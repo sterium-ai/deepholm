@@ -1,0 +1,28 @@
+{
+  "jobs": [
+    {"kind": "dig", "labour": "mine", "needs_tool": "pick", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 30, "retry_base_ticks": 20, "retry_cap_ticks": 80,
+      "yields": {"always": ["sand"], "find_table": [
+        {"item": "gold_coin", "weight": 5},
+        {"item": "flint", "weight": 20},
+        {"item": "coal", "weight": 10},
+        {"item": "seed", "weight": 10},
+        {"item": null, "weight": 55}
+      ]}},
+    {"kind": "mine", "labour": "mine", "needs_tool": "pick", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 30, "retry_base_ticks": 20, "retry_cap_ticks": 80},
+    {"kind": "chop", "labour": "chop", "needs_tool": "axe", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 40, "retry_base_ticks": 20, "retry_cap_ticks": 80},
+    {"kind": "forage", "labour": "forage", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 25},
+    {"kind": "till", "labour": "farm", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 30},
+    {"kind": "sow", "labour": "farm", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 20},
+    {"kind": "haul", "labour": "haul", "toils": ["reserve", "go_to", "pick_up", "go_to", "place", "release_all"], "priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40},
+    {"kind": "site_fetch", "labour": "build", "toils": ["reserve", "go_to", "pick_up", "go_to", "deposit", "release_all"]},
+    {"kind": "site_work", "labour": "build", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},
+    {"kind": "eat_food", "labour": "", "toils": ["reserve", "go_to", "consume", "release_all"]},
+    {"kind": "drink_water", "labour": "", "toils": ["reserve", "go_to", "consume", "release_all"]},
+    {"kind": "sleep", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 60},
+    {"kind": "incident", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},
+    {"kind": "escape_trench", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},
+    {"kind": "flee", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},
+    {"kind": "rescue", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 20},
+    {"kind": "approach", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1}
+  ]
+}

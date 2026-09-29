@@ -1,0 +1,7 @@
+{
+  "needs": [
+    {"kind": "food", "rate_per_day": 67, "warn": 50, "urgent": 25, "critical": 10, "restore": 100, "source_kind": "berry_bush", "full": 100, "job_priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40},
+    {"kind": "water", "rate_per_day": 100, "warn": 50, "urgent": 25, "critical": 10, "restore": 100, "source_kind": "tile", "full": 100, "job_priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40},
+    {"kind": "rest", "rate_per_day": 80, "warn": 50, "urgent": 25, "critical": 10, "restore": 100, "source_kind": "bed", "full": 100, "job_priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40, "bedroom_rest_multiplier": 1.25}
+  ]
+}

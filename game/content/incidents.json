@@ -1,0 +1,44 @@
+{
+  "incidents": [
+    {
+      "id": "wildlife_wander",
+      "faction": "wildlife",
+      "min_day": 3,
+      "weight": 1,
+      "cooldown_days": 5,
+      "spawn": {"actor_def": "wolf", "count": 2, "edge": "west", "wait_ticks": 40}
+    },
+    {
+      "id": "trader_visit",
+      "faction": "traders",
+      "min_day": 5,
+      "weight": 1,
+      "cooldown_days": 7,
+      "spawn": {"actor_def": "trader", "count": 1, "edge": "east", "wait_ticks": 60}
+    },
+    {
+      "id": "migrant_joins",
+      "faction": "allies",
+      "min_day": 8,
+      "weight": 1,
+      "cooldown_days": 10,
+      "spawn": {"actor_def": "colonist", "count": 1, "edge": "south", "wait_ticks": 1, "lingers": true}
+    },
+    {
+      "id": "raider_incursion",
+      "faction": "raiders",
+      "min_day": 10,
+      "weight": 1,
+      "cooldown_days": 5,
+      "spawn": {"actor_def": "wolf", "count": 1, "edge": "north", "wait_ticks": 3, "lingers": true}
+    },
+    {
+      "id": "wolf_attack",
+      "faction": "predators",
+      "min_day": 6,
+      "weight": 1,
+      "cooldown_days": 6,
+      "spawn": {"actor_def": "wolf", "count": 1, "edge": "south", "wait_ticks": 3, "lingers": true}
+    }
+  ]
+}

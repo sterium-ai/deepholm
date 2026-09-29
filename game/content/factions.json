@@ -1,0 +1,94 @@
+{
+  "factions": [
+    {
+      "id": "colony",
+      "relations": {
+        "wildlife": "neutral",
+        "raiders": "hostile",
+        "traders": "neutral",
+        "allies": "friendly",
+        "predators": "hostile"
+      },
+      "rules": {
+        "may_pass_doors": true,
+        "may_reserve_colony_items": true,
+        "may_be_ordered": true
+      }
+    },
+    {
+      "id": "wildlife",
+      "relations": {
+        "colony": "hostile",
+        "raiders": "neutral",
+        "traders": "neutral",
+        "allies": "hostile",
+        "predators": "neutral"
+      },
+      "rules": {
+        "may_pass_doors": false,
+        "may_reserve_colony_items": false,
+        "may_be_ordered": false
+      }
+    },
+    {
+      "id": "raiders",
+      "relations": {
+        "colony": "hostile",
+        "wildlife": "neutral",
+        "traders": "hostile",
+        "allies": "hostile",
+        "predators": "neutral"
+      },
+      "rules": {
+        "may_pass_doors": false,
+        "may_reserve_colony_items": false,
+        "may_be_ordered": false
+      }
+    },
+    {
+      "id": "traders",
+      "relations": {
+        "colony": "neutral",
+        "wildlife": "neutral",
+        "raiders": "hostile",
+        "allies": "neutral",
+        "predators": "hostile"
+      },
+      "rules": {
+        "may_pass_doors": true,
+        "may_reserve_colony_items": false,
+        "may_be_ordered": false
+      }
+    },
+    {
+      "id": "allies",
+      "relations": {
+        "colony": "friendly",
+        "wildlife": "hostile",
+        "raiders": "hostile",
+        "traders": "neutral",
+        "predators": "hostile"
+      },
+      "rules": {
+        "may_pass_doors": true,
+        "may_reserve_colony_items": false,
+        "may_be_ordered": false
+      }
+    },
+    {
+      "id": "predators",
+      "relations": {
+        "colony": "hostile",
+        "wildlife": "neutral",
+        "raiders": "neutral",
+        "traders": "hostile",
+        "allies": "hostile"
+      },
+      "rules": {
+        "may_pass_doors": false,
+        "may_reserve_colony_items": false,
+        "may_be_ordered": false
+      }
+    }
+  ]
+}

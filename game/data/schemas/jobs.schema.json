@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["jobs"],"properties":{"jobs":{"type":"array","items":{"type":"object","required":["id","display_name","work_ticks","output"],"properties":{"id":{"type":"string"},"display_name":{"type":"string"},"work_ticks":{"type":"integer","minimum":1},"output":{"type":"object","additionalProperties":{"type":"integer","minimum":1}},"required_tags":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}}},"additionalProperties":false}
+

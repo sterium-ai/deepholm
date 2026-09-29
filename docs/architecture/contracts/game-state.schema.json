@@ -1,0 +1,715 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://deepholm.example/schemas/game-state.schema.json",
+  "title": "Deepholm vertical-slice game state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
+  "$defs": {
+    "tile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "kind", "count", "factionId"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "count": { "type": "integer", "minimum": 1 },
+        "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+      }
+    },
+    "handsEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "count"],
+      "properties": {
+        "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "count": { "type": "integer", "minimum": 1, "maximum": 4 }
+      }
+    },
+    "object": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "kind", "factionId"],
+      "properties": {
+        "target": { "$ref": "#/$defs/tile" },
+        "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "orientation": { "type": "string", "enum": ["", "horizontal", "vertical"] },
+        "health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hp", "maxHp"],
+          "properties": {
+            "hp": { "type": "integer", "minimum": 0 },
+            "maxHp": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "materialEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["item", "quantity"],
+      "properties": {
+        "item": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "quantity": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "constructionSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "origin", "orientation", "requiredMaterials", "heldMaterials", "progress", "buildTicks", "maxBuilders", "builderIds"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "origin": { "$ref": "#/$defs/tile" },
+        "orientation": { "type": "string", "enum": ["", "horizontal", "vertical"] },
+        "requiredMaterials": { "type": "array", "items": { "$ref": "#/$defs/materialEntry" } },
+        "heldMaterials": { "type": "array", "items": { "$ref": "#/$defs/materialEntry" } },
+        "progress": { "type": "integer", "minimum": 0 },
+        "buildTicks": { "type": "integer", "minimum": 1 },
+        "maxBuilders": { "type": "integer", "minimum": 1 },
+        "builderIds": { "type": "array", "items": { "type": "string", "pattern": "^[a-z0-9_-]+$" } }
+      }
+    },
+    "workProgressEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "ticksRemaining"],
+      "properties": {
+        "target": { "$ref": "#/$defs/tile" },
+        "ticksRemaining": { "type": "integer", "minimum": 1 },
+        "ownerJobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+      }
+    },
+    "workProgressOwnerEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "jobId"],
+      "properties": {
+        "target": { "$ref": "#/$defs/tile" },
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+      }
+    },
+    "suspendedWorkProgressEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "ticksRemaining"],
+      "properties": {
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "ticksRemaining": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pausedJobEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colonistId", "jobId"],
+      "properties": {
+        "colonistId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+      }
+    },
+    "rescueVictimAssignmentEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "victimId"],
+      "properties": {
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "victimId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+      }
+    },
+    "approachJobTargetEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "kind"],
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "actor" } } },
+          "then": { "required": ["actorId"] }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "object" } } },
+          "then": { "required": ["tile"] }
+        }
+      ],
+      "properties": {
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "kind": { "type": "string", "enum": ["actor", "object"] },
+        "actorId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "tile": { "$ref": "#/$defs/tile" }
+      }
+    },
+    "calendarAlerts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fired"],
+      "properties": {
+        "fired": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "toolFetchExcludedEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "toolIds"],
+      "properties": {
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "toolIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+        }
+      }
+    },
+    "combatBlockedTargetsEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actorId", "tiles"],
+      "properties": {
+        "actorId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "tiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tile" }
+        }
+      }
+    },
+    "toolLocation": {
+      "type": "object",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["type", "x", "y"],
+          "properties": {
+            "type": { "const": "ground" },
+            "x": { "type": "integer", "minimum": 0 },
+            "y": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "x", "y"],
+          "properties": {
+            "type": { "const": "stockpile" },
+            "x": { "type": "integer", "minimum": 0 },
+            "y": { "type": "integer", "minimum": 0 }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "colonistId"],
+          "properties": {
+            "type": { "const": "held" },
+            "colonistId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+          }
+        }
+      ]
+    },
+    "toolItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "location"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
+        "location": { "$ref": "#/$defs/toolLocation" }
+      }
+    },
+    "groundBerry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "berries"],
+      "properties": {
+        "target": { "$ref": "#/$defs/tile" },
+        "berries": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "zone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "x", "y", "width", "height"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "path", "step", "moveTicksRemaining"],
+      "properties": {
+        "jobId": { "type": "string" },
+        "path": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tile" } },
+        "step": { "type": "integer", "minimum": 0 },
+        "moveTicksRemaining": { "type": "integer", "minimum": 0 },
+        "rerouting": {
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/routeState" }
+          ]
+        }
+      }
+    },
+    "work": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["jobId", "ticksRemaining"],
+      "properties": {
+        "jobId": { "type": "string" },
+        "ticksRemaining": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "queueEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target", "base", "submittedTick", "ordinal", "restrictTo"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "target": { "$ref": "#/$defs/tile" },
+        "base": { "type": "integer" },
+        "submittedTick": { "type": "integer", "minimum": 0 },
+        "ordinal": { "type": "integer", "minimum": 0 },
+        "restrictTo": { "type": "string", "pattern": "^[a-z0-9_-]*$" },
+        "autonomous": { "type": "boolean" }
+      }
+    },
+    "health": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hp", "maxHp", "dead"],
+      "properties": {
+        "hp": { "type": "integer", "minimum": 0 },
+        "maxHp": { "type": "integer", "minimum": 1 },
+        "dead": { "type": "boolean" }
+      }
+    },
+    "trapped": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tile"],
+      "properties": {
+        "tile": { "$ref": "#/$defs/tile" },
+        "ticksRemaining": { "type": "integer", "minimum": 1 },
+        "fromTile": { "$ref": "#/$defs/tile" }
+      }
+    },
+    "routeState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "target", "status", "frontier", "visited", "cameFrom", "path", "expansions", "resumeCalls"],
+      "properties": {
+        "start": { "$ref": "#/$defs/tile" },
+        "target": { "$ref": "#/$defs/tile" },
+        "status": { "type": "string", "enum": ["searching", "found", "unreachable"] },
+        "frontier": { "type": "array", "items": { "$ref": "#/$defs/tile" } },
+        "visited": { "type": "array", "items": { "$ref": "#/$defs/tile" } },
+        "cameFrom": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["child", "parent"],
+            "properties": {
+              "child": { "$ref": "#/$defs/tile" },
+              "parent": { "$ref": "#/$defs/tile" }
+            }
+          }
+        },
+        "path": { "type": "array", "items": { "$ref": "#/$defs/tile" } },
+        "expansions": { "type": "integer", "minimum": 0 },
+        "resumeCalls": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 25 },
+    "contentVersion": { "type": "string", "minLength": 1 },
+    "seed": { "type": "integer" },
+    "tick": { "type": "integer", "minimum": 0 },
+    "epoch": { "type": "integer", "minimum": 0 },
+    "map": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "tiles", "generatorVersion"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "tiles": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["rock", "soil", "floor", "plowed_soil", "planted", "hazard", "tree", "water", "trench"] }
+        },
+        "generatorVersion": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextId", "list"],
+      "properties": {
+        "nextId": { "type": "integer", "minimum": 1 },
+        "list": { "type": "array", "items": { "$ref": "#/$defs/item" } }
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/object" }
+    },
+    "constructionSites": {
+      "description": "One record per active construction site (issue #406). Optional top-level field, like combatBlockedTargets/digFindRng before it: absent for any save written before this task, in which case WorldState loads with no active sites -- exactly a fresh world's own starting state.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/constructionSite" }
+    },
+    "groundBerries": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/groundBerry" }
+    },
+    "zones": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/zone" }
+    },
+    "nextZoneId": { "type": "integer", "minimum": 1 },
+    "workProgress": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workProgressEntry" }
+    },
+    "workProgressOwners": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/workProgressOwnerEntry" }
+    },
+    "suspendedWorkProgress": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/suspendedWorkProgressEntry" }
+    },
+    "pausedJobs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pausedJobEntry" }
+    },
+    "needJobAssignments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/pausedJobEntry" }
+    },
+    "rescueVictimAssignments": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rescueVictimAssignmentEntry" }
+    },
+    "combatBlockedTargets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/combatBlockedTargetsEntry" }
+    },
+    "approachJobTargets": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/approachJobTargetEntry" }
+    },
+    "approachRetiredActors": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+    },
+    "calendarAlerts": { "$ref": "#/$defs/calendarAlerts" },
+    "toolFetchExcluded": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/toolFetchExcludedEntry" }
+    },
+    "toolItems": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextId", "list"],
+      "properties": {
+        "nextId": { "type": "integer", "minimum": 1 },
+        "list": { "type": "array", "items": { "$ref": "#/$defs/toolItem" } }
+      }
+    },
+    "toolReservations": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+      "propertyNames": { "pattern": "^[a-z0-9_-]+$" }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "x", "y", "route", "factionId", "health", "trapped"],
+        "allOf": [
+          {
+            "if": { "properties": { "kind": { "const": "colonist" } } },
+            "then": { "required": ["needs", "needsAccumulator", "labourTable", "work", "hands"] }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "wolf" } } },
+            "then": { "required": ["needs", "needsAccumulator", "combat", "wild"] }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "trader" } } },
+            "then": { "required": ["inventory", "visitor"] }
+          }
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+          "kind": { "type": "string", "enum": ["colonist", "wolf", "trader"] },
+          "x": { "type": "integer", "minimum": 0 },
+          "y": { "type": "integer", "minimum": 0 },
+          "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+          "health": { "$ref": "#/$defs/health" },
+          "trapped": {
+            "anyOf": [
+              { "type": "null" },
+              { "$ref": "#/$defs/trapped" }
+            ]
+          },
+          "needs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["food", "water", "rest"],
+            "properties": {
+              "food": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "water": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "rest": { "type": "integer", "minimum": 0, "maximum": 100 }
+            }
+          },
+          "needsAccumulator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["food", "water", "rest"],
+            "properties": {
+              "food": { "type": "integer", "minimum": 0 },
+              "water": { "type": "integer", "minimum": 0 },
+              "rest": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "labourTable": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],
+            "properties": {
+              "mine": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "chop": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "farm": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "haul": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "build": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "craft": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "cook": { "type": "integer", "minimum": 0, "maximum": 4 }
+            }
+          },
+          "route": {
+            "anyOf": [
+              { "type": "null" },
+              { "$ref": "#/$defs/route" }
+            ]
+          },
+          "work": {
+            "anyOf": [
+              { "type": "null" },
+              { "$ref": "#/$defs/work" }
+            ]
+          },
+          "hands": {
+            "type": "array",
+            "maxItems": 4,
+            "items": { "$ref": "#/$defs/handsEntry" }
+          },
+          "heldTool": { "type": "string", "pattern": "^[a-z0-9_-]*$" },
+          "combat": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["attack", "damage", "cooldown", "cooldownRemaining"],
+            "properties": {
+              "attack": { "type": "integer", "minimum": 0 },
+              "damage": { "type": "integer", "minimum": 0 },
+              "cooldown": { "type": "integer", "minimum": 1 },
+              "cooldownRemaining": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "inventory": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["items", "tool", "capacity"],
+            "properties": {
+              "items": { "type": "array" },
+              "tool": { "type": "string", "pattern": "^[a-z0-9_-]*$" },
+              "capacity": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "wild": { "const": true },
+          "visitor": { "const": true }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 },
+      "propertyNames": { "pattern": "^[a-z0-9_-]+$" }
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "status", "priority", "target", "reason", "remedy", "blockingJobId",
+          "itemId", "cell", "retryAt", "backoffTicks"],
+        "allOf": [
+          {
+            "description": "SaveIO._valid_state()'s own site-job rule (issue #406, supersedes the single-worker `build` job's own buildKind-carrying shape): a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' looser (optional-for-legacy) shape below.",
+            "if": { "properties": { "kind": { "enum": ["site_fetch", "site_work"] } } },
+            "then": {
+              "required": ["site"],
+              "properties": {
+                "site": { "$ref": "#/$defs/tile" }
+              }
+            }
+          }
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft", "chop", "haul", "forage", "till", "sow", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
+          "priority": { "type": "integer", "enum": [0, 1, 2] },
+          "target": { "$ref": "#/$defs/tile" },
+          "reason": { "type": "string" },
+          "remedy": { "type": "string" },
+          "blockingJobId": { "type": "string" },
+          "itemId": { "type": "string", "pattern": "^[a-z0-9_-]*$" },
+          "cell": {
+            "anyOf": [
+              { "type": "null" },
+              { "$ref": "#/$defs/tile" }
+            ]
+          },
+          "retryAt": { "type": "integer", "minimum": 0 },
+          "backoffTicks": { "type": "integer", "minimum": 0 },
+          "site": {
+            "description": "site_fetch/site_work jobs only (issue #406): the construction site's own origin tile. Optional for backward compatibility with a same-version save written before either kind existed; a job of kind site_fetch or site_work must carry a non-null tile here (enforced by the allOf rule above, matching SaveIO).",
+            "anyOf": [
+              { "type": "null" },
+              { "$ref": "#/$defs/tile" }
+            ]
+          }
+        }
+      }
+    },
+    "scheduling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextJobId", "jobSequence", "jobTick", "queueEventSequence", "eventSequence",
+        "waiting", "nextOrdinal", "cursors", "pending", "assignments", "activatedEntries"],
+      "properties": {
+        "nextJobId": { "type": "integer", "minimum": 1 },
+        "jobSequence": { "type": "integer", "minimum": 0 },
+        "jobTick": { "type": "integer", "minimum": 0 },
+        "queueEventSequence": { "type": "integer", "minimum": -1 },
+        "eventSequence": { "type": "integer", "minimum": 0 },
+        "waiting": { "type": "array", "items": { "$ref": "#/$defs/queueEntry" } },
+        "nextOrdinal": { "type": "integer", "minimum": 0 },
+        "cursors": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "pending": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["candidates", "cursor", "found", "start", "route"],
+            "properties": {
+              "candidates": { "type": "array", "items": { "$ref": "#/$defs/queueEntry" } },
+              "cursor": { "type": "integer", "minimum": 0 },
+              "found": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["worker", "entry", "travel"],
+                  "properties": {
+                    "worker": { "type": "string" },
+                    "entry": { "$ref": "#/$defs/queueEntry" },
+                    "travel": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              },
+              "start": { "$ref": "#/$defs/tile" },
+              "route": {
+                "anyOf": [
+                  { "type": "null" },
+                  { "$ref": "#/$defs/routeState" }
+                ]
+              }
+            }
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["jobId", "startedTick", "travelTicks", "path"],
+            "properties": {
+              "jobId": { "type": "string" },
+              "startedTick": { "type": "integer", "minimum": 0 },
+              "travelTicks": { "type": "integer", "minimum": 0 },
+              "path": { "type": "array", "items": { "$ref": "#/$defs/tile" } }
+            }
+          }
+        },
+        "activatedEntries": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/queueEntry" },
+          "propertyNames": { "pattern": "^[a-z0-9_-]+$" }
+        }
+      }
+    },
+    "rng": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "state"],
+      "properties": {
+        "seed": { "type": "integer" },
+        "state": { "type": "integer" }
+      }
+    },
+    "digFindRng": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seed", "state"],
+      "properties": {
+        "seed": { "type": "integer" },
+        "state": { "type": "integer" }
+      }
+    },
+    "incidentScheduler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cooldownUntilDay", "lastProcessedDay", "rng"],
+      "properties": {
+        "cooldownUntilDay": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "propertyNames": { "pattern": "^[a-z0-9_-]+$" }
+        },
+        "lastProcessedDay": { "type": "integer", "minimum": 0 },
+        "rng": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["seed", "state"],
+          "properties": {
+            "seed": { "type": "integer" },
+            "state": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}

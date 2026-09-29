@@ -1,0 +1,7 @@
+{
+  "_note": "Line-count caps for the largest core files, checked before review. Raising one requires an ADR in the same change.",
+  "game/scripts/core/world_state.gd": 5030,
+  "game/scripts/core/jobs/toil_executor.gd": 970,
+  "game/scripts/core/jobs/job_queue.gd": 790,
+  "game/scripts/core/scheduling/global_assignment.gd": 688
+}

@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["entities"],"properties":{"entities":{"type":"array","items":{"type":"object","required":["id","kind"],"properties":{"id":{"type":"string","pattern":"^[a-z0-9_.-]+$"},"kind":{"type":"string"},"display_name":{"type":"string"},"components":{"type":"array","items":{"type":"string"}}},"additionalProperties":false}}},"additionalProperties":false}
+

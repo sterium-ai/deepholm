@@ -1,0 +1,12 @@
+{
+  "buildings": [
+    {
+      "id": "building.campfire",
+      "display_name": "Campfire",
+      "footprint": [1, 1],
+      "build_cost": {"item.wood": 4},
+      "tags": ["utility"]
+    }
+  ]
+}
+

@@ -1,0 +1,12 @@
+{
+  "recipes": [
+    {
+      "id": "recipe.campfire",
+      "display_name": "Build campfire",
+      "inputs": {"item.wood": 4},
+      "outputs": {"building.campfire": 1},
+      "work_ticks": 20
+    }
+  ]
+}
+

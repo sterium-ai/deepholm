@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["tiles"],
+  "properties": {
+    "tiles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "passable", "move_cost", "diggable", "display", "move_ticks_per_tile"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "passable": {"type": "boolean"},
+          "move_cost": {"type": "integer", "minimum": 0},
+          "diggable": {"type": "boolean"},
+          "display": {
+            "type": "object",
+            "required": ["label"],
+            "properties": {
+              "label": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          },
+          "move_ticks_per_tile": {"type": "integer", "minimum": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

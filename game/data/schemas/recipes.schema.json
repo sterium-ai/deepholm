@@ -1,0 +1,2 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["recipes"],"properties":{"recipes":{"type":"array","items":{"type":"object","required":["id","display_name","inputs","outputs","work_ticks"],"properties":{"id":{"type":"string"},"display_name":{"type":"string"},"inputs":{"type":"object","additionalProperties":{"type":"integer","minimum":1}},"outputs":{"type":"object","additionalProperties":{"type":"integer","minimum":1}},"work_ticks":{"type":"integer","minimum":1}},"additionalProperties":false}}},"additionalProperties":false}
+

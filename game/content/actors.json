@@ -1,0 +1,37 @@
+{
+  "actors": [
+    {
+      "id": "colonist",
+      "components": ["mover", "worker", "needs", "health", "inventory", "combat"],
+      "tunables": {
+        "mover": {"speed": 1},
+        "worker": {"labours": ["mine", "chop", "farm", "haul", "build", "craft", "cook"], "labour_default": 3, "labour_min": 0, "labour_max": 4},
+        "needs": {"rates": {"food": 1, "water": 2, "rest": 1}},
+        "health": {"hp": 100, "maxHp": 100},
+        "inventory": {"capacity": 1},
+        "combat": {"attack": 2, "damage": 2, "cooldown": 30, "flee_hp_fraction": 0.3}
+      }
+    },
+    {
+      "id": "wolf",
+      "components": ["mover", "needs", "health", "combat", "wild"],
+      "tunables": {
+        "mover": {"speed": 2},
+        "needs": {"rates": {"food": 1}},
+        "health": {"hp": 40, "maxHp": 40},
+        "combat": {"attack": 8, "damage": 8, "cooldown": 20, "flee_hp_fraction": 0.3},
+        "wild": {"trench_climb_ticks": 40}
+      }
+    },
+    {
+      "id": "trader",
+      "components": ["mover", "health", "inventory", "visitor"],
+      "tunables": {
+        "mover": {"speed": 1},
+        "health": {"hp": 30, "maxHp": 30},
+        "inventory": {"capacity": 10},
+        "visitor": {}
+      }
+    }
+  ]
+}

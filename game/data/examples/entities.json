@@ -1,0 +1,17 @@
+{
+  "entities": [
+    {
+      "id": "settlement_01",
+      "kind": "settlement",
+      "display_name": "First Camp",
+      "components": ["inventory", "needs", "jobs"]
+    },
+    {
+      "id": "worker_01",
+      "kind": "character",
+      "display_name": "Worker",
+      "components": ["needs", "skills"]
+    }
+  ]
+}
+

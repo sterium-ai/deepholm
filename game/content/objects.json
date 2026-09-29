@@ -1,0 +1,14 @@
+{
+  "objects": [
+    {"kind": "chair", "passable": true, "move_cost": 3, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": []},
+    {"kind": "door", "passable": true, "move_cost": 2, "is_door": true, "health": 40, "max_health": 40, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 1}]},
+    {"kind": "wooden_wall", "passable": false, "move_cost": 0, "is_door": false, "health": 80, "max_health": 80, "footprint": [1, 1], "rotatable": false, "build_ticks": 20, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 1}]},
+    {"kind": "stone_wall", "passable": false, "move_cost": 0, "is_door": false, "health": 80, "max_health": 80, "footprint": [1, 1], "rotatable": false, "build_ticks": 20, "max_builders": 1, "build_cost": [{"item": "stone", "quantity": 1}]},
+    {"kind": "table", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": []},
+    {"kind": "berry_bush", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": []},
+    {"kind": "bed", "passable": true, "move_cost": 3, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 1}]},
+    {"kind": "test_multi_source_crate", "passable": true, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 3}, {"item": "stone", "quantity": 2}]},
+    {"kind": "test_footprint_crate", "passable": false, "move_cost": 0, "is_door": false, "health": 20, "max_health": 20, "footprint": [2, 1], "rotatable": true, "build_ticks": 40, "max_builders": 1, "build_cost": []},
+    {"kind": "workbench", "passable": false, "move_cost": 0, "is_door": false, "footprint": [2, 1], "rotatable": true, "build_ticks": 120, "max_builders": 2, "build_cost": [{"item": "wood", "quantity": 3}, {"item": "stone", "quantity": 4}]}
+  ]
+}

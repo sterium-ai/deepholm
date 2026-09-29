@@ -1,0 +1,159 @@
+{
+  "controls.center": "Center colonists",
+  "controls.navigate": "Navigate",
+  "controls.map_hint": "Pan: middle drag / Space + left drag   |   Zoom: wheel   |   Escape: leave tool   |   Preview: green valid, red crossed invalid",
+  "controls.pause": "Pause",
+  "controls.step": "Step",
+  "controls.speed_x1": "x1",
+  "controls.speed_x2": "x2",
+  "controls.speed_x3": "x3",
+  "controls.save": "Save",
+  "controls.load": "Load",
+  "controls.tool_dig": "Dig",
+  "controls.tool_chop": "Chop",
+  "controls.tool_forage": "Forage",
+  "controls.tool_cancel": "Cancel",
+  "controls.tool_wall": "Wall",
+  "controls.wooden_wall": "Wooden",
+  "controls.stone_wall": "Stone",
+  "controls.tool_remove_object": "Remove Object",
+  "controls.tool_zone": "Zone",
+  "controls.tool_till": "Till",
+  "controls.tool_sow": "Sow",
+  "controls.tool_mine": "Mine",
+  "controls.toggle_art": "Toggle Art",
+
+  "work_table.colonist_header": "Colonist",
+  "work_table.labour.mine": "Mine",
+  "work_table.labour.chop": "Chop",
+  "work_table.labour.farm": "Farm",
+  "work_table.labour.haul": "Haul",
+  "work_table.labour.build": "Build",
+  "work_table.labour.craft": "Craft",
+  "work_table.labour.cook": "Cook",
+  "work_table.boost_label": "(+%d)",
+  "work_table.level_off": "Off",
+  "work_table.banner_text": "%s in %d day(s)",
+  "work_table.banner_dismiss": "Dismiss",
+
+  "status.last_saved_label": "Last saved: tick %d",
+  "status.last_saved_none": "Last saved: never",
+  "status.load_failed": "Load failed: no valid save found",
+  "status.save_failed": "Save failed: %s",
+  "status.resumed_clean": "Resumed from %s (tick %d)",
+  "status.resumed_with_skip": "Resumed from %s (tick %d) because %s was %s",
+
+  "save.slot.manual": "the manual save",
+  "save.reason.read_failed": "unreadable",
+  "save.reason.parse_error": "unreadable",
+  "save.reason.invalid_envelope": "unreadable",
+  "save.reason.integrity_mismatch": "corrupted",
+  "save.reason.schema_error": "in an incompatible format",
+  "save.reason.no_migration_available": "missing required data",
+  "save.reason.save_from_newer_version": "from a newer version of the game",
+
+  "save.write_reason.write_failed": "the save file could not be written",
+  "save.write_reason.write_interrupted": "the write was interrupted before it finished",
+  "save.write_reason.rename_failed": "the new save could not replace the previous one",
+  "save.write_reason.schema_error": "the save state was in an invalid format",
+  "save.write_reason.no_migration_available": "the save state was missing required data",
+  "save.write_reason.unknown": "an unknown error occurred",
+
+  "status.idle": "Idle",
+  "status.held_tool_label": "Held tool: %s",
+  "status.hands_label": "Hands: %s",
+  "status.reason.blocked_no_tool": "No reachable, available tool matches this job",
+  "status.remedy.provide_tool": "Craft or find a reachable tool of the required kind",
+  "status.reason.waiting_for_tool_handover": "Waiting for another colonist to drop the reserved tool",
+  "status.remedy.wait_for_tool_handover": "Wait for the holder to drop the tool",
+  "status.job.dig": "Digging",
+  "status.job.escape_trench": "Climbing out of a trench",
+  "status.job.rescue": "Rescuing",
+  "status.job.chop": "Chopping",
+  "status.reason_label": "Reason: %s",
+  "status.remedy_label": "Remedy: %s",
+  "status.target_label": "Target: (%d, %d)",
+  "status.route_length_label": "Remaining steps: %d",
+  "status.rejected_tile_label": "(%d, %d): %s",
+  "status.zone_rejected_label": "Zone rejected: %s",
+  "status.toil_label": "Toil: %s",
+
+  "status.job.haul": "Hauling",
+  "status.toil.go_to": "Traveling",
+  "status.toil.work": "Working",
+  "status.toil.pick_up": "Picking up",
+  "status.toil.place": "Placing",
+  "status.toil.consume": "Consuming",
+
+  "status.job.eat_food": "Eating",
+  "status.job.drink_water": "Drinking",
+  "status.job.sleep": "Sleeping",
+
+  "status.need.food": "Food",
+  "status.need.water": "Water",
+  "status.need.rest": "Rest",
+  "status.need_value_label": "%s: %d/%d",
+  "status.need_reason_label": "Need reason: %s",
+  "status.need_remedy_label": "Need remedy: %s",
+
+  "status.reason.need_unmet:food": "No reachable, unreserved food source is available",
+  "status.remedy.provide_food_source": "Provide a reachable food source",
+
+  "status.reason.need_unmet:water": "No reachable, unreserved water source is available",
+  "status.remedy.provide_water_source": "Provide a reachable water source",
+
+  "status.reason.need_unmet:rest": "No reachable, unreserved bed is available",
+  "status.remedy.provide_bed": "Provide a reachable bed",
+
+  "status.reason.need_source_missing:food": "No food source has been placed anywhere on the map",
+  "status.remedy.place_food_source": "Place a food source on the map",
+
+  "status.reason.need_source_missing:water": "No water source exists anywhere on the map",
+  "status.remedy.place_water_source": "Place a water source on the map",
+
+  "status.reason.need_source_missing:rest": "No bed has been placed anywhere on the map",
+  "status.remedy.place_bed_source": "Place a bed on the map",
+
+  "status.reason.blocked_source_reserved": "The nearest need source was just reserved by another colonist",
+  "status.remedy.wait_for_source_release": "Wait for the reserving job to release the source",
+
+  "status.reason.blocked_source_unreachable": "The need source became unreachable",
+  "status.remedy.restore_source_access": "Clear a path to the need source",
+
+  "status.alert_need_unmet_label": "%s: %s need unmet",
+  "status.alert_need_source_missing_label": "%s: %s source missing",
+
+  "status.reason.invalid_target": "Target tile is not a valid choice for this order",
+
+  "status.reason.rerouting": "The colonist is rerouting to its target",
+  "status.remedy.await_new_route": "Wait for the new route to be found",
+
+  "status.reason.trapped": "Trapped in a trench",
+  "status.remedy.await_rescue": "Wait for another colonist to rescue them",
+  "status.reason.no_rescuer_available": "trapped in a trench, no one can help",
+  "status.remedy.await_rescuer": "Wait for a rescuer to become available",
+
+  "status.reason.blocked_target_reserved": "Target tile is reserved by another job",
+  "status.remedy.wait_for_target_release": "Wait for the reserving job to release the tile",
+
+  "status.reason.blocked_target_unreachable": "Target tile cannot currently be reached",
+  "status.remedy.restore_target_access": "Clear a path to the target tile",
+
+  "status.reason.blocked_reachability_unavailable": "Reachability could not be evaluated",
+  "status.remedy.provide_reachability_check": "Restore the reachability check",
+
+  "status.reason.cancelled_by_command": "The order was cancelled",
+  "status.remedy.resubmit_order": "Resubmit the order",
+
+  "status.reason.job_execution_failed": "The job failed while executing",
+  "status.remedy.inspect_target_and_resubmit": "Inspect the target and resubmit",
+
+  "status.reason.target_invalidated": "The target is no longer valid",
+  "status.remedy.choose_valid_target": "Choose a valid target",
+
+  "status.reason.no_work_queued": "No dig orders are queued",
+  "status.remedy.await_scenario_orders": "Wait for the scenario to submit more orders",
+
+  "status.reason.awaiting_scheduling": "Waiting for the scheduler to consider this worker",
+  "status.remedy.wait_for_next_tick": "Wait for the next tick"
+}

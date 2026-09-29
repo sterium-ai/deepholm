@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["incidents"],
+  "properties": {
+    "incidents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "faction", "min_day", "weight", "cooldown_days", "spawn"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "faction": {"type": "string", "minLength": 1},
+          "min_day": {"type": "integer", "minimum": 1},
+          "weight": {"type": "integer", "minimum": 1},
+          "cooldown_days": {"type": "integer", "minimum": 0},
+          "spawn": {
+            "type": "object",
+            "required": ["actor_def", "count", "edge", "wait_ticks"],
+            "properties": {
+              "actor_def": {"type": "string", "minLength": 1},
+              "count": {"type": "integer", "minimum": 1},
+              "edge": {"type": "string", "minLength": 1},
+              "wait_ticks": {"type": "integer", "minimum": 1},
+              "lingers": {"type": "boolean"}
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

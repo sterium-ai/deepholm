@@ -1,0 +1,68 @@
+name: Godot headless checks
+
+"on":
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  headless:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Godot 4.7.2
+        shell: bash
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/godot.zip" \
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          sudo install -m 755 "$RUNNER_TEMP/godot/Godot_v4.7.2-stable_linux.x86_64" /usr/local/bin/godot
+          godot --version
+
+      - name: Validate JSON content, data and schemas
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          roots = ["game/content", "game/data", "docs/architecture"]
+          files = sorted(p for root in roots for p in Path(root).rglob("*.json"))
+          for path in files:
+              with path.open(encoding="utf-8") as source:
+                  json.load(source)
+          print(f"Validated {len(files)} JSON files")
+
+      - name: Check core file size budgets
+        shell: python
+        run: |
+          import json, sys
+          budgets = json.load(open("docs/architecture/core-budgets.json", encoding="utf-8"))
+          over = []
+          for path, cap in budgets.items():
+              if path.startswith("_"):
+                  continue
+              lines = sum(1 for _ in open(path, encoding="utf-8"))
+              print(f"{path}: {lines}/{cap}")
+              if lines > cap:
+                  over.append(path)
+          sys.exit(f"over budget: {over}" if over else 0)
+
+      - name: Lint content literals in the simulation core
+        shell: pwsh
+        run: ./game/scripts/tests/lint_content_literals.ps1
+
+      # Import first to build the class_name cache the scripts depend on.
+      - name: Import Godot project
+        run: godot --headless --path game --import
+
+      - name: Headless boot check
+        run: godot --headless --path game --quit-after 1
+
+      - name: Run the full headless test suite
+        run: bash tools/run_tests.sh godot

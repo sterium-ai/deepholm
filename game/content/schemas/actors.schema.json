@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["actors"],
+  "properties": {
+    "actors": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "components", "tunables"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "components": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "enum": ["mover", "worker", "needs", "health", "inventory", "combat", "wild", "visitor"]
+            }
+          },
+          "tunables": {
+            "type": "object",
+            "properties": {
+              "mover": {
+                "type": "object",
+                "required": ["speed"],
+                "properties": {
+                  "speed": {"type": "integer", "minimum": 1}
+                },
+                "additionalProperties": false
+              },
+              "worker": {
+                "type": "object",
+                "required": ["labours", "labour_default", "labour_min", "labour_max"],
+                "properties": {
+                  "labours": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {"type": "string", "minLength": 1}
+                  },
+                  "labour_default": {"type": "integer", "minimum": 0},
+                  "labour_min": {"type": "integer", "minimum": 0},
+                  "labour_max": {"type": "integer", "minimum": 1}
+                },
+                "additionalProperties": false
+              },
+              "needs": {
+                "type": "object",
+                "required": ["rates"],
+                "properties": {
+                  "rates": {
+                    "type": "object",
+                    "properties": {
+                      "food": {"type": "integer", "minimum": 0},
+                      "water": {"type": "integer", "minimum": 0},
+                      "rest": {"type": "integer", "minimum": 0}
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false
+              },
+              "health": {
+                "type": "object",
+                "required": ["maxHp"],
+                "properties": {
+                  "hp": {"type": "integer", "minimum": 0},
+                  "maxHp": {"type": "integer", "minimum": 1}
+                },
+                "additionalProperties": false
+              },
+              "inventory": {
+                "type": "object",
+                "required": ["capacity"],
+                "properties": {
+                  "capacity": {"type": "integer", "minimum": 1}
+                },
+                "additionalProperties": false
+              },
+              "combat": {
+                "type": "object",
+                "required": ["attack", "damage", "cooldown"],
+                "properties": {
+                  "attack": {"type": "integer", "minimum": 0},
+                  "damage": {"type": "integer", "minimum": 0},
+                  "cooldown": {"type": "integer", "minimum": 1},
+                  "flee_hp_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+                },
+                "additionalProperties": false
+              },
+              "wild": {
+                "type": "object",
+                "properties": {
+                  "trench_climb_ticks": {"type": "integer", "minimum": 1}
+                },
+                "additionalProperties": false
+              },
+              "visitor": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

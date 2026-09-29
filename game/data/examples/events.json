@@ -1,0 +1,17 @@
+{
+  "events": [
+    {
+      "id": "event.day_started",
+      "type": "lifecycle",
+      "payload": {"day": 1},
+      "scheduled_tick": 0
+    },
+    {
+      "id": "event.weather_shift",
+      "type": "world",
+      "payload": {"weather": "clear"},
+      "scheduled_tick": 100
+    }
+  ]
+}
+

@@ -1,0 +1,12 @@
+{
+  "jobs": [
+    {
+      "id": "job.gather_wood",
+      "display_name": "Gather wood",
+      "work_ticks": 10,
+      "output": {"item.wood": 2},
+      "required_tags": ["outdoors"]
+    }
+  ]
+}
+

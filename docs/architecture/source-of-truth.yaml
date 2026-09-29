@@ -1,0 +1,42 @@
+version: 1
+canonical:
+  vision:
+    path: docs/architecture/vision.md
+    authority: product and engineering intent
+  vertical_slice:
+    path: docs/architecture/vertical-slice.md
+    authority: first playable scope and acceptance criteria
+  simulation_boundaries:
+    path: docs/architecture/simulation-boundaries.md
+    authority: runtime layering, determinism, and persistence boundary
+  agent_ownership:
+    path: docs/architecture/agent-ownership.md
+    authority: ownership and change coordination
+  game_state_contract:
+    path: docs/architecture/contracts/game-state.schema.json
+    authority: minimum serialized state shape
+  save_system:
+    path: docs/architecture/save-system.md
+    authority: save layout, rotation, integrity, migration, and autosave triggers
+  orders_and_movement:
+    path: docs/architecture/orders-and-movement.md
+    authority: dig/chop/cancel_job order contract, tick-cost constants, and route/work movement semantics
+  map_experience:
+    path: docs/architecture/map-experience.md
+    authority: PC camera, HUD isolation, coordinate conversion, and designation presentation
+  art_style:
+    path: docs/art/style.md
+    authority: pixel-art rules, sprite sizes, grounding, and shoreline layering
+  decisions:
+    path: docs/decisions/
+    authority: dated decisions that supersede or clarify contracts
+evidence:
+  research:
+    - docs/architecture/colonist-ai.md   # colonist AI design study
+    - docs/architecture/foundation-for-breadth.md
+rules:
+  precedence:
+    - canonical
+    - accepted ADR
+    - evidence
+  note: Evidence informs the game but does not override a canonical contract.

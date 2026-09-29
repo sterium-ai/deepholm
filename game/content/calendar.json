@@ -1,0 +1,6 @@
+{
+  "day_length_ticks": 2200,
+  "windows": [
+    {"id": "sow", "labour": "farm", "from": 1, "to": 20, "boost": 1, "label": "sowing window"}
+  ]
+}

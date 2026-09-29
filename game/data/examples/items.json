@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "id": "item.wood",
+      "display_name": "Wood",
+      "stack_limit": 100,
+      "tags": ["resource"]
+    },
+    {
+      "id": "item.stone",
+      "display_name": "Stone",
+      "stack_limit": 100,
+      "tags": ["resource"]
+    }
+  ]
+}
+

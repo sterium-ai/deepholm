@@ -1,0 +1,17 @@
+; Minimal Godot 4 project for the Deepholm.
+config_version=5
+
+[application]
+config/name="Deepholm"
+run/main_scene="res://scenes/boot.tscn"
+
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+window/size/window_width_override=960
+window/size/window_height_override=540
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+

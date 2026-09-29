@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["day_length_ticks", "windows"],
+  "properties": {
+    "day_length_ticks": {"type": "integer", "minimum": 1},
+    "windows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "labour", "from", "to", "boost", "label"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "labour": {"type": "string", "minLength": 1},
+          "from": {"type": "integer", "minimum": 1},
+          "to": {"type": "integer", "minimum": 1},
+          "boost": {"type": "integer"},
+          "label": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

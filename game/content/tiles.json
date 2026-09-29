@@ -1,0 +1,13 @@
+{
+  "tiles": [
+    {"id": "rock", "passable": false, "move_cost": 0, "diggable": false, "display": {"label": "Rock"}, "move_ticks_per_tile": 4},
+    {"id": "soil", "passable": true, "move_cost": 1, "diggable": true, "display": {"label": "Soil"}, "move_ticks_per_tile": 4},
+    {"id": "floor", "passable": true, "move_cost": 1, "diggable": false, "display": {"label": "Floor"}, "move_ticks_per_tile": 4},
+    {"id": "plowed_soil", "passable": true, "move_cost": 1, "diggable": false, "display": {"label": "Plowed Soil"}, "move_ticks_per_tile": 4},
+    {"id": "planted", "passable": true, "move_cost": 1, "diggable": false, "display": {"label": "Planted"}, "move_ticks_per_tile": 4},
+    {"id": "hazard", "passable": false, "move_cost": 0, "diggable": false, "display": {"label": "Hazard"}, "move_ticks_per_tile": 4},
+    {"id": "tree", "passable": false, "move_cost": 0, "diggable": false, "display": {"label": "Tree"}, "move_ticks_per_tile": 4},
+    {"id": "water", "passable": false, "move_cost": 0, "diggable": false, "display": {"label": "Water"}, "move_ticks_per_tile": 4},
+    {"id": "trench", "passable": true, "move_cost": 1, "diggable": false, "display": {"label": "Trench"}, "move_ticks_per_tile": 4}
+  ]
+}
