@@ -1,13 +1,13 @@
 # Vision and principles
 
-> **In short:** Deepholm is a game about building an underground colony. This
+> **In short:** Deepholm is a game about growing a small colony on a generated map. This
 > page explains what the game should feel like and the engineering rules that
 > keep it reliable and easy to extend.
 
 ## Product vision
 
-Deepholm is a calm-but-consequential underground colony simulation. The
-player turns a dangerous layered cave into a functioning settlement by issuing
+Deepholm is a calm-but-consequential colony simulation. The player turns an
+untamed, generated map of forest, rock and water into a functioning settlement by issuing
 priorities, allocating scarce resources, and responding to emergent problems.
 The game keeps the genre's pillars—digging, construction, colonists,
 needs, production, farming, and defense—while making the simulation testable,
