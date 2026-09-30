@@ -10,20 +10,26 @@ permissions:
 
 jobs:
   headless:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # Windows: the save integrity hash is not yet identical across platforms (see README,
+    # Known limitations), and Windows is the platform the suite and its fixtures are maintained on.
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Install Godot 4.7.2
-        shell: bash
         run: |
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/godot.zip" \
-            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip
+            https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
-          sudo install -m 755 "$RUNNER_TEMP/godot/Godot_v4.7.2-stable_linux.x86_64" /usr/local/bin/godot
-          godot --version
+          mkdir -p "$RUNNER_TEMP/godot-bin"
+          cp "$RUNNER_TEMP/godot/Godot_v4.7.2-stable_win64_console.exe" "$RUNNER_TEMP/godot-bin/godot.exe"
+          echo "$RUNNER_TEMP/godot-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/godot-bin/godot.exe" --version
 
       - name: Validate JSON content, data and schemas
         shell: python

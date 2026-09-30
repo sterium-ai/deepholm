@@ -231,7 +231,17 @@ Measured on the released tree:
 
 Deepholm was built largely by AI coding agents — Claude Code, OpenAI Codex and GitHub Copilot — orchestrated by [sterium-ai/agent-orchestrator](https://github.com/sterium-ai/agent-orchestrator). A human sets objectives, playtests and integrates; agents write contracts, code and tests, and a *different* agent reviews each change against its contract and the headless test results before it merges. The rules the agents follow are in [AGENTS.md](AGENTS.md): simulation-purity rules, one owner per subsystem, contracts and ADRs before boundary changes, core size budgets, and tests as the review gate. Many constraints visible in the code (size budgets, architecture tests, content lints, typed rejections) exist precisely so an automated reviewer can check them.
 
+## Known limitations
+
+- **Saves are not yet portable between operating systems.** The save integrity hash is taken over Godot's JSON
+  rendering of the state, and very large numbers (the 64-bit random-number seeds) are rendered differently by the
+  Windows and Linux builds of the engine. A save written on one platform can therefore fail its integrity check on
+  the other. The test suite and its fixtures are maintained on Windows, and CI runs there. The planned fix is a
+  platform-independent canonical form for the hash, shipped as a new schema version with its own migration.
+
 ## Roadmap
+
+- Platform-independent save integrity hash (see Known limitations)
 
 - Crop growth and harvest (farming currently stops at tilling and sowing)
 - Workbench recipes (`game/data/examples/recipes.json` sketches the shape)
