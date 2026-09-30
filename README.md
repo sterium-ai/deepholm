@@ -234,15 +234,14 @@ Deepholm was built largely by AI coding agents — Claude Code, OpenAI Codex and
 ## Known limitations
 
 - **Saves are not yet portable between operating systems.** The save integrity hash is taken over Godot's JSON
-  rendering of the state, and very large numbers (the 64-bit random-number seeds) are rendered differently by the
-  Windows and Linux builds of the engine. A save written on one platform can therefore fail its integrity check on
-  the other. The test suite and its fixtures are maintained on Windows, and CI runs there. The planned fix is a
+  rendering of the parsed state, and that rendering is not byte-identical between the Windows and Linux builds of
+  the engine (most likely in how very large numbers, such as the 64-bit random-number seeds, are formatted). Save
+  fixtures written on Windows fail their integrity check on Linux. The test suite and its fixtures are maintained on Windows, and CI runs there. The planned fix is a
   platform-independent canonical form for the hash, shipped as a new schema version with its own migration.
 
 ## Roadmap
 
 - Platform-independent save integrity hash (see Known limitations)
-
 - Crop growth and harvest (farming currently stops at tilling and sowing)
 - Workbench recipes (`game/data/examples/recipes.json` sketches the shape)
 - Dedicated actor art for wolves and traders; real pixel art to replace the placeholders
