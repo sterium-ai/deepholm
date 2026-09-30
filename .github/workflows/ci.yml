@@ -26,10 +26,13 @@ jobs:
           curl --fail --location --retry 3 --output "$RUNNER_TEMP/godot.zip" \
             https://github.com/godotengine/godot-builds/releases/download/4.7.2-stable/Godot_v4.7.2-stable_win64.exe.zip
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          # The console launcher must keep its original name next to the main executable,
+          # so expose it through a small "godot" wrapper script instead of renaming it.
           mkdir -p "$RUNNER_TEMP/godot-bin"
-          cp "$RUNNER_TEMP/godot/Godot_v4.7.2-stable_win64_console.exe" "$RUNNER_TEMP/godot-bin/godot.exe"
+          printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$RUNNER_TEMP/godot/Godot_v4.7.2-stable_win64_console.exe" > "$RUNNER_TEMP/godot-bin/godot"
+          chmod +x "$RUNNER_TEMP/godot-bin/godot"
           echo "$RUNNER_TEMP/godot-bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/godot-bin/godot.exe" --version
+          "$RUNNER_TEMP/godot-bin/godot" --version
 
       - name: Validate JSON content, data and schemas
         shell: python
