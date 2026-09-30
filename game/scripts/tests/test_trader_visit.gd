@@ -1,8 +1,7 @@
 extends SceneTree
 
-## Acceptance coverage for issue #278/#305: the trader_visit incident
-## (content/incidents.json, already generic from #277's incident/visitor
-## handling -- see docs/architecture/orders-and-movement.md's "Incident
+## Coverage for the trader_visit incident (content/incidents.json, built on
+## the generic incident/visitor handling -- see docs/architecture/orders-and-movement.md's "Incident
 ## jobs") posts a trade_offer partway through its own unchanged wait
 ## (WorldState._maybe_post_trade_offer(), called from _set_work_progress()
 ## on the trader's first work-toil tick), and the new accept_trade command
@@ -12,8 +11,8 @@ extends SceneTree
 ## shared finish boundary its own unaccepted wait-completion despawn
 ## already uses. A refused offer (accept_trade never called) still ends
 ## with the trader gone once its own content-declared wait elapses and the
-## stockpile untouched -- test_incidents.gd's own exact-wait-timing
-## assertions (out of this task's owned paths) already cover every incident
+## stockpile untouched -- test_incidents.gd's exact-wait-timing
+## assertions already cover every incident
 ## actor, trader included, despawning exactly its declared wait after
 ## arrival; this file does not re-prove that timing, only the trade itself.
 
@@ -202,7 +201,7 @@ func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 	_expect(String(second.get("rejection", {}).get("reason", "")) == "invalid_target",
 		"an already-departed trader must be rejected invalid_target, got %s" % second)
 
-## Round-1 review: the old _remove_one_item_of_kind() fallback could pull
+## The old _remove_one_item_of_kind() fallback could pull
 ## want_item straight out of a colonist's carrying slot mid-haul; accept_trade
 ## must instead require an eligible stockpiled item (in a zone, unreserved)
 ## and leave a merely-carried item alone.

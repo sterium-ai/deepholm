@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #360 (ADR 025 t4): rescue_giver.gd, the job-giver that frees a
+## ADR 026: rescue_giver.gd, the job-giver that frees a
 ## trapped colonist. Exercises RescueGiver through real gameplay -- tripping a
 ## colonist into a trench, ticking the world -- never by calling private
 ## rescue methods directly, so the whole search -> commit -> route -> work ->
@@ -103,7 +103,7 @@ func _find_rescue_job(world: WorldStateType, restrict_to_worker: String = "") ->
 			return job
 	return {}
 
-## Ticks until job_id is "active" (bounded). A rescue commits AFTER the
+## Ticks until job_id is "active" (bounded). A rescue commits after the
 ## scheduler's own tick (rescue_giver.gd, "Route budget"), so its activation
 ## -- and with it the activation-gated trapped:<victim_id> key -- lands on a
 ## later tick than the one the job first appears on.
@@ -138,10 +138,10 @@ func _trap_colonist_at(world: WorldStateType, colonist: Dictionary, trench: Vect
 	_expect(submit.get("ok", false), "setup: till submission for the custom trap must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: colonist must become trapped at the requested tile")
 
-## Acceptance: "when a colonist is trapped and another colonist is available, a
-## rescue job is automatically generated, the rescuer routes to an adjacent
-## (never the trench) tile, works 20 ticks, and the trapped colonist is moved
-## onto the rescuer's tile and resumes ordinary scheduling."
+## When a colonist is trapped and another colonist is available, a rescue job
+## is automatically generated, the rescuer routes to an adjacent (never the
+## trench) tile, works 20 ticks, and the trapped colonist is moved onto the
+## rescuer's tile and resumes ordinary scheduling.
 func _check_rescue_job_auto_generated_and_completes() -> void:
 	var world := _fresh_world(360001)
 	_trap_colonist_0(world)
@@ -190,8 +190,8 @@ func _check_rescue_job_auto_generated_and_completes() -> void:
 			break
 	_expect(resumed, "the freed colonist must re-enter the fair scheduler's own pool like any other idle colonist")
 
-## Acceptance: "a colonist with its own critical need is never diverted into a
-## rescue." The only other colonist is busy committing to (then pursuing) a
+## A colonist with its own critical need is never diverted into a
+## rescue. The only other colonist is busy committing to (then pursuing) a
 ## critical food need; while that is true, RescueGiver must never pick it,
 ## exposing REASON_NO_RESCUER_AVAILABLE on the victim instead. Once the need
 ## resolves, the same colonist becomes available and completes the rescue.
@@ -229,17 +229,17 @@ func _check_critical_need_never_diverted_into_rescue() -> void:
 			break
 	_expect(rescued, "the candidate must go on to complete the rescue once its own critical need is satisfied")
 
-## Acceptance: "an ordinary labour job is pre-empted by a pending rescue the
-## same way a need job pre-empts it."
+## An ordinary labour job is pre-empted by a pending rescue the
+## same way a need job pre-empts it.
 func _check_pending_rescue_preempts_ordinary_labour() -> void:
 	var world := _fresh_world(360003)
 	var worker := _spawn_colonist(world, "colonist_1", 10, 0)
 	var worker_id: String = String(worker["id"])
 	# Short: the worker quickly arrives and spends its own 30-tick work timer
 	# stationary, active but never travelling, giving the rescue search a
-	# stable position to converge against well within that window (round-3
-	# review finding 2: the rescue search always re-validates against the
-	# candidate's LIVE position once a full sweep finishes, see
+	# stable position to converge against well within that window (the
+	# rescue search always re-validates against the
+	# candidate's live position once a full sweep finishes, see
 	# rescue_giver.gd's _advance_search() -- a candidate still travelling the
 	# whole time never lets a distance-scaling sweep finish before it moves
 	# again, so this deliberately keeps travel short instead of long).
@@ -283,9 +283,9 @@ func _check_pending_rescue_preempts_ordinary_labour() -> void:
 			break
 	_expect(resumed_labour, "the worker must resume its own pre-empted labour job once the rescue completes")
 
-## Acceptance: "two colonists trapped at once each get their own rescue job (no
+## Two colonists trapped at once each get their own rescue job (no
 ## double-claim of one victim), verified via the trapped:<colonist_id>
-## reservation key."
+## reservation key.
 func _check_two_victims_each_get_own_rescue_no_double_claim() -> void:
 	var world := _fresh_world(360004)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
@@ -331,9 +331,9 @@ func _check_two_victims_each_get_own_rescue_no_double_claim() -> void:
 			break
 	_expect(both_rescued, "both trapped colonists must eventually be freed")
 
-## Acceptance: "when every colonist is trapped, WorldState exposes a reason a
-## panel can render as 'no one can help' rather than leaving the situation
-## unexplained." The only colonist in the world is trapped, so RescueGiver's
+## When every colonist is trapped, WorldState exposes a reason a
+## panel can render as "no one can help" rather than leaving the situation
+## unexplained. The only colonist in the world is trapped, so RescueGiver's
 ## own candidate pool is empty by construction.
 func _check_no_rescuer_available_reason_when_everyone_trapped() -> void:
 	var world := _fresh_world(360005)
@@ -351,7 +351,7 @@ func _check_no_rescuer_available_reason_when_everyone_trapped() -> void:
 		world.tick()
 	_expect(victim.get("trapped") != null, "with nobody to rescue it, the colonist must stay trapped -- no auto-rescue")
 
-## content/jobs.json's own "rescue" entry (task's Owned content), reusing the
+## content/jobs.json's own "rescue" entry, reusing the
 ## existing toil vocabulary with no toil_executor.gd change.
 func _check_rescue_content_shape() -> void:
 	var world := _fresh_world(360006)
@@ -361,8 +361,8 @@ func _check_rescue_content_shape() -> void:
 		"rescue must reuse the exact reserve/go_to/work/release_all toil sequence")
 	_expect(int(job_def.get("work_ticks", -1)) == 20, "rescue's work_ticks must be 20")
 
-## Round-2 review finding 1: a rescuer's own later-arising critical need must
-## still take precedence over an already-ACTIVE rescue, suspending it exactly
+## A rescuer's own later-arising critical need must
+## still take precedence over an already-active rescue, suspending it exactly
 ## like it would any ordinary work, and the rescue must resume once the need
 ## is satisfied. Exercises _committed_jobs()'s merge order directly: under
 ## the bug, rescue's entry overwrote need's for the same actor, so the
@@ -429,7 +429,7 @@ func _check_need_preempts_an_already_active_rescue() -> void:
 			break
 	_expect(rescued, "the rescue must still complete once resumed")
 
-## Round-2 review finding 4: cancelling a rescue job through the ordinary
+## Cancelling a rescue job through the ordinary
 ## command path (_apply_job_command()) must tell RescueGiver its association
 ## resolved, exactly like it already tells NeedGiver (_resolve_giver_association())
 ## -- otherwise the rescuer stays permanently "pending" on a job that is no
@@ -466,12 +466,12 @@ func _check_command_cancelled_rescue_frees_the_rescuer() -> void:
 			break
 	_expect(scheduled, "the freed rescuer must be able to take ordinary work again, not stay stuck on the cancelled rescue job's own stale RescueGiver association")
 
-## Round-2 review finding 5: world_state.gd's own rescue completion effect
-## must free the victim THIS specific job actually committed to, never merely
+## world_state.gd's own rescue completion effect
+## must free the victim this specific job actually committed to, never merely
 ## "the first trapped colonist adjacent to the target" -- two different
 ## trenches can each be cardinally adjacent to the very same free tile.
 ## Victim A's own trench (1,0) and victim B's own trench (3,0) are both
-## adjacent to (2,0). Victim A is trapped FIRST, with no rescuer of its own
+## adjacent to (2,0). Victim A is trapped first, with no rescuer of its own
 ## anywhere in the world yet -- if it were trapped afterward instead, it
 ## would itself be a perfectly ordinary, idle candidate colonist and could be
 ## picked as victim B's own rescuer, which is not what this test means to
@@ -529,7 +529,7 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 	_expect(Vector2i(int(victim_a["x"]), int(victim_a["y"])) == Vector2i(1, 0),
 		"victim A must stay exactly where it was trapped, untouched by victim B's rescue")
 
-## Round-2 review finding 3: a save/load while a rescue job is ACTIVE (the
+## A save/load while a rescue job is active (the
 ## rescuer already working) must not create a duplicate rescue job for the
 ## same victim, and the surviving job must still resume and complete
 ## correctly -- RescueGiver's own bookkeeping (_pending/_job_victim) is
@@ -574,8 +574,8 @@ func _check_save_load_preserves_active_rescue_continuation() -> void:
 			duplicate_found = true
 	_expect(not duplicate_found, "loading must never create a second rescue job for the same victim")
 
-## Round-2 review finding 3, the suspended half: a save/load while a rescue
-## job is SUSPENDED (its own rescuer mid a critical-need interrupt) must
+## The suspended half: a save/load while a rescue
+## job is suspended (its own rescuer mid a critical-need interrupt) must
 ## still resume and complete the same rescue after load, with no orphaned
 ## reservation left behind.
 func _check_save_load_preserves_suspended_rescue_continuation() -> void:
@@ -625,14 +625,14 @@ func _check_save_load_preserves_suspended_rescue_continuation() -> void:
 	var report := ReservationInvariantsType.check(loaded._scheduler.queue.get_reservation_table(), loaded.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "resuming a loaded, suspended rescue must leave no orphaned reservations")
 
-## Round-3 review finding 2 ("a reserved near-side tile"): the victim's own
+## Regression (a reserved near-side tile): the victim's own
 ## nearest, cheapest adjacent tile (1, 2) is reserved by an unrelated job, so
 ## the only remaining target (3, 2) is a straight shot through the trench
-## (2, 2) for the near candidate (0, 2) -- exactly the geometry the review
-## named, where the old "restricted search proves a detour exists" scheme
+## (2, 2) for the near candidate (0, 2) -- exactly the geometry where the
+## old "restricted search proves a detour exists" scheme
 ## would have committed the near candidate to a route the real go_to executor
 ## would actually walk straight through the trench. A second, farther
-## candidate (5, 2) CAN reach the same target safely (from the far side, never
+## candidate (5, 2) can reach the same target safely (from the far side, never
 ## touching (2, 2)). The fix must reject the unsafe pairing outright and use
 ## the safe one instead -- never assume the near candidate's own restricted
 ## "detour" would really be followed.
@@ -643,8 +643,8 @@ func _check_unsafe_route_rejected_in_favour_of_a_safe_candidate() -> void:
 	world._tiles[world._tile_index(2, 1)] = WorldStateType.TILE_ROCK
 	world._tiles[world._tile_index(2, 3)] = WorldStateType.TILE_ROCK
 	# Reserves the near-side target directly on the shared table, exactly like
-	# an unrelated job's own active tile reservation would (round-3 review's
-	# own scenario), forcing the only remaining target to (3, 2).
+	# an unrelated job's own active tile reservation would, forcing the only
+	# remaining target to (3, 2).
 	world._scheduler.queue.get_reservation_table().acquire("tile:1,2", "blocker_job")
 	var unsafe_rescuer := _spawn_colonist(world, "unsafe_rescuer", 0, 2)
 	var unsafe_id: String = String(unsafe_rescuer["id"])
@@ -670,8 +670,8 @@ func _check_unsafe_route_rejected_in_favour_of_a_safe_candidate() -> void:
 	_expect(unsafe_rescuer.get("trapped") == null, "the rejected unsafe candidate must never actually be sent, so it never falls into the trench")
 	_expect(safe_rescuer.get("trapped") == null, "the chosen safe candidate must never fall into the trench either")
 
-## Round-3 review finding 2 ("intervening trenches"): the victim's trench
-## (5, 0) is the ONLY passable crossing point of an otherwise fully walled
+## Regression (intervening trenches): the victim's trench
+## (5, 0) is the only passable crossing point of an otherwise fully walled
 ## column x=5 -- every route from the west side to the one remaining target
 ## (6, 0), on the east side, must cross it. No detour exists anywhere on the
 ## map, unlike the previous check's own far-side candidate. The giver must
@@ -698,7 +698,7 @@ func _check_no_rescue_when_every_route_crosses_the_trench() -> void:
 	_expect(victim.get("trapped") != null, "the victim must stay trapped rather than be sent an unsafe rescuer")
 	_expect(rescuer.get("trapped") == null, "the only candidate must never be dispatched into the trench")
 
-## Round-3 review finding 4: victim B dies (is fully removed, not merely
+## Victim B dies (is fully removed, not merely
 ## un-trapped) while its own rescue job is still active. The completion
 ## effect must treat this as an obsolete rescue -- resolved through the
 ## ordinary cleanup boundary, never substituting a different, merely-adjacent
@@ -753,13 +753,13 @@ func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "a rescue job whose victim died must leave no orphaned reservations")
 
-## Round-3 review finding 3, verified through the REAL SaveIO boundary (not
-## just StateCodec directly, per the reviewer's own repair decision): the
+## Verified through the real SaveIO boundary (not
+## just StateCodec directly): the
 ## exact shared-neighbour geometry from
 ## _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour(),
 ## where target-tile-plus-adjacency alone cannot tell victim A and victim B
-## apart, with a COMPLETED rescue job (an unrelated, already-finished rescue)
-## also present in job history alongside the ACTIVE one under test -- SaveIO
+## apart, with a completed rescue job (an unrelated, already-finished rescue)
+## also present in job history alongside the active one under test -- SaveIO
 ## must accept a world containing both (its job-kind allow-list must include
 ## "rescue"), and decode() must restore job_b's own victim association
 ## losslessly (never adjacency-guessed) so saving never changes who gets
@@ -829,10 +829,10 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 	if FileAccess.file_exists(path):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
-## Round-2 review round-4 finding 1's own example: the victim's trench at
+## Regression (an unrelated trench on the route): the victim's trench at
 ## (5, 0) is not the only trench on the map. A near candidate's real route to
-## the only remaining target (4, 0) crosses a completely UNRELATED trench at
-## (2, 0) -- the old "does the path cross the VICTIM's own tile" check let
+## the only remaining target (4, 0) crosses a completely unrelated trench at
+## (2, 0) -- the old "does the path cross the victim's own tile" check let
 ## this through, since (2, 0) is not (5, 0). The fix must reject it and use
 ## the farther, genuinely safe candidate instead.
 func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
@@ -853,7 +853,7 @@ func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 			break
 	_expect(not job.is_empty(), "a rescue job must still be generated despite the near candidate's route crossing an unrelated trench")
 	_expect(world._rescue_giver.colonist_for_job(String(job["id"])) == safe_id,
-		"a candidate whose only route crosses a DIFFERENT trench than the victim's own must never be chosen")
+		"a candidate whose only route crosses a different trench than the victim's own must never be chosen")
 	_expect(job["target"] == Vector2i(4, 0), "the only remaining target must be (4, 0)")
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND:
@@ -864,10 +864,10 @@ func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 	_expect(rescued, "the safe candidate must still complete the rescue")
 	_expect(unsafe_rescuer.get("trapped") == null, "the rejected candidate must never actually be sent, so it never falls into the unrelated trench")
 
-## Round-2 review round-4 finding 2, the real-travel half: a candidate doing
+## The real-travel half: a candidate doing
 ## a genuinely long ordinary labour job keeps moving, tile after tile, for
 ## far longer than a single sweep takes -- unlike
-## _check_pending_rescue_preempts_ordinary_labour()'s own deliberately SHORT
+## _check_pending_rescue_preempts_ordinary_labour()'s own deliberately short
 ## travel, which dodges this. The bounded stale-retry counter must still let
 ## a later, idle candidate win instead of the search restarting forever.
 func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void:
@@ -885,9 +885,9 @@ func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void
 	var labour_submit := world._scheduler.submit(Vector2i(46, 5), 1, world.get_tick(), "till", worker_id)
 	_expect(labour_submit.get("ok", false), "setup: the long ordinary labour order must be accepted")
 	var labour_job_id: String = String(labour_submit["job_id"])
-	# Waits for the worker to be genuinely under way AND far along (not merely
+	# Waits for the worker to be genuinely under way and far along (not merely
 	# assigned, not merely "x > 0"): a rescue search that starts too early
-	# converges against a NEARBY, barely-moved position, where each of the (up
+	# converges against a nearby, barely-moved position, where each of the (up
 	# to four) targets resolves in a single tick -- a 3-target sweep and this
 	# actor's own 3-tick move_ticks_per_tile hold then take the exact same
 	# duration, so the search spuriously reads "not stale" and legitimately
@@ -920,7 +920,7 @@ func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void
 			break
 	_expect(rescued, "the backup candidate must go on to complete the rescue")
 
-## Round-2 review round-4 finding 2, the targeted half: a candidate whose live
+## The targeted half: a candidate whose live
 ## position differs every single tick (teleported here, independent of any
 ## real job, to make the effect deterministic rather than dependent on
 ## move_ticks_per_tile timing) must never indefinitely restart the search
@@ -957,20 +957,20 @@ func _check_moving_candidate_cannot_starve_a_stationary_backup() -> void:
 			break
 	_expect(rescued, "the backup candidate must go on to complete the rescue")
 
-## Round-2 review round-4 finding 3, the "across the trench" half: the only
+## The "across the trench" half: the only
 ## passage across x=5 is the victim's own trench tile. A critical need whose
 ## only source sits on the far side is fine for the need job itself (an
 ## ordinary job may cross a trench), but it leaves the rescuer on the wrong
-## side of the only passage for its OWN rescue target. Resuming must never
+## side of the only passage for its own rescue target. Resuming must never
 ## blindly walk it back across; the stale commitment must be retired so a
 ## fresh search can find the still-safe target from the rescuer's new side.
 ## world._interrupt_current_job()/_resume_interrupted_job() (the exact same
 ## wrappers a real critical need uses, see
 ## _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() below)
 ## reposition the rescuer directly rather than routing a real need job across
-## the trench: any ordinary job's route stepping onto ANY trench tile (a
+## the trench: any ordinary job's route stepping onto any trench tile (a
 ## waypoint or a target -- world_state.gd's own _check_trench_arrival(),
-## unrelated to this task) unconditionally traps a colonist, so a real
+## a separate mechanic) unconditionally traps a colonist, so a real
 ## cross-trench need job would itself become a second trapped victim instead
 ## of landing safely on the far side. Direct repositioning isolates the one
 ## thing this check is about: world_state.gd's resume path revalidating route
@@ -1009,9 +1009,9 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
 		# The stale commitment is retired through the toil executor's own
-		# budgeted, multi-tick re-route (round-4 review finding 4: never a
+		# budgeted, multi-tick re-route (never a
 		# synchronous search), so the old job id can still be pending for a
-		# few ticks -- only a DIFFERENT rescue job counts as the fresh one.
+		# few ticks -- only a different rescue job counts as the fresh one.
 		if fresh_job.is_empty():
 			var candidate := _find_rescue_job(world, rescuer_id)
 			if not candidate.is_empty() and String(candidate["id"]) != job_id:
@@ -1032,7 +1032,7 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "retiring an unsafe resumed rescue must leave no orphaned reservations")
 
-## Round-2 review round-4 finding 3, the "one tile beyond" half: lands the
+## The "one tile beyond" half: lands the
 ## rescuer diagonally adjacent to its own rescue target -- Chebyshev-adjacent
 ## (distance 1) but not the exact tile RescueGiver's own commit-time search
 ## verified safe. Uses WorldState's own interrupt/resume wrappers directly
@@ -1074,8 +1074,8 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(int(rescuer["x"]), int(rescuer["y"])),
 		"the victim must end up on the rescuer's own tile")
 
-## Round-2 review round-4 finding 4: rescue A is suspended mid-work with real
-## leftover progress; rescue B, a DIFFERENT victim sharing the same target
+## Rescue A is suspended mid-work with real
+## leftover progress; rescue B, a different victim sharing the same target
 ## tile, activates on the freed tile and runs to completion; rescue A then
 ## resumes. Each job's own progress must survive untouched by the other's --
 ## proven through _get_work_progress() directly (never through colonist.work,
@@ -1116,9 +1116,9 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	_expect(world._scheduler.queue.get_job(job_a_id)["target"] == Vector2i(2, 0), "setup: job A's target must be the shared tile (2, 0)")
 
 	# Column x=2 has no trench anywhere along it, so routing rescuer A south to
-	# its own food source never risks the general "stepping onto ANY trench
+	# its own food source never risks the general "stepping onto any trench
 	# tile traps the actor" mechanic (world_state.gd's _check_trench_arrival(),
-	# unrelated to this task) the way crossing back over x=1 or x=3 would.
+	# a separate mechanic) the way crossing back over x=1 or x=3 would.
 	rescuer_a["needs"]["food"] = 5
 	for kind in world._need_definitions.keys():
 		if kind != "food":
@@ -1174,7 +1174,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 			need_resolved = true
 			break
 	_expect(need_resolved, "setup: rescuer A's own need must be satisfied so the rescue can resume")
-	# Round-6 review (#278/#303): a suspended job's own progress now lives in
+	# A suspended job's own progress now lives in
 	# WorldState._suspended_work_progress (job-id-keyed) rather than staying
 	# live under the shared tile-keyed _work_progress cache -- exactly the
 	# same mechanism a suspended ordinary job now uses -- so it is only
@@ -1198,7 +1198,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	# is what actually proves no cross-job corruption happened.
 	var live_ticks_remaining := int(rescuer_a["work"]["ticks_remaining"])
 	_expect(live_ticks_remaining <= remaining_before_interrupt and live_ticks_remaining >= remaining_before_interrupt - 1,
-		"job A must resume from its OWN preserved progress, not restart fresh or inherit job B's leftover (got %d, expected close to %d)" % [live_ticks_remaining, remaining_before_interrupt])
+		"job A must resume from its own preserved progress, not restart fresh or inherit job B's leftover (got %d, expected close to %d)" % [live_ticks_remaining, remaining_before_interrupt])
 	var restored_progress = world._get_work_progress(Vector2i(2, 0))
 	_expect(restored_progress != null and int(restored_progress) == live_ticks_remaining,
 		"job A's cached progress must match its own current live work state, never job B's leftover or a corrupted value (got %s expected %s)" % [restored_progress, live_ticks_remaining])
@@ -1210,7 +1210,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 			break
 	_expect(rescued_a, "job A must still go on to complete the rescue")
 
-## Round-2 review round-4 finding 5: state_hash() must reflect RescueGiver's
+## state_hash() must reflect RescueGiver's
 ## own job-to-victim association -- two otherwise-identical states naming a
 ## different victim for the same job id must never hash equal.
 func _check_state_hash_reflects_rescue_victim_assignment() -> void:
@@ -1244,12 +1244,12 @@ func _has_progress_key_for(world: WorldStateType, job_id: String) -> bool:
 			return true
 	return false
 
-## Round-4 review finding 2, cancellation during work with a PAUSED ORDINARY
+## Cancellation during work with a paused ordinary
 ## job sharing the target: an ordinary worker tills the very tile a rescue
 ## later targets, is interrupted by a real critical need (parking its own
 ## progress under its own job id via _suspend_work_progress() and releasing
 ## the tile), then the rescue reserves that tile and starts its own work.
-## Cancelling the rescue through the command boundary must drop ONLY the
+## Cancelling the rescue through the command boundary must drop only the
 ## rescue's own job-scoped key: the old owner-lookup clear ran after
 ## _finish_job() had already released the tile, resolved to the plain key,
 ## and erased the till job's parked progress instead of the rescue's.
@@ -1284,7 +1284,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	var till_job_id: String = String(till["job_id"])
 	_expect(String(world._scheduler.queue.get_job(till_job_id).get("status", "")) == "queued",
 		"setup: the till job must be suspended, releasing the shared tile")
-	# Round-6 review (#278/#303): a suspended job's own progress -- till's own
+	# A suspended job's own progress -- till's own
 	# ordinary job here included -- now lives in job-id-keyed
 	# _suspended_work_progress, not under the shared tile-keyed _work_progress
 	# cache (see WorldState._suspend_work_progress()'s own doc comment); this
@@ -1317,7 +1317,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "cancelling an active rescue must leave no orphaned reservations")
 
-## Round-4 review finding 2, cancellation while SUSPENDED: a rescue interrupted
+## Cancellation while suspended: a rescue interrupted
 ## mid-work keeps its progress parked under its own job id (that is what lets
 ## it resume with its own progress); cancelling the suspended job must drop
 ## that entry even though the job is no longer "active" -- nobody else can
@@ -1339,7 +1339,7 @@ func _check_cancel_while_suspended_clears_the_rescue_progress_key() -> void:
 	_expect(not key.is_empty(), "setup: the rescue must be mid-work with parked progress")
 	world._interrupt_current_job(rescuer)
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued", "setup: the rescue must be suspended")
-	# Round-6 review (#278/#303): suspension moves this job's own progress out
+	# Suspension moves this job's own progress out
 	# of _work_progress into job-id-keyed _suspended_work_progress (see
 	# WorldState._suspend_work_progress()'s own doc comment), the same
 	# mechanism every other suspended work-ticked kind now uses.
@@ -1351,7 +1351,7 @@ func _check_cancel_while_suspended_clears_the_rescue_progress_key() -> void:
 	_expect(not world._suspended_work_progress.has(job_id), "cancelling a suspended rescue must drop its own parked progress")
 	_expect(world._rescue_giver.get_pending_job(rescuer_id).is_empty(), "the rescuer must be freed")
 
-## Round-4 review finding 2, death: the rescuer dies mid-work; its rescue is
+## Death: the rescuer dies mid-work; its rescue is
 ## cancelled through the death boundary and must drop its own progress key.
 func _check_rescuer_death_clears_the_rescue_progress_key() -> void:
 	var world := _fresh_world(360027)
@@ -1378,7 +1378,7 @@ func _check_rescuer_death_clears_the_rescue_progress_key() -> void:
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "a rescuer's death must leave no orphaned reservations")
 
-## Round-4 review finding 3: two LIVE rescues whose job ids straddle a digit
+## Two live rescues whose job ids straddle a digit
 ## boundary (job_9 and job_10 -- inserted in that order live, but sorted
 ## "job_10" < "job_9" on disk) must hash identically before and after a real
 ## save/load, since the associations themselves are identical.
@@ -1430,8 +1430,8 @@ func _check_state_hash_equal_across_save_load_with_digit_boundary_rescue_ids() -
 	_expect(loaded.state_hash() == live_hash,
 		"state_hash must be identical across save/load when the only difference is the Dictionary order of identical rescue associations")
 
-## Round-4 review finding 4 (ADR 004): three victims' searches all evaluating
-## the ONE far-away candidate on a large open map must share that colonist's
+## ADR 004: three victims' searches all evaluating
+## the one far-away candidate on a large open map must share that colonist's
 ## single per-tick route allowance with the scheduler and the toil executor
 ## -- never one resume() per victim per tick -- while every unfinished search
 ## is retained across ticks and still completes; and a resumed rescue must
@@ -1510,12 +1510,12 @@ func _check_rescue_searches_share_the_per_colonist_route_budget() -> void:
 		previous_calls = calls
 	_expect(one_step_per_tick, "the retained re-route must advance by at most one budgeted step per tick")
 
-## Round-4 review finding 5, blocked travel + trench-crossing re-route +
+## Blocked travel + trench-crossing re-route +
 ## retiring an unreachable commitment: the only connections between the
 ## west and east halves of this carved map are two trench tiles. Rescuer 1
 ## (west) commits to the safe west-side target; a wall dropped in front of it
 ## mid-travel leaves no trench-free route to that target at all -- the
-## unrestricted shortest re-route would now run through BOTH trenches -- so
+## unrestricted shortest re-route would now run through both trenches -- so
 ## the commitment must be retired (rescuer 1 never trapped, never walked
 ## through a trench) and rescuer 2 (east) must be chosen instead.
 func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_helps() -> void:
@@ -1573,7 +1573,7 @@ func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "retiring and re-proposing must leave no orphaned reservations")
 
-## Round-4 review finding 5, blocked travel with a safe detour: a wall dropped
+## Blocked travel with a safe detour: a wall dropped
 ## in front of the rescuer mid-travel forces a re-route whose unrestricted
 ## shortest alternatives tie between a path through the victim's own trench
 ## and a trench-free one. The re-route must take the trench-free path
@@ -1612,10 +1612,10 @@ func _check_blocked_corridor_with_a_safe_detour_reroutes_without_crossing_the_tr
 			rescued = true
 			break
 	_expect(rescued, "the rescue must complete via the trench-free detour")
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "completed", "the SAME rescue job must complete (re-routed, not retired)")
+	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "completed", "the same rescue job must complete (re-routed, not retired)")
 	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(0, 0), "the victim must end up on the rescue target")
 
-## Round-4 review finding 5, a newly impassable target -- both while the
+## A newly impassable target -- both while the
 ## commitment is still queued (activation-time path trim) and mid-travel
 ## (re-route-time trim): a wall on the rescue target must retire the rescue
 ## rather than let the ordinary impassable-target route trim start rescue

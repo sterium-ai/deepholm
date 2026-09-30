@@ -1,24 +1,23 @@
 extends SceneTree
 
-## Issue #301 acceptance: "The full map is captured separately in an enlarged,
-## capture-only viewport (following the existing production camera contract,
-## unmodified), since 256x256 tiles at 16 px do not fit in 1280x720, 1920x1080
-## or at the 0.5x minimum zoom; that capture must show all four map edges and
-## both ends of the river."
+## The full map is captured separately in an enlarged, capture-only viewport
+## (following the existing production camera contract, unmodified), since
+## 256x256 tiles at 16 px do not fit in 1280x720, 1920x1080 or at the 0.5x
+## minimum zoom; that capture must show all four map edges and both ends of
+## the river.
 ##
-## Review finding: earlier full-map shots clamped a "fit zoom" into the fixed
-## 1280x720/1920x1080 windows, which can never contain a 256x256 map at 16px
-## (4096x4096 px) even at the production camera's 0.5x zoom floor -- so every
-## "full-map" image was actually cropped. This file restores the issue #300
-## pattern instead: temporarily enlarge the SceneTree root viewport
-## (evidence-only) so the whole map's real-pixel extent at the camera's own
+## Clamping a "fit zoom" into the fixed 1280x720/1920x1080 windows cannot
+## work: they can never contain a 256x256 map at 16px (4096x4096 px) even at
+## the production camera's 0.5x zoom floor, so every "full-map" image would be
+## cropped. Instead this file temporarily enlarges the SceneTree root viewport
+## (capture-only) so the whole map's real-pixel extent at the camera's own
 ## unmodified 0.5x zoom floor (map_viewport.gd's zoom_at(), never touched)
 ## fits entirely inside it. map_viewport.gd's existing _constrain() then
 ## centers the whole map in frame unconditionally (extent <= viewport size on
 ## both axes), showing every edge and both river endpoints, not a
-## colonist-centered crop, tile, or stitch. Always PASSes headless (no
+## colonist-centered crop, tile, or stitch. Always passes headless (no
 ## capture happens without a real DisplayServer); the graphical run is
-## separate, explicit capture saved under user://captures.
+## a separate, explicit capture saved under user://captures.
 ##
 ## godot --headless --path game --script res://scripts/tests/test_river_map_capture.gd
 ## godot --path game --script res://scripts/tests/test_river_map_capture.gd -- --capture

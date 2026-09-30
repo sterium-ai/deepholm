@@ -1,17 +1,19 @@
 # ADR 006: Ground wood becomes first-class items, colonist carrying, schemaVersion 6
 
+> **In short:** Wood lying on the ground becomes individual items that colonists can pick up, carry and put down, and save files are upgraded to match.
+
 - **Status:** accepted
 - **Date:** 2026-09-18
 - **Scope:** simulation (`WorldState`, the toil executor), persistence (save
   schema and migration)
 - **Implements:** [ADR 003](003-scheduling-explainability-save-integrity-mobile-first.md),
-  principle 3 (save integrity is a named strategy); objective #189.
+  principle 3 (save integrity is a named strategy).
 
 ## Context
 
-Objective #189 asks for ground wood to stop being a per-tile counter and
-become a first-class item — `{id, x, y, kind, count}` — so a later haul job
-(t5) and stockpile zones (t4) have something with an identity to reference
+Ground wood needs to stop being a per-tile counter and become a
+first-class item — `{id, x, y, kind, count}` — so a later haul job and
+stockpile zones have something with an identity to reference
 and reserve. This is a new persisted, public data shape: `game-state.schema.json`
 and the save envelope both change, so per `AGENTS.md` ("update the relevant
 contract, schema, example, test, and a short numbered ADR when the decision
@@ -66,15 +68,15 @@ implementation.
 - **Keep the per-tile wood counter and add a parallel items table only for
   carried items.** Rejected: it would need two representations of the same
   concept (ground wood as a count, carried wood as an item) instead of one,
-  and a later haul job (t5) or stockpile zone (t4) would still need ground
+  and a later haul job or stockpile zone would still need ground
   wood to have an id to reserve — better to give it one now than migrate
   twice.
 - **Let `pick_up`/`place` operate on stockpile zones now.** Rejected:
-  objective #189 explicitly defers zone membership to t4; testing `place`
-  against an arbitrary free tile keeps this change's scope to the item/toil
-  mechanics alone.
+  zone membership is explicitly deferred to the stockpile-zone work (ADR
+  007); testing `place` against an arbitrary free tile keeps this change's
+  scope to the item/toil mechanics alone.
 - **Omit `_next_item_id` from `state_hash()`, since the item list itself is
-  already covered.** Rejected during review: the counter determines the id
+  already covered.** Rejected: the counter determines the id
   of the *next* item a chop will create, which is state that diverges
   observably (a later save/load/chop sequence produces a different id) even
   when the current item list is identical, so it must be part of the hashed
@@ -97,7 +99,7 @@ implementation.
   step; `test_save_migration.gd` gains a schemaVersion-5 fixture covering
   it.
 - No stockpile zone, haul job kind, or viewer change is introduced by this
-  ADR; they are explicitly deferred to tasks t4, t5, and t6.
+  ADR; they are explicitly deferred to later work (see ADR 007).
 
 ## Acceptance criteria
 

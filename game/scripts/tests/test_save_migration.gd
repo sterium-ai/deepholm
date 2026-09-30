@@ -26,26 +26,24 @@ const FIXTURE_V9 := "res://scripts/tests/fixtures/save_schema_v9_fixture.json"
 const FIXTURE_V10 := "res://scripts/tests/fixtures/save_schema_v10_fixture.json"
 const FIXTURE_V11 := "res://scripts/tests/fixtures/save_schema_v11_fixture.json"
 
-## #269: a real schemaVersion-15 save file (this task's own predecessor
-## schema, current on main before ADR 008's calendar alert wiring), the
-## fixtures/ directory being an owned path for this task unlike #243/#257's
-## inline v13/v14 literals above.
+## A real schemaVersion-15 save file (the schema in use before ADR 008's
+## calendar alert wiring), stored under fixtures/ unlike the inline v13/v14
+## literals below.
 const FIXTURE_V16 := "res://scripts/tests/fixtures/save_schema_v16_fixture.json"
 
-## #288: a real schemaVersion-18 save file (this task's own predecessor
-## schema, current on main before per-object/per-item faction ownership was
+## A real schemaVersion-18 save file (the schema in use before
+## per-object/per-item faction ownership was
 ## persisted), named for its own schemaVersion like the v1..v11 fixture files
 ## above rather than FIXTURE_V16's target-version naming.
 const FIXTURE_V18 := "res://scripts/tests/fixtures/save_schema_v18_fixture.json"
 
-## #295: a real schemaVersion-20 save file (this task's own predecessor
-## schema, current on main before the incident scheduler's continuation state
+## A real schemaVersion-20 save file (the schema in use before the
+## incident scheduler's continuation state
 ## was persisted), named for its own schemaVersion like FIXTURE_V18 above.
 const FIXTURE_V20 := "res://scripts/tests/fixtures/save_schema_v20_fixture.json"
 
-## #243 review round 1: the v13 fixture must live inside this owned test file
-## rather than as a separate game/scripts/tests/fixtures/ file (that
-## directory is not one of this task's owned paths). Written to a user://
+## The v13 fixture lives inline in this test file rather than as a separate
+## game/scripts/tests/fixtures/ file. Written to a user://
 ## temp file at runtime (see _write_v13_fixture()) so _check_v13_fixture_loads_through_save_io()
 ## still exercises SaveIO.read()'s real file I/O and integrity-hash
 ## verification, not just a Dictionary literal.
@@ -84,10 +82,10 @@ const V13_FIXTURE_STATE := {
 	"toolReservations": {},
 }
 
-## #257: a real schema-14 save file, mirroring V13_FIXTURE_STATE one version
+## A real schema-14 save file, mirroring V13_FIXTURE_STATE one version
 ## up -- one colonist holding a tool, a queued job with its own waiting-queue
 ## entry mirrored into activatedEntries, a ground item/object/zone/berry
-## patch -- but with the three #241-round-2 fields v13 predates
+## patch -- but with the three need-interrupt fields v13 predates
 ## (needJobAssignments, waiting/activatedEntries restrictTo) now genuinely
 ## populated rather than backfilled placeholders, so this fixture is not just
 ## V13_FIXTURE_STATE with the version counter bumped.
@@ -128,13 +126,11 @@ const V14_FIXTURE_STATE := {
 	"needJobAssignments": [{"colonistId": "colonist_0", "jobId": "job_1"}],
 }
 
-## #284: a real schema-17 save file (this task's own predecessor schema),
-## mirroring V13_FIXTURE_STATE/V14_FIXTURE_STATE's inline-literal precedent
-## (the fixtures/ directory is not this task's own extension point for a new
-## fixture file): one colonist holding a tool, one colonist carrying an item,
-## a fired calendar alert, and a populated toolFetchExcluded entry, none of
-## which any earlier fixture in this file exercises together with the two new
-## v18 entity fields this task adds.
+## A real schema-17 save file, following V13_FIXTURE_STATE/V14_FIXTURE_STATE's
+## inline-literal precedent: one colonist holding a tool, one colonist
+## carrying an item, a fired calendar alert, and a populated
+## toolFetchExcluded entry, none of which any earlier fixture in this file
+## exercises together with the two entity fields v18 adds.
 const V17_FIXTURE_DIR := "user://test-save-migration-v17-fixture"
 const V17_FIXTURE_STATE := {
 	"schemaVersion": 17, "contentVersion": "1.0.0", "seed": 357911, "tick": 8,
@@ -172,42 +168,42 @@ const V17_FIXTURE_STATE := {
 	"toolFetchExcluded": [{"jobId": "job_1", "toolIds": ["tool_1"]}],
 }
 
-## #257: proves SaveIO.read() rejects a save whose contentVersion has no
+## Proves SaveIO.read() rejects a save whose contentVersion has no
 ## registered rename with the new typed content_version_mismatch code, never
 ## silently proceeding with a stale content id.
 const CONTENT_MISMATCH_FIXTURE_DIR := "user://test-save-migration-content-mismatch-fixture"
 
-## #257: proves the content-rename hook actually runs (not just the mismatch
+## Proves the content-rename hook actually runs (not just the mismatch
 ## check itself) by registering a rename for this exact source contentVersion
 ## and asserting the loaded state's renamed content id took effect.
 const CONTENT_RENAME_FIXTURE_DIR := "user://test-save-migration-content-rename-fixture"
 const RENAME_SOURCE_CONTENT_VERSION := "test-legacy-content-version"
 
-## Issue #449: fixture directory for the production wall->wooden_wall
+## Fixture directory for the production wall->wooden_wall
 ## content-rename hook check, distinct from CONTENT_RENAME_FIXTURE_DIR above
 ## (that one exercises a test-registered rename, not the real one).
 const WALL_RENAME_FIXTURE_DIR := "user://test-save-migration-wall-rename-fixture"
 
-## Round 2 review (issue #449): fixture directory for a pre-task save that
-## still carries an UNFINISHED "wall" construction site (ADR 038), proving the
+## Fixture directory for a pre-rename save that
+## still carries an unfinished "wall" construction site (ADR 040), proving the
 ## production content-rename hook renames a constructionSites[].kind entry
 ## (not just a completed objects[].kind entry) and that the renamed site can
 ## still be delivered to and completed after load.
 const WALL_SITE_RENAME_FIXTURE_DIR := "user://test-save-migration-wall-site-rename-fixture"
 
-## Round 2 review (issue #449): fixture directory for a pre-task save that
-## still carries a queued/active legacy (pre-#406) "build" job whose own
+## Fixture directory for a pre-rename save that
+## still carries a queued/active legacy (pre-construction-site) "build" job whose own
 ## retired buildKind is "wall", proving SaveIO resolves the content-rename
 ## before SaveMigrations.migrate_legacy_build_jobs() looks buildKind up
 ## against the current content bundle -- otherwise that lookup misses and
 ## synthesizes an empty-cost, one-tick site instead of a real wooden_wall one.
 const LEGACY_WALL_BUILD_JOB_FIXTURE_DIR := "user://test-save-migration-legacy-wall-build-job-fixture"
 
-## Round 2 review (issue #449): fixture directories for a save entering the
+## Fixture directories for a save entering the
 ## content-rename path (contentVersion == WALL_RENAME_FROM_CONTENT_VERSION)
 ## with a missing/malformed "objects", "constructionSites", "jobs", or
-## "contentVersion" field. Before the round-2 fix, SaveMigrations'
-## _rename_wall_to_wooden_wall() fabricated an empty objects/jobs array when
+## "contentVersion" field. SaveMigrations' _rename_wall_to_wooden_wall()
+## once fabricated an empty objects/jobs array when
 ## either was absent (masking a missing-field rejection) and blindly cast
 ## every collection/entry, raising a script error for a malformed one instead
 ## of letting _validate_state() reject it structurally. Each of these must be
@@ -228,8 +224,8 @@ const WALL_RENAME_NON_STRING_OBJECT_KIND_FIXTURE_DIR := "user://test-save-migrat
 const WALL_RENAME_NON_STRING_SITE_KIND_FIXTURE_DIR := "user://test-save-migration-wall-rename-non-string-site-kind-fixture"
 const WALL_RENAME_NON_STRING_JOB_BUILD_KIND_FIXTURE_DIR := "user://test-save-migration-wall-rename-non-string-job-build-kind-fixture"
 
-## #299: a real schema-19 save file (this task's own predecessor schema,
-## current on main before "map.generatorVersion" was persisted), mirroring
+## A real schema-19 save file (the schema in use before
+## "map.generatorVersion" was persisted), mirroring
 ## V17_FIXTURE_STATE one version up -- items/objects already carry factionId
 ## (added at v19), entities already carry factionId/health (added at v18),
 ## but "map" has no "generatorVersion" field yet, the one thing v19->v20 adds.
@@ -272,8 +268,8 @@ const V19_FIXTURE_STATE := {
 	"toolFetchExcluded": [],
 }
 
-## #349: a real schemaVersion-21 save file (this task's own predecessor
-## schema, current on main before the per-need decay accumulator was
+## A real schemaVersion-21 save file (the schema in use before the per-need
+## decay accumulator was
 ## persisted), mirroring V19_FIXTURE_STATE one version up -- "map" already
 ## carries generatorVersion and the top level already carries "epoch" (added
 ## at v20) and "incidentScheduler" (added at v21), but no entity carries
@@ -319,9 +315,9 @@ const V21_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1160801, "state": 0}},
 }
 
-## Issue #358 round 2 review (ADR 025 amendment): a real schemaVersion-22 save
-## file (this task's own predecessor schema, current on main before the
-## dig-find RNG continuation was persisted), mirroring V21_FIXTURE_STATE one
+## ADR 026 amendment: a real schemaVersion-22 save file (the schema in use
+## before the dig-find RNG continuation was persisted), mirroring
+## V21_FIXTURE_STATE one
 ## version up -- every entity already carries "needsAccumulator" (added at
 ## v22), but the top level carries no "digFindRng" yet, the one thing
 ## v22->v23 adds.
@@ -368,8 +364,8 @@ const V22_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 }
 
-## Issue #359 (ADR 025 t3): a real schemaVersion-23 save file (this task's own
-## predecessor schema, current on main before trapped-actor state was
+## ADR 026: a real schemaVersion-23 save file (the schema in use before
+## trapped-actor state was
 ## persisted), mirroring V22_FIXTURE_STATE one version up -- every entity
 ## already carries "needsAccumulator" (v22) and the top level already carries
 ## "digFindRng" (v23), but no entity carries "trapped" yet, the one thing
@@ -416,16 +412,16 @@ const V23_FIXTURE_STATE := {
 	"toolFetchExcluded": [],
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 	"digFindRng": {"seed": 468135, "state": 0},
-	# Round-4 review: origin/main's own schemaVersion-23 encoder (the #342 combat
-	# merge) writes this field unconditionally, so a REAL v23 save from current
-	# main always carries a populated one, not just an empty list -- this
+	# The schemaVersion-23 encoder writes
+	# this field unconditionally, so a real v23 save always carries a
+	# populated one, not just an empty list -- this
 	# fixture must exercise that shape, or the migration shape-check regression
 	# that rejected it goes uncaught (see _is_schema_v23_state()'s own comment).
 	"combatBlockedTargets": [{"actorId": "colonist_1", "tiles": [{"x": 2, "y": 1}, {"x": 0, "y": 1}]}],
 }
 
-## Issue #402 (ADR 035): a real schemaVersion-24 save file (this task's own
-## predecessor schema, current on main before the hands model), mirroring
+## ADR 037: a real schemaVersion-24 save file (the schema in use before the
+## hands model), mirroring
 ## V23_FIXTURE_STATE one version up -- every entity already carries "trapped"
 ## (v23->v24) but still the single-slot "carrying" field (null or populated)
 ## v24 itself predates replacing with "hands". colonist_0's null carrying
@@ -475,28 +471,28 @@ const V24_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 }
 
-## Round 2 review regression: calendar window ids come from content/calendar.json,
+## Regression: calendar window ids come from content/calendar.json,
 ## whose own schema (game/content/schemas/calendar.schema.json) allows any
 ## non-empty string, not the stricter ^[a-z0-9_-]+$ pattern _matches_id_pattern()
 ## enforces for entity/job/item ids. A valid window id like "SpringSow" must
 ## still round-trip through SaveIO.read(), not just an in-memory _validate_state call.
 const CALENDAR_ID_FIXTURE_DIR := "user://test-save-migration-calendar-id-fixture"
 
-## Round-4 review regression (#406): a save carrying a legacy "build" job
+## Regression: a save carrying a legacy "build" job
 ## (JobQueue.BUILD_KIND, the single-worker job the construction-site model
-## replaced) at the CURRENT schemaVersion -- construction sites were added
+## replaced) at the current schemaVersion -- construction sites were added
 ## without a version bump, so this scenario is not covered by any vN fixture
 ## above. Used by _check_legacy_build_job_loads_through_save_io().
 const LEGACY_BUILD_JOB_FIXTURE_DIR := "user://test-save-migration-legacy-build-job-fixture"
 
-## Round 2 review regression (#295): _migrate_v20_to_v21() calls int(state["tick"])
+## Regression: _migrate_v20_to_v21() calls int(state["tick"])
 ## to derive incidentScheduler.lastProcessedDay; _is_schema_v20_state() must
 ## reject a Dictionary/Array "tick" before that conversion runs, not let it
 ## reach a script error. Used by _check_malformed_v20_tick_rejected_through_save_io()
 ## to prove the same rejection holds through a real integrity-valid envelope.
 const V20_TICK_FIXTURE_DIR := "user://test-save-migration-v20-tick-fixture"
 
-## Round 1 review regression (#349): _is_schema_v21_state() checked that
+## Regression: _is_schema_v21_state() once checked that
 ## entities were dictionaries but never that a present entity["needs"] was
 ## itself a Dictionary, so a v21 fixture with needs null, an array, or a
 ## scalar reached _migrate_v21_to_v22()'s unguarded `(needs as Dictionary).keys()`
@@ -580,7 +576,7 @@ func _init() -> void:
 	_check_content_version_mismatch_without_rename_fails()
 	_check_content_version_mismatch_resolved_by_rename_loads()
 	_check_wall_content_rename_migrates_to_wooden_wall()
-	_check_pretask_wall_construction_site_continues_as_wooden_wall_after_load()
+	_check_legacy_wall_construction_site_continues_as_wooden_wall_after_load()
 	_check_legacy_wall_build_job_synthesizes_wooden_wall_site_via_content_rename()
 	_check_wall_rename_missing_objects_field_rejected_through_save_io()
 	_check_wall_rename_missing_jobs_field_rejected_through_save_io()
@@ -760,7 +756,7 @@ func _check_v3_fixture_migrates_to_v4() -> void:
 
 ## The v4 fixture (a colonist with a normal, non-rerouting route) must migrate
 ## straight to schemaVersion 5 with every field preserved unchanged: version 4
-## predates re-routing, so the existing route was truthfully already in its
+## predates re-routing, so the existing route was already in its
 ## normal state and the schemaVersion-5 "rerouting" field stays absent (see
 ## StateCodec._encode_route_field()), not backfilled with an explicit value.
 func _check_v4_fixture_migrates_to_v5() -> void:
@@ -818,8 +814,8 @@ func _check_v5_fixture_migrates_to_v6() -> void:
 	_check_entities_carry_null_carrying(state["entities"])
 
 ## The v6 fixture (no zones field) must migrate straight to schemaVersion 7
-## with zones backfilled to an honestly empty [] and a fresh nextZoneId of 1:
-## version 6 predates player-drawn stockpile zones, so there is truthfully
+## with zones backfilled to an empty [] and a fresh nextZoneId of 1:
+## version 6 predates player-drawn stockpile zones, so there is
 ## nothing to backfill besides an empty zone list.
 func _check_v6_fixture_migrates_to_v7() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V6)
@@ -837,7 +833,7 @@ func _check_v6_fixture_migrates_to_v7() -> void:
 ## The v7 fixture (a chop job pre-dating the haul job kind) must migrate
 ## straight to schemaVersion 8 with every existing job backfilled with
 ## JobQueue.submit_dig()'s own harmless haul defaults: itemId "", cell null,
-## retryAt 0, backoffTicks 0 (issue #189).
+## retryAt 0, backoffTicks 0.
 func _check_v7_fixture_migrates_to_v8() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V7)
 	var result := SaveMigrationsType.migrate(raw_state, 7, 8)
@@ -862,7 +858,7 @@ func _check_v7_fixture_migrates_to_v8() -> void:
 ## The v8 fixture (colonists with no "needs" field, one active haul job) must
 ## migrate straight to schemaVersion 9 with every colonist backfilled with a
 ## full (100) food/water/rest, matching WorldState.NEED_FULL/_full_needs():
-## version 8 predates needs, so there is truthfully nothing else to backfill.
+## version 8 predates needs, so there is nothing else to backfill.
 func _check_v8_fixture_migrates_to_v9() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V8)
 	var result := SaveMigrationsType.migrate(raw_state, 8, 9)
@@ -884,8 +880,8 @@ func _check_v8_fixture_migrates_to_v9() -> void:
 			"a migrated v8 entity must be backfilled with full food/water/rest")
 
 ## The v9 fixture (no groundBerries field) must migrate straight to
-## schemaVersion 10 with groundBerries backfilled to an honestly empty []:
-## version 9 predates berry bushes and forage (#202), so there is truthfully
+## schemaVersion 10 with groundBerries backfilled to an empty []:
+## version 9 predates berry bushes and forage, so there is
 ## nothing to backfill besides an empty list.
 func _check_v9_fixture_migrates_to_v10() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V9)
@@ -900,9 +896,9 @@ func _check_v9_fixture_migrates_to_v10() -> void:
 	_expect(state["groundBerries"] == [], "v9-originated save must migrate with an empty groundBerries list")
 
 ## The v10 fixture (no workProgress/pausedJobs fields) must migrate straight
-## to schemaVersion 11 with each backfilled to an honestly empty collection:
-## version 10 predates the critical-need interrupt (#205), so no `work` toil
-## could ever have been paused mid-tick-count, and there is truthfully
+## to schemaVersion 11 with each backfilled to an empty collection:
+## version 10 predates the critical-need interrupt, so no `work` toil
+## could ever have been paused mid-tick-count, and there is
 ## nothing else to backfill (colonist-ai.md 3.6).
 func _check_v10_fixture_migrates_to_v11() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V10)
@@ -921,7 +917,7 @@ func _check_v10_fixture_migrates_to_v11() -> void:
 ## straight to schemaVersion 12 with every colonist backfilled to the same
 ## default all-3 labour table (colonist-ai.md 3.2) a freshly spawned colonist
 ## gets today, matching WorldState.LABOUR_KINDS/_default_labour_table():
-## version 11 predates the labour table, so there is truthfully nothing else
+## version 11 predates the labour table, so there is nothing else
 ## to backfill.
 func _check_v11_fixture_migrates_to_v12() -> void:
 	var raw_state := _load_fixture_state(FIXTURE_V11)
@@ -946,12 +942,12 @@ func _check_v11_fixture_migrates_to_v12() -> void:
 		_expect(migrated_entity["labourTable"] == default_labour_table,
 			"a migrated v11 entity must be backfilled with the default all-3 labour table")
 
-## No schemaVersion-12 fixture file exists (task #213 is the first to reach
-## schemaVersion 13), so this exercises SaveMigrations.migrate() straight from
+## No schemaVersion-12 fixture file exists, so this exercises
+## SaveMigrations.migrate() straight from
 ## an inline schemaVersion-12 Dictionary literal (no toolItems/
-## toolReservations keys, no entity heldTool): version 12 predates tool items
-## (#213), so no axe/pick could ever have existed, and there is truthfully
-## nothing else to backfill besides two honestly empty collections
+## toolReservations keys, no entity heldTool): version 12 predates tool items,
+## so no axe/pick could ever have existed, and there is
+## nothing else to backfill besides two empty collections
 ## (colonist-ai.md 2/3.4).
 func _check_v12_state_migrates_to_v13() -> void:
 	var raw_state := {
@@ -993,15 +989,14 @@ func _check_v12_state_migrates_to_v13() -> void:
 	# would only ever fail on schemaVersion alone, telling us nothing about
 	# whether this step's own migration is correct.
 
-## No schemaVersion-13 fixture file exists (#241 review round 2 is the first
-## to reach schemaVersion 14), so this exercises SaveMigrations.migrate()
+## No schemaVersion-13 fixture file exists, so this exercises SaveMigrations.migrate()
 ## straight from an inline schemaVersion-13 Dictionary literal whose queue
 ## entries (waiting, a pending candidate, and a pending found pair) predate
 ## "restrictTo": version 13 predates both NeedGiver's own persisted
 ## colonist_id -> job_id association and the queue entry's worker
-## restriction (colonist-ai.md 3.1/3.6), so there is truthfully nothing to
-## backfill besides an honestly empty needJobAssignments list, "" for every
-## existing queue entry's new restrictTo field, and an honestly empty
+## restriction (colonist-ai.md 3.1/3.6), so there is nothing to
+## backfill besides an empty needJobAssignments list, "" for every
+## existing queue entry's new restrictTo field, and an empty
 ## activatedEntries map (no v13 save ever tracked a job's original
 ## waiting-queue entry past its own activation).
 func _check_v13_state_migrates_to_v14() -> void:
@@ -1076,15 +1071,15 @@ func _check_v13_state_migrates_to_v14() -> void:
 	var validation := SaveIOType._validate_state(advanced["state"])
 	_expect(validation["ok"], "a migrated v13 state must pass SaveIO's current-schema validation: %s" % validation.get("message", ""))
 
-## #243: a real schema-13 save file (as opposed to the inline literal above),
+## A real schema-13 save file (as opposed to the inline literal above),
 ## written to disk by _write_v13_fixture() so this and the next check load it
-## the same way an actual pre-objective save would -- two colonists with
+## the same way an actual schemaVersion-13 save would -- two colonists with
 ## needs/labourTable/heldTool/carrying, a held tool item, ground
 ## items/berries/objects/zones, partial workProgress, and a pausedJobs entry,
 ## but no needJobAssignments, no queue-entry restrictTo, and no
-## activatedEntries (all three postdate #241 round 2) -- must still migrate
+## activatedEntries (all three postdate) -- must still migrate
 ## straight to schemaVersion 14 with every pre-existing field preserved and
-## the three new fields honestly backfilled, exactly like the inline v13 case
+## the three new fields backfilled, exactly like the inline v13 case
 ## above.
 func _check_v13_fixture_migrates_to_v14() -> void:
 	var raw_state := _load_fixture_state(_v13_fixture_path)
@@ -1140,8 +1135,8 @@ func _check_v13_fixture_loads_through_save_io() -> void:
 	_expect(state["toolItems"]["list"].size() == 1, "SaveIO-loaded v13 fixture must keep its one tool item")
 	_expect(state["pausedJobs"].size() == 1, "SaveIO-loaded v13 fixture must keep its pausedJobs entry")
 
-## #257: the v14 fixture (needJobAssignments and restrictTo genuinely
-## populated, unlike the v13 fixture's honestly-empty backfills) must migrate
+## The v14 fixture (needJobAssignments and restrictTo genuinely
+## populated, unlike the v13 fixture's empty backfills) must migrate
 ## straight to schemaVersion 15 with every field preserved unchanged: v14's
 ## own shape is already the v15 shape, so only the version counter moves.
 func _check_v14_fixture_migrates_to_v15() -> void:
@@ -1173,7 +1168,7 @@ func _check_v14_fixture_migrates_to_v15() -> void:
 ## integrity hash, migrate it to schemaVersion 15, and pass the current
 ## schema's _validate_state -- including its populated needJobAssignments
 ## entry and non-empty queue-entry restrictTo/activatedEntries, none of which
-## the v13 fixture's honestly-empty backfills exercise.
+## the v13 fixture's empty backfills exercise.
 func _check_v14_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(_v14_fixture_path)
 	_expect(result["ok"], "v14 fixture must load through SaveIO.read(): %s" % result)
@@ -1189,9 +1184,9 @@ func _check_v14_fixture_loads_through_save_io() -> void:
 	_expect(waiting.size() == 1 and String(waiting[0]["restrictTo"]) == "colonist_0",
 		"SaveIO-loaded v14 fixture must keep its waiting entry's restrictTo")
 
-## #269: the v15 fixture (a real save predating the sowing-window calendar
+## The v15 fixture (a real save predating the sowing-window calendar
 ## alert, ADR 008 consequence 6) must migrate straight to schemaVersion 16
-## with every pre-existing field preserved and calendarAlerts honestly
+## with every pre-existing field preserved and calendarAlerts
 ## backfilled to {fired: []} -- no window could ever have fired on a save
 ## this old -- and the result must validate against the current schema
 ## (docs/architecture/contracts/game-state.schema.json, mirrored here by
@@ -1225,7 +1220,7 @@ func _check_v15_fixture_migrates_to_v16() -> void:
 ## loadable save envelope (mirroring every _check_vN_fixture_loads_through_save_io()
 ## above): SaveIO.read() must independently verify its integrity hash,
 ## migrate it all the way to the current schema, and pass the current
-## schema's _validate_state, including its honestly-backfilled calendarAlerts.
+## schema's _validate_state, including its backfilled calendarAlerts.
 func _check_v15_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V16)
 	_expect(result["ok"], "v15 fixture must load through SaveIO.read(): %s" % result)
@@ -1236,9 +1231,9 @@ func _check_v15_fixture_loads_through_save_io() -> void:
 	_expect(state["calendarAlerts"] == {"fired": []},
 		"SaveIO-loaded v15 fixture must carry calendarAlerts backfilled to fired: []")
 
-## #284: the v17 fixture (a real save predating per-actor faction membership
+## The v17 fixture (a real save predating per-actor faction membership
 ## and persisted colonist health) must migrate straight to schemaVersion 18
-## with every pre-existing field preserved and every entity honestly
+## with every pre-existing field preserved and every entity
 ## backfilled with factionId: "colony" and a full-health snapshot
 ## {hp: 100, maxHp: 100, dead: false} -- no entity could ever have belonged to
 ## another faction or had its real hp restored across a save/load round trip
@@ -1284,7 +1279,7 @@ func _check_v17_fixture_migrates_to_v18() -> void:
 ## loadable save envelope (mirroring every _check_vN_fixture_loads_through_save_io()
 ## above): SaveIO.read() must independently verify its integrity hash,
 ## migrate it to schemaVersion 18, and pass the current schema's
-## _validate_state -- including its honestly-backfilled factionId/health,
+## _validate_state -- including its backfilled factionId/health,
 ## its held tool, and its carried item.
 func _check_v17_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(_v17_fixture_path)
@@ -1303,9 +1298,9 @@ func _check_v17_fixture_loads_through_save_io() -> void:
 	_expect(state["toolFetchExcluded"] == [{"jobId": "job_1", "toolIds": ["tool_1"]}],
 		"SaveIO-loaded v17 fixture must keep its toolFetchExcluded entry")
 
-## #288: the v18 fixture (a real save predating per-object/per-item faction
+## The v18 fixture (a real save predating per-object/per-item faction
 ## ownership) must migrate straight to schemaVersion 19 with every
-## pre-existing field preserved and every item and object honestly backfilled
+## pre-existing field preserved and every item and object backfilled
 ## with factionId: "colony" -- no object or item could ever have belonged to
 ## another faction on a save this old (StateCodec's own encode() never wrote
 ## the field before this version) -- and the result must validate against the
@@ -1366,7 +1361,7 @@ func _check_v18_fixture_migrates_to_v19() -> void:
 ## loadable save envelope (mirroring every _check_vN_fixture_loads_through_save_io()
 ## above): SaveIO.read() must independently verify its integrity hash,
 ## migrate it to schemaVersion 19, and pass the current schema's
-## _validate_state -- including every item's and object's honestly-backfilled
+## _validate_state -- including every item's and object's backfilled
 ## factionId.
 func _check_v18_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V18)
@@ -1386,7 +1381,7 @@ func _check_v18_fixture_loads_through_save_io() -> void:
 		_expect(String((object_entry as Dictionary).get("factionId", "")) == "colony",
 			"SaveIO-loaded v18 fixture object must carry factionId backfilled to 'colony'")
 
-## #299 (ADR 019): a v19 save predates "map.generatorVersion" -- migration
+## ADR 019: a v19 save predates "map.generatorVersion" -- migration
 ## must backfill it to 1 (the only generator algorithm that has ever produced
 ## a save) while leaving "map.width"/"map.height" and everything else
 ## byte-for-byte untouched, and the result must validate against the current
@@ -1443,9 +1438,9 @@ func _check_v19_fixture_loads_through_save_io() -> void:
 	_expect(decoded.get_tiles().size() == 6,
 		"a decoded 3x2 v19 fixture must have exactly width*height tiles, not a mismatched 16x16 array")
 
-## #295 (F5, issue #294; ADR 004 "WorldState's diagnostic hash includes this
+## F5 incidents (ADR 004: "WorldState's diagnostic hash includes this
 ## continuation state"): a v20 save predates incidents, so migration must
-## backfill `incidentScheduler.cooldownUntilDay` to an honestly empty map,
+## backfill `incidentScheduler.cooldownUntilDay` to an empty map,
 ## `lastProcessedDay` to the save's own current calendar day (not 0 -- a
 ## restored world must not treat every day it never lived through as newly
 ## due), and `rng` to the exact same deterministic re-seed
@@ -1467,7 +1462,7 @@ func _check_v20_fixture_migrates_to_v21() -> void:
 
 	var incident_scheduler: Dictionary = state["incidentScheduler"]
 	_expect(incident_scheduler["cooldownUntilDay"] == {},
-		"a migrated v20 save must be backfilled with an honestly empty cooldownUntilDay")
+		"a migrated v20 save must be backfilled with an empty cooldownUntilDay")
 	var expected_day := CalendarServiceType.new().day_of_tick(int(raw_state["tick"]))
 	_expect(incident_scheduler["lastProcessedDay"] == expected_day,
 		"a migrated v20 save's lastProcessedDay must sync to the save's own current calendar day (%d), got %s" % [expected_day, incident_scheduler["lastProcessedDay"]])
@@ -1500,12 +1495,12 @@ func _check_v20_fixture_loads_through_save_io() -> void:
 	var state: Dictionary = result["state"]
 	_expect(state["schemaVersion"] == StateCodecType.SCHEMA_VERSION, "SaveIO-loaded v20 fixture must report the current schemaVersion")
 	_expect(state["incidentScheduler"]["cooldownUntilDay"] == {},
-		"SaveIO-loaded v20 fixture must carry an honestly empty incidentScheduler.cooldownUntilDay")
+		"SaveIO-loaded v20 fixture must carry an empty incidentScheduler.cooldownUntilDay")
 
-## Issue #349/ADR 023: a v21 save predates the per-need decay accumulator, so
+## A v21 save predates the per-need decay accumulator, so
 ## migration must backfill every entity that already carries "needs" with a
 ## "needsAccumulator" of 0 for each of that same "needs" dictionary's own
-## kinds -- honest, since a v21 save never tracked a sub-point carry to lose
+## kinds -- correct, since a v21 save never tracked a sub-point carry to lose
 ## -- while every other field is preserved untouched.
 func _check_v21_fixture_migrates_to_v22() -> void:
 	var raw_state := _load_fixture_state(_v21_fixture_path)
@@ -1535,7 +1530,7 @@ func _check_v21_fixture_migrates_to_v22() -> void:
 			"a migrated v21 entity's needsAccumulator must cover exactly its own needs kinds")
 		for kind in needs.keys():
 			_expect(accumulator.has(kind) and int(accumulator[kind]) == 0,
-				"a migrated v21 entity's needsAccumulator['%s'] must be honestly backfilled to 0, got %s" % [kind, accumulator.get(kind)])
+				"a migrated v21 entity's needsAccumulator['%s'] must be backfilled to 0, got %s" % [kind, accumulator.get(kind)])
 		for key in migrated_entity.keys():
 			if key == "needsAccumulator":
 				continue
@@ -1544,8 +1539,8 @@ func _check_v21_fixture_migrates_to_v22() -> void:
 	# schemaVersion 22 is not guaranteed to stay current, so this step's own
 	# output is advanced through to StateCodecType.SCHEMA_VERSION before
 	# validating against the current schema -- see _check_v20_fixture_migrates_to_v21()'s
-	# identical reasoning; a no-op today while 22 IS current, but keeps this
-	# test correct once a later migration adds schemaVersion 23.
+	# identical reasoning, so this test stays correct as later migrations
+	# add schema versions.
 	var advanced := SaveMigrationsType.migrate(state, 22, StateCodecType.SCHEMA_VERSION)
 	_expect(advanced["ok"], "a migrated v21 fixture must further migrate to schemaVersion %d: %s" % [StateCodecType.SCHEMA_VERSION, advanced])
 	if not advanced["ok"]:
@@ -1572,7 +1567,7 @@ func _check_v21_fixture_loads_through_save_io() -> void:
 			_expect(int(accumulator.get(kind, -1)) == 0,
 				"SaveIO-loaded v21 fixture must carry needsAccumulator['%s'] backfilled to 0" % kind)
 
-## Issue #358 round 2 review (ADR 025 amendment): a v22 save predates the
+## ADR 026 amendment: a v22 save predates the
 ## persisted dig-find RNG continuation, so migration must backfill
 ## "digFindRng" to the exact same deterministic re-seed WorldState._init()
 ## itself derives from the save's seed (seed + WorldState.DIG_FIND_SEED_SALT),
@@ -1603,8 +1598,8 @@ func _check_v22_fixture_migrates_to_v23() -> void:
 	# schemaVersion 23 is not guaranteed to stay current, so this step's own
 	# output is advanced through to StateCodecType.SCHEMA_VERSION before
 	# validating against the current schema -- see _check_v20_fixture_migrates_to_v21()'s
-	# identical reasoning; a no-op today while 23 IS current, but keeps this
-	# test correct once a later migration adds schemaVersion 24.
+	# identical reasoning, so this test stays correct as later migrations
+	# add schema versions.
 	var advanced := SaveMigrationsType.migrate(state, 23, StateCodecType.SCHEMA_VERSION)
 	_expect(advanced["ok"], "a migrated v22 fixture must further migrate to schemaVersion %d: %s" % [StateCodecType.SCHEMA_VERSION, advanced])
 	if not advanced["ok"]:
@@ -1626,16 +1621,16 @@ func _check_v22_fixture_loads_through_save_io() -> void:
 	_expect((state["digFindRng"] as Dictionary).has("seed") and (state["digFindRng"] as Dictionary).has("state"),
 		"SaveIO-loaded v22 fixture must carry a backfilled digFindRng")
 
-## Issue #359 (ADR 025 t3): a v23 save predates a trapped actor's persisted
+## ADR 026: a v23 save predates a trapped actor's persisted
 ## state, so migration must backfill every entity with "trapped": null --
 ## mirroring _check_v21_fixture_migrates_to_v22()'s identical needsAccumulator
-## assertion shape -- while every other field, including a POPULATED
-## "combatBlockedTargets" (round-4 review: a real v23 save from current main
-## always carries this key), is preserved untouched.
+## assertion shape -- while every other field, including a populated
+## "combatBlockedTargets" (a real v23 save always carries this key), is
+## preserved untouched.
 func _check_v23_fixture_migrates_to_v24() -> void:
 	var raw_state := _load_fixture_state(_v23_fixture_path)
 	_expect(not (raw_state["combatBlockedTargets"] as Array).is_empty(),
-		"sanity: the v23 fixture's combatBlockedTargets must be populated, not empty, to exercise the round-4 regression")
+		"sanity: the v23 fixture's combatBlockedTargets must be populated, not empty, to exercise the shape-check regression")
 	var result := SaveMigrationsType.migrate(raw_state, 23, 24)
 	_expect(result["ok"], "schemaVersion-23 fixture must migrate to schemaVersion 24: %s" % result)
 	if not result["ok"]:
@@ -1665,7 +1660,7 @@ func _check_v23_fixture_migrates_to_v24() -> void:
 	# schemaVersion 24 is not guaranteed to stay current, so this step's own
 	# output is advanced through to StateCodecType.SCHEMA_VERSION before
 	# validating against the current schema -- see _check_v20_fixture_migrates_to_v21()'s
-	# identical reasoning; a no-op today while 24 IS current.
+	# identical reasoning.
 	var advanced := SaveMigrationsType.migrate(state, 24, StateCodecType.SCHEMA_VERSION)
 	_expect(advanced["ok"], "a migrated v23 fixture must further migrate to schemaVersion %d: %s" % [StateCodecType.SCHEMA_VERSION, advanced])
 	if not advanced["ok"]:
@@ -1690,8 +1685,8 @@ func _check_v23_fixture_loads_through_save_io() -> void:
 	_expect((state["combatBlockedTargets"] as Array).size() == 1,
 		"SaveIO-loaded v23 fixture must preserve its populated combatBlockedTargets entry, not drop or reject it")
 
-## Round-4 review: a real schemaVersion-23 save whose "combatBlockedTargets"
-## is an honestly EMPTY list (an actor never fled, or its episode already
+## A real schemaVersion-23 save whose "combatBlockedTargets"
+## is an empty list (an actor never fled, or its episode already
 ## closed) is the ordinary case, not just the populated fixture above --
 ## proves _is_schema_v23_state() accepts the field being present-but-empty
 ## too, mirroring save_io.gd's own optional treatment of it, and that
@@ -1716,7 +1711,7 @@ func _check_v23_state_with_empty_combat_blocked_targets_migrates_and_loads() -> 
 			"SaveIO-loaded empty combatBlockedTargets must stay empty, not be dropped or backfilled with data")
 	_cleanup_dir(V23_EMPTY_COMBAT_BLOCKED_FIXTURE_DIR)
 
-## Issue #402 (ADR 035): proves the v24 fixture's null-carrying entity
+## ADR 037: proves the v24 fixture's null-carrying entity
 ## migrates to an empty hands array and its populated-carrying entity
 ## migrates to a one-entry hands array preserving kind/count, with every
 ## other field (including "trapped", already present since v24) untouched.
@@ -1776,7 +1771,7 @@ func _check_v24_fixture_loads_through_save_io() -> void:
 	_expect((entities[1] as Dictionary)["hands"] == [{"kind": "wood", "count": 3}],
 		"SaveIO-loaded v24 fixture's populated-carrying entity must have a one-entry hands array")
 
-## Issue #358 round 2 review: proves the dig-find RNG's own continuation --
+## Proves the dig-find RNG's own continuation --
 ## a non-freshly-seeded stream (distinct seed and state from a brand-new
 ## WorldState's own construction-time values) -- survives a real
 ## WorldState.to_save_state() -> StateCodec.encode() -> from_save_state() ->
@@ -1804,11 +1799,11 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 	_expect(restored.state_hash() == world.state_hash(),
 		"a save/load round trip must reproduce the exact same state_hash() once the dig-find RNG is restored")
 
-## Issue #405: content/objects.json's "test_footprint_crate" (footprint [2, 1],
+## Content/objects.json's "test_footprint_crate" (footprint [2, 1],
 ## rotatable) placed "vertical" occupies (5, 5) and (5, 6). Proves the full
 ## WorldState.to_save_state() -> StateCodec.encode() -> from_save_state() ->
 ## StateCodec.decode() stack persists it as exactly one record naming its
-## origin tile and orientation (docs/decisions/037), not one per occupied
+## origin tile and orientation (ADR 039), not one per occupied
 ## tile, and that a real WorldState reconstructed from that one record
 ## re-occupies both footprint tiles with a byte-identical state_hash().
 func _check_multi_tile_object_round_trips_through_save_load() -> void:
@@ -1837,9 +1832,9 @@ func _check_multi_tile_object_round_trips_through_save_load() -> void:
 		"a restored multi-tile object must occupy both footprint tiles")
 	_expect(restored.state_hash() == before_hash, "a multi-tile object must round-trip with an unchanged state_hash()")
 
-## Issue #405: game-state.schema.json's "orientation" field is optional --
+## Game-state.schema.json's "orientation" field is optional --
 ## absent means footprint [1,1]/no rotation, so a current-schema-version save
-## written before this task (no object entry ever named it) must still
+## written before rotation existed (no object entry ever named it) must still
 ## validate and decode unchanged, exactly like objects[].health/
 ## route.rerouting's own optional-field precedent.
 func _check_object_without_orientation_field_loads_unchanged() -> void:
@@ -1853,7 +1848,7 @@ func _check_object_without_orientation_field_loads_unchanged() -> void:
 	_expect(world.get_object(0, 0) == "wall", "decode() must restore an object entry with no orientation field")
 	_expect(world.get_object_faction_id(0, 0) == "colony", "decode() must restore its factionId")
 
-## Issue #405 review round 1: an explicit orientation: "" must validate and
+## An explicit orientation: "" must validate and
 ## decode identically to the field's absence -- "" is the same "no rotation"
 ## default, not a third distinct value, so SaveIO._valid_object() and the
 ## schema must both accept it (previously only "horizontal"/"vertical" were
@@ -1869,9 +1864,9 @@ func _check_object_with_empty_orientation_field_loads_unchanged() -> void:
 	_expect(world.get_object(0, 0) == "wall", "decode() must restore an object entry with orientation ''")
 	_expect(world.get_object_faction_id(0, 0) == "colony", "decode() must restore its factionId")
 
-## Issue #406: game-state.schema.json's "constructionSites" top-level field is
+## Game-state.schema.json's "constructionSites" top-level field is
 ## optional -- absent means no active construction sites, so a current-schema-
-## version save written before this task (no such field at all) must still
+## version save written before construction sites existed (no such field at all) must still
 ## validate and decode unchanged, exactly like objects[].orientation's own
 ## optional-field precedent above.
 func _check_state_without_construction_sites_field_loads_unchanged() -> void:
@@ -1884,8 +1879,8 @@ func _check_state_without_construction_sites_field_loads_unchanged() -> void:
 	var world := StateCodecType.decode(state)
 	_expect(world.get_construction_sites().is_empty(), "decode() must restore no construction sites when the field is absent")
 
-## Acceptance: "a save mid-construction (partial materials, partial progress,
-## one builder) round-trips with hash equality" -- exercised end-to-end in
+## A save mid-construction (partial materials, partial progress, one
+## builder) round-trips with hash equality -- exercised end-to-end in
 ## test_construction_site.gd; this proves the persisted wire shape itself
 ## (one record under "constructionSites", not one per footprint tile, mirroring
 ## "objects"'s own origin-record convention) survives SaveIO's own schema
@@ -1911,7 +1906,7 @@ func _check_construction_site_round_trips_through_save_load() -> void:
 	_expect(restored.state_hash() == before_hash, "a construction-site save/load round trip must preserve state_hash() exactly")
 	_expect(not restored.get_construction_site(5, 5).is_empty(), "the restored world must still show the site")
 
-## Round 1 review regression (#349): a v21 fixture whose entity["needs"] is
+## Regression: a v21 fixture whose entity["needs"] is
 ## null must be rejected by _is_schema_v21_state() before
 ## _migrate_v21_to_v22() dereferences it as a Dictionary, not crash. Mutates
 ## the real v21 fixture rather than hand-building a second minimal state, so
@@ -1978,9 +1973,9 @@ func _check_malformed_v21_scalar_needs_rejected_through_save_io() -> void:
 	_expect(not result["ok"] and result["code"] == "no_migration_available",
 		"an integrity-valid save with malformed v21 scalar needs must be rejected through SaveIO.read(), not crash: %s" % result)
 
-## Round 2 review regression: _migrate_v20_to_v21() converts state["tick"] with
-## int() to derive incidentScheduler.lastProcessedDay. Before this fix,
-## _is_schema_v20_state() checked that "tick" was present but never its type,
+## Regression: _migrate_v20_to_v21() converts state["tick"] with
+## int() to derive incidentScheduler.lastProcessedDay. _is_schema_v20_state()
+## once checked that "tick" was present but never its type,
 ## so an otherwise-valid v20 save with a Dictionary "tick" reached that int()
 ## call and threw a script error instead of a typed no_migration_available
 ## rejection. Mutates the real v20 fixture rather than hand-building a second
@@ -2017,7 +2012,7 @@ func _check_malformed_v20_tick_rejected_through_save_io() -> void:
 	_expect(not result.has("state"),
 		"a rejected malformed-tick save must not return partial state: %s" % result)
 
-## #295: proves the incident scheduler's own continuation state -- non-empty
+## Proves the incident scheduler's own continuation state -- non-empty
 ## per-incident cooldowns, a non-zero last-processed day, and a
 ## non-freshly-seeded RNG stream (distinct seed and state from a brand-new
 ## IncidentScheduler's own construction-time values) -- survives a real
@@ -2046,7 +2041,7 @@ func _check_incident_scheduler_continuation_survives_save_load_round_trip() -> v
 	_expect(restored._incidents._random.seed == expected_rng_seed and restored._incidents._random.state == expected_rng_state,
 		"a save/load round trip must preserve the incident scheduler's own RNG stream exactly")
 
-## #257: SaveIO.read() must reject a save whose stored contentVersion does not
+## SaveIO.read() must reject a save whose stored contentVersion does not
 ## match the content bundle currently on disk (StateCodec.content_version())
 ## with the new typed content_version_mismatch code when no content-rename
 ## entry resolves it -- never silently proceeding with a stale content id.
@@ -2059,7 +2054,7 @@ func _check_content_version_mismatch_without_rename_fails() -> void:
 		"a save whose contentVersion has no registered rename must fail with content_version_mismatch: %s" % result)
 	_cleanup_dir(CONTENT_MISMATCH_FIXTURE_DIR)
 
-## #257: proves the content-rename hook actually runs, not just the mismatch
+## Proves the content-rename hook actually runs, not just the mismatch
 ## check itself: a save's contentVersion resolved by a registered rename must
 ## load successfully, and the rename's own id remap (here, an item's "kind")
 ## must have taken effect in the state SaveIO.read() hands back.
@@ -2083,13 +2078,13 @@ func _check_content_version_mismatch_resolved_by_rename_loads() -> void:
 	_expect(loaded_kind == "wood",
 		"the registered rename must actually remap the renamed content id, not just flip the version: got '%s'" % loaded_kind)
 
-## Issue #449: content/objects.json's "wall" row was replaced by "wooden_wall"
+## Content/objects.json's "wall" row was replaced by "wooden_wall"
 ## (unchanged build_cost) and a new "stone_wall" row. Proves the real,
 ## non-test-only content-rename entry SaveMigrations registers for itself
 ## (WALL_RENAME_FROM_CONTENT_VERSION, the checkout's own contentVersion before
-## this rename) actually resolves a pre-task save through SaveIO.read() --
+## this rename) actually resolves a pre-rename save through SaveIO.read() --
 ## never a test-registered stand-in like the check above -- so a save written
-## before this task, carrying an object of kind "wall", loads with that
+## before the rename, carrying an object of kind "wall", loads with that
 ## object now reporting "wooden_wall".
 func _check_wall_content_rename_migrates_to_wooden_wall() -> void:
 	var current_content_version := StateCodecType.content_version()
@@ -2100,7 +2095,7 @@ func _check_wall_content_rename_migrates_to_wooden_wall() -> void:
 	var path := _write_state_fixture(WALL_RENAME_FIXTURE_DIR, state)
 	var result := SaveIOType.read(path)
 	_cleanup_dir(WALL_RENAME_FIXTURE_DIR)
-	_expect(result["ok"], "a pre-task save with a 'wall' object must load through SaveIO.read() via the production content-rename hook: %s" % result)
+	_expect(result["ok"], "a pre-rename save with a 'wall' object must load through SaveIO.read() via the production content-rename hook: %s" % result)
 	if not result["ok"]:
 		return
 	var loaded_state: Dictionary = result["state"]
@@ -2110,21 +2105,21 @@ func _check_wall_content_rename_migrates_to_wooden_wall() -> void:
 	_expect(objects.size() == 1, "the renamed object must survive the load")
 	if objects.size() == 1:
 		_expect(String((objects[0] as Dictionary)["kind"]) == "wooden_wall",
-			"a pre-task 'wall' object must be renamed to 'wooden_wall' by the production content-rename hook")
+			"a pre-rename 'wall' object must be renamed to 'wooden_wall' by the production content-rename hook")
 	var world := StateCodecType.decode(loaded_state)
 	_expect(world.get_object(0, 0) == "wooden_wall", "the decoded world must expose the renamed object as 'wooden_wall'")
 
-## Round 2 review (issue #449): the check above only proves a COMPLETED "wall"
-## object is renamed. A pre-task save can just as easily carry an UNFINISHED
-## "wall" construction site (ADR 038's own persistent site model) -- this
+## The check above only proves a completed "wall"
+## object is renamed. A pre-rename save can just as easily carry an unfinished
+## "wall" construction site (ADR 040's own persistent site model) -- this
 ## proves the production content-rename hook also renames a
 ## constructionSites[].kind entry, preserves that site's own persisted
 ## requiredMaterials/buildTicks exactly (never recomputed from current
-## content: those are the site's own truthful history, not a content id), and
+## content: those are the site's own actual history, not a content id), and
 ## that the renamed site can still be delivered to and completed after load,
 ## with the completed object correctly impassable and carrying content's own
 ## current health.
-func _check_pretask_wall_construction_site_continues_as_wooden_wall_after_load() -> void:
+func _check_legacy_wall_construction_site_continues_as_wooden_wall_after_load() -> void:
 	var world := WorldStateType.new(449001, 10)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
@@ -2146,8 +2141,8 @@ func _check_pretask_wall_construction_site_continues_as_wooden_wall_after_load()
 	if sites.size() != 1:
 		return
 	var site: Dictionary = (sites[0] as Dictionary).duplicate(true)
-	# Relabel this real site as if it had been ordered as a "wall" before this
-	# task's rename: its own persisted requiredMaterials/buildTicks reflect
+	# Relabel this real site as if it had been ordered as a "wall" before the
+	# rename: its own persisted requiredMaterials/buildTicks reflect
 	# whatever "wall" declared at the time it was ordered (build_cost 1 wood,
 	# 40 build_ticks -- distinct from wooden_wall's own 20, so preservation
 	# through the rename is provable), not the current content's shape.
@@ -2160,7 +2155,7 @@ func _check_pretask_wall_construction_site_continues_as_wooden_wall_after_load()
 	var path := _write_state_fixture(WALL_SITE_RENAME_FIXTURE_DIR, saved)
 	var result := SaveIOType.read(path)
 	_cleanup_dir(WALL_SITE_RENAME_FIXTURE_DIR)
-	_expect(result.get("ok", false), "a pre-task save with a 'wall' construction site must load via the production content-rename hook: %s" % result)
+	_expect(result.get("ok", false), "a pre-rename save with a 'wall' construction site must load via the production content-rename hook: %s" % result)
 	if not result["ok"]:
 		return
 	var loaded_state: Dictionary = result["state"]
@@ -2170,7 +2165,7 @@ func _check_pretask_wall_construction_site_continues_as_wooden_wall_after_load()
 		return
 	var loaded_site: Dictionary = loaded_sites[0]
 	_expect(String(loaded_site["kind"]) == "wooden_wall",
-		"a pre-task 'wall' construction site must be renamed to 'wooden_wall' by the production content-rename hook")
+		"a pre-rename 'wall' construction site must be renamed to 'wooden_wall' by the production content-rename hook")
 	_expect(int(loaded_site["buildTicks"]) == 40,
 		"the content-rename must preserve the site's own persisted buildTicks exactly, not recompute it from current content")
 	_expect(loaded_site["requiredMaterials"] == [{"item": "wood", "quantity": 1}],
@@ -2197,18 +2192,18 @@ func _check_pretask_wall_construction_site_continues_as_wooden_wall_after_load()
 	_expect(int(health.get("maxHp", -1)) == int(wooden_wall_definition.get("max_health", -2)),
 		"the completed wooden_wall's maxHp must come from content's own current max_health")
 
-## Round 2 review (issue #449): a pre-task save can carry a queued/active
-## legacy (pre-#406) "build" job whose own retired buildKind is "wall" just as
-## easily as a completed object or an ADR-038 site. Before this fix, SaveIO
-## ran SaveMigrations.migrate_legacy_build_jobs() BEFORE resolving the content
-## rename, so this buildKind was looked up directly against the CURRENT
+## A pre-rename save can carry a queued/active
+## legacy (pre-construction-site) "build" job whose own retired buildKind is "wall" just as
+## easily as a completed object or an ADR-040 site. SaveIO once ran
+## SaveMigrations.migrate_legacy_build_jobs() before resolving the content
+## rename, so this buildKind was looked up directly against the current
 ## content bundle -- which no longer has "wall" -- and registry.get_entry()'s
 ## own empty-dictionary-on-miss fallback silently synthesized a site with an
 ## empty requiredMaterials and buildTicks 1. Proves the fixed ordering
-## (content-rename resolved first) carries the pre-#449 buildKind through the
+## (content-rename resolved first) carries the pre-rename buildKind through the
 ## rename before that lookup, so the synthesized site matches wooden_wall's
-## real, current content -- read live off ContentRegistry, never hand-typed
-## (docs L-013), so this stays correct if wooden_wall's own cost ever changes.
+## real, current content -- read live off ContentRegistry, never hand-typed,
+## so this stays correct if wooden_wall's own cost ever changes.
 func _check_legacy_wall_build_job_synthesizes_wooden_wall_site_via_content_rename() -> void:
 	var current_content_version := StateCodecType.content_version()
 	_expect(current_content_version != SaveMigrationsType.WALL_RENAME_FROM_CONTENT_VERSION,
@@ -2225,7 +2220,7 @@ func _check_legacy_wall_build_job_synthesizes_wooden_wall_site_via_content_renam
 	var path := _write_state_fixture(LEGACY_WALL_BUILD_JOB_FIXTURE_DIR, state)
 	var result := SaveIOType.read(path)
 	_cleanup_dir(LEGACY_WALL_BUILD_JOB_FIXTURE_DIR)
-	_expect(result["ok"], "a pre-#449 save with a legacy 'wall' build job must still load through SaveIO.read(): %s" % result)
+	_expect(result["ok"], "a pre-rename save with a legacy 'wall' build job must still load through SaveIO.read(): %s" % result)
 	if not result["ok"]:
 		return
 	var loaded_state: Dictionary = result["state"]
@@ -2255,10 +2250,10 @@ func _check_legacy_wall_build_job_synthesizes_wooden_wall_site_via_content_renam
 	var world := StateCodecType.decode(loaded_state)
 	_expect(world.get_construction_sites().size() == 1, "the decoded world must carry the synthesized wooden_wall site")
 
-## Round 2 review (issue #449): a save entering the content-rename path
+## A save entering the content-rename path
 ## (contentVersion == WALL_RENAME_FROM_CONTENT_VERSION) with no "objects"
 ## field at all must still be rejected as missing that required field --
-## before the fix, _rename_wall_to_wooden_wall() fabricated an empty array
+## _rename_wall_to_wooden_wall() once fabricated an empty array
 ## for an absent "objects", which made this otherwise-valid-shaped save look
 ## structurally complete and silently pass validation.
 func _check_wall_rename_missing_objects_field_rejected_through_save_io() -> void:
@@ -2281,7 +2276,7 @@ func _check_wall_rename_missing_jobs_field_rejected_through_save_io() -> void:
 	_expect(not result["ok"] and result["code"] == "no_migration_available",
 		"a wall-rename-path save missing 'jobs' must be rejected as a missing required field, not fabricated into an empty one: %s" % result)
 
-## Round 2 review (issue #449): a save missing "contentVersion" entirely must
+## A save missing "contentVersion" entirely must
 ## be rejected as a missing required field, not coerced through String() into
 ## an empty-string content id and misreported as a content_version_mismatch.
 func _check_wall_rename_missing_content_version_rejected_through_save_io() -> void:
@@ -2293,7 +2288,7 @@ func _check_wall_rename_missing_content_version_rejected_through_save_io() -> vo
 	_expect(not result["ok"] and result["code"] == "no_migration_available",
 		"a save missing 'contentVersion' must be rejected as a missing required field, not as a content_version_mismatch: %s" % result)
 
-## Round 2 review (issue #449): a non-String "contentVersion" (e.g. a number)
+## A non-String "contentVersion" (e.g. a number)
 ## must be rejected with the schema's own "invalid contentVersion" error, not
 ## silently coerced through String() first and misreported as a
 ## content_version_mismatch.
@@ -2306,7 +2301,7 @@ func _check_wall_rename_invalid_content_version_type_rejected_through_save_io() 
 	_expect(not result["ok"] and result["code"] == "schema_error",
 		"a save with a non-String contentVersion must be rejected with a schema_error, not misreported as content_version_mismatch: %s" % result)
 
-## Round 2 review (issue #449): "objects" carrying the wrong type (not an
+## "objects" carrying the wrong type (not an
 ## Array) on a save entering the content-rename path must be rejected by
 ## _validate_state()'s own "invalid objects type" check, not crash inside
 ## _rename_wall_to_wooden_wall()'s former unconditional `as Array` cast.
@@ -2373,11 +2368,11 @@ func _check_wall_rename_invalid_jobs_entry_rejected_through_save_io() -> void:
 	_expect(not result["ok"] and result["code"] == "schema_error",
 		"a wall-rename-path save with a non-Dictionary jobs entry must be rejected with a schema_error, not crash: %s" % result)
 
-## Round 4 review (issue #449): a well-typed Dictionary objects entry whose own
+## A well-typed Dictionary objects entry whose own
 ## "kind" field is not a String (an integrity-valid old-content save could
 ## carry a numeric, Array, Dictionary, or null value there) must not reach
 ## _rename_wall_to_wooden_wall()'s former unconditional String() cast, which
-## the reviewer found raises a script error for those types. The field must
+## raised a script error for those types. The field must
 ## instead pass through untouched so _matches_id_pattern() rejects it with the
 ## same "invalid objects entry" schema_error a non-String kind already gets on
 ## any other content version.
@@ -2424,11 +2419,11 @@ func _check_wall_rename_non_string_job_build_kind_rejected_through_save_io() -> 
 	_expect(not result["ok"] and result["code"] == "schema_error",
 		"a wall-rename-path save with a non-String jobs[].buildKind must be rejected with a schema_error, not crash: %s" % result)
 
-## Round 2 review regression: a real calendar window id is allowed to be any
+## Regression: a real calendar window id is allowed to be any
 ## non-empty string (game/content/schemas/calendar.schema.json), so a window
 ## named "SpringSow" -- mixed case, no underscore/hyphen -- must still round
 ## trip through a full save file, not just satisfy an in-memory Dictionary
-## check. Before this fix, SaveIO's stricter ^[a-z0-9_-]+$ id pattern rejected
+## check. SaveIO's stricter ^[a-z0-9_-]+$ id pattern once rejected
 ## it, so a colony that legitimately fired that window's alert could never
 ## save again.
 func _check_calendar_alerts_fired_accepts_valid_non_lowercase_id() -> void:
@@ -2448,27 +2443,27 @@ func _check_calendar_alerts_fired_accepts_valid_non_lowercase_id() -> void:
 	_expect((loaded_state["calendarAlerts"]["fired"] as Array) == [window_id],
 		"SaveIO.read() must preserve the calendar id '%s' exactly, got %s" % [window_id, loaded_state["calendarAlerts"]])
 
-## Round-4 review: a save written before construction sites existed (issue
-## #406) can still carry a legacy "build" job (JobQueue.BUILD_KIND, the
-## single-worker fetch-then-work job this task's own site-based model
-## replaced) even though schemaVersion never moved -- the new "site_fetch"/
+## A save written before construction sites existed (ADR 040) can still
+## carry a legacy "build" job (JobQueue.BUILD_KIND, the single-worker
+## fetch-then-work job the site-based model replaced) even though
+## schemaVersion never moved -- the new "site_fetch"/
 ## "site_work" kinds and constructionSites only widened v25's existing wire
 ## shape (the same additive-compatibility precedent objects[].orientation and
 ## constructionSites' own absence already established above), so a save
 ## carrying one must still load rather than fail with "invalid job kind".
 ## SaveMigrations.migrate_legacy_build_jobs() converts it into a fresh site
-## and a "site_fetch" job pointed at it (there is truthfully nothing to
+## and a "site_fetch" job pointed at it (there is nothing to
 ## resume from a legacy build job's own progress -- see that function's own
 ## doc comment), which ConstructionGiver then re-derives real fetch/work jobs
 ## for on its very next tick. Uses "door" (a stable, currently-valid content
 ## id, not "wall") so this generic legacy-job-synthesis mechanism keeps being
 ## exercised independently of any one content id's own rename history -- see
 ## _check_legacy_wall_build_job_synthesizes_wooden_wall_site_via_content_rename()
-## for the "wall"-specific content-rename-ordering regression. Round 2 review:
-## also proves the synthesized site's own requiredMaterials/buildTicks/
+## for the "wall"-specific content-rename-ordering regression. Also proves
+## the synthesized site's own requiredMaterials/buildTicks/
 ## maxBuilders actually come from the buildKind's real, current content
-## definition -- read live off ContentRegistry, never hand-typed (docs
-## L-013) -- not just that a site of some shape exists.
+## definition -- read live off ContentRegistry, never hand-typed -- not just
+## that a site of some shape exists.
 func _check_legacy_build_job_loads_through_save_io() -> void:
 	var state := _minimal_current_schema_state(StateCodecType.content_version(), "wood")
 	state["jobs"] = [{
@@ -2499,8 +2494,8 @@ func _check_legacy_build_job_loads_through_save_io() -> void:
 		var site: Dictionary = sites[0]
 		_expect(String(site["kind"]) == "door", "the synthesized site must carry the legacy job's own buildKind")
 		_expect(site["origin"] == {"x": 0, "y": 0}, "the synthesized site must sit at the legacy job's own site tile")
-		_expect((site["heldMaterials"] as Array).is_empty(), "a synthesized site has truthfully nothing already delivered")
-		_expect(int(site["progress"]) == 0, "a synthesized site has truthfully no progress yet")
+		_expect((site["heldMaterials"] as Array).is_empty(), "a synthesized site has nothing already delivered")
+		_expect(int(site["progress"]) == 0, "a synthesized site has no progress yet")
 		var registry := ContentRegistryType.new()
 		var door_definition := registry.get_entry("objects", "door")
 		_expect(site["requiredMaterials"] == (door_definition.get("build_cost", []) as Array),
@@ -2555,7 +2550,7 @@ func _rename_legacy_wood_item_kind(state: Dictionary) -> Dictionary:
 	remapped["items"] = items
 	return remapped
 
-## #241 review round 2: proves NeedGiver's own colonist_id -> job_id
+## Proves NeedGiver's own colonist_id -> job_id
 ## association and the interrupted dig job's requeued scheduler entry both
 ## survive a real save/load round trip -- not just a migration-shaped
 ## dictionary, WorldState.to_save_state()/from_save_state() end to end -- so
@@ -2610,8 +2605,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 
 	# Tick until the eat_food job is actually committed (not just searching),
 	# so the save captures NeedGiver's own persisted association in use, not
-	# just an in-flight search this task's own non-goal already excludes from
-	# persistence.
+	# just an in-flight search, which is deliberately not persisted.
 	var committed := false
 	for _i in 60:
 		if not world._need_giver.get_pending_assignments().is_empty():
@@ -2627,7 +2621,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 		"a save taken while a need job is pending must persist NeedGiver's own colonist->job association")
 	_expect((saved["pausedJobs"] as Array).size() == 1,
 		"a save taken mid-interrupt must persist the paused dig job")
-	# Round-6 review (#278/#303): a suspended job's own progress persists via
+	# A suspended job's own progress persists via
 	# job-id-keyed "suspendedWorkProgress", not the shared tile-keyed
 	# "workProgress" array -- world_state.gd's own _suspend_work_progress()
 	# moves it out the instant the interrupt clears colonist.work.
@@ -2715,11 +2709,11 @@ func _check_non_default_labour_table_survives_save_load_round_trip() -> void:
 			_expect(colonist["labourTable"] == world._default_labour_table(),
 				"a save/load round trip must not disturb a different colonist's untouched labourTable")
 
-## #353: the "mine" job kind and "stone" item kind are new content (rock
-## outcrops mined like trees, issue #372); this proves a real WorldState
+## The "mine" job kind and "stone" item kind are new content (rock
+## outcrops mined like trees); this proves a real WorldState
 ## save/load round trip carries an active mine job and a ground stone item
 ## through unchanged, mirroring the labour-table check above rather than the
-## v13-v21 migration-backfill checks (there is truthfully nothing to backfill:
+## v13-v21 migration-backfill checks (there is nothing to backfill:
 ## an old save with no mine job or stone item must keep loading unchanged).
 ## colonist_0 is given a held "pick" tool up front so the submitted mine job
 ## reaches "active" status on its very first tick instead of first spending a
@@ -2781,7 +2775,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 			and int(restored_stone.get("y", -1)) == 5 and int(restored_stone.get("count", -1)) == 1,
 		"a save/load round trip must preserve the ground stone item exactly, got %s" % restored_stone)
 
-## #284 review round 3: the migration-backfill checks above
+## The migration-backfill checks above
 ## (_check_v17_fixture_migrates_to_v18/_check_v17_fixture_loads_through_save_io)
 ## only prove the default "colony"/full-health values a pre-existing entity is
 ## backfilled with -- they would still pass even if StateCodec silently reset
@@ -2918,7 +2912,7 @@ func _check_v5_fixture_loads_through_save_io() -> void:
 
 ## Proves the v6 fixture is an actually loadable save envelope: SaveIO.read()
 ## must verify its integrity hash, migrate it to schemaVersion 7, and pass
-## the current schema's _validate_state -- including its backfilled, honestly
+## the current schema's _validate_state -- including its backfilled,
 ## empty zones list and fresh nextZoneId.
 func _check_v6_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V6)
@@ -2966,7 +2960,7 @@ func _check_v8_fixture_loads_through_save_io() -> void:
 
 ## Proves the v9 fixture is an actually loadable save envelope: SaveIO.read()
 ## must verify its integrity hash, migrate it to schemaVersion 13, and pass
-## the current schema's _validate_state -- including its backfilled, honestly
+## the current schema's _validate_state -- including its backfilled,
 ## empty groundBerries list.
 func _check_v9_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V9)
@@ -2979,7 +2973,7 @@ func _check_v9_fixture_loads_through_save_io() -> void:
 
 ## Proves the v10 fixture is an actually loadable save envelope: SaveIO.read()
 ## must verify its integrity hash, migrate it to schemaVersion 13, and pass
-## the current schema's _validate_state -- including its backfilled, honestly
+## the current schema's _validate_state -- including its backfilled,
 ## empty workProgress/pausedJobs/toolItems/toolReservations collections.
 func _check_v10_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V10)
@@ -2996,7 +2990,7 @@ func _check_v10_fixture_loads_through_save_io() -> void:
 ## Proves the v11 fixture is an actually loadable save envelope: SaveIO.read()
 ## must verify its integrity hash, migrate it to schemaVersion 13, and pass
 ## the current schema's _validate_state -- including its colonists' backfilled
-## default all-3 labour table and its backfilled, honestly empty
+## default all-3 labour table and its backfilled, empty
 ## toolItems/toolReservations collections.
 func _check_v11_fixture_loads_through_save_io() -> void:
 	var result := SaveIOType.read(FIXTURE_V11)

@@ -1,12 +1,13 @@
 # ADR 010: Content registry — one loader, schema-validated, frozen at session start
 
+> **In short:** All game data files are loaded and checked in one place when the game starts, and a save made with different game data is refused instead of loading incorrectly.
+
 - **Status:** accepted
 - **Date:** 2026-09-19
 - **Scope:** content loading (`game/scripts/core/content/content_registry.gd`,
   `game/content/schemas/`), persistence (`content_version` sourcing and the
   `content_version_mismatch` load error)
-- **Implements:** F1 in `docs/architecture/foundation-for-breadth.md`; issues #259, #260,
-  #261, #262.
+- **Implements:** F1 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 

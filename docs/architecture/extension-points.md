@@ -1,5 +1,9 @@
 # Behaviour extension points
 
+> **In short:** A step-by-step guide to adding new behaviour, such as a new
+> job, creature, faction or building, in the places the design expects, so the
+> game stays consistent.
+
 This is the recipe for adding behaviour under the one-work-engine rule. A
 colonist action is a job, a job is a list of toils, and a decision about when
 that job exists belongs to a job giver. WorldState owns state, validation, and
@@ -7,7 +11,7 @@ orchestration; it is not a place to add behaviour.
 
 Command handlers such as `accept_trade` and `set_faction` are ordinary
 WorldState orchestration: they validate and mutate state through existing
-boundaries and are not a sixth extension point.
+boundaries and are not a separate extension point.
 
 ## Content
 
@@ -65,13 +69,12 @@ boundaries and are not a sixth extension point.
   the new toil and its failure/release paths.
 - Example: `consume` is implemented once by `toil_executor.gd` and is used by
   the need jobs; `test_need_jobs.gd` checks the known toil and its completion.
-  `deposit` (issue #406, [ADR 038](../decisions/038-construction-sites.md)) is
-  a second example of a genuinely new verb, added rather than an existing one
-  extended, because its destination (a construction site's `held_materials`)
-  has no "cell still free" precondition and no ground-item side effect —
-  branching `place`'s own body on "is this a site or a cell" would have been
-  exactly the per-kind special case a new verb exists to avoid;
-  `test_construction_site.gd` checks it.
+  `deposit` ([ADR 040](../decisions/040-construction-sites.md)) is a second
+  example: a new verb rather than an extension of `place`, because its
+  destination (a construction site's `held_materials`) has no "cell still free"
+  precondition and no ground-item side effect. Branching `place` on "is this a
+  site or a cell" would be exactly the per-kind special case a new verb exists
+  to avoid. `test_construction_site.gd` checks it.
 
 ## Job-giver
 
@@ -83,7 +86,7 @@ boundaries and are not a sixth extension point.
 - Example: `need_giver.gd` creates need jobs from thresholds, while
   `haul_giver.gd` creates haul jobs from eligible items and destinations;
   `test_haul_need_interrupt.gd` covers their interaction. `construction_giver.gd`
-  (issue #406) decides when a construction site's next fetch or work job
+  decides when a construction site's next fetch or work job
   should exist, reading `ConstructionSiteTable` state `world_state.gd` owns
   rather than tracking its own parallel notion of site progress;
   `test_construction_site.gd` covers its fetch/work scheduling and blocked
@@ -109,12 +112,11 @@ boundaries and are not a sixth extension point.
   focused behaviour test for runtime semantics.
 - Example: ADR 008 and `content/calendar.json` define the calendar window
   shape; `test_calendar.gd` checks the schema and pure service behaviour.
-  `build_line` (issue #450, [ADR 040](../decisions/040-build-line-batch-command.md))
-  is a command handler like `accept_trade`/`set_faction` above — ordinary
+  `build_line` ([ADR 042](../decisions/042-build-line-batch-command.md)) is a
+  command handler like `accept_trade`/`set_faction` above — ordinary
   `WorldState` orchestration, not a new extension point — but its batch
-  payload shape and its whole-set enclosure-atomicity rule are a new decision
-  crossing the command contract's own boundary, hence the ADR;
-  `test_wall_orders.gd` checks it.
+  payload shape and its whole-set enclosure-atomicity rule change the command
+  contract, hence the ADR; `test_wall_orders.gd` checks it.
 
 ## Faction
 
@@ -150,11 +152,10 @@ boundaries and are not a sixth extension point.
   sixth faction is its own new `content/factions.json` entry *plus* a relation row to it added
   into each of the five existing entries' `relations` maps (both directions must be given
   explicitly since a relation need not be symmetric), no core code to hand-edit. A faction that
-  may *act* without being
-  ordered — a hostile raid that arrives and attacks on its own — still needs F5's incident and
-  combat work (`docs/architecture/foundation-for-breadth.md`); this extension point only
+  may *act* without being ordered — a hostile raid that arrives and attacks on its own — still
+  needs F5's incident and combat work ([foundation-for-breadth.md](foundation-for-breadth.md)); this extension point only
   declares who may pass doors, reserve colony items, and be given player orders, not what an
-  unordered actor decides to do. See [ADR 015](../decisions/015-factions-and-relations.md) for
+  unordered actor decides to do. See [ADR 014](../decisions/014-factions-and-relations.md) for
   the collection's design and its amendments wiring the three consultation points above.
 
 ## Incident
@@ -166,9 +167,9 @@ boundaries and are not a sixth extension point.
   is an optional boolean, default `false`, with nothing to dangle). When `spawn.lingers` is `true`,
   `IncidentScheduler.on_job_finished()` leaves the spawned actor in the world instead of despawning it
   once its own walk-then-wait job completes, handing it off to whatever generic per-tick system
-  already has work queued for it (e.g. `ApproachGiver`'s own hostile search, ADR 031) — see
-  [ADR 032](../decisions/032-incident-lingering-actors.md) for why this exists and exactly how it
-  threads through `incident_scheduler.gd`, including the documented gap that a lingering actor's
+  already has work queued for it (e.g. `ApproachGiver`'s own hostile search, ADR 033) — see
+  [ADR 034](../decisions/034-incident-lingering-actors.md) for why this exists and exactly how it
+  works in `incident_scheduler.gd`, including the documented gap that a lingering actor's
   in-flight status is not persisted across save/reload. Fired by
   `game/scripts/core/incidents/incident_scheduler.gd`'s seeded, budgeted daily draw
   (`WorldState.tick()` calls it once per day boundary) or on demand through the `spawn_incident`
@@ -188,35 +189,35 @@ boundaries and are not a sixth extension point.
 - Example: `wildlife_wander` (wolves via the `west` edge) and `trader_visit` (a trader via the
   `east` edge) in `content/incidents.json` are each one entry naming an existing faction and actor
   definition; `boot.gd`'s `_update_need_alerts_label()` appends one line per `incident_started`
-  event to the same standing-alert list the need-unmet/need-source-missing lines already populate
-  (issue #296), presentation-only -- it adds no simulation rule, it only reads
-  `WorldState.get_events()`. See [ADR 015](../decisions/015-factions-and-relations.md) for the
+  event to the same standing-alert list the need-unmet/need-source-missing lines already populate.
+  This is presentation-only: it adds no simulation rule and only reads
+  `WorldState.get_events()`. See [ADR 014](../decisions/014-factions-and-relations.md) for the
   faction rules incidents spawn actors into and
-  `docs/architecture/foundation-for-breadth.md`'s F5 section for the incident model's design.
+  [foundation-for-breadth.md](foundation-for-breadth.md)'s F5 section for the incident model's design.
 
 ## Stations
 
 - Files: add a row to `game/content/objects.json` (`footprint`, `rotatable`, `build_cost`,
   `build_ticks`, `max_builders`, like every other buildable kind) and an atlas cell for it in
   `game/scripts/viewer/tile_atlas_map.gd`'s `OBJECT_ATLAS_MAP` (or accept the placeholder/no-art
-  rendering when new art is explicitly out of scope, as `workbench` is for issue #406). That is the
-  whole extension: the construction-site model (issue #406,
-  [ADR 038](../decisions/038-construction-sites.md)) reads every object kind's `build_cost`/
+  rendering when new art is out of scope, as it was for `workbench` in the construction-site
+  work). That is the whole extension: the construction-site model
+  ([ADR 040](../decisions/040-construction-sites.md)) reads every object kind's `build_cost`/
   `build_ticks`/`max_builders` generically through `ConstructionGiver`/`ConstructionSiteTable`, and
   the `build`/`cancel_site` commands validate any kind the same footprint-aware way. A station that
   needs a colonist to actually *use* it once built (a crafting bench consuming/producing items, not
   merely being constructed) is a [job-giver](#job-giver) reading `get_object`/`get_construction_site`
   the same way `need_giver.gd` already reads bed/water/berries sources — still no new core
-  simulation class, and still not this task's own scope (issue #406's Non-goals: "do not add
-  workbench art" or a crafting job giver; only the construction-site mechanism itself).
+  simulation class. Workbench art and a crafting job giver were explicit non-goals of the
+  construction-site design, which covers only the construction mechanism itself.
 - Test: extend `test_object_storage.gd`/`test_forage_content.gd` for the new `objects.json` row;
   extend `test_construction_site.gd`/`test_build.gd` if the new kind's own footprint/cost/duration
   shape exercises a construction-site path the existing fixtures do not already cover.
-- Example: `workbench` (issue #406) is exactly one `content/objects.json` row
+- Example: `workbench` is exactly one `content/objects.json` row
   (`footprint: [2, 1]`, `rotatable: true`, `build_cost: [{wood, 3}, {stone, 4}]`,
-  `build_ticks: 120`, `max_builders: 2`) — no new simulation code, since `_apply_construction_
-  submission()`/`ConstructionGiver`/`ConstructionSiteTable` already generalize over every
-  `build_cost`-bearing kind.
+  `build_ticks: 120`, `max_builders: 2`) — no new simulation code, since
+  `_apply_construction_submission()`/`ConstructionGiver`/`ConstructionSiteTable` already
+  generalize over every `build_cost`-bearing kind.
 
 Keep core classes scene-independent and deterministic. A new job giver or
 toil must flow through the existing queue, scheduler, and consolidated toil

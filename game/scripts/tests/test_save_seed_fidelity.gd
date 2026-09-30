@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Issue #299 round 2 review: SaveIO's exact-restore for the top-level "seed"
-## field and rng.seed/rng.state must parse the COMPLETE JSON number token at
+## SaveIO's exact-restore for the top-level "seed"
+## field and rng.seed/rng.state must parse the complete JSON number token at
 ## each field, not a bare digit prefix. A JSON number can spell the same
 ## integer several ways (1000, 1e3, 1.000e3) and every spelling must restore
 ## to the identical exact value; a token with a genuine fractional remainder,
@@ -45,7 +45,7 @@ func _init() -> void:
 	_run_case("seed", "1.23e1", false, 0) # 12.3 after exponent, still fractional
 
 	# rng.seed and rng.state mirror the same parsing, independently of the
-	# top-level "seed" field (round 1 review: the two must not be confused).
+	# top-level "seed" field (the two must not be confused).
 	_run_case("rng.seed", "1e3", true, 1000)
 	_run_case("rng.seed", "1.5", false, 0)
 	_run_case("rng.seed", "9223372036854775808", false, 0)
@@ -53,7 +53,7 @@ func _init() -> void:
 	_run_case("rng.state", "1.5", false, 0)
 	_run_case("rng.state", "9223372036854775808", false, 0)
 
-	# round 3 review: exponent magnitude must be bounded before expansion or
+	# Exponent magnitude must be bounded before expansion or
 	# arithmetic that could overflow or allocate unboundedly, not merely
 	# checked after the fact.
 	_run_case("seed", "1e18", true, 1000000000000000000)
@@ -62,12 +62,12 @@ func _init() -> void:
 	# and must resolve without ever allocating an exponent-sized string.
 	_run_case("seed", "0e-999999999999999999", true, 0)
 	_run_case("seed", "0e999999999999999999", true, 0)
-	# round 4 review: a zero mantissa with a moderate positive exponent was
-	# being rejected because the point-padding it computed (before noticing
+	# Regression: a zero mantissa with a moderate positive exponent was once
+	# rejected because the point-padding it computed (before noticing
 	# the mantissa was zero) exceeded int64's own digit-count bound -- a
 	# structurally different path than the oversized-exponent cases above.
-	# "0e19" sits just under that padding bound and already passed; "0e20"
-	# is the first value that crossed it and was wrongly rejected.
+	# "0e19" sits just under that padding bound; "0e20" is the first value
+	# that crosses it.
 	_run_case("seed", "0e19", true, 0)
 	_run_case("seed", "0e20", true, 0)
 	_run_case("seed", "0e21", true, 0)
@@ -153,7 +153,7 @@ func _run_case(field: String, token: String, expect_ok: bool, expected_value: in
 		_expect(result.get("code", "") == "schema_error",
 			"field '%s' token '%s' rejection must be a typed schema_error, got '%s'" % [field, token, result.get("code", "")])
 
-## Round 3 review: a JSON key written with a \uXXXX escape (e.g. "seed"
+## A JSON key written with a \uXXXX escape (e.g. "seed"
 ## spelled "\u0073eed") must decode to the same field a plain key would --
 ## SaveIO's exact-restore now locates fields structurally, not by text
 ## search, so it must not be fooled by an escaped key it never has to text-
@@ -186,7 +186,7 @@ func _run_escaped_key_cases() -> void:
 ## An envelope carrying a decoy top-level "seed" and a decoy top-level "rng"
 ## object -- sibling to "state", sharing the exact field names the exact-
 ## restore looks for -- must never supply the restored value; only the
-## authenticated "state" object's own fields may (round 3 review).
+## authenticated "state" object's own fields may.
 func _run_envelope_decoy_case() -> void:
 	var state := _minimal_state()
 	state["seed"] = 123456789012345

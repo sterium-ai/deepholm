@@ -1,7 +1,7 @@
 class_name ConstructionSiteTable
 extends RefCounted
 
-## One record per active construction site (issue #406, docs/decisions/038):
+## One record per active construction site (ADR 040):
 ## a persistent, multi-tick `build` order that exists independently of any
 ## job. WorldState is the only mutator; ConstructionGiver and the toil hooks
 ## read/write through the methods below rather than indexing a site
@@ -148,8 +148,7 @@ func builder_ids(id: String) -> Array:
 
 ## Adds `amount` ticks to id's own accumulated progress -- every active
 ## builder's `site_work` job calls this once per tick it works, so the
-## mechanism already sums correctly for more than one concurrent builder
-## (issue #406 Non-goals: only ever exercised with one in this task). Returns
+## mechanism sums correctly for more than one concurrent builder. Returns
 ## the new total, or 0 for an unknown id.
 func add_progress(id: String, amount: int) -> int:
 	if not _sites.has(id):

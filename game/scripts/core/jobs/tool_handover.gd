@@ -1,11 +1,10 @@
 class_name ToolHandover
 extends RefCounted
 
-## Presentation-only overlay (issue #266, ADR 012): while a job's own
+## Presentation-only overlay (ADR 013): while a job's own
 ## fetch_tool toil is waiting on a foreign colonist to physically drop a tool
-## it already reserved (ToolDropToil.waiting_for_handover(), case (b)'s third
-## location), surfaces that wait through the job record's own existing
-## generic reason/remedy/itemId/blockingJobId fields -- reused, not new
+## it already reserved (ToolDropToil.waiting_for_handover()), surfaces that
+## wait through the job record's own existing generic reason/remedy/itemId/blockingJobId fields -- reused, not new
 ## persisted state (docs/architecture/extension-points.md's "Toil" recipe: a
 ## scheduler/executor reason, not a new decision layer) -- the same way
 ## JobQueue's own _block()/blocking_job_id already surfaces every other block

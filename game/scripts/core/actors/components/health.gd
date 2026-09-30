@@ -1,9 +1,9 @@
 class_name ActorHealth
 extends RefCounted
 
-## F2 health component: hp, maxHp, dead flag. Data + validate() only in this
-## task (no real combat/damage behaviour yet -- see docs/decisions/
-## 012-actors-and-components.md and task t3). Tunables (content/actors.json):
+## F2 health component: hp, maxHp, dead flag. Data + validate() plus bounds
+## clamping; no damage behaviour lives here (see docs/decisions/
+## 012-actors-and-components.md). Tunables (content/actors.json):
 ## {"maxHp": int >= 1, "hp": int >= 0 (optional, defaults to maxHp)}.
 
 static func validate(tunables: Dictionary) -> bool:
@@ -26,8 +26,8 @@ static func build(tunables: Dictionary) -> Dictionary:
 	return {"hp": int(tunables.get("hp", max_hp)), "maxHp": max_hp, "dead": false}
 
 ## Same shape as build(), but always starts at hp == maxHp, dead == false,
-## ignoring any optional "hp" tunable -- issue #283: a colonist's spawn hp
-## must track maxHp even when content declares an "hp" below it.
+## ignoring any optional "hp" tunable: a colonist's spawn hp must track
+## maxHp even when content declares an "hp" below it.
 static func build_full(tunables: Dictionary) -> Dictionary:
 	var max_hp := int(tunables.get("maxHp", 1))
 	return {"hp": max_hp, "maxHp": max_hp, "dead": false}
@@ -36,9 +36,9 @@ static func build_full(tunables: Dictionary) -> Dictionary:
 ## floored at 1), dead true once hp has reached 0 and permanently true from
 ## then on (a prior true dead is preserved even if something set hp positive
 ## again, since death must not un-happen). Idempotent and safe to call after
-## any sequence of external hp edits -- there are none yet (issue #283
-## Non-goals: no combat/hazard damage this task). Named clamp_bounds(), not
-## clamp(), to avoid shadowing GDScript's built-in global clamp(value, min, max).
+## any sequence of external hp edits (this component itself applies no
+## combat or hazard damage). Named clamp_bounds(), not clamp(), to avoid
+## shadowing GDScript's built-in global clamp(value, min, max).
 static func clamp_bounds(health: Dictionary) -> void:
 	var max_hp := maxi(1, int(health.get("maxHp", 1)))
 	health["maxHp"] = max_hp

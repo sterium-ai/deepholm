@@ -14,8 +14,7 @@ enum Speed { PAUSED, X1, X2, X3 }
 const BASE_TICKS_PER_SECOND := 2.0
 
 var world: WorldStateType
-## Paused by default (issue #300 Goal: "the normal new game starts
-## paused"): every world this driver ever attaches to -- the default boot
+## Paused by default: every world this driver ever attaches to -- the default boot
 ## world, a fresh New Game, a resumed save -- starts with no ticks advancing
 ## until the player explicitly presses Play/Step, rather than silently
 ## running at X1 the instant the scene loads.
@@ -39,7 +38,7 @@ func _process(delta: float) -> void:
 func set_speed(new_speed: int) -> void:
 	speed = new_speed
 
-## Real seconds a single tick spans at the current speed (issue #364): the
+## Real seconds a single tick spans at the current speed: the
 ## interpolation clock colonist_sprites.gd's advance() divides its own
 ## elapsed-since-tile-change time by. 0.0 while paused, matching the "freeze
 ## interpolation and animation" rule -- never divides by BASE_TICKS_PER_SECOND

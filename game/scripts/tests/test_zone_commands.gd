@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Exercises WorldState.apply()'s zone_add/zone_remove commands (issue #189):
+## Exercises WorldState.apply()'s zone_add/zone_remove commands:
 ## both apply immediately (no job queue), validated/rejected the same way as
 ## place_object/remove_object in _apply_place_object_command (see
 ## test_place_object_command.gd). Also exercises the per-cell free/reserved

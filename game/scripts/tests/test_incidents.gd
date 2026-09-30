@@ -1,6 +1,6 @@
 extends SceneTree
 
-## F5 incidents (issue #294): exercises IncidentScheduler's day-gated budget
+## Incidents: exercises IncidentScheduler's day-gated budget
 ## draw, its spawn_incident debug command (and the viewer's dispatch of it),
 ## the shared job/toil dispatch a spawned actor's walk/wait runs through,
 ## activation-gated spawning (a proposed actor enters the world only once its
@@ -25,7 +25,7 @@ const BOOT_RESTORE_DIR := "user://test-incidents-boot-restore"
 const NEW_GAME_SAVE_DIR := "user://test-incidents-new-game"
 const BOOT_SCENE_PATH := "res://scenes/boot.tscn"
 const TICK_RATE := 10
-## content/calendar.json's day_length_ticks (issue #349/ADR 023: 2200, was
+## content/calendar.json's day_length_ticks (ADR 024: 2200, previously
 ## 100): tick 4400 is the first tick of day 3.
 const DAY_LENGTH_TICKS := 2200
 const DAY3_TICK := 2 * DAY_LENGTH_TICKS
@@ -34,18 +34,18 @@ const DAY3_TICK := 2 * DAY_LENGTH_TICKS
 ## work, not day-length-dependent, so the margin stays a flat 400 rather than
 ## scaling with DAY_LENGTH_TICKS.
 const TICK_BUDGET := DAY3_TICK + 400
-## issue #300 round 1 review finding 8: the one real (uncontrolled) boot-scene
+## The one real (uncontrolled) boot-scene
 ## check that ticks its own world --
 ## _check_viewer_dispatches_spawn_incident()'s wait for a viewer-triggered
 ## actor to enter the world -- now builds at the default New Game size
-## (256x256, docs/decisions/020, boot.gd's build_default_world()) instead of
+## (256x256, ADR 020, boot.gd's build_default_world()) instead of
 ## the old 48x48 debug scenario. Finding a valid bare edge spawn tile and
 ## walking in from it takes meaningfully longer on a map over 5x wider/taller,
 ## on top of content/incidents.json's own spawn.wait_ticks (60 for
 ## trader_visit); an actor was observed found at tick 642. This bound is
 ## passed explicitly only at that one call site, never by raising the shared
-## TICK_BUDGET default above (round 1 review: that would have silently
-## loosened every unrelated small-controlled-world regression's own bound).
+## TICK_BUDGET default above, which would silently loosen every unrelated
+## small-controlled-world regression's own bound.
 ## The many _build_controlled_world()/_build_pocket_world() checks below stay
 ## their own small, fully controlled size and complete well within the
 ## original 600-tick TICK_BUDGET.
@@ -55,7 +55,7 @@ const DOOR_Y := 24
 const GAP_Y := 0
 const NO_TILE := Vector2i(-1, -1)
 
-## Issue #398 (ADR 032): content/incidents.json's test-only "raider_incursion"
+## ADR 034: content/incidents.json's test-only "raider_incursion"
 ## row (raiders faction, hostile to colony per content/factions.json; wolf
 ## actor_def reused as a fixture, spawn.lingers: true). min_day 10 sits
 ## comfortably past both this file's fixed-day checks (day 3's
@@ -65,13 +65,12 @@ const LINGER_INCIDENT_ID := "raider_incursion"
 const LINGER_MIN_DAY := 10
 const LINGER_SPAWN := Vector2i(24, 0)
 ## Bare floor tiles strictly between the spawn and the door, all genuinely
-## NOT Chebyshev-adjacent to it: with LINGER_NEAR_DOOR_TILE sealed off for
+## not Chebyshev-adjacent to it: with LINGER_NEAR_DOOR_TILE sealed off for
 ## the one tick that runs the daily draw, these are IncidentScheduler's own
-## _pick_reachable_target()'s ONLY candidates, so whichever one its seeded
+## _pick_reachable_target()'s only candidates, so whichever one its seeded
 ## RNG picks, the incident's own destination is guaranteed non-adjacent to
 ## the door -- proving the later hand-off is the generic ApproachGiver
-## behaviour, not a coincidental incident-target pick (mirrors the reference
-## fix in commit 164a29de).
+## behaviour, not a coincidental incident-target pick.
 const LINGER_FAR_CORRIDOR_START_Y := 1
 const LINGER_FAR_CORRIDOR_END_Y := 5
 const LINGER_NEAR_DOOR_TILE := Vector2i(24, 6)
@@ -192,8 +191,8 @@ func _build_single_wall(world: WorldStateType, x: int, door_y: int, gap_y: int) 
 func _build_controlled_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	# issue #300: a freshly generated world can now place berry_bush objects
-	# (docs/decisions/020); a leftover one would make _is_bare_tile() false
+	# A freshly generated world can now place berry_bush objects
+	# (ADR 020); a leftover one would make _is_bare_tile() false
 	# for whichever tile it landed on, breaking this fixture's "fully
 	# determined" spawn/target selection.
 	world._objects.clear()
@@ -281,16 +280,16 @@ func _check_same_seed_reproduces_same_spawns_and_hash() -> void:
 		_expect(events_a[0]["data"]["actor_ids"] == events_b[0]["data"]["actor_ids"],
 			"the same seed must reproduce the same proposed actor ids")
 
-## The genuine pre-#294 baseline is test_toils_dig_chop_regression.gd's own
+## The genuine incident-free baseline is test_toils_dig_chop_regression.gd's own
 ## unchanged COLONY_EXPECTED_HASH literal (a world that never enables
 ## incidents); here: the default and an explicitly disabled world match on
 ## the full hash (their lastProcessedDay never advances either), and enabling
 ## incidents perturbs colony state (state_hash(false), the projection that
 ## excludes cooldownUntilDay/lastProcessedDay/rng) nothing until a draw
-## actually proposes an actor. Comparing the FULL hash between an enabled and
+## actually proposes an actor. Comparing the full hash between an enabled and
 ## a disabled world would fail before that first draw regardless: an enabled
 ## world's own lastProcessedDay legitimately advances on every calendar-day
-## boundary (issue #295, state_hash()'s day-gate coverage) while a disabled
+## boundary (see state_hash()'s day-gate coverage) while a disabled
 ## world's never does, since IncidentScheduler.advance() is a true no-op
 ## while disabled -- that divergence is real incident-scheduler state, not a
 ## colony-state leak, so it belongs outside this RNG-isolation comparison.
@@ -362,7 +361,7 @@ func _check_shared_engine_dispatch() -> void:
 	_expect(String(job.get("status", "")) == "active", "a spawned incident actor's job must be active")
 
 ## A single wall with a door (the short way) and one far gap: the wolf's
-## INITIAL route (GlobalAssignment's own bounded search, run under the
+## initial route (GlobalAssignment's own bounded search, run under the
 ## wolf's faction) must avoid the door and reach the target via the gap,
 ## while a colonist ordered beyond the same wall routes straight through
 ## the door.
@@ -679,7 +678,7 @@ func _check_unreachable_travel_clears_progress_for_next_job() -> void:
 	_expect(int(work["ticks_remaining"]) == till_ticks - 1,
 		"the later job must start from its own full duration (%d), not inherit the incident's wait (got %d)" % [till_ticks, int(work["ticks_remaining"])])
 
-## Recovery review round 3, defect 1: two incident jobs race for one target;
+## Two incident jobs race for one target;
 ## terminal commands against the queued loser, including rejected completion
 ## and repeated commands, must never touch the active winner's stamped wait.
 func _check_cancelling_queued_competitor_preserves_active_owner_wait() -> void:
@@ -722,7 +721,7 @@ func _check_queued_competitor_command_preserves_wait(command_type: String) -> vo
 	_expect(world._get_work_progress(target) == wait_before,
 		"a rejected repeated terminal command must never disturb the active winner's wait either")
 
-## Recovery review round 3, defect 3: a door lands on a staged wolf's own
+## A door lands on a staged wolf's own
 ## spawn tile while its target route search is still pending; activation must
 ## revalidate the spawn tile under the actor's faction and retire the
 ## proposal (through the shared finish boundary) instead of appending it onto
@@ -755,7 +754,7 @@ func _check_door_on_spawn_tile_during_pending_route_retires_proposal() -> void:
 	_expect(world._incidents.staged_actors().is_empty(), "a retired spawn-tile proposal must leave nothing staged")
 	_expect(world._find_colonist("gated_wolf").is_empty(), "the gated wolf must never enter the world")
 
-## Recovery review round 3, defect 4: a door lands on an incident's own
+## A door lands on an incident's own
 ## destination tile while its actor is travelling. The resource-target
 ## adjacency exception (_routable_to()) must never let stopping next to that
 ## tile count as having reached it; the job must instead prove the tile
@@ -779,7 +778,7 @@ func _check_door_on_destination_during_travel_is_never_reached() -> void:
 		"an incident whose destination is blocked by a door must cancel, never complete its wait adjacent to it")
 	_expect(world._get_work_progress(target) == null, "the cancelled incident must clear its stamped wait")
 
-## Recovery review round 3, minor finding: terminating an incident actor while
+## Terminating an incident actor while
 ## its bounded reroute search is still active (route.rerouting.status ==
 ## "searching") must release that search from WorldState._reroutes, exactly
 ## like an ordinary colonist's later _advance_colonists() pass would -- a
@@ -805,7 +804,7 @@ func _check_terminate_during_active_reroute_releases_search() -> void:
 	_expect(not world._reroutes.has("reroute_wolf"), "terminating an actor mid-reroute must release its search entry")
 	_expect(world._find_colonist("reroute_wolf").is_empty(), "the cancelled actor must be gone")
 
-## Recovery review round 3, defect 2: both startup autosave restoration and a
+## Both startup autosave restoration and a
 ## manual Load construct their world through StateCodec.decode(), which
 ## always builds with incidents disabled -- boot.gd must re-enable incidents
 ## on the restored world either way, and a freshly spawned actor's id must
@@ -854,7 +853,7 @@ func _check_incidents_enabled_after_startup_restore_and_manual_load() -> void:
 			_expect(buttons.size() == 5, "%s: the restored viewer must offer one spawn button per content incident" % restore_mode)
 			for button in buttons:
 				var incident_button: Button = button
-				if String(incident_button.text).contains("wildlife_wander"):
+				if String(incident_button.get_meta("incident_id", "")) == "wildlife_wander":
 					var before := _incident_started_events(restored_world, "wildlife_wander").size()
 					incident_button.pressed.emit()
 					var events := _incident_started_events(restored_world, "wildlife_wander")
@@ -989,11 +988,11 @@ func _check_viewer_dispatches_spawn_incident() -> void:
 		var seen: Array[String] = []
 		for i in buttons.size():
 			var button: Button = buttons[i]
-			var incident_id := ""
-			for candidate in ["wildlife_wander", "trader_visit", "migrant_joins", "raider_incursion", "wolf_attack"]:
-				if String(button.text).contains(candidate):
-					incident_id = candidate
-			_expect(not incident_id.is_empty() and not seen.has(incident_id), "spawn button %d must name a distinct seed incident (got '%s')" % [i, button.text])
+			var incident_id := String(button.get_meta("incident_id", ""))
+			_expect(incident_id in ["wildlife_wander", "trader_visit", "migrant_joins", "raider_incursion", "wolf_attack"] and not seen.has(incident_id),
+				"spawn button %d must carry a distinct seed incident id (got '%s')" % [i, incident_id])
+			_expect(not String(button.text).is_empty() and not String(button.text).contains("_"),
+				"spawn button %d must show a human-readable label, not a raw id (got '%s')" % [i, button.text])
 			seen.append(incident_id)
 			var before := _incident_started_events(world, incident_id).size()
 			button.pressed.emit()
@@ -1011,7 +1010,7 @@ func _check_viewer_dispatches_spawn_incident() -> void:
 	root.remove_child(boot_node)
 	boot_node.free()
 
-## Round 5 review finding 1: _start_new_game() built its fresh WorldState with
+## Regression: _start_new_game() used to build its fresh WorldState with
 ## the bare constructor's own incidents_enabled=false default, unlike every
 ## other world-building path (_init()'s live build, _restore_from_save(),
 ## _on_load_pressed()) which all explicitly re-enable it -- a brand-new colony
@@ -1063,8 +1062,7 @@ func _check_incidents_enabled_after_new_game_and_survive_save_load() -> void:
 ## LINGER_NEAR_DOOR_TILE, with a colony door at LINGER_DOOR_TILE -- "raiders"
 ## may not pass a colony door (content/factions.json), and the door itself
 ## carries a health entry, so it is the actor's only reachable hostile
-## target once ApproachGiver takes over. Mirrors _build_wolf_attack_world()
-## from the reference fix (commit 164a29de).
+## target once ApproachGiver takes over. Mirrors test_wolf_attack.gd's _build_wolf_attack_world().
 func _build_lingering_arena(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
 	world._tiles.fill(WorldStateType.TILE_ROCK)
@@ -1106,7 +1104,7 @@ func _has_actor_with_health_id(world: WorldStateType, actor_id: String) -> bool:
 			return true
 	return false
 
-## Issue #398 (ADR 032): proves spawn.lingers end to end, through the real
+## ADR 034: proves spawn.lingers end to end, through the real
 ## generic systems alone -- no lingering-specific or wolf-specific code
 ## anywhere else. raider_incursion fires on its own min_day through the
 ## ordinary daily budgeted draw (not force_spawn/spawn_incident, which
@@ -1133,7 +1131,7 @@ func _check_lingering_actor_survives_arrival_and_hands_off_to_approach() -> void
 	var incident_target: Vector2i = _find_job(world, incident_job_id).get("target", NO_TILE)
 	_expect(incident_target != NO_TILE, "the lingering actor's own incident job must carry a target")
 	_expect(_chebyshev(incident_target, LINGER_DOOR_TILE) > 1,
-		"the incident's own picked target (%s) must NOT be adjacent to the door (%s) -- the near-door seal must have worked" % [incident_target, LINGER_DOOR_TILE])
+		"the incident's own picked target (%s) must not be adjacent to the door (%s) -- the near-door seal must have worked" % [incident_target, LINGER_DOOR_TILE])
 
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return String(_find_job(w, incident_job_id).get("status", "")) == "completed", LINGER_ARRIVAL_BUDGET) >= 0,
 		"the lingering actor's own arrival job (walk then wait) must run to completion")

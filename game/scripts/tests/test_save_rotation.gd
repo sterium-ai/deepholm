@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Scene-free acceptance coverage for SaveManager's slot policy: autosave
+## Scene-free coverage for SaveManager's slot policy: autosave
 ## rotation (oldest-recorded-tick eviction, see save_manager.gd's header),
 ## manual-slot isolation from that rotation, and load_best()'s newest-first
 ## fallback past a corrupted candidate.
@@ -166,9 +166,9 @@ func _corrupt_content_version(path: String) -> void:
 	output.store_buffer(bytes)
 	output.close()
 
-## Round 1 review (issue #299): SaveManager ranked candidates by raw tick
-## alone, so an old game's high-tick autosave outranked a brand-new game's
-## low-tick manual save. Proves the (epoch, tick) fix end to end, including a
+## Ranking candidates by raw tick alone would let an old game's high-tick
+## autosave outrank a brand-new game's low-tick manual save. Proves
+## SaveManager's (epoch, tick) ordering end to end, including a
 ## simulated process restart (a fresh SaveManager instance with no in-memory
 ## state, exactly like SaveManagerType.new(dir) after boot.gd re-launches).
 func _check_new_game_epoch_outranks_old_autosave_after_restart() -> void:

@@ -1,13 +1,11 @@
 extends SceneTree
 
-## Issue #273 (objective #266): headless proof of the five tool-toil
-## scenarios named in issue #266's own Acceptance section, which
-## docs/architecture/colonist-ai.md section 4's "Tools" entry is the template
-## for. This file adds no new toil behaviour -- fetch_tool/drop_tool/the
-## destroyed-tool failure path are already implemented (issues #271/#272) --
-## it only drives real jobs through the existing engine (job queue ->
-## scheduler -> toil executor, AGENTS.md's "one work engine") and asserts the
-## five outcomes the issue calls for, reusing the same world-construction and
+## Headless end-to-end scenarios for the tool toils (fetch_tool, drop_tool
+## and the destroyed-tool failure path; docs/decisions/013-tool-toils.md),
+## following docs/architecture/colonist-ai.md section 4's "Tools" entry.
+## Drives real jobs through the existing engine (job queue -> scheduler ->
+## toil executor, AGENTS.md's "one work engine") and asserts five outcomes,
+## reusing the same world-construction and
 ## command helpers as test_toils_dig_chop_regression.gd and
 ## test_tool_items.gd:
 ##   1. two colonists share one axe across two chop orders: both complete,
@@ -245,13 +243,13 @@ func _check_scenario_3_destroyed_tool_mid_job_fails_and_requeues() -> void:
 	_expect(not world.is_tool_item_reserved(held_id),
 		"the destroyed axe's own reservation must be released, not left dangling")
 	_expect(not world.is_tool_item_reserved(extra_id),
-		"every OTHER reservation the failing job held must also be released, not just the destroyed item's")
+		"every other reservation the failing job held must also be released, not just the destroyed item's")
 	_expect(String(world.get_colonists()[0].get("held_tool", "")) == "",
 		"the colonist must no longer record held_tool once its actively-used tool is destroyed")
 	_expect(world.get_colonists()[0].get("work") == null,
 		"the colonist's work toil must stop the instant its active tool is destroyed")
 
-	# Supplying a fresh axe must let the SAME job id complete afterward.
+	# Supplying a fresh axe must let the same job id complete afterward.
 	world.spawn_ground_tool_item("axe", 0, 0)
 	var completed := false
 	for _i in 120:
@@ -320,7 +318,7 @@ func _check_scenario_4_handover_bounded_ticks() -> void:
 			for job in world.get_jobs():
 				if job["id"] == forage_a_id and job["status"] == "completed":
 					forage_a_done = true
-					# colonist_a's own NEXT dispatched job -- submitted only
+					# colonist_a's own next dispatched job -- submitted only
 					# now, so a third job is never queued while colonist_b
 					# waits -- is what makes its first toil drop_tool.
 					var forage_b := _command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})

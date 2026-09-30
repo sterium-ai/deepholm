@@ -1,8 +1,13 @@
 # Map experience: PC camera and designation
 
-Issue #298 delivers the current map as a clipped play area.
-PC is the temporary validation target; mobile remains part of the product
-vision. This slice adds no touch gestures or simulation/save/content changes.
+> **In short:** How the player looks around the map on a PC and marks work for
+> the colonists, and how we test that this stays fast and correct on large
+> maps.
+
+The map is presented as a clipped play area with its own camera. PC is the
+current validation target; mobile remains part of the product vision. This
+presentation layer adds no touch gestures and no simulation, save or content
+changes.
 See [ADR 018](../decisions/018-pc-map-presentation.md).
 
 ## Controls and layout
@@ -45,10 +50,10 @@ See [ADR 018](../decisions/018-pc-map-presentation.md).
   above the sprite and drains from full to empty using the site's public
   `progress` and `build_ticks` values; the viewer does not own progress state.
 
-## Large-map presentation (issue #299)
+## Large-map presentation
 
 `map_view.gd` sizes itself to the attached world's own `get_map_width()`/
-`get_map_height()`, not a fixed constant, so `map_viewport.gd`'s pan/zoom
+`get_map_height()` rather than a fixed constant, so `map_viewport.gd`'s pan/zoom
 bounds always match whichever world is live (48x48 fixture or a 256x256
 game). `set_world()` performs one full `TileMapLayer` rebuild; every
 subsequent `refresh()` (called once per tick) instead replays only the
@@ -109,15 +114,15 @@ material, not committed files. Automated input is not a claim of human
 testing: manual panning, zooming, centering and designating at two zooms
 remain part of acceptance.
 
-## Performance instrumentation (issue #299)
+## Performance instrumentation
 
 `test_map_experience_benchmark.gd` (`game/scripts/tests/`) measures a
 256x256, seed-42 world's generation, save/load, `TileMapLayer` full rebuild
 and no-op-refresh cost, and `MapViewport.pan_by()` cost, and prints them. It
-runs in the automatic test discovery and always passes -- it is CPU-bound
-headless instrumentation (world generation and `MapViewport`'s own transform
-math, not a rendered GPU frame), not a pass/fail performance gate a slower or
-faster machine should fail on. The rendered-frame counterpart, with a real
+runs in the automatic test discovery and always passes: it is CPU-bound
+headless instrumentation (world generation and `MapViewport`'s transform
+math, not a rendered GPU frame), not a performance gate that a slower
+machine should fail. The rendered-frame counterpart, with a real
 display/GPU active, is `test_map_experience_seed42_flow.gd` below.
 
 ```powershell
@@ -143,12 +148,12 @@ accepting it, so it pays this cost too, not just `SaveIO.read()`.
 The no-op-refresh row makes the incremental-refresh requirement concrete: a
 tick with no terrain change touches 0 of 65536 cells, not a full rebuild.
 
-## Graphical round trip (issue #299)
+## Graphical round trip
 
 `test_map_experience_seed42_flow.gd` (`game/scripts/tests/`) is an automated
-graphical exercise of the full flow -- New Game with seed 42, a reproducible
-60-step pan sequence to the opposite (far) corner, a real dig order issued
-through the actual pointer/tool path, Save, Load -- run through the real Boot
+graphical exercise of the full flow (New Game with seed 42, a reproducible
+60-step pan sequence to the opposite corner, a real dig order issued
+through the actual pointer/tool path, Save, Load), run through the real Boot
 scene's own button handlers (`_on_new_game_pressed`/
 `_on_new_game_confirmed`/`_on_save_pressed`/`_on_load_pressed`), not a
 headless StateCodec-level round trip. It asserts terrain, colonist positions,
@@ -182,9 +187,9 @@ correctness against escaped keys and envelope decoys that a native regex
 search could not handle. That cost is deliberate and must not be reduced by
 weakening those checks.
 
-## Main river and correlated vegetation (issue #300)
+## Main river and correlated vegetation
 
-The scattered-water terrain from issue #299 is replaced by a single main
+The earlier scattered-water terrain is replaced by a single main
 river and grove-correlated vegetation/food; the fixed `(2, 2)`-`(8, 8)` spawn
 rectangle is replaced by a river-aware, resource-validated search. The full
 algorithm, its width contract, the spawn search's bounded-attempts/documented-
@@ -203,17 +208,17 @@ godot --path game --script res://scripts/tests/test_river_seed_viewer_interactio
 `test_river_generation.gd` covers a fixed >=20-seed suite (reproducibility,
 crossing two opposite edges, single 4-connected water component, no isolated
 water tile, width >= the 4-tile neck floor including curves, no width spike),
-proves its own connectivity check against a synthetic broken (multi-component)
+proves its connectivity check against a synthetic broken (multi-component)
 river and a synthetic diagonal-only-connected river, and verifies -- via an
-independent from-scratch BFS, not a reuse of `WorldGenerator`'s own distance
+independent from-scratch BFS, not a reuse of `WorldGenerator`'s distance
 fields -- that all three spawned colonists reach water/food/trees within
-40/40/50 real route steps, with the search's own `"fallback"` flag `false`
+40/40/50 real route steps, with the search's `"fallback"` flag `false`
 for every seed. `test_spawn_fallback.gd` calls `WorldGenerator.place_spawn()`
 directly against small synthetic maps that force its repair/construct tiers
 to actually run (a hostile documented anchor, resources reachable nowhere on
 the map, a connected land component with only exactly `colonist_count`
 tiles), asserting three connected colonist positions, an untouched river, and
-honestly-reported (`-1`, never fabricated) resource distances when a resource
+resource distances reported as `-1` (never fabricated) when a resource
 truly cannot be reached. `test_river_map_capture.gd` drives the real New Game
 button path (never a hand-built fixture) for seeds 42, 1337 and 20260919
 through the real (default, art-mode) renderer; with `-- --capture` it renders
@@ -241,7 +246,7 @@ button and the real `TickDriver` until the bush is foraged. The graphical
 blue-dominant, soil tile not) and writes spawn / order-placed / order-done
 captures.
 
-## Sustained-load measurement (issue #344)
+## Sustained-load measurement
 
 Two graphical tests exercise the map under realistic use, following the same
 real-`Boot`-scene, real-pointer-path pattern as

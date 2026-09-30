@@ -1,10 +1,10 @@
 extends SceneTree
 
-## Issue #344 acceptance: 60 real seconds of sustained-load,
+## 60 real seconds of sustained-load,
 ## rendered-frame-interval measurement after warmup, on the real Boot scene --
 ## a 256x256 seed-42 world (mapgen.json's own default colonist_count == 3),
 ## 30 valid local "till" orders queued up front, alternating pan/zoom every
-## frame, at 1920x1080. "till" needs no fetched tool (colonist_ai.md: a
+## frame, at 1920x1080. "till" needs no fetched tool (colonist-ai.md: a
 ## freshly spawned colonist has no pick/axe, so dig/chop would sit
 ## blocked_no_tool), so all 30 orders are actually workable by the 3
 ## colonists while the measurement window runs at real x3 tick speed through
@@ -23,14 +23,14 @@ extends SceneTree
 ## printed numbers are queue-depth/CPU bound, not the number to quote against
 ## the >=30 FPS / <=50ms p95 target.
 ##
-## Round 1 review: average FPS and p95 alone do not establish "sustained"
+## Average FPS and p95 alone do not establish "sustained"
 ## performance -- a single very long frame is invisible to both. So this
 ## also buckets frames by the real second they fell in (one bucket's frame
 ## count is that second's own FPS) and separately lists every individual
 ## frame over LONG_FRAME_MS, with its offset into the window and how many
 ## TileMapLayer cells that frame's own refresh touched (to tell a rendering
 ## stall apart from a terrain-rebuild one). "MET" below requires the average,
-## the p95, AND the worst single real second's frame count to all clear the
+## the p95, and the worst single real second's frame count to all clear the
 ## target -- not average/p95 alone.
 ##
 ## godot --headless --path game --script res://scripts/tests/test_map_experience_fps_measurement.gd
@@ -200,7 +200,7 @@ func _frame_stats(frame_records: Array, measured_seconds: float) -> Dictionary:
 	var p95_ms: float = sorted_ms[p95_index]
 
 	# Bucket by the real second each frame started in: a bucket's own frame
-	# count IS that second's FPS, so the worst bucket is the sustained floor
+	# count is that second's FPS, so the worst bucket is the sustained floor
 	# a single long frame (invisible to avg/p95) would otherwise hide. Uses
 	# floor, not ceil: the loop that fills frame_records stops as soon as
 	# elapsed crosses measured_seconds, so the trailing fractional second is
@@ -231,8 +231,8 @@ func _frame_stats(frame_records: Array, measured_seconds: float) -> Dictionary:
 	}
 
 ## Every frame, alternates a small pan step with a zoom oscillating between
-## the 0.5x/3x bounds -- "alternando pan/zoom" per the task's own wording,
-## never both in the same frame so each gesture's cost is independently real.
+## the 0.5x/3x bounds, never both in the same frame, so each gesture's cost
+## is measured independently.
 func _alternate_pan_zoom(camera: Control) -> void:
 	_gesture_frame += 1
 	if _gesture_frame % 2 == 0:

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #301 acceptance: "Headless test: same seed, same map -> same tile
+## "Headless test: same seed, same map -> same tile
 ## variants after pan, zoom, save and load; the simulation hash does not
 ## change with art enabled or disabled."
 ##

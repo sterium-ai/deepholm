@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Acceptance coverage for issue #270 (colonist-ai.md 3.2/3.7/3.8's "work
+## Coverage for the work table panel (colonist-ai.md 3.2/3.7/3.8's "work
 ## table shows these active boosts" / labour priority grid / sowing
 ## calendar banner): WorkTablePanel must render exactly one row per colonist
 ## (world.get_colonists()) and one column per labour kind (WorldState.
@@ -8,12 +8,11 @@ extends SceneTree
 ## header, cycle a cell's level through the documented order via the real
 ## set_labour command, and show/hide the calendar-alert banner per
 ## world.get_events() -- sticky until dismissed or replaced by a different
-## alert, never via a panel-local CalendarService or day-based expiry (round
-## 1 review finding). It also covers debug_scenario.gd's pre-plowed starting
-## tile/seed stock (produced through world.apply()+world.tick(), round 1
-## finding) and boot.gd's UI layout, which must keep the new panel, its
-## banner, and the till/sow buttons reachable within a scrollable content
-## area (round 1 finding).
+## alert, never via a panel-local CalendarService or day-based expiry. It also
+## covers debug_scenario.gd's pre-plowed starting tile/seed stock (produced
+## through world.apply()+world.tick()) and boot.gd's UI layout, which must
+## keep the panel, its banner, and the till/sow buttons reachable within a
+## scrollable content area.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const WorkTablePanelType = preload("res://scripts/viewer/work_table_panel.gd")
@@ -167,7 +166,7 @@ func _check_banner_hides_once_acknowledged() -> void:
 	panel.refresh()
 	_expect(not panel._banner_label.visible, "a later refresh with the same alert must keep the banner dismissed")
 
-## Round 1 review finding: WorldState exposes no getter for a calendar
+## WorldState exposes no getter for a calendar
 ## window's own "to" day or the current day number, so the panel must never
 ## expire the banner on its own -- it must stay visible across any number of
 ## ticks until the player dismisses it or a different alert arrives.
@@ -216,7 +215,7 @@ func _check_banner_replaced_by_different_alert_after_ack() -> void:
 	_expect(panel._banner_label.text.find("harvest window") >= 0,
 		"the banner must show the newer alert's own text, got '%s'" % panel._banner_label.text)
 
-## Round 1 review finding: boot.gd calls refresh() on every simulation tick;
+## boot.gd calls refresh() on every simulation tick;
 ## rebuilding every cell button on every such call would let a real
 ## press-then-release spanning a tick lose its button mid-press. A cell
 ## button visible before a tick must be the exact same node afterward, and
@@ -265,7 +264,7 @@ func _check_grid_reconciles_rows_when_colonist_set_changes() -> void:
 	_expect(panel._cell_button("colonist_extra", "farm") != null,
 		"the new colonist's cells must be reachable by id after reconciliation")
 
-## Round 1 review finding: debug_scenario.gd must produce its pre-plowed
+## debug_scenario.gd must produce its pre-plowed
 ## starting tile through world.apply() (a till job) plus world.tick(), never
 ## a direct tile write -- the starting seed stock is the one authorized
 ## direct-write exception (no public command can spawn a stackable ground
@@ -295,13 +294,12 @@ func _check_debug_scenario_produces_plowed_tile_and_seed_stock_via_apply_and_tic
 		"the debug scenario must seed a starting stock of %d seed(s), got %d"
 			% [DebugScenarioType.STARTING_SEED_COUNT, seed_count])
 
-## Round 1 review finding: the work table panel, its banner, and the
+## The work table panel, its banner, and the
 ## till/sow buttons must stay reachable within boot.gd's actual UI, not
 ## merely placed past the configured 960x540 viewport's edge. Calls
 ## _build_ui() directly (via Godot's dynamic call()) since boot.gd's _ready()
-## skips it under a headless DisplayServer -- exactly the gap the round 1
-## review flagged ("the passing headless boot command skips _build_ui(), so
-## it cannot detect this").
+## skips it under a headless DisplayServer, so a headless boot alone could
+## not detect a layout regression.
 func _check_ui_layout_places_new_controls_within_reachable_scroll_area() -> void:
 	var boot_scene: PackedScene = load(BOOT_SCENE_PATH)
 	var boot_node: Node = boot_scene.instantiate()

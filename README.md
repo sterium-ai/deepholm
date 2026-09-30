@@ -1,5 +1,9 @@
 # Deepholm
 
+## In plain words
+
+Deepholm is a small colony-building game: a handful of settlers dig, chop wood, gather food, build walls and beds, and look after their hunger, thirst and sleep on a generated map. What makes it unusual is how it is built rather than how much content it has: the same starting map and the same player actions always produce exactly the same outcome, saved games keep loading after every change to the game, and hundreds of automatic checks run before any change is accepted. Most of the code was written and reviewed by AI coding assistants working under strict, written rules, with one person setting direction and checking the results. It shows that careful engineering habits make AI-assisted development trustworthy, and it can serve as a reference for anyone building testable simulations in the Godot engine.
+
 **A deterministic, seeded colony simulation in Godot 4 — with the simulation fully separated from the viewer, versioned saves that still load 24 schema versions later, and a headless test suite that gates every change.**
 
 Deepholm is a top-down colony sim: dig, mine, chop and forage, build walls and furniture, haul to stockpiles, keep colonists fed, watered and rested, fend off wolves and trade with visitors — on a seeded map that replays identically from any save. It is developed by [Sterium AI](https://www.steriumai.dev/), a one-person studio, with most of the code written and cross-reviewed by an AI agent pipeline (see [Built with an AI agent pipeline](#built-with-an-ai-agent-pipeline)).
@@ -13,14 +17,14 @@ Deepholm is a top-down colony sim: dig, mine, chop and forage, build walls and f
 | | |
 | --- | --- |
 | Language / engine | 100 % GDScript, Godot 4.7 (GL Compatibility renderer, web export preset) |
-| Simulation core | ~20.9k lines in `game/scripts/core/` — no scenes, nodes, rendering or wall-clock time |
+| Simulation core | ~20.8k lines in `game/scripts/core/` — no scenes, nodes, rendering or wall-clock time |
 | Viewer | ~3.9k lines in `game/scripts/viewer/` + `boot.gd` |
 | Tests | **90** headless test scripts, **808** named check cases, ~**4,750** assertion call sites (~41k lines) |
 | Saves | schema **v25**, **24** chained migrations, **14** frozen fixtures from older schemas |
 | Content | **11** JSON content files, each with a JSON Schema |
 | Decisions | **43** architecture decision records in `docs/decisions/` |
 
-How these were measured is in [Numbers](#numbers).
+How these were measured is in [Numbers](#numbers). All documentation is indexed in [docs/README.md](docs/README.md).
 
 ## Design pillars
 
@@ -31,7 +35,7 @@ How these were measured is in [Numbers](#numbers).
 
 ## What is in the simulation today
 
-Honest scope, as implemented in `game/scripts/core/` and `game/content/`:
+Scope as implemented in `game/scripts/core/` and `game/content/`:
 
 | System | Scope today |
 | --- | --- |
@@ -68,7 +72,7 @@ godot --headless --path game --quit-after 1
 godot --path game --script res://scripts/tools/screenshot.gd -- /absolute/output/dir
 ```
 
-In the viewer, **New Game** starts a fresh seeded world (paused — press **x1**), the toolbar holds the order tools (Dig, Chop, Forage, Wall, Zone, Till, Sow, Mine, Build …), middle-drag or Space+drag pans, the wheel zooms, and **Toggle Art** switches to the flat-colour diagnostic renderer. **Debug Scenario** loads a small fixture world with furniture and queued orders.
+In the viewer, **New Game** starts a fresh seeded world (paused — press **x1**), the toolbar holds the order tools (Dig, Chop, Forage, Wall, Zone, Till, Sow, Mine, Build …), middle-drag or Space+drag pans, the wheel zooms, and **Toggle Art** switches to the flat-colour diagnostic renderer. **Debug Scenario** loads a small fixture world with furniture and queued orders. The incident buttons (**Wolf attack**, **Trader visit**, **Migrant arrives**, …) trigger a content incident immediately, for testing.
 
 ## Running the tests
 
@@ -128,8 +132,8 @@ flowchart LR
 
 - `game/scripts/core/` — simulation. `world_state.gd` holds state, validates commands and records events; behaviour lives in the job engine (`jobs/`, `scheduling/`), job givers (`jobs/givers/`, `combat/`), routing, map analysis, incidents, persistence and world generation.
 - `game/scripts/viewer/` + `game/scripts/boot.gd` — the Godot scene side: tick pacing, rendering, input, panels. It never mutates simulation state except through `apply()` and `tick()` (enforced by `test_architecture_rules.gd`).
-- `game/content/` and `game/content/schemas/` — the rules as data. `game/data/` holds the viewer's text table, tile set and sprite frames, plus example records and schemas.
-- `docs/architecture/` — contracts (game-state schema, save system, orders and movement, colonist AI, simulation boundaries, extension points) indexed by `source-of-truth.yaml`; `docs/decisions/` — ADRs; `docs/architecture/core-budgets.json` — line caps for the largest core files.
+- `game/content/` and `game/content/schemas/` — the rules as data. `game/data/` holds the viewer's text table, tile set and sprite frames, plus early schema sketches (`examples/`, `schemas/`) that the game does not load.
+- `docs/architecture/` — contracts (game-state schema, save system, orders and movement, colonist AI, simulation boundaries, extension points) indexed by `source-of-truth.yaml`; `docs/decisions/` — ADRs; [`docs/README.md`](docs/README.md) — an index of all documentation, with a one-line summary per page; `docs/architecture/core-budgets.json` — line caps for the largest core files.
 
 ## Under the hood
 
@@ -197,8 +201,8 @@ flowchart LR
 
 ## Curiosities
 
-- The save schema went from v1 to v25, and each of the 24 steps has its own migration and its own version-shape check. In the private development history, v2 → v25 took about eight days (2026-09-17 → 2026-09-25): agents adding a feature had to ship its migration and keep every frozen fixture loading in the same change, so no older save format was left behind.
-- `world_state.gd` is capped by `docs/architecture/core-budgets.json` (5,030 lines; 5,020 at release, checked in CI). Raising a cap requires an ADR, which is why 14 ADR filenames end in `budget-increase`.
+- The save schema went from v1 to v25, and each of the 24 steps has its own migration and its own version-shape check. Steps v2 → v25 were added in about eight days of development (2026-09-17 → 2026-09-25), because an agent adding a feature had to ship its migration and keep every frozen fixture loading in the same change, so no older save format was left behind.
+- `world_state.gd` is capped by `docs/architecture/core-budgets.json` (5,030 lines; 4,994 at release, checked in CI). Raising a cap requires an ADR, which is why 14 ADR filenames end in `budget-increase`.
 - All art is generated by one Python script (`tools/generate_placeholder_art.py`), and even the shoreline cells are tested from their pixels: `test_tile_atlas_map.gd` measures each grass cell's alpha to confirm its transparent side faces the direction the code claims.
 
 ## How it compares
@@ -220,7 +224,7 @@ Measured on the released tree:
 | ~4,750 assertion call sites | occurrences of `_expect(` minus the 85 helper definitions |
 | 24 migrations / schema v25 | `grep -cE '^static func _migrate_v[0-9]+_to_v[0-9]+' game/scripts/core/persistence/save_migrations.gd`; `SCHEMA_VERSION` in `state_codec.gd` |
 | 14 save fixtures | `ls game/scripts/tests/fixtures \| wc -l` |
-| 43 ADRs | `ls docs/decisions/*.md \| wc -l` (numbered 001–041; the numbering has a few gaps and shared numbers from parallel work) |
+| 43 ADRs | `ls docs/decisions/*.md \| wc -l` (numbered 001–043, one number per decision) |
 | Line counts | `wc -l` over `game/scripts/core/**/*.gd`, `game/scripts/viewer/*.gd` + `boot.gd`, and `game/scripts/tests/*.gd` |
 
 ## Built with an AI agent pipeline

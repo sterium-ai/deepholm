@@ -29,7 +29,7 @@ func _fail(message: String) -> void:
 	push_error(message)
 	_failed = true
 
-## issue #299 round 1 review: two restored states with the same flattened
+## Two restored states with the same flattened
 ## tiles/entities but different rectangular dimensions (4x4 vs 2x8, both
 ## area 16) must report DIFFERENT state_hash() values -- width/height now
 ## govern tile indexing and simulation bounds, so a hash blind to them could
@@ -108,8 +108,8 @@ func _check_initialization() -> void:
 				_fail("expected no ground wood at (%d,%d) on a freshly generated world" % [x, y])
 				return
 
-	# issue #300: the spawn clearing is chosen dynamically (river-aware,
-	# resource-validated -- WorldGenerator.place_spawn(), docs/decisions/020),
+	# The spawn clearing is chosen dynamically (river-aware,
+	# resource-validated -- WorldGenerator.place_spawn(), ADR 020),
 	# not a fixed (2,2)-(8,8) rectangle, so this checks whatever clearing this
 	# seed's search actually chose, via WorldState's own get_spawn_clearing().
 	var clearing := world.get_spawn_clearing()
@@ -373,14 +373,14 @@ func _check_replay_determinism() -> void:
 		_fail("event logs diverged")
 		return
 
-## F5/#295 determinism proof (objective #277 acceptance item 4): two
+## Incident determinism proof: two
 ## identically-seeded worlds with incidents enabled, ticked far enough to
 ## cross incidents.json's min_day gates (3, 5) and actually draw/spawn, must
 ## reach the same state_hash() and event log -- proving IncidentScheduler's
 ## own RNG stream, cooldowns, and last-processed day are all fully
 ## deterministic and fully covered by state_hash() (ADR 004).
 ## IncidentScheduler.advance() draws once per in-game calendar day
-## (CalendarService.day_of_tick()); issue #349/ADR 023 grew day_length_ticks
+## (CalendarService.day_of_tick()); ADR 024 grew day_length_ticks
 ## from 100 to 2200 (22x), so the tick budget needed to cross min_day 3 (day 3
 ## starts at tick 2 * day_length_ticks = 4400) is scaled by the same factor
 ## the day length grew by, keeping the original ~6.5-day margin past min_day 5.
@@ -407,111 +407,38 @@ func _check_incident_replay_determinism() -> void:
 	if first.get_events() != second.get_events():
 		_fail("incident-enabled event logs diverged")
 
-## F5/#295: an incidents-disabled world's own IncidentScheduler never draws
+## An incidents-disabled world's IncidentScheduler never draws
 ## (advance()/_run_daily_draw() are a true no-op while disabled), so its
-## cooldowns/last-processed-day/RNG stay at their exact freshly-constructed
-## values through many ticks. Two separately constructed disabled worlds of
-## the same seed reproducing the same full state_hash() only proves
-## repeatability of THIS implementation; the actual pre-incident-baseline
-## proof is PRE_INCIDENT_BASELINE_HASH below, an independent literal captured
-## with Godot from this exact world/scenario's colony-only projection
-## (state_hash(false)) -- byte-identical to what state_hash() itself computed
-## before issue #295 added any incident field to it, since state_hash(false)
-## never includes cooldownUntilDay/lastProcessedDay/rng. Matching that fixed
-## literal, plus the colony's own RNG stream staying in lockstep between the
-## two runs, is what confirms the incident RNG stream never touches the
-## colony's own sequence -- not merely that two new-implementation runs agree
-## with each other.
-## Issue #302: colonist now carries a real "combat" component
-## (content/actors.json), backfilled by WorldState._ensure_combat() the
-## first tick any colonist exists, plus state_hash() including
-## world._object_health (round-3 review: a wall/door's accumulated damage
-## must be hash-visible) and CombatGiver's own excluded-flee-destination set
-## (round-6 review, second pass: `_blocked_targets` affects the very next
-## flee-destination pick, so a save/load or a determinism comparison that
-## differs only in it must not hash equal) -- each a genuine, intentional
-## shape change to the same snapshot dict, present even for a colony-only
-## world with no combat/damage/flee activity since each new key itself
-## changes the dict shape.
-## Re-captured for issue #300 (world_generator.gd's own GENERATOR_VERSION
-## bump to 2): the prior literal was pinned to #299's independent-per-tile
-## water scatter, which this task replaces with the main-river/correlated-
-## vegetation algorithm, so seed 20260922's terrain (and therefore this
-## colony-only projection) changed even at the 48x48 reference size.
-## Re-captured again for issue #300 round 1 revision (world_state.gd's own
-## _generate_map()/_spawn_colonists() now consume their own GEOGRAPHY_SEED_
-## SALT/PLACEMENT_SEED_SALT-derived local RNGs instead of _random, so seed
-## 20260922's terrain/spawn positions -- and therefore this projection --
-## changed again, though _random's own post-construction state is now the
-## simulation-stream invariant test_river_generation.gd's own
-## _check_generation_does_not_perturb_simulation_stream() asserts). Value
-## captured via this exact test run in this sandbox with Godot 4.7.2.
-## Re-captured for issue #349/ADR 023 (needs.json's per-tick "rate" replaced
-## by per-day "rate_per_day", applied through a new persisted per-colonist
-## "needsAccumulator" field): both the decay trajectory and the hashed
-## colonist shape changed, so this literal moved even though the scenario's
-## own seed/tiles/tick count did not.
-## Re-captured for issue #351/#347 (world_generator.gd's own GENERATOR_VERSION
-## bump to 3): grown compact rock outcrops are a new terrain-shaping pass, and
-## place_spawn()'s anchor scoring now also requires outcrop reachability, so
-## seed 20260922's terrain/spawn positions -- and therefore this colony-only
-## projection -- changed again even at the 48x48 reference size. Value
-## captured via this exact test run in this sandbox with Godot 4.7.2.
-## Re-captured for issue #351/#347 round 1 revision (world_generator.gd's own
-## _scatter_rock_outcrops() now draws from a private OUTCROP_SEED_SALT-derived
-## substream instead of the shared `random` stream, so the outcrop pass never
-## shifts every other pass's draws -- see that function's own doc comment):
-## seed 20260922's rock-outcrop tile positions changed again, though every
-## other terrain feature this projection also depends on did not.
-## Re-captured for issue #358 round 2 review (ADR 025 amendment): state_hash()
-## now also includes world._dig_find_random's own seed/state (dig's find-roll
-## RNG continuation, now persisted through save/load), unconditionally rather
-## than gated by include_incidents -- a pure snapshot-shape change, not a
-## colony-behavior change, but it still moves this colony-only projection.
-## Re-captured for issue #359 (ADR 025 t3): every colonist's snapshot now
-## also carries a "trapped" field. Re-captured once more to merge the #302
-## combat-shape change onto this same snapshot dict. Re-captured once more for
-## issue #278/#303 round 6 (second pass): state_hash() now also includes
-## world._suspended_work_progress (a suspended job's own progress affects what
-## happens the moment it resumes, so two states differing only in it must not
-## hash equal) -- a pure snapshot-shape change (an empty array here), not a
-## colony-behavior change, but it still moves this projection.
-## Re-captured for issue #360 (ADR 025 t4, rescue_giver.gd): state_hash() now
-## also includes RescueGiver's own job_id -> victim_id association
-## ("rescue_victim_assignments"), unconditionally like the dig-find RNG
-## stream above -- always empty here (this scenario never traps a colonist),
-## but the new key itself still changes the dict shape this projection hashes
-## over. Re-captured once more for #360's round-4 review (finding 3): that
-## field is now hashed in state_codec.gd's own sorted {jobId, victimId} array
-## encoding (an empty Array here) instead of the raw Dictionary, so identical
-## associations restored in a different insertion order hash identically.
-## Merging issue #360 onto origin/main (both the #278/#303 suspended-work-
-## progress addition and the rescue-victim-assignments field landing together
-## for the first time) moved this literal once more -- a pure combined
-## snapshot-shape change. Value captured via this exact test run in this
-## sandbox with Godot 4.7.2, per AGENTS.md's "never hand-derive a hash" rule.
-## Re-captured for issue #390 (ADR 031, ApproachGiver): state_hash() now also
-## includes ApproachGiver's own job_id -> target association
-## ("approach_job_targets"), unconditionally like rescue's own association
-## above -- always empty here (this colony-only scenario never spawns a
-## hostile actor), but the new key itself still changes the dict shape this
-## projection hashes over. Re-captured again for issue #391: ApproachGiver no
-## longer retires an actor permanently (see approach_giver.gd's own class doc
-## comment), so state_hash() drops the now-meaningless "approach_retired_actors"
-## key it briefly carried (ADR 031 round-2 review finding 2) -- the dict shape
-## moves again, even though the key was always empty in this colony-only
-## scenario. Re-captured for issue #402 (ADR 035): a colonist's single-slot
-## "carrying" field becomes "hands", a list instead of a nullable object --
-## a pure snapshot-shape change (empty here, since this scenario never has a
-## colonist carrying anything), not a colony-behavior change, but it still
-## moves this projection. Value captured via this exact test run in this
-## sandbox with Godot 4.7.2.
-## Re-captured for issue #406 (ADR 038): state_hash() now also includes
-## "construction_sites" (ConstructionSiteTable.list()), unconditionally like
-## every other giver's own association above -- always empty here (this
-## colony-only scenario never issues a `build` command), but the new key
-## itself still changes the dict shape this projection hashes over. Value
-## captured via this exact test run in this sandbox with Godot 4.7.2.
+## cooldowns/last-processed-day/RNG stay at their freshly constructed values
+## through many ticks. Two disabled worlds of the same seed reproducing the
+## same full state_hash() only proves repeatability; the actual
+## pre-incident-baseline proof is PRE_INCIDENT_BASELINE_HASH below, an
+## independent literal captured with Godot from this world/scenario's
+## colony-only projection (state_hash(false)), which never includes
+## cooldownUntilDay/lastProcessedDay/rng. Matching that literal, plus the
+## colony's own RNG stream staying in lockstep between the two runs, confirms
+## the incident RNG stream never touches the colony's sequence.
+##
+## The literal must be recaptured (by running this test, per AGENTS.md's
+## "never hand-derive a hash" rule) whenever the colony-only projection
+## changes. Past causes include:
+## - Terrain generation changes for seed 20260922 (GENERATOR_VERSION bumps for
+##   the main-river/correlated-vegetation algorithm and for rock outcrops;
+##   _generate_map()/_spawn_colonists() and _scatter_rock_outcrops() moving to
+##   their own salted RNG substreams, so generation never perturbs the
+##   simulation stream checked by test_river_generation.gd's
+##   _check_generation_does_not_perturb_simulation_stream()).
+## - Needs decaying per day through a persisted "needsAccumulator" field
+##   (ADR 024), which changed both the decay trajectory and the colonist shape.
+## - New snapshot keys that are always empty in this colony-only scenario but
+##   still change the dict shape: the colonist "combat" component,
+##   world._object_health, CombatGiver's excluded-flee-destination set,
+##   world._dig_find_random's seed/state (hashed unconditionally, not gated by
+##   include_incidents), the colonist "trapped" field (ADR 026),
+##   world._suspended_work_progress, "rescue_victim_assignments" (hashed as a
+##   sorted {jobId, victimId} array so insertion order does not matter),
+##   "approach_job_targets" (ADR 033), the colonist "hands" list (ADR 037) and
+##   "construction_sites" (ADR 040).
 const PRE_INCIDENT_BASELINE_HASH := 1196647028
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
@@ -545,7 +472,7 @@ func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if world._random.seed != reference._random.seed or world._random.state != reference._random.state:
 		_fail("disabling incidents must never desynchronize the colony's own RNG stream between two otherwise-identical runs")
 
-## F5/#295 review round 1: state_hash() must be sensitive to each persisted
+## state_hash() must be sensitive to each persisted
 ## IncidentScheduler field independently -- proving ADR 004's "WorldState's
 ## diagnostic hash includes this continuation state" actually holds for
 ## cooldownUntilDay, lastProcessedDay and rng, not merely that an "incidents"

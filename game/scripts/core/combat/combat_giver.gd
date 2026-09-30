@@ -1,13 +1,13 @@
 class_name CombatGiver
 extends RefCounted
 
-## F5/#302 job-giver for the flee decision (rule 4's "paths away" half):
-## decides WHEN a `flee` job should exist, exactly like HaulGiver/NeedGiver
+## F5 job-giver for the flee decision (rule 4's "paths away" half):
+## decides when a `flee` job should exist, exactly like HaulGiver/NeedGiver
 ## decide their own job's existence (AGENTS.md "one work engine" -- never a
 ## per-colonist loop, a re-route path, or a job-state machine of its own).
 ## Movement itself is the ordinary `go_to` toil once submitted; this module
 ## only ever calls into the same job_queue.gd entry points every other
-## job-giver uses, via `WorldState._scheduler.submit_autonomous()` (ADR 015
+## job-giver uses, via `WorldState._scheduler.submit_autonomous()` (ADR 014
 ## Amendment) so a non-colony combat actor (a hostile wolf) can flee its own
 ## job the same way an incident actor walks its own -- an ordinary
 ## `may_be_ordered`-gated `submit()` would refuse a wildlife-faction actor's
@@ -22,14 +22,14 @@ const FLEE_DISTANCE := 6
 ## never progress on its own: its target is already another job's reservation
 ## (BLOCKED_TARGET_RESERVED), or the scheduler's own coarse reachability check
 ## says it cannot be reached at all (BLOCKED_TARGET_UNREACHABLE) -- mirrors
-## JobQueue's own string constants (job_queue.gd is not owned by this task, so
-## these are a local copy of its typed-reason vocabulary, exactly like
-## NeedGiver's own REASON_BLOCKED_SOURCE_RESERVED does).
+## JobQueue's own string constants (a local copy of its typed-reason
+## vocabulary, exactly like NeedGiver's own REASON_BLOCKED_SOURCE_RESERVED
+## is).
 const BLOCKED_TARGET_RESERVED := "blocked_target_reserved"
 const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
 
-## Ordered away from a threat's own dominant axis first (round-1 review:
-## a single diagonal ray leaves an actor stuck when its one ray is blocked).
+## Ordered away from a threat's own dominant axis first (a single diagonal
+## ray would leave an actor stuck whenever that one ray is blocked).
 ## Fixed array order backs the deterministic tie-break in _ranked_directions().
 const CANDIDATE_DIRECTIONS: Array[Vector2i] = [
 	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
@@ -53,19 +53,19 @@ var _cancel_job: Callable
 
 ## actor_id -> the flee job_id currently pursued for it -- a giver-owned
 ## association, mirroring NeedGiver's own `_pending` map, never a field on the
-## job record itself (job_queue.gd is not owned by this task). Rebuilt from
+## job record itself. Rebuilt from
 ## the scheduler's own queued/active jobs (see `_adopt_existing_flee_job()`
 ## and `restore_blocked_targets()`), never assumed to have survived a
 ## save/load: this Dictionary itself is never serialized, so a reload starts
 ## it empty even while a `flee` job it once tracked is still queued/active in
-## state that DID persist. Never the record of whether an actor is mid-flee:
+## state that did persist. Never the record of whether an actor is mid-flee:
 ## that is `_episodes` below, which outlives any individual leg.
 var _fleeing: Dictionary = {}
 
-## actor_id -> Dictionary[Vector2i, true]: the flee EPISODE this giver owns
-## for that actor (round-7 review), keyed by the actor and holding every
+## actor_id -> Dictionary[Vector2i, true]: the flee *episode* this giver owns
+## for that actor, keyed by the actor and holding every
 ## destination a cancelled blocked flee job for it targeted during that
-## episode (round-5 review). The key's presence, not any current flee job,
+## episode. The key's presence, not any current flee job,
 ## is what says "this giver interrupted this actor's work and owns its
 ## recovery": it is opened at the exact moment `_interrupt` is called for the
 ## first leg, survives a blocked leg's cancellation, survives destination
@@ -90,8 +90,8 @@ var _episodes: Dictionary = {}
 ## be WorldState._scheduler.queue.get_jobs (used only to reconcile this
 ## giver's own association after a fresh load, never to drive per-tick
 ## decisions). restrict_to_for(job_id)->String must be
-## WorldState._job_restricted_to (round-3 review: the raw
-## WorldState._scheduler.restrict_to_for only knows an ACTIVATED job; a
+## WorldState._job_restricted_to (the raw
+## WorldState._scheduler.restrict_to_for only knows an activated job; a
 ## queued or still-searching flee job restored from a save needs the
 ## fallback to the raw waiting-queue entry _job_restricted_to also provides,
 ## or a reload mid-flee submits a duplicate leg). interrupt(actor: Dictionary)->void
@@ -111,14 +111,14 @@ var _episodes: Dictionary = {}
 ## passability, so a disconnected pocket is never picked). bounds_max is the
 ## map's own (width-1, height-1). content/relations are WorldState's own
 ## frozen ContentRegistry/Relations instances. is_target_reserved(x, y)->bool
-## (round-5 review) must be a WorldState wrapper around the shared
+## must be a WorldState wrapper around the shared
 ## ReservationTable (WorldState._flee_target_reserved) so a candidate already
 ## claimed by another job's own target reservation is never picked in the
-## first place. cancel_job(job_id)->void (round-5 review) must be
+## first place. cancel_job(job_id)->void must be
 ## WorldState._cancel_autonomous_job (the shared _finish_job() boundary) so a
 ## `flee` job stuck "queued" and blocked can be retired without waiting on
 ## _toil_on_unreachable(), which only ever fires once a job has activated.
-## Round-6 review (second pass): also called on ordinary recovery (hp back
+## Also called on ordinary recovery (hp back
 ## above flee_hp_fraction) to retire a still-queued or still-active flee job
 ## before resuming interrupted work -- a no-op reject for a job already
 ## terminal (job_queue.gd's own _finish() status guard), so this is safe
@@ -161,7 +161,7 @@ func forget(actor_id: String) -> void:
 	_episodes.erase(actor_id)
 
 ## actor_id -> job_id for every actor this giver currently tracks as fleeing
-## (round-3 review): WorldState layers this over NeedGiver's own
+## WorldState layers this over NeedGiver's own
 ## get_pending_assignments() before calling GlobalAssignment.tick(), the same
 ## `committed_needs` boundary a critical need already uses to force its own
 ## job past ordinary priority scoring -- otherwise a `flee` job merely sitting
@@ -172,8 +172,7 @@ func forget(actor_id: String) -> void:
 func get_committed_jobs() -> Dictionary:
 	return _fleeing.duplicate()
 
-## True while this giver holds an open flee episode for actor_id (round-8
-## review): the same "this giver interrupted this actor's work and owns its
+## True while this giver holds an open flee episode for actor_id: the same "this giver interrupted this actor's work and owns its
 ## recovery" test `_episodes.has()` already documents above -- broader than
 ## `_fleeing`, since an episode also stays open through destination
 ## exhaustion (no current job tracked) and across a save/load before
@@ -184,8 +183,8 @@ func owns(actor_id: String) -> bool:
 	return _episodes.has(actor_id)
 
 ## Every flee episode this giver currently owns, actor_id ->
-## Dictionary[Vector2i, true] of its excluded destinations, detached (round-6
-## review): unlike `_fleeing`, this cannot be reconstructed from the
+## Dictionary[Vector2i, true] of its excluded destinations, detached.
+## Unlike `_fleeing`, this cannot be reconstructed from the
 ## scheduler's own queued/active jobs after a load -- a cancelled blocked
 ## flee job that produced an exclusion is already gone from the queue by the
 ## time it is excluded, and an exhausted episode has no job at all -- so it
@@ -202,13 +201,13 @@ func get_blocked_targets() -> Dictionary:
 
 ## state_codec.gd's decode() counterpart to get_blocked_targets(): replaces
 ## this giver's own episode/exclusion state wholesale, then reconciles
-## `_fleeing` against the scheduler's restored queue (round-7 review) --
+## `_fleeing` against the scheduler's restored queue --
 ## every non-terminal `flee` job is re-adopted for the actor it is restricted
 ## to, and that actor's episode is (re)opened if the save predates episode
 ## persistence -- so the very first advance() after a load handles recovery,
 ## blocked-leg cancellation and destination picking exactly as the
 ## uninterrupted run would, and get_committed_jobs() is complete before the
-## scheduler's first tick. Must therefore be called AFTER the scheduler
+## scheduler's first tick. Must therefore be called after the scheduler
 ## queue/scheduling state has been restored, never right after construction.
 func restore_blocked_targets(data: Dictionary) -> void:
 	_episodes = data
@@ -225,7 +224,7 @@ func restore_blocked_targets(data: Dictionary) -> void:
 
 ## Runs once per tick, alongside HaulGiver/NeedGiver: for every combat actor
 ## strictly below its own flee_hp_fraction that is not already pursuing a
-## tracked flee job, interrupts whatever it is doing (round-1 review: an
+## tracked flee job, interrupts whatever it is doing (an
 ## incident/haul/travel assignment must not simply run to completion while
 ## its worker is meant to be fleeing) and submits one, restricted to the
 ## fleeing actor, targeting a deterministic reachable tile away from its
@@ -246,7 +245,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 		if bool(health.get("dead", false)):
 			forget(actor_id)
 			continue
-		# Reconcile BEFORE any decision (round-7 review): a non-terminal flee
+		# Reconcile before any decision: a non-terminal flee
 		# job this giver does not currently track (a load whose codec
 		# predates restore_blocked_targets()'s own reconciliation, or a job
 		# restored for an episode this giver still owns) is adopted here,
@@ -256,12 +255,12 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 			_adopt_existing_flee_job(actor_id)
 		var should_flee := _hp_fraction(actor) < _flee_hp_fraction(actor, _content)
 		if not should_flee:
-			# Recovery is owned by the EPISODE, never by a current flee job
-			# (round-7 review): an exhausted episode (every destination
+			# Recovery is owned by the episode, never by a current flee job:
+			# an exhausted episode (every destination
 			# excluded, nothing submitted) or a freshly loaded one still owes
 			# the actor this cleanup. Retires any outstanding flee job through
-			# the shared finish boundary BEFORE resuming interrupted work
-			# (round-6 review): cancel() is a no-op reject for a job already
+			# the shared finish boundary before resuming interrupted work.
+			# cancel() is a no-op reject for a job already
 			# terminal (job_queue.gd's _finish() status guard), so this is
 			# safe whether the job is still queued, active, or has already
 			# completed on its own -- without it, recovery during an active
@@ -277,8 +276,8 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 			continue
 		if not _fleeing.has(actor_id):
 			# A non-terminal flee job already exists (a fresh load) -- track
-			# it, never duplicate it. Round-6 review: falls through into the
-			# SAME status handling below instead of `continue`-ing past it, so
+			# it, never duplicate it. Falls through into the
+			# same status handling below instead of `continue`-ing past it, so
 			# an adopted job already "queued" and blocked is excluded/
 			# cancelled this same tick rather than one tick later than an
 			# uninterrupted run would have.
@@ -293,8 +292,8 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 				# the instant this actor tried to commit to it, or genuinely
 				# unreachable through a faction-forbidden door despite passing
 				# the coarser region-connectivity check) never resolves itself:
-				# JobQueue.tick() only ever retries the SAME target, forever
-				# (round-5 review). Cancel it through the shared finish boundary
+				# JobQueue.tick() only ever retries the same target, forever.
+				# Cancel it through the shared finish boundary
 				# and fall through to pick a fresh, different destination this
 				# same tick rather than leaving the actor stranded, still
 				# "tracked" as fleeing but making no progress.
@@ -311,7 +310,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 		var target = _pick_flee_target(actor, actors, threat, _episodes.get(actor_id, {}))
 		if target == null:
 			# Destination exhaustion: the episode (and its owed recovery)
-			# stays open -- nothing is erased here (round-7 review).
+			# stays open -- nothing is erased here.
 			continue
 		# The episode opens at the interrupt boundary itself, so ownership of
 		# the paused work never depends on the leg being accepted or surviving.
@@ -344,21 +343,21 @@ func _adopt_existing_flee_job(actor_id: String) -> bool:
 ## ranking the 8 directions by how directly they point away from `threat`
 ## (ties broken by a fixed index, never insertion order) and, within each
 ## direction, the farthest in-bounds distance first, backing off toward
-## shorter legs in that SAME direction before ever trying a worse direction
-## (round-3 review: distance was previously the outer loop, so a long move in
-## a bad direction could win over a short, available move in a good one).
+## shorter legs in that same direction before ever trying a worse direction
+## (with distance as the outer loop, a long move in a bad direction could
+## win over a short, available move in a good one).
 ## Every candidate must also strictly increase this actor's own distance from
 ## `threat` compared to its current tile -- a plain geometric ray can point
 ## "away" from the threat's last known tile yet still land closer to it once
-## clamped to the map bounds (round-3 review's own repro: the one open
-## direction at the farthest distance was the direction TOWARD the threat).
+## clamped to the map bounds (e.g. when the one open direction at the
+## farthest distance is the direction toward the threat).
 ## Skips a candidate that is impassable, unreachable (a disconnected pocket),
 ## ineligible for actor_id to reserve (colony property for a hostile actor, a
 ## reserved cell), currently occupied by a hostile actor, already the target
-## of another job's own live reservation (round-5 review: eligibility alone
-## does not prove the tile is actually free right now), or named in
-## `excluded` (a destination a just-cancelled blocked flee job for this same
-## actor already proved unusable this tick, round-5 review). null when
+## of another job's own live reservation (eligibility alone does not prove
+## the tile is actually free right now), or named in `excluded` (a
+## destination a just-cancelled blocked flee job for this same actor already
+## proved unusable this tick). null when
 ## nothing at all qualifies.
 func _pick_flee_target(actor: Dictionary, actors: Array[Dictionary], threat: Dictionary, excluded: Dictionary = {}):
 	var ax := int(actor["x"])

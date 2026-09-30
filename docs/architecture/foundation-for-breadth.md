@@ -1,12 +1,26 @@
 # Foundation for breadth: what must be solid before structures, enemies and allies
 
+> **In short:** Before adding many new buildings, enemies and allies, the game
+> needs a few solid building blocks. This page lists those five foundations,
+> in order, and records which are already done.
+
 Design question (2026-09-18): what is a good next step so that the game has a solid, coherent
 base on which to build more complexity — different kinds of structures, different kinds of
 enemies, some allies? This page answers with an audit of what the game has today, the
 architectural patterns that make breadth cheap in a data-driven simulation, and the five
 foundations to lay **between the AI increments (B–E) and the first "breadth" content**.
-Nothing here changes the AI plan in `colonist-ai.md`; it says what to do with the seams that
-plan leaves open so that content becomes data instead of code.
+
+Two labelling schemes are used throughout:
+
+- **Increments A–E** are the colonist-AI milestones defined in
+  [colonist-ai.md, section 5](colonist-ai.md#5-sequencing): A passability and re-routing,
+  B toils and reservations, C labour table and calendar urgency, D needs, E tools.
+- **Foundations F1–F5** are the five foundations this page proposes (section 3): F1 content
+  registry, F2 actors and components, F3 factions and relations, F4 system split, F5 regions,
+  rooms and incidents.
+
+Nothing here changes the AI plan in [colonist-ai.md](colonist-ai.md); it says what to do with
+the seams that plan leaves open so that content becomes data instead of code.
 
 ## 1. Where the game stands (audit, 2026-09-18)
 
@@ -19,13 +33,13 @@ Weak, and the reason to stop and lay foundations before breadth:
 - **`world_state.gd` is becoming a god class.** 691 lines, 52 functions: map
   generation, tiles, objects, colonists, ground items, movement, work, command dispatch, hashing.
   Every increment adds to it. A single massive map class invites exactly the coupling
-  failures described in `colonist-ai.md` section 2.
+  failures described in [colonist-ai.md](colonist-ai.md) section 2.
 - **Actors are only colonists.** `_colonists: Array[Dictionary]` with ad-hoc keys. An enemy or
   an animal has no place to exist; a "faction" is not a concept.
 - **Tile and object *kind ids* are still named as constants in code** (`TILE_ROCK`…, mirroring
   `content/tiles.json`'s own ids); their *costs* are not — `move_ticks_per_tile` (tiles.json)
   and each job's `work_ticks`/haul `priority`/retry backoff (jobs.json) moved into content and
-  load through `ContentRegistry` (F1 below, done via #259/#260/#256).
+  load through `ContentRegistry` (F1, the content registry, below).
 - **Content schemas exist but nothing validates content at startup**; `data/examples/*.json`
   are examples, not loaded definitions.
 - **No damage, no health as a component, no combat model**; no structure integrity.
@@ -71,11 +85,11 @@ placement-attempt caps — have moved the same way, from constants into
 `content/mapgen.json`, read whole via `ContentRegistry.document("mapgen")` and used
 directly by `WorldState`'s map carving methods. `WorldState` reads all of these from the
 registry at construction and injects them into `ToilExecutor`/`NeedGiver`/
-`HaulGiver`'s existing constructor parameters (#259/#260/#256). Every save's
+`HaulGiver`'s existing constructor parameters. Every save's
 `contentVersion` is now sourced from `ContentRegistry.version()` rather than a
 hard-coded literal (`content_version` in `docs/architecture/save-system.md`), and a
 mismatch against the content bundle on disk is a typed `content_version_mismatch`
-load error with a rename migration hook (#261/#262). `test_content_registry.gd` loads
+load error with a rename migration hook. `test_content_registry.gd` loads
 the real bundle and asserts every cross-reference resolves, and fails a fixture
 construction on any dangling reference (a job that names an unknown item), a schema
 violation, or malformed JSON. Payoff: every later "add a kind of X" is a JSON entry
@@ -88,11 +102,11 @@ plus a test fixture, and the reviewer's checklist can say "content only, no code
 `game/content/actors.json` and exposes `has_component()` / `get_component()`.
 The component classes in `game/scripts/core/actors/components/*.gd` implement
 `mover`, `worker`, `needs`, `health`, `inventory`, `combat`, `wild`, and `visitor`;
-`ContentRegistry` validates definitions, component names and tunables (#281).
-Scheduler, executor and need-giver consumers use component accessors (#282), and
+`ContentRegistry` validates definitions, component names and tunables.
+Scheduler, executor and need-giver consumers use component accessors, and
 `worker`, `inventory`, `needs` and `health` own labour/tool access, carrying,
-need decay and health bounds respectively (#283). Health and faction membership
-are persisted with the schema-v18 migration (#284; see
+need decay and health bounds respectively. Health and faction membership
+are persisted with the schema-v18 migration (see
 [save-system.md](save-system.md)).
 
 Components are an accessor layer over the existing colonist dictionary:
@@ -111,18 +125,18 @@ can reuse component implementations through a content entry. See
 a relation row per other faction (`hostile | neutral | friendly`, not required to be symmetric)
 and the rules `may_pass_doors`, `may_reserve_colony_items`, `may_be_ordered`; `ContentRegistry`
 loads, schema-validates and cross-checks it as a seventh required collection kind, and
-`game/scripts/core/relations/relations.gd` reads relations for any pair of factions or actors
-(#286). Every placed object, ground-berries cell, and item carries a `faction_id`, and every
-colonist's existing `factionId` field participates in the same rules (#287, #289, #290).
+`game/scripts/core/relations/relations.gd` reads relations for any pair of factions or actors.
+Every placed object, ground-berries cell, and item carries a `faction_id`, and every
+colonist's existing `factionId` field participates in the same rules.
 `WorldState.passability()` takes an optional `faction_id` and blocks a door to a faction whose
-rules say it may not pass (#289); `GlobalAssignment`'s reservation and order-eligibility gates
+rules say it may not pass; `GlobalAssignment`'s reservation and order-eligibility gates
 consult `may_reserve_colony_items` and `may_be_ordered` before a job may be proposed, activated,
-or resumed, so a raider can neither reserve the colony's food nor be given a player order
-(#290). Live spawning of non-colony actors and the combat/incident work that would let a hostile
-faction act on its own remain future work (F5). Payoff: adding a faction, or changing a
+or resumed, so a raider can neither reserve the colony's food nor be given a player order.
+Live spawning of non-colony actors and the combat/incident work that would let a hostile
+faction act on its own belong to F5 (regions, rooms and incidents, below). Payoff: adding a faction, or changing a
 relation or rule, is a `content/factions.json` entry with no core code to hand-edit; an ally is
 a faction with `friendly` relation and the worker component, and a tame animal is `colony`
-faction with `tame`. See [ADR 015](../decisions/015-factions-and-relations.md) for the
+faction with `tame`. See [ADR 014](../decisions/014-factions-and-relations.md) for the
 collection's design and the [faction recipe](extension-points.md#faction) for how to extend it.
 
 ### F4 — Systems with a fixed tick order, extracted from `world_state.gd`
@@ -149,31 +163,31 @@ cooldown_days, spawn: {actor_def, count, edge, wait_ticks}}`; `game/scripts/core
 incident_scheduler.gd` runs a seeded, budgeted daily draw at each day boundary and also accepts
 an on-demand `spawn_incident` command, proposing the declared actor(s) — of a faction (F3) built
 from an actor definition (F2) — through the same job queue and shared toil dispatch every other
-actor uses, and recording one `incident_started` event per firing (#294). `wildlife_wander`
+actor uses, and recording one `incident_started` event per firing. `wildlife_wander`
 (hostile wolves) and `trader_visit` (a neutral trader) are the first two incident entries;
-`tile_atlas_map.gd`'s `ACTOR_ATLAS_MAP` gives a future renderer a lookup-table entry for each
-spawned actor kind, reusing already-registered atlas cells, and `boot.gd`'s standing alert list
-surfaces each `incident_started` event alongside the existing need alerts (#296). Combat itself —
+`tile_atlas_map.gd`'s `ACTOR_ATLAS_MAP` gives the renderer a lookup-table entry for each
+spawned actor kind, and `boot.gd`'s standing alert list
+surfaces each `incident_started` event alongside the existing need alerts. Combat itself —
 an unordered hostile actor acting on its own — remains future work; F5's own scope is regions,
 rooms, and getting actors of any faction onto the map and through the work engine. Payoff: the
 first enemy and the first ally are two incident entries and two actor defs. See
-[ADR 015](../decisions/015-factions-and-relations.md) and the
+[ADR 014](../decisions/014-factions-and-relations.md) and the
 [incident recipe](extension-points.md#incident) for how to extend it.
 
 ## 4. Where this sits against the AI increments
 
 | When | What |
 | --- | --- |
-| Now (B in flight) | Nothing changes. B's toils and ReservationTable are already component-agnostic. |
-| Between B and D | **F1 content registry** (small, mostly moving constants to JSON + loader + validation test) — done (#259/#260/#256). D's needs read `content/needs.json` through it. |
-| Between D and C | **F2 actors/components** — implemented (#281–#284): actor definitions and component accessors now own the labour/tool and need/health fields. |
-| After E | **F4 system split** — by then all systems exist; extracting them is mechanical and hash-checked (same tests, same hashes). Do it as one milestone with one task per system. |
-| Then | **F3 factions** — delivered (#286, #287, #289, #290). **F5 regions/rooms/incidents** — delivered (#294, #296, #307): a wolf (wild, hostile) and a trader (neutral visitor) arrive as incidents, and the #307 headless breadth proof builds a bedroom through haul+work toils, verifies walls+door+bed recognition, and proves its rest-quality boost against an open bed. **#278 breadth content delivered**: hostile wolf attack, neutral trader offer/acceptance, allied migrant recruitment, and the built-bedroom proof (#307), backed by the combat and build-order foundations. |
+| During B | Nothing changes. B's toils and ReservationTable are already component-agnostic. |
+| Between B and D | **F1 content registry** (small, mostly moving constants to JSON + loader + validation test) — delivered. D's needs read `content/needs.json` through it. |
+| Between D and C | **F2 actors/components** — implemented: actor definitions and component accessors now own the labour/tool and need/health fields. |
+| After E | **F4 system split** — by then all systems exist; extracting them is mechanical and hash-checked (same tests, same hashes). Do it as one milestone, one system at a time. |
+| Then | **F3 factions** — delivered. **F5 regions/rooms/incidents** — delivered: a wolf (wild, hostile) and a trader (neutral visitor) arrive as incidents, and a headless breadth test builds a bedroom through haul and work toils, verifies wall, door and bed recognition, and proves its rest-quality boost over an open bed. **First breadth content** — delivered: hostile wolf attack, neutral trader offer and acceptance, allied migrant recruitment, and the built-bedroom proof, backed by the combat and build-order foundations. |
 
-Each foundation is one milestone of 4–7 tasks with the same acceptance style as the AI
-increments: headless tests, hash equality where behaviour must not change, contract migration,
-docs. The lint tests (F1 dangling references, F4 system isolation) are what keep the base
-solid as the agents add content later.
+Each foundation is one milestone with the same acceptance style as the AI increments:
+headless tests, hash equality where behaviour must not change, contract migration, docs. The
+lint tests (F1 dangling references, F4 system isolation) are what keep the base solid as
+content is added later.
 
 ## 5. Explicitly deferred
 

@@ -2,7 +2,7 @@ class_name CalendarAlertGiver
 extends RefCounted
 
 ## Job-giver for the sowing-window calendar alert (ADR 008 consequence 6,
-## colonist-ai.md 3.7): decides WHEN the soonest upcoming calendar window's
+## colonist-ai.md 3.7): decides when the soonest upcoming calendar window's
 ## one-shot alert fires, from live colony facts -- has_labour_enabled (any
 ## colonist's labourTable has that window's labour above 0), has_plowed_plot
 ## (any tile is plowed_soil), has_seed_stock (any "seed" item exists anywhere,

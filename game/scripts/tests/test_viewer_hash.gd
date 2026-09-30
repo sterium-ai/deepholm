@@ -2,8 +2,8 @@ extends SceneTree
 
 ## Builds the default boot world two ways: once by instantiating boot.tscn in
 ## this headless SceneTree, once by calling Boot.build_default_world()
-## directly with no scene (issue #300: the viewer's default is now a real New
-## Game, not the DebugScenario -- see boot.gd's own doc comment on
+## directly with no scene (the viewer's default is a real New Game, not the
+## DebugScenario -- see boot.gd's own doc comment on
 ## build_default_world()). Both must reach the same state_hash() after an
 ## identical fixed tick count, proving the viewer scene adds no hidden state
 ## or input dependency on top of the function it shares with this test.

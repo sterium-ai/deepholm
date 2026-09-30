@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Issue #299 round 1 review: after panning a large world to its far corner,
-## replacing it with a smaller world (a later Load, or New Game) left the
+## Regression: after panning a large world to its far corner,
+## replacing it with a smaller world (a later Load, or New Game) used to leave the
 ## camera at its old, now out-of-range position -- the viewport could stay
 ## entirely blank until another pan/zoom action. _replace_world() must
 ## reapply camera bounds (or center) whenever the attached world's dimensions

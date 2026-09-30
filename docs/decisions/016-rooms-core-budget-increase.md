@@ -1,15 +1,17 @@
-# ADR 017: Rooms wiring raises the world_state.gd core budget
+# ADR 016: Rooms wiring raises the world_state.gd core budget
+
+> **In short:** Detecting rooms (enclosed spaces such as bedrooms) needed a few more lines in the main simulation file, so its size limit was raised to match.
 
 - **Status:** accepted
 - **Date:** 2026-09-20
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`.
-- **Implements:** F5 in `docs/architecture/foundation-for-breadth.md`; issue #293.
+- **Implements:** F5 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 
 Wiring `RoomMap` (`game/scripts/core/map/rooms.gd`) into `world_state.gd` raises its
 `core-budgets.json` cap: 1855 -> 1877. `WorldState` owns a lazily-built `RoomMap` (mirroring
-`RegionMap`'s own lazy field from ADR 016, so a save/load's direct `_tiles`/`_objects`
+`RegionMap`'s own lazy field from ADR 015, so a save/load's direct `_tiles`/`_objects`
 overwrite in `state_codec.gd` never leaves it stale), calls `on_passability_changed()` from
 the same two mutation sites `RegionMap` already hooks (`_set_object()`,
 `_toil_on_work_complete()`), exposes the read-only `get_room_at()` lookup Presentation
@@ -31,6 +33,5 @@ function already live raises the cap.
 ## Consequences
 
 The cap now equals the file's exact post-change line count, matching every prior
-`core-budgets.json` entry (including the cap ADR 016 set, which this change increases
-further). No other core file's budget changes; the toil executor and scheduler are untouched
-by this task.
+`core-budgets.json` entry (including the cap ADR 015 set, which this change increases
+further). No other core file's budget changes; the toil executor and scheduler are untouched.

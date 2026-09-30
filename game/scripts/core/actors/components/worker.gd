@@ -40,7 +40,7 @@ static func default_labour_table(tunables: Dictionary) -> Dictionary:
 		table[String(labour)] = default_level
 	return table
 
-## Issue #283: the single place a colonist's legacy "held_tool" field (ADR
+## The single place a colonist's legacy "held_tool" field (ADR
 ## 012 keeps the field name, not a nested "worker" key) is read/written, so
 ## ToolItemStore calls into this instead of indexing the field inline in
 ## more than one place.

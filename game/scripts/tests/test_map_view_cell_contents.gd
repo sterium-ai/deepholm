@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Issue #299 round 1 review: proves the TileMapLayer renderer (the default
-## production presentation path since this round, see map_view.gd's
+## Proves the TileMapLayer renderer (the default
+## production presentation path, see map_view.gd's
 ## _art_enabled doc comment) actually reflects dig/chop/build in its rendered
 ## cell contents, not just an internal touch counter, and that replacing the
 ## attached world invalidates any stale cell content from the world just
@@ -23,7 +23,7 @@ func _init() -> void:
 	_give_starting_tools(world)
 	var map_view := MapViewType.new()
 	root.add_child(map_view)
-	_expect(map_view.is_art_enabled(), "map_view.gd's TileMapLayer renderer must be enabled by default (issue #299 round 1: production presentation, not an instrumentation-only opt-in)")
+	_expect(map_view.is_art_enabled(), "map_view.gd's TileMapLayer renderer must be enabled by default (it is the production presentation, not an instrumentation-only opt-in)")
 	map_view.set_world(world)
 
 	var colonist_tiles: Array[Vector2i] = []
@@ -46,7 +46,7 @@ func _init() -> void:
 	_run_job_to_completion(world, "dig", dig_target)
 	_expect(world.get_tile(dig_target.x, dig_target.y) == "trench", "a completed dig must turn its target to trench")
 	map_view.refresh()
-	# ADR 025 presentation extension: trench now has its own atlas mapping; the
+	# ADR 026 presentation extension: trench now has its own atlas mapping; the
 	# rendered cell must update instead of leaving stale soil content behind.
 	_assert_tile_cell_matches(map_view, dig_target, "trench")
 
@@ -55,7 +55,7 @@ func _init() -> void:
 	map_view.refresh()
 	_assert_tile_cell_matches(map_view, chop_target, "floor")
 
-	# issue #449: content/objects.json's "wall" row (this test's own former
+	# Content/objects.json's "wall" row (this test's own former
 	# build target) was replaced by "wooden_wall"/"stone_wall";
 	# tile_atlas_map.gd's OBJECT_ATLAS_MAP now maps "wooden_wall" onto the
 	# same SOURCE_WALL art the retired "wall" id used, so this assertion
@@ -70,7 +70,7 @@ func _init() -> void:
 	_assert_object_cell_matches(map_view, build_target, "wooden_wall")
 
 	# Replacing the world must invalidate every stale cell the previous world
-	# left behind, not just bump a touch counter (round 1 review): the cells
+	# left behind, not just bump a touch counter: the cells
 	# this test just dug/chopped/built on must reflect the newly attached
 	# world's own actual terrain/object at those same coordinates, whatever
 	# that happens to be, rather than the replaced world's leftover content.
@@ -88,8 +88,8 @@ func _init() -> void:
 
 ## Mirrors boot.gd's _spawn_starting_tools() at test scale: every job kind
 ## needing a tool gets one placed at a real colonist's own starting tile (not
-## the map origin -- issue #300: the spawn clearing is chosen dynamically,
-## see docs/decisions/020, and need not be anywhere near (0, 0)) so dig/chop
+## the map origin -- the spawn clearing is chosen dynamically,
+## see ADR 020, and need not be anywhere near (0, 0)) so dig/chop
 ## can actually run to completion here instead of sitting blocked_no_tool or
 ## spending the whole tick budget just walking to fetch a tool.
 func _give_starting_tools(world: WorldStateType) -> void:
@@ -124,9 +124,9 @@ func _assert_tile_cell_matches(map_view: MapViewType, tile: Vector2i, kind: Stri
 	if atlas == null:
 		_expect(layer.get_cell_source_id(tile) == -1, "tile (%d, %d) with no atlas mapping must be an empty cell" % [tile.x, tile.y])
 		return
-	# issue #301: TILE_SOIL renders one of several hash-selected prairie
+	# TILE_SOIL renders one of several hash-selected prairie
 	# variants (never the single fixed default), so a soil tile only needs
-	# to match ONE registered variant, not TILE_ATLAS_MAP's own default entry.
+	# to match one registered variant, not TILE_ATLAS_MAP's own default entry.
 	if kind == WorldStateType.TILE_SOIL:
 		var rendered_coords: Vector2i = layer.get_cell_atlas_coords(tile)
 		_expect(layer.get_cell_source_id(tile) == int(atlas["source_id"]) and rendered_coords in TileAtlasMapType.TILE_SOIL_VARIANTS,
@@ -157,8 +157,8 @@ func _assert_object_cell_matches(map_view: MapViewType, tile: Vector2i, kind: St
 ## place_object applies instantly, no travel/job involved.
 ##
 ## The non-reverse search instead expands in Chebyshev rings from a real
-## colonist's own tile (issue #300: the spawn clearing is chosen dynamically,
-## not always near the map origin -- docs/decisions/020), so a dig/chop target
+## colonist's own tile (the spawn clearing is chosen dynamically,
+## not always near the map origin -- ADR 020), so a dig/chop target
 ## this test then runs to completion under TICK_BUDGET stays a short,
 ## reliable walk regardless of where on the map spawn actually landed.
 func _find_tile(world: WorldStateType, kind: String, excluded: Array[Vector2i] = [], reverse: bool = false) -> Vector2i:

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #300 round 2 review: the seed suite (test_river_generation.gd) only
+## The seed suite (test_river_generation.gd) only
 ## ever proves the fallback flag stayed false on real generated maps -- it
 ## never forces WorldGenerator.place_spawn()'s own repair/construct tiers to
 ## actually run. This calls place_spawn() directly (a pure static function,
@@ -12,8 +12,8 @@ extends SceneTree
 ##   sits inside water and a berry bush, with the only usable land elsewhere.
 ## - _check_unreachable_resources_reported_honestly(): a perfectly good land
 ##   clearing exists, but the map has no water/tree/bush anywhere at all --
-##   "recursos garantizados no cuentan si son inaccesibles" must show up as an
-##   honest -1, never a silently accepted success.
+##   the rule that guaranteed resources do not count when unreachable must show
+##   up as an explicit -1, never a silently accepted success.
 ## - _check_insufficient_land_cells_still_places_three(): the only connected
 ##   land component on the map is exactly colonist_count tiles, too small for
 ##   mapgen's own 6x6 clearing rectangle and too small to also reserve room
@@ -178,15 +178,15 @@ func _check_insufficient_land_cells_still_places_three() -> void:
 	_expect(int(clearing["water_steps"]) != -1 and int(clearing["food_steps"]) != -1 and int(clearing["tree_steps"]) != -1,
 		"insufficient-land-cells: resources adjacent to the tiny component must still be reported reachable (resource bounds honoured even under repair)")
 
-## Round 5 review: a single reachable berry bush is close enough to satisfy
-## the NEAREST-bush distance check (food_steps) for every candidate anchor on
-## this map, exactly the shape the pre-round-5 check accepted as "sufficient"
+## A single reachable berry bush is close enough to satisfy
+## the nearest-bush distance check (food_steps) for every candidate anchor on
+## this map, exactly the shape an earlier nearest-distance-only check accepted as "sufficient"
 ## -- but forage yields exactly one non-regrowing meal per bush (world_state.gd's
 ## _spawn_berries_item()), so one bush can never feed three colonists. A large
 ## clean soil rectangle (plenty of fully-compliant, non-food-limited anchors)
-## surrounds the single bush, so the ONLY reason no anchor is fully compliant
+## surrounds the single bush, so the only reason no anchor is fully compliant
 ## is the distinct-food-source floor (colonist_count == 3), not distance,
-## reachability, or land size -- isolating exactly the gap round 5 review found.
+## reachability, or land size.
 func _check_single_shared_bush_reported_insufficient() -> void:
 	var width := 20
 	var height := 14
@@ -221,7 +221,7 @@ func _check_single_shared_bush_reported_insufficient() -> void:
 	_expect(bool(clearing["fallback"]),
 		"single-shared-bush: with only one bush existing globally, no anchor can ever satisfy 3 distinct food sources, so the search must honestly report fallback=true instead of silently accepting the single-bush spot as fully compliant")
 
-## Round 4 review (issue #351/#347): the round-2 fixture below used only a
+## An earlier version of the fixture below used only a
 ## single berry bush, so FOOD_SOURCES_PER_COLONIST * colonist_count (3
 ## distinct bushes required, see _check_single_shared_bush_reported_insufficient
 ## above) forced fallback=true all by itself -- both the pre-fix raw-TILE_ROCK
@@ -252,10 +252,10 @@ func _check_isolated_rock_does_not_satisfy_outcrop_reachability() -> void:
 	var height := 10
 	var map: Array[String] = []
 	map.resize(width * height)
-	map.fill(TILE_HAZARD) # impassable filler, deliberately NOT TILE_ROCK -- background rock would itself form one giant qualifying component adjacent to the whole map, swamping the two deliberately-placed rock features below
+	map.fill(TILE_HAZARD) # impassable filler, deliberately not TILE_ROCK -- background rock would itself form one giant qualifying component adjacent to the whole map, swamping the two deliberately-placed rock features below
 	for y in range(3, 8):
 		for x in range(4, 12):
-			map[y * width + x] = TILE_SOIL # compact cluster island -- (6,4)/4x3 is its ONLY obstacle-free clearing rectangle, so the chosen anchor is deterministic
+			map[y * width + x] = TILE_SOIL # compact cluster island -- (6,4)/4x3 is its only obstacle-free clearing rectangle, so the chosen anchor is deterministic
 	for x in range(12, 34):
 		map[5 * width + x] = TILE_SOIL # single-soil-tile-wide corridor, too thin for any clearing rectangle
 	for y in range(3, 8):
@@ -292,7 +292,7 @@ func _check_isolated_rock_does_not_satisfy_outcrop_reachability() -> void:
 	_expect(int(clearing.get("food_sources", -1)) >= int(clearing.get("required_food_sources", 3)),
 		"isolated-rock-vs-outcrop: three distinct bushes are all in-budget, so the required food-source floor must be met independent of outcrop reachability, got %d/%d" % [int(clearing.get("food_sources", -1)), int(clearing.get("required_food_sources", 3))])
 	# The regression check itself: an independent, non-qualifying BFS
-	# (mirroring the pre-fix behavior) evaluated over the SAME clearing
+	# (mirroring the pre-fix behavior) evaluated over the same clearing
 	# footprint place_spawn() actually returned.
 	var raw_dist := _raw_rock_distance_field(map, width, height)
 	var raw_worst := _worst_over_footprint(raw_dist, width, int(clearing["x"]), int(clearing["y"]), int(clearing["width"]), int(clearing["height"]))
@@ -357,8 +357,8 @@ func _flood_fill(map: Array[String], width: int, height: int, start: Vector2i) -
 ## above: deliberately mirrors world_generator.gd's own _distance_field() BFS
 ## shape (walk over TILE_SOIL/TILE_FLOOR, dist=1 at the first ring adjacent to
 ## a target, breadth-first outward) but targets every TILE_ROCK tile
-## unfiltered by component size -- exactly the pre-fix behavior the round-4
-## review found this fixture was not actually exercising. Never calls into
+## unfiltered by component size -- exactly the pre-fix behavior an earlier
+## version of this fixture failed to exercise. Never calls into
 ## WorldGenerator; this is a separate reimplementation, same as
 ## test_river_generation.gd's own _water_components()/_bfs_route_distance().
 func _raw_rock_distance_field(map: Array[String], width: int, height: int) -> PackedInt32Array:

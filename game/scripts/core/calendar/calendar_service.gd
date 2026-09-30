@@ -7,8 +7,8 @@ extends RefCounted
 ## No season-length content exists yet (no other subsystem tracks seasons),
 ## so a window's "from"/"to" are plain day-of-year numbers and day 1 is
 ## documented here as spring day 1 -- the seed window ("sow", days 1-20)
-## is exactly colonist-ai.md's "spring days 1-20" under that reading. A
-## later task adding more seasons only needs to add windows whose day
+## is exactly colonist-ai.md's "spring days 1-20" under that reading.
+## Adding more seasons later only needs windows whose day
 ## numbers account for the seasons that come before them; this service does
 ## not need to change.
 ##
@@ -74,8 +74,8 @@ func active_boost(labour: String, tick: int) -> int:
 ## is exactly ALERT_LEAD_DAYS days from opening, nobody already has its
 ## labour enabled, the colony already has both a plowed plot and seed
 ## stock, and the window has not already fired. Colony facts are taken as
-## plain booleans (not read from WorldState) so this stays wireable by a
-## later task without depending on colonist or farm-order state existing.
+## plain booleans (not read from WorldState) so callers can wire this up
+## without depending on colonist or farm-order state existing.
 func alert_state(tick: int, has_labour_enabled: bool, has_plowed_plot: bool, has_seed_stock: bool,
 		already_fired: bool) -> Dictionary:
 	var day := day_of_tick(tick)

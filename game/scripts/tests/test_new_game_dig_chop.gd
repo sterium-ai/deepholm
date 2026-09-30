@@ -1,20 +1,19 @@
 extends SceneTree
 
-## Issue #299 round 1 review: a game created through boot.gd's New Game
+## A game created through boot.gd's New Game
 ## control (not a hand-built WorldState) must be able to actually complete
 ## dig and chop through real ticks -- both require a fetched tool
 ## (jobs.json's needs_tool), and a bare WorldState with an empty tool store
-## left them blocked_no_tool indefinitely before this round's fix. Proves the
+## leaves them blocked_no_tool indefinitely. Proves the
 ## new-game initialization/content boundary (boot.gd's _spawn_starting_tools())
 ## provides real, fetchable starting tools without bypassing the work engine:
 ## dig/chop still go through fetch_tool -> reserve -> go_to -> work exactly
 ## like any other order.
 ##
-## Issue #300 Goal: also proves New Game starts paused with no auto-submitted
+## Also proves New Game starts paused with no auto-submitted
 ## dig queue (never the debug scenario's own), then drives the player
 ## choosing real dig/chop orders, resuming, and completing them with real
-## fetched tools -- "choose orders, resume and complete gathering/felling
-## with tools".
+## fetched tools.
 
 const BootScenePath := "res://scenes/boot.tscn"
 const NEW_GAME_SEED := 555001
@@ -42,9 +41,9 @@ func _run() -> void:
 		_finish(boot_node)
 		return
 
-	# issue #300 Goal: "the normal new game starts paused and without the
-	# debug scenario's random dig orders" -- checked here,
-	# before any order is chosen, then the rest of this test still drives the
+	# The normal new game starts paused and without the
+	# debug scenario's random dig orders -- checked here,
+	# before any order is chosen, then the rest of this test drives the
 	# player choosing dig/chop orders, resuming (ticking), and completing them
 	# with real fetched tools.
 	var tick_driver = boot_node.get("tick_driver")
@@ -66,7 +65,7 @@ func _run() -> void:
 	_finish(boot_node)
 
 ## expected_tile: dig's own completion effect turns its target into "trench"
-## (ADR 025, docs/decisions/025-trench-trapped-actor-and-rescue.md), never
+## (ADR 026, docs/decisions/026-trench-trapped-actor-and-rescue.md), never
 ## "floor"; chop is unaffected and still produces "floor".
 func _run_and_verify(world, job_type: String, target: Vector2i, expected_tile: String) -> void:
 	var result: Dictionary = world.apply({

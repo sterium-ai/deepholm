@@ -32,8 +32,8 @@ static func encode(world: WorldState) -> Dictionary:
 		"contentVersion": content_version(),
 		"seed": world._seed,
 		"tick": world._clock.tick,
-		# SaveManager's own game-session marker (issue #299 round 1, save_manager.gd
-		# header comment): WorldState carries no session concept of its own, so
+		# SaveManager's own game-session marker (see save_manager.gd's header
+		# comment): WorldState carries no session concept of its own, so
 		# encode() always emits the game-agnostic default here; SaveManager
 		# overwrites this field on the returned Dictionary before writing a
 		# manual/autosave slot. Every direct encode()/write_atomic() caller that
@@ -53,23 +53,23 @@ static func encode(world: WorldState) -> Dictionary:
 		"rng": {"seed": world._random.seed, "state": world._random.state},
 		"items": _encode_items(world._items, world._next_item_id, world._item_factions),
 		"objects": _encode_objects(world._objects, world._object_factions, world._object_health, world._object_origin, world._object_orientation),
-		# issue #406: one record per active construction site. Optional on the
+		# One record per active construction site. Optional on the
 		# wire like "combatBlockedTargets"/"digFindRng" above -- an older save
-		# predating this task simply has none, matching decode()'s own
+		# predating construction sites simply has none, matching decode()'s own
 		# constructor default (a fresh, empty ConstructionSiteTable).
 		"constructionSites": _encode_construction_sites(world._sites.list()),
 		"zones": _encode_zones(world._zones),
 		"nextZoneId": world._next_zone_id,
 		"groundBerries": _encode_ground_berries(world._ground_berries),
 		"workProgress": _encode_work_progress(world._work_progress),
-		# Round-5 review (#278/#303): the exact job_id that owns each workProgress
+		# The exact job_id that owns each workProgress
 		# key, so decode() restores real ownership instead of guessing it from
 		# whichever job happens to target that key (see world_state.gd's own
 		# _work_progress_owner doc comment). Optional on the wire like
 		# "digFindRng"/"combatBlockedTargets" -- see SaveIO._validate_state() --
 		# so an older fixture predating this field still validates.
 		"workProgressOwners": _encode_work_progress_owners(world._work_progress_owner),
-		# Round-6 review (#278/#303): a suspended (still-queued, not
+		# A suspended (still-queued, not
 		# terminated) job's own work-toil ticks, moved out of the live
 		# "workProgress"/"workProgressOwners" tile cache so a different job
 		# that later works the same tile can never inherit or clobber them
@@ -82,7 +82,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"toolItems": _encode_tool_items(world._tool_store.items, world._tool_store.next_id),
 		"toolReservations": world._tool_store.reservations.snapshot(),
 		"needJobAssignments": _encode_paused_jobs(world._need_giver.get_pending_assignments()),
-		# Issue #360 round-3 review finding 3: RescueGiver's own job_id ->
+		# RescueGiver's own job_id ->
 		# victim_id association, persisted verbatim (see
 		# _encode_rescue_victim_assignments()'s own doc comment) rather than
 		# re-derived from target-tile adjacency, which cannot uniquely
@@ -90,7 +90,7 @@ static func encode(world: WorldState) -> Dictionary:
 		# overlapping adjacency sets.
 		"rescueVictimAssignments": _encode_rescue_victim_assignments(world._rescue_giver.get_job_victims()),
 		"combatBlockedTargets": _encode_combat_blocked_targets(world._combat_giver.get_blocked_targets()),
-		# Issue #390/ADR 031: ApproachGiver's own job_id -> target association,
+		# ApproachGiver's own job_id -> target association,
 		# persisted verbatim (see _encode_approach_job_targets()'s own doc
 		# comment) for the same reason rescueVictimAssignments is -- an object
 		# target has no living record to re-scan after a load.
@@ -98,7 +98,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"calendarAlerts": _encode_calendar_alerts(world._calendar_alerts_fired),
 		"toolFetchExcluded": _encode_tool_fetch_excluded(world._toils.get_fetch_tool_excluded()),
 		"incidentScheduler": _encode_incident_scheduler(world),
-		# ADR 025 round 2 review: dig's own find-roll RNG continuation (world._dig_find_random),
+		# ADR 026: dig's own find-roll RNG continuation (world._dig_find_random),
 		# mirroring "rng" above and "incidentScheduler.rng" -- optional on the wire (see
 		# SaveIO._validate_state()) so an older hand-built fixture that never exercises dig's
 		# find roll still validates; decode() below leaves the constructor's own fresh
@@ -121,10 +121,10 @@ static func decode(state: Dictionary) -> WorldState:
 	# above that upper bound; a smaller saved fixture, e.g. 3x2, is valid and
 	# must decode at its own exact size). Overwrite the constructor's resolved
 	# _width/_height with the saved dimensions before replacing _tiles, or
-	# every tile index below would use the wrong row stride (round 1 review).
+	# every tile index below would use the wrong row stride.
 	world._width = width
 	world._height = height
-	# Round 5 review finding 3: the constructor above already built
+	# The constructor above already built
 	# NeedGiver/IncidentScheduler against its own resolve_size()-clamped
 	# width/height (16..512), before the two lines above corrected
 	# world._width/_height to the saved map's real, possibly-smaller size.
@@ -139,7 +139,7 @@ static func decode(state: Dictionary) -> WorldState:
 	world._items = items_data["items"]
 	world._next_item_id = items_data["next_id"]
 	world._item_factions = items_data["factions"]
-	# issue #405: state["objects"] holds one record per placed *origin* tile,
+	# State["objects"] holds one record per placed *origin* tile,
 	# not per occupied tile -- _decode_objects() below only decodes the raw
 	## per-origin records; expanding each back out to every tile of its
 	# footprint needs world._object_definitions (footprint/rotatable), already
@@ -173,7 +173,7 @@ static func decode(state: Dictionary) -> WorldState:
 	world._object_health = object_health
 	world._object_origin = object_origin
 	world._object_orientation = object_orientation
-	# issue #406: absent for any save written before this task -- restore()
+	# Absent for any save written before construction sites existed -- restore()
 	# with an empty array/next_id 1 matches a fresh ConstructionSiteTable's
 	# own starting state exactly.
 	var construction_sites := _decode_construction_sites(state.get("constructionSites", []))
@@ -203,7 +203,7 @@ static func decode(state: Dictionary) -> WorldState:
 
 	var jobs := _decode_jobs(state["jobs"])
 	var rescue_jobs := _surviving_rescue_jobs(jobs)
-	# Issue #360 round-3 review finding 3: RescueGiver's own job_id ->
+	# RescueGiver's own job_id ->
 	# victim_id association is persisted verbatim on the wire (see
 	# _encode_rescue_victim_assignments()'s own doc comment) -- restore it
 	# before queue.restore() runs immediately below: that call's own
@@ -220,7 +220,7 @@ static func decode(state: Dictionary) -> WorldState:
 		if not surviving_rescue_job_ids.has(job_id):
 			rescue_victims.erase(job_id)
 	world._rescue_giver.restore_victim_assignments(rescue_victims)
-	# Issue #390/ADR 031: filtered to jobs that actually survived decode, the
+	# Filtered to jobs that actually survived decode, the
 	# same way rescue_victims is above -- a corrupted/hand-built fixture must
 	# never seed an association for a job that no longer exists.
 	var surviving_approach_job_ids: Dictionary = {}
@@ -235,15 +235,14 @@ static func decode(state: Dictionary) -> WorldState:
 	# Repoints RescueGiver's own ReservationTable reference at the table
 	# queue.restore() just built in place of the one _build_dimension_services()
 	# handed it -- otherwise every is_reserved()/owner() peek this giver makes
-	# from now on reads an obsolete, orphaned table (round-2 review finding 3).
+	# from now on reads an obsolete, orphaned table.
 	world._rescue_giver.set_reservation_table(world._scheduler.queue.get_reservation_table())
 	# world._work_progress_owner is restored from the persisted job_id above
-	# (round-5 review: guessing it from job-target iteration order could hand
-	# one job's progress to another queued at the same tile), right after jobs
+	# (guessing it from job-target iteration order could hand one job's
+	# progress to another queued at the same tile), right after jobs
 	# restore and before _reconcile_incident_jobs_after_load() below may
 	# cancel one through the shared _finish_job() boundary, so that
-	# cancellation's own ownership-gated work-progress cleanup (issue
-	# #278/#303 round-3 review) fires correctly immediately after a load.
+	# cancellation's own ownership-gated work-progress cleanup fires correctly immediately after a load.
 	world._restore_work_progress_owners(work_progress_owners)
 
 	var bounds_max := Vector2i(width - 1, height - 1)
@@ -256,33 +255,33 @@ static func decode(state: Dictionary) -> WorldState:
 	# persists, see WorldState._resubmit_unreachable_job()'s own comment).
 	world._rescue_giver.restore_pending_assignments(_rescue_pending_from_scheduler(rescue_jobs, world._scheduler))
 	_restore_reroutes(world, bounds_max)
-	# F5 (issue #294): re-associate each restored incident job with its actor,
+	# Re-associate each restored incident job with its actor,
 	# or retire it (see WorldState).
 	world._reconcile_incident_jobs_after_load()
-	# F5/#302 (round-7 review): AFTER the queue/scheduling restore above, so
+	# Restored after the queue/scheduling restore above, so
 	# CombatGiver can re-adopt every restored non-terminal flee job for its
 	# owned episode right here, before the first tick's own decisions.
 	world._combat_giver.restore_blocked_targets(_decode_combat_blocked_targets(state.get("combatBlockedTargets", [])))
-	# Issue #390/ADR 031: AFTER the queue/scheduling restore above, so
+	# Restored after the queue/scheduling restore above, so
 	# ApproachGiver can re-adopt every restored non-terminal `approach` job for
 	# its actor right here, before the first tick's own decisions (mirrors
 	# CombatGiver.restore_blocked_targets() immediately above).
 	world._approach_giver.restore_job_targets(approach_targets)
-	# Issue #391: ApproachGiver no longer retires an actor permanently (see
+	# ApproachGiver no longer retires an actor permanently (see
 	# approach_giver.gd's own class doc comment) -- an old save's own
 	# "approachRetiredActors" field, if present, is simply ignored; save_io.gd
 	# still accepts it for backward compatibility (world_state.gd's own
 	# construction/decode no longer treat it as authoritative).
-	# #295 (ADR 004 "WorldState's diagnostic hash includes this continuation
+	# ADR 004 ("WorldState's diagnostic hash includes this continuation
 	# state"): IncidentScheduler's own cooldowns/last-drawn-day/RNG are read
 	# and written here directly, since incident_scheduler.gd exposes no
-	# accessor for them (out of this task's owned paths).
+	# accessor for them.
 	var incident_scheduler: Dictionary = state["incidentScheduler"]
 	world._incidents._cooldown_until_day = _decode_int_dict(incident_scheduler["cooldownUntilDay"])
 	world._incidents._last_processed_day = int(incident_scheduler["lastProcessedDay"])
 	world._incidents._random.seed = int(incident_scheduler["rng"]["seed"])
 	world._incidents._random.state = int(incident_scheduler["rng"]["state"])
-	# ADR 025 round 2 review: restores dig's find-roll RNG continuation when the
+	# ADR 026: restores dig's find-roll RNG continuation when the
 	# save carries it (see encode()'s own comment on "digFindRng" above); absent
 	# only for a hand-built fixture predating this field, which keeps the
 	# constructor's own fresh WorldState.new() seed instead.
@@ -303,14 +302,14 @@ static func decode(state: Dictionary) -> WorldState:
 ## need. A colonist still mid-fetch_tool (ToilExecutor.needs_fetch_tool() true
 ## -- a read-only check, see tool_fetch_toil.gd's needs()) instead rebuilds
 ## the passability exception from snapshot["target"] itself -- the search's
-## own ALREADY-PERSISTED original target (see ToolFetchToil.advance(), which
+## own already-persisted original target (see ToolFetchToil.advance(), which
 ## bakes the tool's position in at the moment the search starts into the very
 ## same field _encode_route()/_decode_route() already round-trip) -- rather
-## than recomputing the tool's CURRENT location from toolItems/toolReservations
-## (round 6 review finding: those differ once a held tool's holder moves
+## than recomputing the tool's current location from toolItems/toolReservations
+## (those differ once a held tool's holder moves
 ## after the search began, silently applying the exception to the wrong
-## tile). A colonist mid-drop_tool (ToilExecutor.is_dropping_leg(), issue #266
-## round 2 review) instead rebuilds with PLAIN passability, no exception at
+## tile). A colonist mid-drop_tool (ToilExecutor.is_dropping_leg()) instead
+## rebuilds with plain passability, no exception at
 ## all: the live drop toil never applies one either (a drop destination is
 ## always pre-verified passable, see tool_drop_toil.gd), so using job["target"]'s
 ## own exception here was wrong whenever that tile sat between the holder and
@@ -318,7 +317,7 @@ static func decode(state: Dictionary) -> WorldState:
 ## still be an impassable tile, a divergence only this branch, not a live
 ## uninterrupted run, could ever produce. Every other in-flight search uses
 ## job["target"] as before.
-## Round-8 review: the two `world._routable_to()` branches below now pass the
+## The two `world._routable_to()` branches below now pass the
 ## acting colonist's own factionId (defaulting "colony", a no-op for an
 ## ordinary colonist) instead of `_routable_to()`'s colony default -- a
 ## restored search for a non-colony actor (a raider mid-flee) must be gated by
@@ -345,7 +344,7 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
 			# A carrying build's live second leg searches toward job.site with
 			# the site-tile exception (WorldState._toil_go_to_passable()), never
-			# toward job.target, the wood's own tile (issue #303 round-2 review).
+			# toward job.target, the wood's own tile.
 			cost_fn = world._routable_to(job["site"], faction_id)
 		elif world._toils.is_dropping_leg(colonist, job_id, job, world._toil_hooks):
 			cost_fn = world._is_passable
@@ -384,9 +383,8 @@ static func _decode_tile_array(tiles: Array) -> Array:
 ## world._items is keyed by item id; sorted keys give a deterministic
 ## encoding order. next_id is world._next_item_id, carried alongside the list
 ## so a restored WorldState never reuses an id a save already handed out.
-## item_factions is world._item_factions (issue #288, the persisted
-## counterpart of the "faction_id" runtime field get_items() adds, issue
-## #287), a parallel map keyed by item id rather than a nested value inside
+## item_factions is world._item_factions (the persisted counterpart of the
+## "faction_id" runtime field get_items() adds), a parallel map keyed by item id rather than a nested value inside
 ## items itself -- mirroring _encode_objects()'s own parallel
 ## object_factions map.
 static func _encode_items(items: Dictionary, next_id: int, item_factions: Dictionary) -> Dictionary:
@@ -414,7 +412,7 @@ static func _decode_items(field: Dictionary) -> Dictionary:
 		factions[id] = String(entry.get("factionId", "colony"))
 	return {"items": items, "next_id": int(field["nextId"]), "factions": factions}
 
-# --- tool items (colonist-ai.md 2/3.4, task #213) ---------------------------
+# --- tool items (colonist-ai.md 2/3.4) ---------------------------
 
 ## world._tool_store.items is keyed by item id; sorted keys give a
 ## deterministic encoding order, mirroring _encode_items()/_encode_objects().
@@ -487,20 +485,20 @@ static func _decode_zones(list: Array) -> Dictionary:
 
 ## world._objects is keyed by "%d_%d" % [x, y] (see world_state.gd); the
 ## sorted keys give a deterministic encoding order. object_factions is
-## world._object_factions (issue #288, the persisted counterpart of the
-## "faction_id" runtime field get_objects() adds, issue #287), a parallel map
+## world._object_factions (the persisted counterpart of the "faction_id"
+## runtime field get_objects() adds), a parallel map
 ## keyed the same way as objects rather than a nested value inside it.
-## object_health is world._object_health (F5/#302), the same kind of parallel
+## object_health is world._object_health, the same kind of parallel
 ## map: present only for a key whose object kind declares "max_health"
-## (content/objects.json), so a pre-this-task save (no key ever had a health
+## (content/objects.json), so an older save (no key ever had a health
 ## entry) and a bare/non-damageable object both simply omit the "health" wire
 ## field -- optional, not required, in game-state.schema.json's "object" $def,
 ## so no schema-version bump or migration step is needed (mirrors how
 ## route.rerouting is optional for the same reason, see save_io.gd's
 ## _valid_entity_route()). A save/load that omits it falls back to
 ## WorldState._ensure_object_health()'s own backfill, the same recovery an
-## object placed by a pre-this-task fixture already relies on.
-## issue #405: object_origin/object_orientation are world._object_origin/
+## object placed by an older fixture already relies on.
+## object_origin/object_orientation are world._object_origin/
 ## _object_orientation -- one record is written per placed *object*, not per
 ## occupied tile: a key present in object_origin names a non-origin footprint
 ## tile of a multi-tile object and is skipped entirely (its origin's own
@@ -528,12 +526,12 @@ static func _encode_objects(objects: Dictionary, object_factions: Dictionary, ob
 		encoded.append(entry)
 	return encoded
 
-## issue #405: one raw {origin, kind, factionId, orientation, health?} record
+## One raw {origin, kind, factionId, orientation, health?} record
 ## per placed object, in wire order -- decode() itself expands each back out
 ## to every tile of its footprint (world._object_footprint_tiles(), needing
 ## world._object_definitions, which this static function has no access to).
-## orientation defaults to "" (no rotation) exactly like a pre-#405 save that
-## never wrote the field at all.
+## orientation defaults to "" (no rotation) exactly like a save from before
+## object orientation existed, which never wrote the field at all.
 static func _decode_objects(objects: Array) -> Array:
 	var records: Array = []
 	for item in objects:
@@ -549,10 +547,9 @@ static func _decode_objects(objects: Array) -> Array:
 
 ## world._ground_berries is keyed by "%d_%d" (see world_state.gd, mirroring
 ## _objects); the sorted keys give a deterministic encoding order. Field name
-## "berries" mirrors the pre-#192 groundItems wire shape's "wood" field
+## "berries" mirrors the old per-tile groundItems wire shape's "wood" field
 ## ({target, wood}): ground berries stay a simple per-tile counter, not a
-## first-class pickable item like wood (task #202 defers consumption/hauling
-## to a later increment).
+## first-class pickable item like wood.
 static func _encode_ground_berries(ground_berries: Dictionary) -> Array:
 	var keys := ground_berries.keys()
 	keys.sort()
@@ -610,7 +607,7 @@ static func _decode_work_progress(list: Array) -> Dictionary:
 	return decoded
 
 ## world._work_progress_owner is keyed like _work_progress ("%d_%d") ->
-## job_id (round-5 review, #278/#303); sorted keys give a deterministic
+## job_id; sorted keys give a deterministic
 ## encoding order matching _encode_work_progress() above. Only keys with a
 ## non-empty owner appear -- an "incident" job's stamped wait never
 ## participates in job-id ownership (see WorldState._release_owned_work_progress()'s
@@ -635,8 +632,7 @@ static func _decode_work_progress_owners(list: Array) -> Dictionary:
 		decoded["%d_%d" % [tile.x, tile.y]] = String(entry["jobId"])
 	return decoded
 
-## world._suspended_work_progress is keyed by job_id directly (round-6
-## review, #278/#303): a suspended job's own snapshot, so no tile coordinate
+## world._suspended_work_progress is keyed by job_id directly: a suspended job's own snapshot, so no tile coordinate
 ## participates in the key at all -- sorted job_id keys give a deterministic
 ## encoding order.
 static func _encode_suspended_work_progress(suspended_work_progress: Dictionary) -> Array:
@@ -674,11 +670,10 @@ static func _decode_paused_jobs(list: Array) -> Dictionary:
 		decoded[String(entry["colonistId"])] = String(entry["jobId"])
 	return decoded
 
-# --- rescue giver restoration (issue #360) ----------------------------------
+# --- rescue giver restoration ----------------------------------
 
 ## RescueGiver.get_job_victims()'s own job_id -> victim_id association,
-## encoded as an array of {jobId, victimId} entries (round-3 review finding
-## 3): unlike _encode_paused_jobs()'s colonist-keyed shape, this map is keyed
+## encoded as an array of {jobId, victimId} entries: unlike _encode_paused_jobs()'s colonist-keyed shape, this map is keyed
 ## by job id (a colonist can be the victim of at most one live rescue job, but
 ## nothing here depends on that -- job id is what's actually unique), so
 ## sorting by job id gives the same deterministic encoding order every other
@@ -731,7 +726,7 @@ static func _rescue_pending_from_scheduler(rescue_jobs: Array[Dictionary], sched
 			pending[rescuer_id] = job_id
 	return pending
 
-# --- combat giver flee-destination exclusions (F5/#302, round-6 review) ----
+# --- combat giver flee-destination exclusions ----
 
 ## world._combat_giver's own per-actor excluded-flee-destination set
 ## (CombatGiver._blocked_targets, actor_id -> Dictionary[Vector2i, true]):
@@ -766,7 +761,7 @@ static func _decode_combat_blocked_targets(list: Array) -> Dictionary:
 		decoded[String(entry["actorId"])] = tiles
 	return decoded
 
-# --- approach giver target association (issue #390, ADR 031) ---------------
+# --- approach giver target association (ADR 033) ---------------
 
 ## ApproachGiver.get_job_targets()'s own job_id -> {kind, id/tile} association,
 ## encoded as an array of {jobId, kind, actorId} or {jobId, kind, tile}
@@ -827,7 +822,7 @@ static func _decode_calendar_alerts(field: Dictionary) -> Dictionary:
 		decoded[String(window_id)] = true
 	return decoded
 
-# --- tool fetch excluded candidates (issue #271 round 6, ADR 012) ----------
+# --- tool fetch excluded candidates (ADR 013) ----------
 
 ## ToolFetchToil's own _excluded map (see tool_fetch_toil.gd's get_excluded()/
 ## restore_excluded()): job_id -> Array[String] of tool ids already proven
@@ -855,13 +850,12 @@ static func _decode_tool_fetch_excluded(list: Array) -> Dictionary:
 		decoded[String(entry["jobId"])] = ids
 	return decoded
 
-# --- incident scheduler (F5, issue #294; #295) ------------------------------
+# --- incident scheduler ------------------------------
 
 ## world._incidents' own cooldown-until-day map, last-processed day, and its
 ## independent seeded RNG stream (ADR 004 "WorldState's diagnostic hash
 ## includes this continuation state") -- read directly off IncidentScheduler's
-## fields since that file exposes no accessor (out of this task's owned
-## paths), mirroring how encode() already reads world._random/world._tiles
+## fields since that file exposes no accessor, mirroring how encode() already reads world._random/world._tiles
 ## directly rather than through a getter.
 static func _encode_incident_scheduler(world: WorldState) -> Dictionary:
 	return {
@@ -872,7 +866,7 @@ static func _encode_incident_scheduler(world: WorldState) -> Dictionary:
 
 # --- entities/inventory ----------------------------------------------------
 
-## F5 (issue #294): every component field is emitted only when the live dict
+## Every component field is emitted only when the live dict
 ## actually carries it -- exactly the per-kind shape ActorTable.spawn()
 ## produces (colonist: needs/labourTable/hands/heldTool; wolf: needs/
 ## combat/wild; trader: inventory/visitor) -- never as a colonist-shaped
@@ -920,7 +914,7 @@ static func _encode_entities(colonists: Array[Dictionary]) -> Array:
 ## ActorTable.spawn()'s own generic-actor branch produces, rather than
 ## backfilling a colonist-shaped default that code elsewhere (_ensure_needs(),
 ## colonist-ai.md's own accessors) would then treat as "this actor has a
-## worker/needs component after all". "factionId"/"health" (issue #284) are
+## worker/needs component after all". "factionId"/"health" are
 ## required on the wire (every save reaching this decoder has already
 ## migrated through SaveMigrations, which backfills both), but still read
 ## with a defensive default here, matching every other required-field decoder
@@ -959,7 +953,7 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 		colonists.append(colonist)
 	return colonists
 
-## The F2 combat component (ActorCombat.build()): attack/damage/cooldown
+## The combat component (ActorCombat.build()): attack/damage/cooldown
 ## tunables plus the per-instance cooldown_remaining (camelCase on the wire).
 static func _encode_combat(combat: Dictionary) -> Dictionary:
 	return {
@@ -977,7 +971,7 @@ static func _decode_combat(combat: Dictionary) -> Dictionary:
 		"cooldown_remaining": int(combat.get("cooldownRemaining", 0)),
 	}
 
-## The F2 inventory component (ActorInventory.build()): {items, tool,
+## The inventory component (ActorInventory.build()): {items, tool,
 ## capacity}; items is copied as-is (empty today: no toil fills it yet).
 static func _encode_inventory(inventory: Dictionary) -> Dictionary:
 	return {
@@ -986,7 +980,7 @@ static func _encode_inventory(inventory: Dictionary) -> Dictionary:
 		"capacity": int(inventory.get("capacity", 1)),
 	}
 
-## world._colonists' "health" is the F2 health component (ActorHealth.build*(),
+## world._colonists' "health" is the health component (ActorHealth.build*(),
 ## docs/decisions/012-actors-and-components.md): hp/maxHp/dead, already
 ## camelCase-compatible with the wire shape, so no key renaming is needed
 ## (unlike needs/labourTable, which only need sorted-key determinism).
@@ -1078,7 +1072,7 @@ static func _decode_work_field(work):
 		return null
 	return {"job_id": work["jobId"], "ticks_remaining": int(work["ticksRemaining"])}
 
-## Issue #402: a colonist's "hands" list -- {"kind","count"} per distinct kind
+## A colonist's "hands" list -- {"kind","count"} per distinct kind
 ## held, no item id (a pick_up may merge several ground items' units into one
 ## entry, and place() always mints a fresh id on the way back out) and no x/y
 ## (a carried item has no ground position, see ToilExecutor.pick_up()/place()).
@@ -1094,11 +1088,11 @@ static func _decode_hands_field(hands: Array) -> Array:
 		decoded.append({"kind": entry["kind"], "count": int(entry["count"])})
 	return decoded
 
-## "trapped" (issue #359): unlike carrying/work (present only for the kinds
+## "trapped": unlike carrying/work (present only for the kinds
 ## whose own ActorTable.spawn() shape adds them), any actor kind may fall into
 ## a trench, so this is encoded/decoded unconditionally for every entity,
 ## mirroring health/route rather than carrying's per-kind presence.
-## fromTile (round 2 review finding 4) is present only alongside
+## fromTile is present only alongside
 ## ticksRemaining -- a trapped hostile's own escape_trench climb-out target --
 ## since a trapped colonist has no auto-exit to prefer a fallen-from tile for.
 static func _encode_trapped_field(trapped):
@@ -1123,8 +1117,7 @@ static func _decode_trapped_field(trapped):
 
 # --- jobs --------------------------------------------------------------
 
-## site (issue #406, supersedes #278/#303's own site/buildKind pair): a
-## site_fetch/site_work job's own construction-site origin tile --
+## site (replaces the older site/buildKind pair): a site_fetch/site_work job's own construction-site origin tile --
 ## job_queue.gd's own native field (attach_site()), mirroring itemId/cell's
 ## own optional shape exactly, so an in-flight wall order and an in-flight
 ## door order at the same tick decode to different job dicts and hash
@@ -1169,7 +1162,7 @@ static func _decode_jobs(jobs: Array) -> Array[Dictionary]:
 		})
 	return decoded
 
-# --- construction sites (issue #406) ------------------------------------
+# --- construction sites ------------------------------------
 
 static func _encode_materials(materials: Array) -> Array:
 	var encoded: Array = []
@@ -1285,8 +1278,8 @@ static func _encode_entry(entry: Dictionary) -> Dictionary:
 		"base": entry["base"], "submittedTick": entry["submitted_tick"],
 		"ordinal": entry["ordinal"], "restrictTo": String(entry.get("restrict_to", "")),
 	}
-	# ADR 015 Amendment (issue #294): present on the wire only when true, so
-	# every ordinary entry keeps its exact pre-#294 shape.
+	# ADR 014 Amendment: present on the wire only when true, so
+	# every ordinary entry keeps its original shape.
 	if bool(entry.get("autonomous", false)):
 		encoded["autonomous"] = true
 	return encoded

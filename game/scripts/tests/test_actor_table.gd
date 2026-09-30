@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers issue #281 (F2 actors and components, docs/architecture/foundation-
+## Covers F2 actors and components (docs/architecture/foundation-
 ## for-breadth.md section F2, docs/decisions/012-actors-and-components.md):
 ## 1) ActorTable.spawn() against the real content bundle produces a colonist,
 ##    wolf and trader whose has_component() results exactly match each
@@ -117,13 +117,13 @@ func _check_spawned_components_match_declarations() -> void:
 	_check_wolf_and_trader_component_state(registry)
 
 ## Scope-limiting decision (docs/decisions/012-actors-and-components.md),
-## updated by issue #283: spawn("colonist", ...) still produces exactly the
+## as later extended: spawn("colonist", ...) still produces exactly the
 ## pre-F2 field set for worker's wrapped fields (no new "worker"/"inventory"
 ## key; get_component(colonist, "worker") still assembles {"labourTable",
 ## "held_tool"} from those existing fields), but now also carries a real
 ## "health" field (hp/maxHp/dead), appended last, since health is no longer
-## inert for a colonist the way inventory/combat still are. Issue #349/ADR
-## 023 adds one more: "needsAccumulator", the sibling of "needs" holding each
+## inert for a colonist the way inventory/combat still are. ADR 024 adds
+## one more: "needsAccumulator", the sibling of "needs" holding each
 ## kind's deterministic per-day decay carry, inserted right after "needs"
 ## (ActorTable._spawn_colonist()'s own literal field order).
 func _check_colonist_shape_is_unchanged(registry: ContentRegistryType) -> void:
@@ -252,7 +252,7 @@ func _check_out_of_bounds_tunable_fails_construction() -> void:
 # own validate() rule -- a rule the schema's per-field "minimum" checks cannot
 # express. If ActorTable.validate_component() were not wired into
 # ContentRegistry._init(), every one of these fixtures would construct
-# successfully (see the finding this covers).
+# successfully.
 
 func _check_missing_component_tunables_fails_construction() -> void:
 	_write_minimal_bundle(MISSING_TUNABLES_FIXTURE_DIR, {"actors": [
@@ -313,7 +313,7 @@ func _check_hp_above_maxhp_fails_construction() -> void:
 	_expect(String(error.get("file", "")).ends_with("actors.json"),
 		"the fixture's error must name actors.json as the offending file, got %s" % error)
 
-## Issue #283 regression: a colonist definition whose health tunables declare
+## Regression: a colonist definition whose health tunables declare
 ## a valid "hp" below "maxHp" (a value ActorHealth.build() would honor for a
 ## generic actor) must still spawn a colonist at hp == maxHp, since a
 ## colonist must always start at full health regardless of that tunable --
@@ -387,7 +387,7 @@ func _check_schema_vocabulary_matches_implemented_vocabulary() -> void:
 		"actors.schema.json's components enum %s must match ActorTable.COMPONENT_NAMES %s" % [declared, implemented])
 
 # --- 6) ActorNeeds.apply_tick() decays via a per-day integer accumulator ---
-# (issue #349/ADR 023): each tick adds the kind's rate_per_day (passed in as
+# (ADR 024): each tick adds the kind's rate_per_day (passed in as
 # tunables["rates"], unchanged key name) to a running "needsAccumulator"
 # carry, and only once that carry reaches tunables["day_length_ticks"] does
 # the need actually lose a point, with the remainder kept (never reset).
@@ -431,7 +431,7 @@ func _check_needs_apply_tick_behaviour() -> void:
 
 func _check_health_apply_tick_behaviour() -> void:
 	# A well-formed health value must pass through apply_tick() unchanged --
-	# no code path deals damage yet (issue #283 Non-goals).
+	# apply_tick() itself never deals damage.
 	var steady := {"health": {"hp": 40, "maxHp": 40, "dead": false}}
 	HealthType.apply_tick(steady)
 	_expect(steady["health"] == {"hp": 40, "maxHp": 40, "dead": false},
@@ -457,7 +457,7 @@ func _check_health_apply_tick_behaviour() -> void:
 		"maxHp below 1 must floor to 1 and hp must stay clamped, got %s" % [invalid_max["health"]])
 
 	# A dead actor stays dead across repeated ticks -- once hp reaches 0 it
-	# never leaves that bound on its own (Non-goals: no healing either).
+	# never leaves that bound on its own (there is no healing either).
 	HealthType.apply_tick(negative)
 	HealthType.apply_tick(negative)
 	_expect(negative["health"]["hp"] == 0 and negative["health"]["dead"] == true,
@@ -465,7 +465,7 @@ func _check_health_apply_tick_behaviour() -> void:
 
 	# Death is permanent, not merely derived from the current hp value: once
 	# dead becomes true (hp reached 0), setting hp back to a positive value
-	# and re-running apply_tick() must NOT clear dead. A test that only repeats
+	# and re-running apply_tick() must not clear dead. A test that only repeats
 	# ticks with hp left at 0 (like the block above) cannot tell permanent
 	# death apart from "dead == (hp == 0)"; this one distinguishes them.
 	var revived := {"health": {"hp": 0, "maxHp": 40, "dead": true}}
@@ -492,7 +492,7 @@ func _check_health_apply_tick_behaviour() -> void:
 ## Writes an otherwise-valid content bundle (every required kind but actors)
 ## plus the given actors_content in place of actors.json, so only the actors
 ## fixture under test can make construction fail. Includes factions.json
-## (issue #286, docs/decisions/015-factions-and-relations.md) now that
+## (docs/decisions/014-factions-and-relations.md) now that
 ## "factions" is a required ContentRegistry collection kind like every other.
 func _write_minimal_bundle(dir: String, actors_content: Dictionary) -> void:
 	var user_dir := DirAccess.open("user://")

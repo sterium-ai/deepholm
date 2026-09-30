@@ -1,17 +1,20 @@
 # ADR 009: Critical-need interrupt suspend/resume releases the paused job's reservation
 
-- Status: accepted task contract for #241 (review round 1)
-- Date: 2026-09-19
-- Extends [ADR 004](004-global-assignment-fairness-policy.md) (aging/fairness formula, unchanged
-  here) and colonist-ai.md §3.6 (interrupt semantics).
+> **In short:** When a colonist drops a job to eat, drink or sleep, the job keeps its place in line, but the spot it was working on is freed so other work is not blocked while the colonist is away.
+
+- **Status:** accepted
+- **Date:** 2026-09-19
+- **Scope:** simulation (`JobQueue`, `GlobalAssignment`, `NeedGiver`, `WorldState`)
+- **Extends:** [ADR 004](004-global-assignment-fairness-policy.md) (aging/fairness formula, unchanged
+  here) and [colonist-ai.md](../architecture/colonist-ai.md) §3.6 (interrupt semantics).
 
 ## Context
 
 colonist-ai.md §3.6 requires a critical need to interrupt a colonist's in-progress `work` toil
 immediately: the interrupted job "goes back to the queue with its aging preserved (it does not
-lose its place)" and resumes rather than restarts once the colonist is free again. Issue #241
-moved this decision (and eat_food/drink_water/sleep submission) out of `WorldState` and into
-`NeedGiver`, a job-giver module, submitting through the same `GlobalAssignment.submit()` entry
+lose its place)" and resumes rather than restarts once the colonist is free again. This decision
+(and eat_food/drink_water/sleep submission) lives in `NeedGiver`, a job-giver module, rather than
+`WorldState`, submitting through the same `GlobalAssignment.submit()` entry
 point any order-driven job uses (AGENTS.md "one work engine").
 
 The first implementation of the interrupt added `GlobalAssignment.suspend_assignment()`/
@@ -21,7 +24,7 @@ activation) back into `_waiting` at its exact aging/ordinal position, but left t
 `JobQueue` record "active" and its target reservation held. `resume_assignment()` later
 restored the worker/job pairing directly.
 
-Review round 1 flagged this: colonist-ai.md §3.4 treats a reservation as belonging to a job that
+That design was flawed: colonist-ai.md §3.4 treats a reservation as belonging to a job that
 is actually in progress ("reservations are released when the job ends for any reason"); leaving
 it held for the entire duration of an unrelated need job means the target tile is unavailable to
 any other legitimate job for as long as the colonist is away eating/drinking/sleeping, with no
@@ -77,24 +80,23 @@ different colonist while telling the original one its need was already satisfied
   engineered away with additional cross-layer state.
 - No schema version bump: `suspend`/`reactivate` only toggle the existing `status` enum value
   between two values ("active"/"queued") already present in the schema, and `restrict_to` on a
-  waiting entry was already a persisted field (schemaVersion 14, #241 t1/t2).
-- `game/scripts/tests/test_movement_and_work.gd` (issue #205, predates this ADR, owned by
-  #241) asserted the interrupted job's `JobQueue` record status stays `"active"` throughout the
-  interrupt. That assertion encoded the now-superseded design; it has been updated to expect
-  `"queued"` during the interrupt window.
+  waiting entry was already a persisted field (since schemaVersion 14).
+- `game/scripts/tests/test_movement_and_work.gd`, which predates this ADR, asserted the
+  interrupted job's `JobQueue` record status stays `"active"` throughout the interrupt. That
+  assertion encoded the superseded design; it now expects `"queued"` during the interrupt window.
 
 ## Alternatives considered
 
-- **Keep the reservation held, as round 1 shipped** (rejected by this review): matches "does not
+- **Keep the reservation held, as the first implementation did** (rejected): matches "does not
   lose its place" for the waiting-queue position, but conflates queue position with resource
   ownership and can starve an unrelated job on the same tile for an unbounded time.
 - **Release the `ReservationTable` entry directly while leaving `JobQueue.status` "active"**
   (considered, rejected): would satisfy `NeedGiver`'s own direct `ReservationTable.is_reserved()`
   checks but not `GlobalAssignment.tick()`'s `get_reservations()`-driven exclusion (which reads
   `status`, not the table), so a different job targeting the same tile would still be blocked --
-  only half the reviewer's concern addressed, for no simpler an implementation.
+  only half the problem fixed, for no simpler an implementation.
 - **Let the interrupted job re-enter fully competitive proposal (no `restrict_to`) on suspend**
   (considered, rejected): matches "one work engine" most purely, but risks a different worker's
   own idle-tick scan winning the job away from the colonist that is about to resume it, before
   `resume_assignment()`'s own forced pairing runs this same tick -- a strictly larger behavior
-  change than this review asked for, and not necessary to fix the reservation-holding defect.
+  change, and not necessary to fix the reservation-holding defect.

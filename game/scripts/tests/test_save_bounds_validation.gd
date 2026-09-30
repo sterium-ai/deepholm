@@ -1,12 +1,11 @@
 extends SceneTree
 
-## Issue #299 round 1 review: SaveIO's bounds check previously covered only
-## entity/item/object/zone/tool-item positions. A hand-edited or corrupted
-## save could still smuggle an out-of-bounds coordinate through a job
-## target/cell, a scheduling queue entry, a pending route search, an
-## assignment path, an entity's own in-flight route, a groundBerries entry,
-## or a workProgress entry -- none of those were bounds-checked before this
-## round. Each check below starts from one shared, fully valid 8x8 state
+## SaveIO bounds-checks not only entity/item/object/zone/tool-item positions
+## but every nested coordinate, so a hand-edited or corrupted save cannot
+## smuggle an out-of-bounds coordinate through a job target/cell, a
+## scheduling queue entry, a pending route search, an assignment path, an
+## entity's own in-flight route, a groundBerries entry, or a workProgress
+## entry. Each check below starts from one shared, fully valid 8x8 state
 ## (entity and object positions always valid) and corrupts exactly one
 ## coordinate family at a time, proving every family independently rejects
 ## an out-of-bounds coordinate without disturbing the others.

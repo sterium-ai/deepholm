@@ -1,25 +1,25 @@
-# ADR 018: Incidents wiring raises the world_state.gd core budget
+# ADR 017: Incidents wiring raises two core budgets
+
+> **In short:** Adding incidents (visitors such as wolves or traders arriving on their own) needed more lines in two core files, so their size limits were raised to match.
 
 - **Status:** accepted
-- **Date:** 2026-09-20 (amended 2026-09-21, review round 3)
+- **Date:** 2026-09-20 (amended 2026-09-21)
 - **Scope:** `docs/architecture/core-budgets.json` caps for `game/scripts/core/world_state.gd`
   and `game/scripts/core/scheduling/global_assignment.gd`.
-- **Implements:** F5 in `docs/architecture/foundation-for-breadth.md`; issue #294.
+- **Implements:** F5 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 
 Wiring `IncidentScheduler` (`game/scripts/core/incidents/incident_scheduler.gd`) into
-`world_state.gd` raises its `core-budgets.json` cap: 1917 -> 2026 (round 3: the activation-gated
-spawning, target-aware reservation gate and shared-finish cleanup below replaced round 2's
-`_activate_pending_incident_jobs()`/pending-wait-ticks map). `global_assignment.gd`'s own cap
-rises 586 -> 673 (round 3: `submit_autonomous()`, the `_may_be_ordered`-only gate skip, the
-target-aware autonomous reservation gate and the autonomous route passability, see
-`docs/decisions/015-factions-and-relations.md`'s "Amendment (issue #294)"). `toil_executor.gd`'s
+`world_state.gd` raises its `core-budgets.json` cap: 1917 -> 2026. `global_assignment.gd`'s own
+cap rises 586 -> 673 for `submit_autonomous()`, the `_may_be_ordered`-only gate skip, the
+target-aware autonomous reservation gate and the autonomous route passability (see
+[ADR 014](014-factions-and-relations.md), Amendment 6). `toil_executor.gd`'s
 own existing cap (698) already had enough headroom for threading a faction argument through its
 passability call sites (691 lines post-change) and needs no change.
 
 `WorldState` owns the scheduler (constructed once in `_init()` alongside `_random`, mirroring
-`RegionMap`/`RoomMap`'s own ADR 016/017 precedent for a lazily-or-eagerly-owned F5 module) and:
+`RegionMap`/`RoomMap`'s own ADR 015/016 precedent for a lazily-or-eagerly-owned F5 module) and:
 
 - calls `_incidents.advance(tick)` once per `tick()` (the day-gated draw);
 - passes the staged (proposed, not yet spawned) incident actors to `_scheduler.tick()` alongside
@@ -62,10 +62,16 @@ live where `apply()`/`_finish_job()`/`_toil_on_unreachable()` themselves already
 ## Consequences
 
 Both caps now equal their file's exact post-change line count, matching every prior
-`core-budgets.json` entry (including the caps ADR 016/017 set, which `world_state.gd`'s increases
-further). `job_queue.gd`'s cap and clock/tick semantics are untouched by this task (see the
-task's own Non-goals and scope for `global_assignment.gd`): its own public API
+`core-budgets.json` entry (including the caps ADR 015/016 set, which `world_state.gd`'s increases
+further). `job_queue.gd`'s cap and clock/tick semantics are untouched: its own public API
 (`get_reservations()`, `tick()`, `suspend()`/`reactivate()`) is enough, reached only through
 `global_assignment.gd`'s existing `queue.advance_selection()` call. Terminal job records
 (completed/cancelled/failed) are retained by `JobQueue` for every job kind, as before; retiring
-them is a queue-owned concern outside this task's scope.
+them is a queue-owned concern outside this decision.
+
+## Revision notes
+
+An earlier version activated pending incident jobs through a dedicated
+`_activate_pending_incident_jobs()` pass and a pending-wait-ticks map. It was replaced by the
+activation-gated spawning, target-aware reservation gate and shared-finish cleanup described
+above; the caps listed here reflect the final design.

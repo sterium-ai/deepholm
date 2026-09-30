@@ -1,17 +1,17 @@
 # ADR 003: Deterministic scheduling, explainability, save integrity, and mobile-first constraints
 
+> **In short:** This decision sets four ground rules the game must always respect: colonists never sit idle unfairly, the game always explains why something did not happen, saves are never lost or corrupted, and the controls and battery use suit phones.
+
 - **Status:** accepted
 - **Date:** 2026-09-14
-- **Owners:** project integrator and simulation owner
 - **Scope:** simulation, persistence, presentation
 
 ## Context
 
-Issue #15 asks the project to turn the most common ways colony
-simulations lose player trust (the "what goes wrong" design-research notes)
-into canonical, cross-cutting contracts before further vertical-slice
-implementation proceeds. Those notes rank four problems and state a "game
-rule" for each:
+The project's "what goes wrong" design-research notes describe the most
+common ways colony simulations lose player trust. They rank four problems
+and state a "game rule" for each; this ADR turns those rules into canonical,
+cross-cutting contracts before further vertical-slice implementation:
 
 1. Save loss and crashes destroyed progress and trust (saving is typically an
    opt-in per-class contract with no version field or atomic-write pattern).
@@ -40,7 +40,7 @@ without reopening or weakening ADR 001 or ADR 002.
 
 The following four principles are accepted as canonical, in addition to
 (not replacing) ADR 001 and ADR 002. Each is a contract that later
-implementation task contracts must conform to; this ADR does not itself
+implementation contracts must conform to; this ADR does not itself
 implement any of them.
 
 ### 1. Task scheduling and priority is a deterministic contract
@@ -59,7 +59,7 @@ implement any of them.
   cancellation, failure, or invalidation, and are reconsidered when
   prerequisites next change; a reservation must never be silently leaked.
 - The exact numeric wait bound and workload shape are specified in the
-  task contract that implements the scheduler, not invented from
+  contract that implements the scheduler, not invented from
   guesses about how other games schedule (the research notes explicitly do
   not establish any other game's scheduling algorithm or tick order).
 
@@ -117,11 +117,11 @@ implement any of them.
   [`simulation-boundaries.md`](../architecture/simulation-boundaries.md).
 - A device-specific frame-pacing and battery/power budget, and the exact
   smallest supported device/screen size, are agreed in the mobile
-  acceptance task contract before mobile acceptance testing, not asserted
+  acceptance contract before mobile acceptance testing, not asserted
   here without measurement.
 
 Stable IDs, versioning, and migration consequences for any new persisted
-field these principles eventually require are deferred to the task
+field these principles eventually require are deferred to the
 contract that implements them; this ADR fixes the contract-level rule, not
 a data shape.
 
@@ -130,9 +130,9 @@ a data shape.
 - **Leave the four rules as informal guidance inside the research notes.**
   Rejected: research notes are evidence, not contracts, and
   `source-of-truth.yaml` ranks evidence below canonical contracts and
-  accepted ADRs. Cross-cutting rules that every future task contract must
+  accepted ADRs. Cross-cutting rules that every future implementation contract must
   satisfy need to sit in the canonical/ADR tier, or they can be silently
-  overridden by a task that never reads the notes.
+  overridden by work that never consults the notes.
 - **Split this into four separate ADRs, one per principle.** Rejected:
   the four principles were ranked and evidenced together against the same
   vertical slice, reference the same two canonical documents, and are
@@ -145,63 +145,61 @@ a data shape.
   arriving continuously would starve lower-priority work indefinitely,
   which is the reported symptom, not a fix for it.
 - **Let presentation infer explanations from animation or inactivity
-  state, as many games do.**
-  Rejected: this reproduces the exact gap identified in problem 3 and
+  state, as many games do.** Rejected: this reproduces the exact gap identified in problem 3 and
   conflicts with the presentation/simulation boundary ADR 001 already
   established.
 - **Treat mobile constraints as post-slice polish.** Rejected: the design
-  notes rank this as one of four core problems, not as a nice-to-have; deferring it past the vertical slice would let an
-  architecture take shape that cannot cheaply add gesture disambiguation
+  notes rank this as one of four core problems, not as a nice-to-have;
+  deferring it past the vertical slice would let an architecture take shape that cannot cheaply add gesture disambiguation
   or backgrounding behavior later.
 - **Specify exact numeric wait bounds, device targets, or battery budgets
   in this ADR.** Rejected: the research notes explicitly warn against
   inventing a capacity limit from guesses about other games; those
-  numbers belong in the task contract that implements and measures them,
+  numbers belong in the contract that implements and measures them,
   with this ADR fixing only the shape of the guarantee.
 
 ## Consequences
 
 - [`docs/architecture/vertical-slice.md`](../architecture/vertical-slice.md)
   and [`docs/architecture/simulation-boundaries.md`](../architecture/simulation-boundaries.md)
-  gain additive clarifications (see their diffs in this same change) that
-  make the four principles checkable acceptance criteria rather than only
+  gain additive clarifications, made alongside this ADR, that make the four principles checkable acceptance criteria rather than only
   ADR prose. No existing acceptance criterion in either document is
   removed or weakened.
-- Future task contracts — a task-scheduler contract, an explainability
+- Future implementation contracts — a task-scheduler contract, an explainability
   event/reason schema, a save-migration implementation, and a mobile
   input/performance budget — must each cite this ADR and satisfy the
-  relevant principle above; a reviewer (per ADR 002) checks the task
+  relevant principle above; a reviewer (per ADR 002) checks each such
   contract against this ADR before implementation review.
 - `docs/architecture/contracts/game-state.schema.json` is unchanged by
   this ADR. The schema fields these principles will eventually need
   (for example, a persisted task-reservation identity or a typed reason
-  code) are introduced by the implementing task's own contract update,
+  code) are introduced by the implementing change's own contract update,
   not invented speculatively here.
 - `game/` is unchanged by this ADR; no principle above is implemented in
-  code by this change.
-- Ownership: the simulation owner is responsible for the scheduler and
-  save-integrity contracts (principles 1 and 3); the agent implementing
-  presentation/application boundaries owns the explainability event
+  code by this decision.
+- Ownership: whoever owns the simulation core is responsible for the
+  scheduler and save-integrity contracts (principles 1 and 3); whoever owns
+  the presentation/application boundaries owns the explainability event
   surface and mobile constraints (principles 2 and 4), consistent with
   ADR 002's phase-based ownership rather than a fixed model assignment.
 - Risk accepted: because the exact wait bound, reason taxonomy, and mobile
-  device budget are deferred to implementing task contracts, this ADR
-  alone cannot be tested end-to-end; the acceptance criteria below are
-  scoped to what this documentation-only change can verify.
+  device budget are deferred to implementing contracts, this ADR alone
+  cannot be tested end-to-end; the acceptance criteria below are scoped to
+  what a documentation-only decision can verify.
 
 ## Acceptance criteria
 
-- [ ] The affected canonical documents (`vertical-slice.md`,
-      `simulation-boundaries.md`) are updated additively to reflect the
-      four principles, or this ADR states why no change was needed for a
-      given document.
-- [ ] `docs/architecture/source-of-truth.yaml`'s evidence section lists
-      the design-research documents.
-- [ ] Contracts, examples, and tests are marked N/A: this ADR does not
-      change `game-state.schema.json` or any test, since no principle is
-      implemented in code by this change.
-- [ ] Save/migration impact is N/A for this change; the save-integrity
-      *strategy* is fixed here, and its implementation is deferred to a
-      future task contract that this ADR constrains.
-- [ ] The source-of-truth index still points to the authoritative location
-      for each canonical document (unchanged by this ADR).
+- The affected canonical documents (`vertical-slice.md`,
+  `simulation-boundaries.md`) are updated additively to reflect the four
+  principles, or this ADR states why no change was needed for a given
+  document.
+- `docs/architecture/source-of-truth.yaml`'s evidence section lists the
+  design-research documents.
+- Contracts, examples, and tests are not applicable: this ADR does not
+  change `game-state.schema.json` or any test, since no principle is
+  implemented in code by this decision.
+- Save/migration impact is not applicable; the save-integrity *strategy* is
+  fixed here, and its implementation is deferred to a future contract that
+  this ADR constrains.
+- The source-of-truth index still points to the authoritative location for
+  each canonical document (unchanged by this ADR).

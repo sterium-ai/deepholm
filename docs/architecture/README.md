@@ -1,8 +1,13 @@
 # Deepholm architecture
 
+> **In short:** This folder describes how the game is meant to be built: what
+> it should do, how its parts fit together, and the rules every change has to
+> follow.
+
 This directory is the canonical engineering contract for the game. It describes
 the intended product, the first playable slice, simulation boundaries, data
-contracts, agent ownership, and decision records. It is design documentation: the contracts come first and the code follows them.
+contracts, agent ownership, and decision records. The contracts come first and
+the code follows them.
 
 ## Start here
 
@@ -15,8 +20,13 @@ contracts, agent ownership, and decision records. It is design documentation: th
 7. [Save system](save-system.md)
 8. [Orders and movement](orders-and-movement.md)
 9. [Colonist AI design](colonist-ai.md)
-10. [Foundation for breadth](foundation-for-breadth.md)
-11. [ADR template](adr/000-template.md)
+10. [Map experience](map-experience.md)
+11. [Behaviour extension points](extension-points.md)
+12. [Foundation for breadth](foundation-for-breadth.md)
+13. [Architecture decision records (ADRs)](../decisions/)
+14. [ADR template](adr/000-template.md)
+
+For an overview of all project documentation, see the [docs index](../README.md).
 
 Design research and playtest notes are evidence sources. When evidence is
 ambiguous, the game contract wins after the decision is recorded in an ADR.

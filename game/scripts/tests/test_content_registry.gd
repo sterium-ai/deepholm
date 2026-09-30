@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers issue #254 (F1 content registry, docs/architecture/foundation-for-
+## Covers the F1 content registry (docs/architecture/foundation-for-
 ## breadth.md): 1) the real game/content/ bundle loads through
 ## ContentRegistry with every cross-reference (a job's needs_tool naming a
 ## declared tool item, a job's toils naming toils ToilExecutor implements, a
@@ -30,12 +30,12 @@ const WILD_TICKS_INVALID_FIXTURE_DIR := "user://test-content-registry-fixture-wi
 const BUILD_COST_DANGLING_FIXTURE_DIR := "user://test-content-registry-fixture-build-cost-dangling"
 const MISSING_BUILD_COST_FIXTURE_DIR := "user://test-content-registry-fixture-missing-build-cost"
 
-## ADR 025/026 (issue #359): tunables.wild.trench_climb_ticks must reject a
+## ADR 026/027: tunables.wild.trench_climb_ticks must reject a
 ## non-integer, zero, and a negative value the same way combat's cooldown
 ## tunable already does.
 const INVALID_WILD_TRENCH_CLIMB_TICKS := ["fast", 0, -1]
 
-## Issue #293's needs.schema.json "number" case: a nonnumeric string, zero
+## needs.schema.json "number" case: a nonnumeric string, zero
 ## (exclusiveMinimum: 0 excludes the boundary itself), and a negative value
 ## must each fail schema validation rather than silently pass through as a
 ## multiplier _apply_need_effect() would later misuse.
@@ -102,7 +102,7 @@ func _check_real_bundle_loads_and_resolves() -> void:
 	_expect(not dig.is_empty(), "jobs collection must contain 'dig'")
 	_expect(String(dig.get("needs_tool", "")) == "pick", "dig's needs_tool must resolve to a declared tool item")
 
-	# issue #357: dig's yields.always/find_table must resolve and its
+	# Dig's yields.always/find_table must resolve and its
 	# find_table weights (5 + 20 + 10 + 10 + 55) must sum to 100.
 	var dig_yields: Dictionary = dig.get("yields", {})
 	_expect(not dig_yields.is_empty(), "dig must declare a yields field")
@@ -181,10 +181,10 @@ func _check_real_bundle_loads_and_resolves() -> void:
 
 	var mapgen := registry.document("mapgen")
 	_expect(not mapgen.is_empty(), "document(\"mapgen\") must expose the mapgen document")
-	# issue #300: spawn_area_width/height is now the clearing footprint size
+	# spawn_area_width/height is now the clearing footprint size
 	# WorldGenerator.place_spawn() searches for, and spawn_area_x/y is only its
 	# last-resort documented fallback anchor -- neither is mirrored as a
-	# compile-time WorldState constant any more (docs/decisions/020), so this
+	# compile-time WorldState constant any more (ADR 020), so this
 	# just checks the real content document declares both, positive.
 	_expect(int(mapgen.get("spawn_area_width", -1)) > 0 and int(mapgen.get("spawn_area_height", -1)) > 0,
 		"mapgen.json must declare a positive spawn_area_width/height")
@@ -215,9 +215,9 @@ func _check_real_bundle_results_are_frozen() -> void:
 
 ## get_entry() for an unknown kind, get_entry() for a known kind but unknown
 ## id, and list() for an unknown kind must all still return a read-only
-## result -- review round 4's finding that these "not found" paths returned a
-## plain mutable {}/[] rather than the frozen empty value every other
-## get_entry()/list() result is.
+## result -- these "not found" paths once returned a plain mutable {}/[]
+## rather than the frozen empty value every other get_entry()/list() result
+## is.
 func _check_unknown_kind_results_are_frozen() -> void:
 	var registry := ContentRegistryType.new()
 	if not registry.is_valid():
@@ -257,7 +257,7 @@ func _check_fixture_with_dangling_reference_fails_construction() -> void:
 	_expect(registry.list("jobs").is_empty(), "an invalid registry must expose no jobs, never a partial default")
 	_expect(registry.version() == "", "an invalid registry must expose no manifest version, never a partial default")
 
-## issue #278/round-3: a fixture bundle whose objects.json declares a
+## A fixture bundle whose objects.json declares a
 ## build_cost naming an unknown item id must fail construction with the typed
 ## dangling_reference error naming objects.json, exactly like needs_tool
 ## above -- never load as valid content that only surfaces at play time as a
@@ -278,8 +278,8 @@ func _check_fixture_with_build_cost_dangling_reference_fails_construction() -> v
 
 ## Same otherwise-valid bundle as _write_fixture_bundle(), except objects.json's
 ## "wall" entry declares a build_cost list whose second entry names an item id
-## no items.json entry declares (the first entry, "wood", DOES resolve --
-## issue #403's build_cost is now a list, and this proves the dangling check
+## no items.json entry declares (the first entry, "wood", does resolve --
+## build_cost is a list, and this proves the dangling check
 ## walks every position, not just index 0), and jobs.json's "chop" entry has
 ## no needs_tool (so the only dangling reference in this bundle is the one
 ## under test).
@@ -303,7 +303,7 @@ func _write_build_cost_dangling_fixture_bundle() -> void:
 	]})
 	_write_required_tiles_and_mapgen(BUILD_COST_DANGLING_FIXTURE_DIR)
 
-## Round-6 finding: build_cost is a required field on every objects.json row
+## build_cost is a required field on every objects.json row
 ## (not just the buildable kinds), so a row omitting it entirely must fail
 ## construction typed schema_violation naming objects.json, exactly like any
 ## other missing-required-field case -- never silently load with an implied
@@ -364,7 +364,7 @@ func _check_fixture_with_float_integer_field_fails_construction() -> void:
 	_expect(String(error.get("file", "")).ends_with("objects.json"),
 		"the fixture's error must name objects.json as the offending file, got %s" % error)
 
-## F5 (issue #294): an incidents.json row whose spawn.actor_def names an
+## F5: an incidents.json row whose spawn.actor_def names an
 ## undeclared actor id, and one whose faction names an undeclared faction id,
 ## must each fail construction with the typed dangling_reference error naming
 ## incidents.json -- never a silent skip of the row.
@@ -389,7 +389,7 @@ func _check_incident_fixtures_with_dangling_references_fail_construction() -> vo
 			"the unknown-%s error must name the dangling id, got %s" % [case_name, error])
 		_expect(registry.list("incidents").is_empty(), "an invalid registry must expose no incidents, never a partial default")
 
-## issue #357: a jobs.json yields.find_table whose weights do not sum to 100
+## A jobs.json yields.find_table whose weights do not sum to 100
 ## must fail construction typed schema_violation, naming jobs.json -- the
 ## cross-field arithmetic rule _validate_node's minimal JSON Schema subset
 ## cannot express (see ContentRegistry._check_job_yields()).
@@ -428,7 +428,7 @@ func _write_yields_weight_sum_fixture_bundle() -> void:
 	]})
 	_write_required_tiles_and_mapgen(YIELDS_WEIGHT_SUM_FIXTURE_DIR)
 
-## issue #357: a jobs.json yields.find_table naming an item id absent from
+## A jobs.json yields.find_table naming an item id absent from
 ## items.json must fail construction typed dangling_reference, naming
 ## jobs.json and the dangling id, matching every other cross-file check.
 func _check_fixture_with_yields_dangling_find_table_item_fails_construction() -> void:
@@ -489,7 +489,7 @@ func _write_incident_dangling_fixture_bundle(incident_row: Dictionary) -> void:
 	_write_required_tiles_and_mapgen(INCIDENT_DANGLING_FIXTURE_DIR)
 	_write_json(INCIDENT_DANGLING_FIXTURE_DIR + "/incidents.json", {"incidents": [incident_row]})
 
-## issue #357 review round 1: a jobs.json yields.find_table entry whose "item"
+## A jobs.json yields.find_table entry whose "item"
 ## is neither a string nor null (a number here) must fail construction typed
 ## schema_violation, not dangling_reference -- jobs.schema.json's "item":
 ## {"type": ["string", "null"]} constraint (ContentRegistry._validate_node's
@@ -591,7 +591,7 @@ func _write_invalid_multiplier_fixture_bundle(multiplier) -> void:
 	]})
 	_write_required_tiles_and_mapgen(INVALID_MULTIPLIER_FIXTURE_DIR)
 
-## ADR 025/026 (issue #359): a non-default tunables.wild.trench_climb_ticks
+## ADR 026/027: a non-default tunables.wild.trench_climb_ticks
 ## (99, not WorldState.DEFAULT_TRENCH_CLIMB_TICKS's 40) must construct
 ## cleanly -- proves the schema/ActorWild.validate() path accepts the real
 ## requested shape, not just the specific default value content/actors.json
@@ -603,7 +603,7 @@ func _check_fixture_with_valid_wild_trench_climb_ticks_constructs() -> void:
 
 	_expect(registry.is_valid(), "a non-default tunables.wild.trench_climb_ticks must construct cleanly, got %s" % registry.get_error())
 
-## ADR 025/026 (issue #359): a non-integer, zero, or negative
+## ADR 026/027: a non-integer, zero, or negative
 ## tunables.wild.trench_climb_ticks must each fail construction typed
 ## schema_violation against actors.json, mirroring
 ## _check_fixtures_with_invalid_bedroom_multiplier_fail_construction().
@@ -647,8 +647,8 @@ func _write_wild_ticks_fixture_bundle(dir: String, ticks) -> void:
 		{"id": "wolf", "components": ["wild"], "tunables": {"wild": {"trench_climb_ticks": ticks}}},
 	]})
 
-## Every JSON malformation named in review round 2 that this parser must
-## reject rather than silently accept: a leading zero, a decimal point or
+## Every JSON malformation this parser must reject rather than silently
+## accept: a leading zero, a decimal point or
 ## exponent marker with no digit after it, an invalid hex escape, and a raw
 ## (unescaped) control character in a string literal. Each case swaps an
 ## otherwise-valid bundle's jobs.json for hand-written text (not run through
@@ -714,9 +714,8 @@ func _write_fixture_bundle() -> void:
 
 ## A content kind with no matching COLLECTION_KINDS/DOCUMENT_KINDS entry
 ## ("widgets") but with a matching schema must still be discovered, loaded
-## and validated -- never silently skipped -- per review round 3's finding
-## that the constructor previously only ever looked at its hardcoded kind
-## list. Proven by making the extra kind's content violate its own schema:
+## and validated -- never silently skipped (the constructor once only looked
+## at its hardcoded kind list). Proven by making the extra kind's content violate its own schema:
 ## if the registry ignored it, construction would succeed (every required
 ## kind here is otherwise valid); requiring it to fail instead proves the
 ## extra file was actually read and validated.

@@ -156,15 +156,15 @@ func _check_reachable_handles_work_targets() -> void:
 	_expect(not regions.reachable(from, Vector2i(-1, 0)), "an out-of-bounds target must never be reachable")
 	_expect(regions.reachable(from, from), "a passable target in from's own region must be reachable")
 
-## Issue #405: WorldState._set_object()'s own RegionMap.on_passability_changed()
-## call must run for EVERY tile of a placed footprint, not just its origin --
+## WorldState._set_object()'s own RegionMap.on_passability_changed()
+## call must run for every tile of a placed footprint, not just its origin --
 ## otherwise the second tile's cached region_id would stay whatever it was
 ## before placement (this RegionMap only recomputes a tile explicitly told to
 ## via on_passability_changed()), silently diverging from what passability()
 ## now reports for it. Places content/objects.json's "test_footprint_crate"
 ## (footprint [2, 1], impassable) horizontally across two tiles that start
 ## passable/regioned, through a real WorldState (not a bare RegionMapType),
-## and checks BOTH tiles' region_id() dropped to 0 (impassable/no region).
+## and checks both tiles' region_id() dropped to 0 (impassable/no region).
 func _check_footprint_object_invalidates_every_occupied_tile() -> void:
 	var world := WorldStateType.new(400, 10)
 	world._tiles[world._tile_index(2, 2)] = WorldStateType.TILE_FLOOR

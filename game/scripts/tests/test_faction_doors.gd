@@ -1,9 +1,9 @@
 extends SceneTree
 
-## F3 (issue #289): WorldState.passability()'s faction_id parameter, consulted
-## only for a door object via ContentRegistry's factions registry (ADR 015).
+## F3: WorldState.passability()'s faction_id parameter, consulted
+## only for a door object via ContentRegistry's factions registry (ADR 014).
 ## Uses DebugScenario.build() (test_debug_scenario_objects.gd already proves
-## it seeds at least one door) and the set_faction command (t2, issue #287)
+## it seeds at least one door) and the set_faction command
 ## to change one of its colonists' factionId, then reads that factionId back
 ## and passes it into passability() -- passability() itself takes an explicit
 ## faction_id, it does not look an actor up.
@@ -48,8 +48,8 @@ func _check_faction_doors() -> void:
 	if door == Vector2i(-1, -1):
 		return
 
-	# A colony colonist's door passability is unchanged from before this task:
-	# both the no-argument call (pre-existing single-arg call sites) and the
+	# A colony colonist's door passability is unchanged by the faction
+	# parameter: both the no-argument call (single-arg call sites) and the
 	# explicit "colony" argument must behave exactly as before F3.
 	var default_result := world.passability(door.x, door.y)
 	_expect(default_result["passable"] and default_result["cost"] == 2 and default_result["is_door"],

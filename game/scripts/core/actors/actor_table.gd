@@ -18,10 +18,10 @@ extends RefCounted
 ## exactly the same Dictionary shape WorldState's own colonist spawning has
 ## always produced (id, kind, x, y, needs, labourTable, route, work,
 ## carrying, held_tool), with has_component() still correctly reporting the
-## colonist definition's declared components. Issue #283 adds one real new
-## field to that shape, "health" (hp/maxHp/dead), since health now carries
-## genuine per-instance state for a colonist the way it already did for a
-## generic actor -- everything else about the accessor layer is unchanged.
+## colonist definition's declared components. The colonist shape also
+## carries "health" (hp/maxHp/dead), since health is genuine per-instance
+## state for a colonist just as it is for a generic actor; everything else
+## about the accessor layer is unchanged.
 
 const MoverType = preload("res://scripts/core/actors/components/mover.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")

@@ -1,8 +1,10 @@
 # ADR 001: Deterministic game foundation
 
+> **In short:** The game's rules run as plain, predictable code that can be tested on its own, separate from graphics and from any particular device.
+
 - **Status:** accepted
 - **Date:** 2026-09-10
-- **Owners:** project integrator and simulation owner
+- **Scope:** simulation core, presentation boundary, content
 
 ## Context
 

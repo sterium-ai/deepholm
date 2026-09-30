@@ -37,7 +37,7 @@ const TOIL_CONSUME := "consume"
 const TOIL_FETCH_TOOL := "fetch_tool"
 const TOIL_DROP_TOOL := "drop_tool"
 const TOIL_RELEASE_ALL := "release_all"
-## issue #406 (docs/decisions/038): "deposit" is a new verb, not an extension
+## ADR 040: "deposit" is its own verb, not an extension
 ## of "place" -- it transfers carried hands into a construction site's own
 ## held_materials (ConstructionSiteTable) instead of minting a ground item, so
 ## it has no "cell still free" precondition and no ground-item side effect at
@@ -95,9 +95,9 @@ var _work_progress_clear: Callable
 ## Live in-flight re-route searches, keyed by colonist id -- the same
 ## Dictionary instance WorldState._reroutes holds (shared by reference, not
 ## copied), since persistence/state_codec.gd reads and rebuilds that field
-## directly and is out of this task's scope to change.
+## directly.
 var _reroutes: Dictionary
-## fetch_tool toil (colonist-ai.md 2/3.3, issue #271): extracted into its own
+## fetch_tool toil (colonist-ai.md 2/3.3): extracted into its own
 ## injected object (tool_fetch_toil.gd) purely to keep this file under its
 ## line budget (docs/architecture/core-budgets.json); constructed below once
 ## _job_kinds is loaded, from WorldState's own existing public tool-item API
@@ -114,7 +114,7 @@ var _route_search_factory: Callable
 ## 004: "at most 64 frontier expansions across all route work" per colonist
 ## per tick) has been spent this external WorldState.tick(), shared by
 ## reference with GlobalAssignment.set_route_budget() and cleared by
-## WorldState at the start of every tick() -- round 5 review: without this, a
+## WorldState at the start of every tick(). Without this, a
 ## colonist whose job the scheduler just activated (spending its own pending-
 ## route search this tick) could still have fetch_tool immediately start and
 ## resume a second, unrelated search the same tick, and a long fetch_tool ->
@@ -124,7 +124,7 @@ var _route_budget: Dictionary
 ## actually operates on/completes at (start_work()/advance_work_step()'s own
 ## work-progress key). Ordinarily job["target"] itself; a build job's real
 ## site instead of the reserved wood item's own tile job["target"] still
-## names (WorldState._work_target_for(), issue #278/#303 -- build needs its
+## names (WorldState._work_target_for() -- build needs its
 ## own second destination, mirroring how haul's job["cell"] is a separate
 ## field from job["target"], but build has no `place` toil of its own to
 ## redirect through _toil_cell_for()). Falls back to job["target"] when unset,
@@ -132,13 +132,13 @@ var _route_budget: Dictionary
 var _work_target_for: Callable
 ## site_exists(site_id: String) -> bool and site_deposit(site_id: String, kind:
 ## String, count: int) -> int (units actually accepted, clamped to what the
-## site still needs) back WorldState's ConstructionSiteTable (issue #406) for
+## site still needs) back WorldState's ConstructionSiteTable for
 ## the "deposit" toil below -- the same "inject the state-mutating callable,
 ## never touch WorldState directly" discipline every other toil already uses.
 var _site_exists: Callable
 var _site_deposit: Callable
 ## drop_tool toil + the handover wait + the destroyed-mid-job failure path
-## (issue #266, ADR 012 amendment), extracted into its own injected object
+## (ADR 013 amendment), extracted into its own injected object
 ## (tool_drop_toil.gd) for the same reason _tool_fetch is: keeps this file
 ## under its line budget (docs/architecture/core-budgets.json). Constructed
 ## below once _tool_fetch exists (it needs _tool_fetch.needs()).
@@ -147,7 +147,7 @@ var _tool_drop: ToolDropToilType
 ## passability(x,y,faction_id)->Dictionary must be WorldState.passability()
 ## (the one authoritative source; faction_id defaults "colony" there, but
 ## every call site in this file threads the acting colonist's own
-## factionId, F5 issue #294, so a non-colony actor's own movement never
+## factionId (F5), so a non-colony actor's own movement never
 ## silently uses colony door permissions). job_lookup(job_id)->Dictionary must return the
 ## active job record (at least "kind"), e.g. WorldState._scheduler.queue.
 ## get_job. work_ticks/move_ticks_per_tile are injected so this module never
@@ -157,7 +157,7 @@ var _tool_drop: ToolDropToilType
 ## ground item's own count by count (removing it entirely at 0), and
 ## place_item(kind, count, x, y)->String must mint a fresh item id and place
 ## a new ground item there, returning that id -- both WorldState's own _items
-## mutators (issue #402: pick_up/place move a count of units, not always a
+## mutators (ADR 037: pick_up/place move a count of units, not always a
 ## whole stack, and place() drops one fresh-id item per distinct hands kind).
 ## cell_occupied(x,y,excluding_colonist_id)
 ## ->bool must report whether another colonist or ground item occupies (x,y),
@@ -165,15 +165,15 @@ var _tool_drop: ToolDropToilType
 ## must report whether a need job's reserved source is still consumable
 ## (kind-aware lookups live in world_state.gd, colonist-ai.md 3.1/3.3), so
 ## consume() can fail typed instead of assuming success. work_progress_get
-## (target, job_id)->Variant (int, or null with nothing stored FOR job_id
-## specifically, round-6 review), work_progress_set(target, ticks_remaining,
+## (target, job_id)->Variant (int, or null with nothing stored for job_id
+## specifically), work_progress_set(target, ticks_remaining,
 ## job_id)->void, and work_progress_clear(target)->void must be WorldState's
 ## job-id-scoped store (colonist-ai.md 3.6): start_work() resumes from stored
 ## ticks instead of the full duration, and advance_work_step() keeps it in
-## sync (also stamping job_id as the key's current owner, issue #278/#303
-## round-3 review) so an interrupt never loses progress, and a different job
-## that later works the same tile can never inherit or clobber it (round-6
-## review: WorldState._resume_work_progress()/_suspend_work_progress()).
+## sync (also stamping job_id as the key's current owner) so an interrupt
+## never loses progress, and a different job that later works the same tile
+## can never inherit or clobber it (see
+## WorldState._resume_work_progress()/_suspend_work_progress()).
 func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callable, job_lookup: Callable,
 		content_registry,
 		item_lookup: Callable = Callable(), remove_item: Callable = Callable(), place_item: Callable = Callable(),
@@ -270,7 +270,7 @@ func start_assignment(colonist: Dictionary, job_id: String, path: Array, on_arri
 
 ## work toil: duration is fixed per job kind (WorldState.WORK_TICKS, injected
 ## so it stays byte-identical to the pre-toils constant). A kind absent from
-## _work_ticks (t5's haul: pick_up/place are instant, not timed) has no work
+## _work_ticks (haul: pick_up/place are instant, not timed) has no work
 ## phase at all: this is a no-op, leaving colonist.work null so the caller
 ## (WorldState) knows the colonist has simply arrived and must drive its own
 ## next toil instead of waiting on a timer. When the target tile already
@@ -364,7 +364,7 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 ## with record_as=TOIL_FETCH_TOOL and its own pickup on_arrive callable
 ## instead of the go_to toil's defaults, so the execution trace and arrival
 ## effect both reflect whichever toil is actually travelling this tick.
-## force_trim_last (issue #278/#303 round-1 review): when true, the found
+## force_trim_last: when true, the found
 ## path's last tile is dropped regardless of the target's own *current* real
 ## passability, unlike the ordinary trim condition below (which only trims a
 ## target that is impassable right now, correct for dig/chop/haul-leg-one's
@@ -377,7 +377,7 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 ## own always-impassable target.
 func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
-	# Step-off rule (issue #303 round-2 review): a colonist ALREADY standing on
+	# Step-off rule: a colonist already standing on
 	# a force-trim target (the stockpile sits on the build site itself, or the
 	# builder walked over it) has nothing for the trim below to drop -- the
 	# search returns the one-tile path [current] and arrival would start work
@@ -402,8 +402,8 @@ func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passa
 		# least one tile, and a save taken before _begin_go_to_reroute()'s
 		# search resolves (the initial fetch_tool leg, a fresh search after an
 		# excluded candidate, or the return-to-target leg after pickup) would
-		# otherwise persist an empty path and fail to reload (round 7 review
-		# finding). advance_route_step() (the only reader of route.path) is
+		# otherwise persist an empty path and fail to reload.
+		# advance_route_step() (the only reader of route.path) is
 		# never reached while rerouting != null, so this placeholder is read
 		# only by persistence until _resume_go_to_reroute() replaces it wholesale
 		# with the search's own resolved path.
@@ -483,7 +483,7 @@ func advance_work_step(colonist: Dictionary) -> String:
 	_record(TOIL_WORK, "complete")
 	return job_id
 
-## pick_up toil (colonist-ai.md 3.3, issue #402): re-validates its
+## pick_up toil (colonist-ai.md 3.3): re-validates its
 ## precondition -- the item still exists on the ground and the colonist
 ## stands on or adjacent to its tile -- every call, failing with a typed
 ## reason rather than throwing when it no longer holds (the item was already
@@ -520,12 +520,12 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 	_record(TOIL_PICK_UP, "complete")
 	return {"ok": true, "item_id": item_id, "count": moved}
 
-## place toil (colonist-ai.md 3.3, issue #402): re-validates that the
+## place toil (colonist-ai.md 3.3): re-validates that the
 ## colonist is still carrying something and the destination cell is still
 ## free -- in bounds, passable, and unoccupied by any other colonist or
-## ground item (no stockpile-zone membership yet -- t4) -- every call,
+## ground item (stockpile-zone membership is not checked here) -- every call,
 ## failing with a typed reason rather than throwing when any of that no
-## longer holds. On success deposits the colonist's ENTIRE current hands
+## longer holds. On success deposits the colonist's entire current hands
 ## contents onto cell in one call: one fresh ground item per distinct kind
 ## held (ActorInventory.hands_snapshot()), each minted through the injected
 ## place_item callable, then clears hands entirely. A caller that needs a
@@ -545,7 +545,7 @@ func place(colonist: Dictionary, cell: Vector2i) -> Dictionary:
 	_record(TOIL_PLACE, "complete")
 	return {"ok": true, "item_ids": placed_ids}
 
-## deposit toil (issue #406, docs/decisions/038): re-validates that the
+## deposit toil (ADR 040): re-validates that the
 ## colonist is still carrying something and the named construction site still
 ## exists, failing typed (REASON_NOT_CARRYING, REASON_SITE_GONE) otherwise. On
 ## success transfers every hands entry into site_id's own held_materials, one
@@ -615,8 +615,8 @@ func consume(colonist: Dictionary, job_id: String) -> Dictionary:
 ## advance_go_to() instead, exactly like a re-route.
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, assignment_path: Array, hooks: Dictionary) -> void:
 	var toils := get_toils(String(job["kind"]))
-	# issue #266 round 3 review: a destroyed active reservation must fail the
-	# job before ANY route interpretation runs, including is_dropping()'s own
+	# A destroyed active reservation must fail the
+	# job before any route interpretation runs, including is_dropping()'s own
 	# leg check below -- destroying an outstanding fetch_tool target used to
 	# make ToolFetchToil.current_target() report null, which is_dropping() (run
 	# first, back then) could misread as "not the fetch leg, must be a drop"
@@ -662,19 +662,19 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, assignment_p
 		return
 	_start_current_toil(colonist, job_id, job, toils, assignment_path, hooks)
 
-## Whether the go_to about to run is THIS job's own first (only, for a
+## Whether the go_to about to run is this job's own first (only, for a
 ## single-leg kind) leg. colonist.carrying is only a valid proxy for "already
 ## past this job's pick_up" when the job's own declared toils actually
 ## contain one -- a colonist carrying cargo from an unrelated interrupted
 ## haul/build (need/combat interrupt, ADR 009) still owes a single-leg kind
 ## (sleep, flee, dig, chop, forage, till, sow, incident, escape_trench) its
 ## one and only go_to, since none of those ever run a pick_up of their own
-## (round-6 review: raw is_carrying() wrongly reported such a leg as "leg two"
-## for those kinds, so _arrival_hook()/_next_toil_after_go_to() picked the
-## no-op arrival and the colonist never started work on arrival).
+## (a raw is_carrying() check would report such a leg as "leg two" for
+## those kinds, so _arrival_hook()/_next_toil_after_go_to() would pick the
+## no-op arrival and the colonist would never start work on arrival).
 ##
-## issue #403: a build job's own fetch leg may visit more than one source
-## before delivering (docs/decisions/036), so "already past pick_up" can no
+## A build job's own fetch leg may visit more than one source
+## before delivering (ADR 038), so "already past pick_up" can no
 ## longer be read off colonist.carrying alone -- a colonist that has picked up
 ## from one source but still needs another is still on "leg one" even though
 ## it is carrying something. `hooks["is_first_leg"]`, when present, decides
@@ -708,7 +708,7 @@ func _start_current_toil(colonist: Dictionary, job_id: String, job: Dictionary, 
 			var is_first: bool = _is_first_leg(toils, colonist, job, hooks)
 			var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
 			var use_assignment_path: bool = is_first and assignment_path.size() > 0 and assignment_path[0] == current
-			# issue #403 round-2 review: a build job's own submission-time seed
+			# A build job's own submission-time seed
 			# is only a placeholder target for the scheduler's own routing/
 			# scoring pass (WorldState._apply_build_submission()) -- the instant
 			# it actually activates, WorldState may have already swapped it for
@@ -732,8 +732,8 @@ func _start_current_toil(colonist: Dictionary, job_id: String, job: Dictionary, 
 			start_work(colonist, job_id)
 		"pick_up":
 			var item_id: String = (hooks["item_id_for"] as Callable).call(job)
-			# issue #403: build's own multi-source fetch clamps each pick_up to
-			# the remainder its declared cost still needs of THIS source's kind
+			# Build's own multi-source fetch clamps each pick_up to
+			# the remainder its declared cost still needs of this source's kind
 			# (hooks["pick_up_count_for"]), never haul's own default "take the
 			# whole reachable stack" -- otherwise a single generous source could
 			# fill every free hand with one kind, leaving no room for a second
@@ -744,7 +744,7 @@ func _start_current_toil(colonist: Dictionary, job_id: String, job: Dictionary, 
 				count = int((hooks["pick_up_count_for"] as Callable).call(job, colonist))
 			var result := pick_up(colonist, item_id, count)
 			if result.get("ok", false):
-				# on_pick_up_success (issue #403): lets build's own on-demand
+				# on_pick_up_success: lets build's own on-demand
 				# planner (WorldState._toil_on_pick_up_success()) decide whether
 				# to retarget this job at a further source or leave it aimed at
 				# the one just visited, now that hands reflect the pickup. Every
@@ -834,12 +834,12 @@ func _continue_go_to(colonist: Dictionary, job_id: String, job: Dictionary, hook
 ## Which toil follows the go_to occurrence that is_first selects (mirrors
 ## _next_toil_index()'s own is_first-based occurrence selection): "pick_up"
 ## has not yet run when is_first is true (this go_to is leg one, or the only
-## leg for a single-leg kind), so is_first true always means the FIRST go_to
-## in the array; false means the first go_to AFTER a pick_up (haul/build's
+## leg for a single-leg kind), so is_first true always means the first go_to
+## in the array; false means the first go_to after a pick_up (haul/build's
 ## leg two). Used only to decide the arrival effect below -- a haul/build leg
 ## whose own next toil is "pick_up" (not "work") must never auto-start the
-## work timer on arrival, the bug ADR 027 traced: advance_route_step()'s
-## default on_arrive is unconditional, so a job with ANY "work" toil
+## work timer on arrival, the bug ADR 028 traced: advance_route_step()'s
+## default on_arrive is unconditional, so a job with any "work" toil
 ## (build now has one) would otherwise start it the instant leg one reaches
 ## the wood, before pick_up ever runs.
 func _next_toil_after_go_to(toils: Array, is_first: bool) -> String:
@@ -889,7 +889,7 @@ func _within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
 ## to route/start-work directly or defer entirely to the fetch_tool toil --
 ## starting a route toward the job target, or the work timer, before this
 ## check would let a stale route/work state get reused as fetch_tool's own
-## travel leg once advance() runs (round 4 review finding). See
+## travel leg once advance() runs. See
 ## tool_fetch_toil.gd's needs() for why this must stay read-only.
 func needs_fetch_tool(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	return _tool_fetch.needs(colonist, job, job_id)
@@ -907,7 +907,7 @@ func _step_off_tile(tile: Vector2i, faction_id: String) -> Vector2i:
 
 ## Read-only counterpart of _arrival_hook()/_next_toil_after_go_to(), for a
 ## caller outside advance() (WorldState._resume_paused_job()/
-## _advance_go_to_or_resubmit(), issue #278/#303 round-1 review) that must
+## _advance_go_to_or_resubmit()) that must
 ## decide whether resuming an interrupted job's own go_to leg may safely
 ## start_work() directly. True only when the go_to occurrence is_first
 ## selects truly leads into a work toil -- false for a haul/build leg whose
@@ -920,11 +920,11 @@ func leads_into_work(kind: String, is_first: bool) -> bool:
 ## Passthrough for WorldState.get_jobs()'s presentation-only overlay
 ## (tool_handover.gd): {} unless job_id's own fetch_tool toil is currently
 ## waiting on colonist_id's reserved tool to be physically dropped by a
-## foreign holder (issue #266). See tool_drop_toil.gd's own doc comment.
+## foreign holder. See tool_drop_toil.gd's own doc comment.
 func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 	return _tool_drop.waiting_for_handover(colonist_id, job_id)
 
-## Persistence passthrough (state_codec.gd, issue #266 round 2 review): true
+## Persistence passthrough (state_codec.gd): true
 ## while colonist's current in-flight route is a drop_tool leg, so a restored
 ## re-route search can reconstruct the same plain passability the drop toil
 ## itself always uses (no target-tile exception) instead of the ordinary
@@ -932,7 +932,7 @@ func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 func is_dropping_leg(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> bool:
 	return _tool_drop.is_dropping(colonist, job_id, job, hooks)
 
-## Persistence passthrough (state_codec.gd, issue #271 round 6/ADR 012):
+## Persistence passthrough (state_codec.gd/ADR 013):
 ## job_id -> Array[String] of tool ids _tool_fetch has already proven
 ## unreachable within a job's current fetch attempt, so a save/load can
 ## restore the exact set instead of re-trying an already-excluded candidate.

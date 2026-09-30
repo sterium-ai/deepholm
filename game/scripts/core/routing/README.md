@@ -1,4 +1,6 @@
-# Route search contract (#46)
+# Route search contract
+
+> **In short:** How the game finds a walking path between two tiles a little at a time, so long searches never slow the game down and always give the same answer.
 
 `RouteSearch` is a plain `RefCounted` module implementing ADR 003 principle 1
 and the bounded route-work budget in `docs/architecture/simulation-boundaries.md`.
@@ -19,8 +21,7 @@ anything impassable); this module has no tile-type knowledge of its own.
 `cost_fn` may return either:
 
 - a `bool` — `true` means passable with cost 1, `false` means impassable.
-  This is the module's original contract and lets any caller written before
-  this task keep passing a plain passability predicate unchanged.
+  This lets a caller pass a plain passability predicate.
 - a number — the cost to enter that tile; a value `<= 0` means impassable, a
   positive value is the tile's movement cost (a chair costs more than a
   floor tile, for example).
@@ -34,7 +35,7 @@ the caller holds onto it. There is no separate save/restore step; resuming
 means calling `resume()` again on the same instance.
 
 - `RouteSearch.STEP_BUDGET = 64`: the most frontier tiles a single `resume()`
-  call may expand. Later tasks reuse this constant instead of a new literal.
+  call may expand. Callers reuse this constant instead of a new literal.
 - `resume()` advances the search by at most `STEP_BUDGET` steps and returns
   the status string. Call it again on the same instance to continue; it
   never restarts from `start`.
@@ -58,9 +59,8 @@ frontier tiles at equal cost the earliest-discovered tile is dequeued first.
 Because a tile's cost depends only on the tile itself (not on which neighbor
 enters it), the first predecessor to discover a given tile is always its
 cheapest predecessor, so a uniform cost-1 map's tie-break and results are
-*identical* to this module's original plain breadth-first search — this is
-what lets every uniform-cost caller (and every existing `is_passable`-style
-boolean callable) keep working unchanged. Given the same `cost_fn`, `start`,
+*identical* to a plain breadth-first search, so uniform-cost callers (and
+`is_passable`-style boolean callables) get breadth-first results. Given the same `cost_fn`, `start`,
 `target`, and bounds, `resume()` calls always take the same number of calls
 and produce the same path. No randomness is used or needed; this module
 never calls `randi()`, reads wall-clock/engine time, or runs on
@@ -104,9 +104,9 @@ if status == RouteSearch.STATUS_FOUND:
 ```
 
 `WorldState` wires this to `passability(x, y)["cost"]` (see
-`docs/architecture/colonist-ai.md` section 3.5); `GlobalAssignment` wraps
-that in `_routable()` so a route may still terminate on an otherwise-
-impassable job target (see below).
+[`docs/architecture/colonist-ai.md`](../../../../docs/architecture/colonist-ai.md)
+section 3.5); `GlobalAssignment` wraps that in `_routable()` so a route may
+still terminate on an otherwise impassable job target.
 
 `test_routing_budget.gd` covers: a short route completing within one call's
 budget; a route landing exactly on the `STEP_BUDGET` boundary (completes in
@@ -122,10 +122,9 @@ requests) reporting `STATUS_UNREACHABLE` rather than `STATUS_FOUND`; and a
 weighted case proving the search is genuinely cost-based rather than
 tile-count shortest-path — a shorter route through three cost-3 tiles loses
 to a longer, cheaper all-cost-1 route, and removing the costly tiles flips
-the choice back to the direct route. Run the issue's import, headless test,
-and forbidden-core-API scan commands.
+the choice back to the direct route.
 
 This is a search primitive, not job or reservation semantics: it has no
 concept of a colonist, a claim, priority, or fairness across colonists.
-Those remain the responsibility of a future task per this module's
-non-goals.
+Those belong to the job queue and the global scheduler
+(`game/scripts/core/jobs/`, `game/scripts/core/scheduling/`).

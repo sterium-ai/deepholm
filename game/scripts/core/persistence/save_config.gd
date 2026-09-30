@@ -1,9 +1,9 @@
 class_name SaveConfig
 extends RefCounted
 
-## Single source of truth for autosave cadence (issue #95). Both
-## autosave_trigger.gd and its test read this constant so the interval can
-## never drift between the trigger and its own acceptance check.
+## Single source of truth for autosave cadence. Both autosave_trigger.gd and
+## its test read this constant so the interval can never drift between the
+## trigger and the test that checks it.
 ##
 ## The debug viewer's tick driver (tick_driver.gd) submits
 ## BASE_TICKS_PER_SECOND * speed world ticks per real second; at the base

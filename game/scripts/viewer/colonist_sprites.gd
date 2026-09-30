@@ -7,7 +7,7 @@ extends Node2D
 ## updates that cache; advance(delta) (every rendered frame, from _process()
 ## below, and directly callable by tests with no scene loop) turns real
 ## elapsed time into a glide fraction `t` over one full tile-crossing's real
-## duration (issue #412: seconds_per_tick() * move_ticks_per_tile, not
+## duration (seconds_per_tick() * move_ticks_per_tile, not
 ## seconds_per_tick() alone -- travel is continuous across tile boundaries).
 
 const TILE_SIZE := 16.0
@@ -31,8 +31,8 @@ const SPRITE_POSITION_OFFSET := Vector2(
 	TILE_SIZE / 2.0 - FRAME_SOURCE_SIZE * DISPLAY_SCALE / 2.0,
 	TILE_SIZE - FRAME_FEET_Y * DISPLAY_SCALE)
 
-## Carried-item marker offset from the colonist sprite's own top-left origin
-## (issue #189 acceptance item 7): above and to the right, so it reads as a
+## Carried-item marker offset from the colonist sprite's own top-left origin:
+## above and to the right, so it reads as a
 ## badge on the sprite rather than overlapping its face.
 const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.5, -TILE_SIZE * 0.25)
 const CARRIED_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
@@ -49,11 +49,11 @@ const TRAPPED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.1, -TILE_SIZE * 0.35)
 const TRAPPED_MARKER_SIZE := Vector2(TILE_SIZE * 0.8, TILE_SIZE * 0.5)
 const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 
-## Health bar (issue #302): a thin two-rect bar (grey background, coloured
+## Health bar: a thin two-rect bar (grey background, coloured
 ## fill) above the colonist's own sprite. health_bar_fill()/health_bar_color()
 ## are pure static functions -- callable on this script's own preload without
 ## instantiating a Node2D -- so a headless test can assert bar values without
-## a live SceneTree, per the objective's own requirement.
+## a live SceneTree.
 const HEALTH_BAR_OFFSET := Vector2(0, -TILE_SIZE * 0.3)
 const HEALTH_BAR_SIZE := Vector2(TILE_SIZE, 3.0)
 const HEALTH_BAR_BACKGROUND := Color(0.15, 0.15, 0.15, 0.9)
@@ -81,8 +81,8 @@ var _move_ticks_per_tile: int = 1
 ## elapsed: float, t: float, facing: "down"|"up"|"side", flip_h: bool,
 ## carrying: bool}. `elapsed`/`t` are advance()'s own glide clock, reset to 0
 ## whenever refresh() records a tile change; `facing`/`flip_h` persist across
-## an idle stretch (issue #364: "an idle colonist keeps the facing of its last
-## movement"). Cleared wholesale by set_world() so the next refresh() treats
+## an idle stretch (an idle colonist keeps the facing of its last
+## movement). Cleared wholesale by set_world() so the next refresh() treats
 ## every colonist as freshly spawned (case 1: snap, no glide).
 var _motion: Dictionary = {}
 
@@ -110,11 +110,11 @@ func _init() -> void:
 
 func set_world(world_ref) -> void:
 	world = world_ref
-	# Viewer-purity (test_architecture_rules.gd): the one get_* call this file
-	# makes on `world` beyond the pre-existing set, read once here rather than
-	# through a second ContentRegistry load of its own (ADR 010).
+	# Viewer purity (test_architecture_rules.gd): read once here through a
+	# world.get_* call rather than through a second ContentRegistry load of
+	# its own (ADR 010).
 	_move_ticks_per_tile = world.get_move_ticks_per_tile() if world != null else 1
-	# Load/New Game (issue #364 acceptance): drop every cached previous/current
+	# Load/New Game: drop every cached previous/current
 	# tile so the next refresh() below sees no prior state for any colonist and
 	# snaps each one (case 1), instead of gliding from a now-meaningless tile
 	# left over from the previous world.
@@ -124,7 +124,7 @@ func set_world(world_ref) -> void:
 func refresh() -> void:
 	_refresh()
 
-## The shared TickDriver (issue #364): advance() reads its seconds_per_tick()
+## The shared TickDriver: advance() reads its seconds_per_tick()
 ## to convert real elapsed time into a glide fraction. Settable independently
 ## of set_world() (boot.gd wires it once at startup) and optional -- with none
 ## set, advance() treats every colonist as paused (t frozen at its last value).
@@ -137,16 +137,16 @@ func set_visible_for_art(enabled: bool) -> void:
 func _process(delta: float) -> void:
 	advance(delta)
 
-## Real-time interpolation tick (issue #364), called once per rendered frame
+## Real-time interpolation tick, called once per rendered frame
 ## by _process() above and directly callable by a headless test with no
 ## running SceneTree. Accumulates elapsed seconds since each colonist's last
 ## tile change and turns it into t = clamp(elapsed / glide_duration, 0, 1),
 ## where glide_duration is seconds_per_tick() * move_ticks_per_tile -- the
-## real duration of one full tile-crossing (issue #412: travel is continuous
-## across tile boundaries; a single seconds_per_tick() is only one simulation
-## tick, one quarter of a tile at the content-declared move_ticks_per_tile,
-## and using it alone made the sprite finish its glide early and then hold at
-## the destination pixel for the remaining ticks). seconds_per_tick() == 0.0
+## real duration of one full tile-crossing (travel is continuous across tile
+## boundaries; a single seconds_per_tick() is only one simulation tick, one
+## quarter of a tile at the content-declared move_ticks_per_tile, so using it
+## alone would make the sprite finish its glide early and then hold at the
+## destination pixel for the remaining ticks). seconds_per_tick() == 0.0
 ## (paused) leaves elapsed/t untouched so the drawn position and animation
 ## frame freeze exactly where they were.
 func advance(delta: float) -> void:
@@ -179,7 +179,7 @@ func _refresh() -> void:
 			_sprites[colonist_id] = sprite
 			add_child(sprite)
 
-		# Carried-item marker (issue #189 acceptance item 7): a small badge
+		# Carried-item marker: a small badge
 		# over the colonist's own sprite, visible only while carrying. Added
 		# after the AnimatedSprite2D each tick so it always draws on top,
 		# mirroring how designation_overlay.gd is added last in map_view.gd
@@ -265,14 +265,14 @@ func _refresh() -> void:
 	_refresh_health_bars()
 
 ## Updates (and returns) `colonist_id`'s cached motion state for its newly
-## observed `tile`, applying the objective's four refresh-time rules:
+## observed `tile`, applying four refresh-time rules:
 ## (1) no prior state (spawn/first sight) -> snap; (2) Chebyshev distance 1
 ## from the last current_tile -> glide (previous <- old current, t resets to
 ## 0); (3) Chebyshev distance > 1 (catch-up burst, teleport-like change) ->
 ## snap; distance 0 -> state unchanged except `carrying` (advance() keeps
 ## ticking its own elapsed/t independently). Facing/flip_h only change on an
 ## actual single-step move (case 2); an idle or snapped colonist keeps its
-## last movement's facing, per the objective's "idle keeps last facing" rule.
+## last movement's facing.
 func _update_motion(colonist_id: String, tile: Vector2i, colonist: Dictionary) -> Dictionary:
 	var carrying: bool = colonist.get("carrying") != null
 	var building: bool = _is_building(colonist)
@@ -307,7 +307,7 @@ func _update_motion(colonist_id: String, tile: Vector2i, colonist: Dictionary) -
 	state["t"] = 0.0
 	return state
 
-## The interpolated, feet-anchored pixel position (issue #364) shared by the
+## The interpolated, feet-anchored pixel position shared by the
 ## AnimatedSprite2D and both markers: lerp(previous_tile, current_tile, t) in
 ## tile units, converted to pixels, then offset per docs/art/style.md's feet
 ## anchor rule.
@@ -318,10 +318,9 @@ func _drawn_position(state: Dictionary) -> Vector2:
 
 ## "carry_"|"" + "walk"|"idle" + "_" + facing, matching colonist_frames.tres's
 ## 12 walk/idle/carry animation names, plus up to 3 "build_"+facing entries
-## (issue #409: the build work-toil's own animation, no carry_build variant
+## (the build work toil's own animation; there is no carry_build variant
 ## since a colonist never carries cargo while working a workbench toil).
-## Movement is current_tile != previous_tile (the objective's own direction
-## rule), independent of t -- a colonist stays in its walk animation for the
+## Movement is current_tile != previous_tile, independent of t -- a colonist stays in its walk animation for the
 ## whole glide, not just while t < 1. A colonist mid-"build" job's work toil
 ## (state["building"], resolved in _update_motion()) always shows its build
 ## animation regardless of motion/carrying, since the work toil only ever
@@ -389,7 +388,7 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	if trapped_marker != null:
 		trapped_marker.position = position + TRAPPED_MARKER_OFFSET
 
-## Health bar (issue #302, round-1 review): every actor with a `health`
+## Health bar: every actor with a `health`
 ## component, not just the worker-only roster the sprite loop above renders
 ## -- WorldState.get_actors_with_health() (unlike get_colonists()) is not
 ## filtered to worker actors, so a wolf/trader gets its own bar even though

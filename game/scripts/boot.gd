@@ -1,6 +1,6 @@
 extends Node
 
-## Debug viewer entry point (issue #48). Builds the seeded scenario, prints
+## Debug viewer entry point. Builds the seeded scenario, prints
 ## its state hash, and drives WorldState purely through explicit ticks. See
 ## scripts/viewer/ for the map, colonist panel, and tick-speed controls.
 
@@ -49,7 +49,7 @@ var _new_game_confirm: ConfirmationDialog
 var _pending_new_game_seed: int = 0
 var _startup_resume_message: String = ""
 ## Game-session marker passed to every save_manual()/save_autosave() call
-## (issue #299 round 1, save_manager.gd's header comment): 0 for the
+## (save_manager.gd's header comment): 0 for the
 ## scenario/fixture world built in _init() and for any ordinary continuing
 ## game, adopted from a loaded save's own "epoch" by _restore_from_save()/
 ## _on_load_pressed(), and bumped to a strictly new value by
@@ -75,19 +75,17 @@ func _init() -> void:
 	_need_alerts_label = Label.new()
 	_room_label = Label.new()
 
-## The default boot world (issue #300 Goal: "the normal new game ...
-## never the default normal experience" for the debug scenario): a real
-## New Game -- WorldGenerator's river/vegetation generator at mapgen.json's
-## own default_new_game_width/height, with real starting tools, incidents on
-## (F5, issue #294: the live viewer is the one caller that wants
-## spawn_incident reachable) -- never DebugScenarioType's seeded dig-order
-## queue and forced furniture, which remains reachable only explicitly: by a
-## test calling DebugScenarioType.build() directly (test_debug_scenario_
-## objects.gd, test_viewer_hash.gd below), or from the running viewer via the
+## The default boot world is a real New Game, not the debug scenario:
+## WorldGenerator's river/vegetation generator at mapgen.json's
+## default_new_game_width/height, with real starting tools and incidents
+## enabled (the live viewer is the one caller that wants spawn_incident
+## reachable). DebugScenarioType's seeded dig-order queue and forced
+## furniture remain reachable only explicitly: by a test calling
+## DebugScenarioType.build() directly (test_debug_scenario_objects.gd,
+## test_viewer_hash.gd), or from the running viewer via the
 ## "Debug Scenario" button (_on_debug_scenario_pressed()). A pure function (no
 ## scene/node access) so test_viewer_hash.gd can call it directly and compare
-## its hash against the scene-built world, exactly like it used to compare
-## against DebugScenarioType.build().
+## its hash against the scene-built world.
 const DEFAULT_BOOT_SEED := 20260915
 
 static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: int = 10) -> WorldStateType:
@@ -121,14 +119,14 @@ func _ready() -> void:
 
 	_build_ui()
 
-## Resumes the persisted colony on startup (round-6 finding): runs the same
+## Resumes the persisted colony on startup: runs the same
 ## load_best()-decode-replace path the Load button uses, once, so reloading
 ## the web tab after an autosave picks the saved colony back up instead of
-## starting a fresh DebugScenario every time. Reuses _replace_world() -- the
+## starting a fresh world every time. Reuses _replace_world() -- the
 ## same helper the Load button calls -- so tick_driver, autosave_trigger,
 ## and (once built) the map/colonist views all repoint at the restored
 ## world identically to a manual Load. When load_best() finds nothing
-## valid, the fresh scenario built in _init() is left untouched and no
+## valid, the fresh world built in _init() is left untouched and no
 ## message is recorded; _build_ui() falls back to the normal
 ## "last saved: never" status in that case.
 func _restore_from_save() -> void:
@@ -137,8 +135,8 @@ func _restore_from_save() -> void:
 		return
 	_current_epoch = int(result.get("epoch", 0))
 	var new_world: WorldStateType = StateCodecType.decode(result["state"])
-	# The live viewer's own incident configuration (recovery review round 3,
-	# issue #294): decode() always builds disabled, so a startup restore must
+	# The live viewer's own incident configuration: decode() always builds
+	# with incidents disabled, so a startup restore must
 	# re-apply it the same way _init()'s fresh build does, or a resumed colony
 	# silently loses its daily incidents and Spawn buttons.
 	new_world.enable_incidents()
@@ -160,24 +158,23 @@ func _build_ui() -> void:
 		["controls.load", _on_load_pressed], ["controls.center", _on_center_pressed],
 		["controls.navigate", func(): _select_tool(-1)], ["controls.toggle_art", _on_toggle_art_pressed]]:
 		_controls.add_child(_make_button(entry[0], entry[1]))
-	# New game controls (issue #299): a visible, editable numeric seed --
+	# New game controls: a visible, editable numeric seed --
 	# left blank, _on_new_game_pressed() picks one and writes it back here so
-	# it stays documented/visible, never silently chosen. Hardcoded English
-	# labels, not routed through _text_table: data/text/en.json is outside
-	# this task's owned paths (see docs/decisions/019-world-dimensions-and-generation.md).
+	# it stays documented/visible, never silently chosen (see
+	# docs/decisions/019-world-dimensions-and-generation.md). Hard-coded
+	# English labels; not yet routed through the text table.
 	_seed_input = LineEdit.new()
 	_seed_input.placeholder_text = "Seed (blank = random)"
 	_seed_input.custom_minimum_size.x = 160
 	_controls.add_child(_seed_input)
 	_controls.add_child(_make_button_text("New Game", _on_new_game_pressed))
-	# Explicit opt-in to the seeded diagnostic scenario (issue #300 Goal:
-	# "keep the diagnostic scenario as an explicit option and fixtures,
-	# never the default normal experience") -- the random dig-order queue
+	# Explicit opt-in to the seeded diagnostic scenario, which is kept as an
+	# option and for fixtures but is never the default -- the random dig-order queue
 	# and forced furniture DebugScenarioType.build() places are reachable from
 	# the running viewer only by pressing this button, never at startup.
 	_controls.add_child(_make_button_text("Debug Scenario", _on_debug_scenario_pressed))
-	# The active world's own seed (round 5 review finding 2), distinct from
-	# _seed_input above: that field is an editable DRAFT for the next New
+	# The active world's own seed, distinct from
+	# _seed_input above: that field is an editable draft for the next New
 	# Game, overwritten by _on_new_game_pressed() and never touched by Load,
 	# so it goes stale/misleading the moment a different colony is restored.
 	# This label always reflects whichever WorldState is actually running --
@@ -262,7 +259,7 @@ func _build_ui() -> void:
 func _on_center_pressed() -> void:
 	_map_viewport.center_colonists()
 
-## Runs the exact same command rules apply() would (WorldState.preview(), issue #346) without
+## Runs the exact same command rules apply() would (WorldState.preview()) without
 ## mutating state or round-tripping through StateCodec: a read-only dry run per tile, in exactly
 ## commit order. Preview introduces neither duplicated rules nor live events.
 func _preview_validity(tiles: Array[Vector2i]) -> Array[bool]:
@@ -316,11 +313,11 @@ func _refresh() -> void:
 const NEED_UNMET_PREFIX := "need_unmet:"
 const NEED_SOURCE_MISSING_PREFIX := "need_source_missing:"
 
-## Standing alert list (colonist-ai.md 3.1/3.8/4 acceptance item 7): every
+## Standing alert list (colonist-ai.md sections 3.1, 3.8 and 4): every
 ## colonist currently exposing need_unmet:<kind> or need_source_missing:<kind>
 ## (WorldState.get_colonist_need_reason()), one line each, id-sorted, followed
 ## by every incident_started event WorldState.get_events() has recorded so far
-## (F5, issue #296 acceptance item 6) -- an incident is a one-time historical
+## -- an incident is a one-time historical
 ## fact rather than an ongoing condition, so unlike the need lines above it is
 ## never dropped once shown, only appended to as new incidents fire. Rebuilt
 ## from scratch every refresh instead of appended to, so the need portion of
@@ -355,9 +352,8 @@ func _update_need_alerts_label() -> void:
 		lines.append(_incident_started_alert_line(event))
 	_need_alerts_label.text = "\n".join(lines)
 
-## Hardcoded English text, not routed through _text_table (same reasoning as
-## the New Game controls above: data/text/en.json is outside this task's
-## owned paths).
+## Hard-coded English text; not yet routed through the text table (like the
+## New Game controls above).
 func _incident_started_alert_line(event: Dictionary) -> String:
 	var data: Dictionary = event.get("data", {})
 	return "Incident: %s (%s)" % [String(data.get("incident_id", "")), String(data.get("faction", ""))]
@@ -369,7 +365,7 @@ func _make_button(text_key: String, on_pressed: Callable) -> Button:
 	return button
 
 ## Like _make_button() but with literal text instead of a text-table key
-## (issue #299 New Game button: see the owned-paths note where it is added).
+## (used for the hard-coded English labels such as the New Game button).
 func _make_button_text(text: String, on_pressed: Callable) -> Button:
 	var button := Button.new()
 	button.text = text
@@ -401,7 +397,7 @@ func _command_for_tile(tool: int, tile: Vector2i) -> Dictionary:
 			"type": "remove_object",
 			"payload": {"x": tile.x, "y": tile.y},
 		}
-	# Build tools (issue #278/#303 round 2): the same command map_view.gd's
+	# Build tools: the same command map_view.gd's
 	# click path submits, so _preview_validity()'s hover colouring runs the
 	# identical read-only rule (WorldState.preview() -> _check_build_command()).
 	var build_kind := _build_kind_for_tool(tool)
@@ -436,20 +432,19 @@ func _command_for_tile(tool: int, tile: Vector2i) -> Dictionary:
 	}
 
 ## The tile a pending order is interacted with at: a site_fetch/site_work
-## job's own construction site (issue #406, supersedes the single "build"
-## job's own #303-round-2 special case) -- its "target" is the fetch source
-## tile or the site itself, but "site" always names the site -- any other
-## job's target.
+## job's construction site (its "target" is the fetch source tile or the
+## site itself, but "site" always names the site); for any other job, its
+## target.
 func _order_tile(job: Dictionary) -> Vector2i:
 	if job.get("site") != null:
 		return job["site"]
 	return job["target"]
 
 ## A construction site has no job at all until ConstructionGiver submits one
-## on its own per-tick schedule (issue #406, ADR 038), so ordering a build and
+## on its own per-tick schedule (ADR 040), so ordering a build and
 ## cancelling it before the next tick must still resolve to something: falls
 ## back to the site record itself, keyed by any of its footprint tiles
-## (get_construction_site(), issue #406) -- WorldState._apply_cancel_job_command()
+## (get_construction_site()) -- WorldState._apply_cancel_job_command()
 ## recognises the same site id standing in for a job id.
 func _cancel_job_for_tile(tile: Vector2i) -> Dictionary:
 	var best := {}
@@ -508,7 +503,7 @@ func _commit_rectangle(tiles: Array[Vector2i]) -> Array[Dictionary]:
 	_update_rejected_tiles_label(rejected)
 	return rejected
 
-## F5 "Rooms": presentation-only readout of the last selected tile's room
+## Rooms: presentation-only readout of the last selected tile's room
 ## (docs/architecture/extension-points.md "Presentation") -- reads
 ## WorldState.get_room_at() and picks a name, Bedroom over Storeroom over
 ## plain Room, adding no simulation rule of its own. Recomputed from
@@ -652,9 +647,8 @@ func _on_map_zone_add_committed(result: Dictionary) -> void:
 
 ## The build tool's own click-to-place path (map_view.gd's build_committed
 ## signal), mirroring _on_map_zone_add_committed()'s ok/rejected handling.
-## Hardcoded English text, not routed through _text_table (data/text/en.json
-## is outside this task's owned paths, same as this file's other literal
-## strings above).
+## Hard-coded English text; not yet routed through the text table (like this
+## file's other literal strings above).
 func _on_map_build_committed(result: Dictionary) -> void:
 	_refresh_room_label()
 	if _rejected_tiles_label == null:
@@ -667,23 +661,23 @@ func _on_map_build_committed(result: Dictionary) -> void:
 func _on_toggle_art_pressed() -> void:
 	_map_view.toggle_art_enabled()
 
-## F5 (issue #294): one debug button per content/incidents.json row, each
-## dispatching spawn_incident(id) below, so the owner can trigger an incident
+## One debug button per content/incidents.json row, each
+## dispatching spawn_incident(id) below, so an incident can be triggered
 ## from the running viewer. Built by _ready() into the control bar, and by
 ## test_incidents.gd directly (a headless test never runs _ready()).
 func _make_incident_buttons() -> Array[Button]:
 	var buttons: Array[Button] = []
 	for entry in world._content.list("incidents"):
 		var incident_id := String(entry["id"])
-		# A plain label: data/text/en.json is outside this change's scope, and a
-		# text-table miss would warn on every boot.
 		var button := Button.new()
-		button.text = "Spawn %s" % incident_id
+		button.text = _incident_display_name(incident_id)
+		button.tooltip_text = "Debug: trigger this incident now"
+		button.set_meta("incident_id", incident_id)
 		button.pressed.connect(spawn_incident.bind(incident_id))
 		buttons.append(button)
 	return buttons
 
-## The viewer's spawn_incident dispatch (F5, issue #294): the debug buttons
+## The viewer's spawn_incident dispatch: the debug buttons
 ## above call this; test_incidents.gd presses them. Returns
 ## WorldState.apply()'s own result so a caller can inspect it.
 func spawn_incident(incident_id: String) -> Dictionary:
@@ -692,9 +686,24 @@ func spawn_incident(incident_id: String) -> Dictionary:
 		"tick": world.get_tick(), "type": "spawn_incident", "payload": {"id": incident_id},
 	})
 	if _status_label != null:
-		var outcome: String = "ok" if result.get("ok", false) else String(result.get("rejection", {}).get("reason", ""))
-		_status_label.text = "spawn_incident %s: %s" % [incident_id, outcome]
+		var display_name := _incident_display_name(incident_id)
+		if result.get("ok", false):
+			_status_label.text = "%s: started." % display_name
+		else:
+			_status_label.text = "%s: not started (%s)." % [display_name, String(result.get("rejection", {}).get("reason", ""))]
 	return result
+
+## Player-facing name of an incident: its "incident.<id>" text-table entry,
+## or the id with underscores replaced and the first letter capitalised when
+## a content incident has no entry yet.
+func _incident_display_name(incident_id: String) -> String:
+	var key := "incident." + incident_id
+	if _text_table == null:
+		_text_table = TextTableType.new(TEXT_TABLE_PATH)
+	if _text_table.has_string(key):
+		return _text_table.get_string(key)
+	var words := incident_id.replace("_", " ")
+	return words.substr(0, 1).to_upper() + words.substr(1)
 
 func _on_pause_pressed() -> void:
 	tick_driver.pause()
@@ -715,7 +724,7 @@ func _on_save_pressed() -> void:
 	var result: Dictionary = save_manager.save_manual(world, _current_epoch)
 	if result.get("ok", false):
 		# The player has now explicitly committed this game to disk: autosave
-		# may safely resume (or keep running) for it (issue #299 round 1) --
+		# may safely resume (or keep running) for it --
 		# a no-op when it was already enabled.
 		autosave_trigger.set_enabled(true)
 	_handle_save_result(result)
@@ -741,8 +750,7 @@ func _on_autosaved(result: Dictionary) -> void:
 ## Resolves the seed field (blank picks one via the application layer's own
 ## global RNG -- never core, see simulation-boundaries.md) and writes the
 ## resolved value back so it stays visible/documented, then asks for
-## confirmation before regenerating the live world (issue #299: "Regenerating
-## a live game requires confirmation").
+## confirmation before regenerating the live world.
 func _on_new_game_pressed() -> void:
 	var seed_text := _seed_input.text.strip_edges()
 	var seed_value: int
@@ -762,7 +770,7 @@ func _on_new_game_pressed() -> void:
 func _on_new_game_confirmed() -> void:
 	_start_new_game(_pending_new_game_seed)
 
-## Explicit diagnostic opt-in (issue #300): swaps in DebugScenarioType's own
+## Explicit diagnostic opt-in: swaps in DebugScenarioType's own
 ## seeded scenario (random dig-order queue, forced wall/furniture/berry_bush/
 ## bed row, a pre-plowed/seeded farm plot) exactly like Load/New Game swap in
 ## any other world, through the same _replace_world() path -- never the
@@ -778,15 +786,14 @@ func _on_debug_scenario_pressed() -> void:
 		_status_label.text = "Debug scenario: seed %d." % DebugScenarioType.SCENARIO_SEED
 
 ## Builds a fresh WorldState at mapgen.json's default_new_game_width/height
-## (256x256, issue #299) the same way build_default_world() does, and swaps it
+## (256x256) the same way build_default_world() does, and swaps it
 ## in exactly like Load does -- never touches save_manager, so the previous
 ## save is left exactly as it was until the player explicitly presses Save.
 ## Mints a strictly new epoch (see _current_epoch's own doc comment), suspends
-## autosaving until that explicit Save happens (round 1 review: without this,
-## a ticking-but-unsaved new game could silently rotate into an existing
-## autosave slot from the game just replaced, contradicting the New Game
-## confirmation's own promise), and pauses (issue #300 Goal: "the normal
-## new game starts paused").
+## autosaving until that explicit Save happens (otherwise a ticking but
+## unsaved new game could silently rotate into an existing autosave slot
+## from the game just replaced, contradicting the New Game confirmation's
+## promise), and starts paused.
 func _start_new_game(seed_value: int) -> void:
 	var new_world := build_default_world(seed_value, 10)
 	_current_epoch = maxi(_current_epoch, save_manager.highest_known_epoch()) + 1
@@ -796,13 +803,13 @@ func _start_new_game(seed_value: int) -> void:
 	if _status_label != null:
 		_status_label.text = "New game: seed %d (%dx%d)." % [seed_value, new_world.get_map_width(), new_world.get_map_height()]
 
-## Deterministic starting prerequisites (round 1 review): every job kind that
+## Deterministic starting prerequisites: every job kind that
 ## declares a needs_tool requirement in jobs.json (dig -> pick, chop -> axe)
 ## gets one ground tool item within the world's own real spawn clearing
-## (issue #300: WorldGenerator.place_spawn()'s river-aware, resource-validated
+## (WorldGenerator.place_spawn()'s river-aware, resource-validated
 ## search, not mapgen.json's spawn_area_x/y -- that field is now only the
 ## absolute-last-resort fallback anchor a total search failure would use, see
-## docs/decisions/020), through the same spawn_ground_tool_item()/fetch_tool
+## ADR 020), through the same spawn_ground_tool_item()/fetch_tool
 ## toil path a player-placed or world-generated tool would use -- never a
 ## bypass of the work engine's tool-fetch requirement, just a real tool
 ## actually present to fetch. Tool kinds are sorted for a placement order
@@ -810,7 +817,7 @@ func _start_new_game(seed_value: int) -> void:
 ## for a given seed. Static (no instance state used) so build_default_world()
 ## can call it without a Boot node.
 ##
-## Round 2 review: reading clearing_x/clearing_y/clearing_width and computing
+## Reading clearing_x/clearing_y/clearing_width and computing
 ## `clearing_x + i % clearing_width` blindly could place a tool on a still-
 ## water cell whenever a fallback tier's own rectangle metadata was not fully
 ## painted (or, for a repaired/constructed clearing, was never a solid
@@ -839,9 +846,9 @@ static func _needed_tool_kinds() -> Array[String]:
 	tool_kinds.sort()
 	return tool_kinds
 
-## One "bed" object per colonist (round 2 review: normal generation supplied
-## no rest-need source at all, so the "rest" need in content/needs.json --
-## source_kind "bed" -- was permanently unmet on every fresh New Game).
+## One "bed" object per colonist: normal generation supplies no other
+## rest-need source, so without these the "rest" need in content/needs.json
+## (source_kind "bed") would be permanently unmet on every fresh New Game.
 ## Placed through the same place_object command path a player-built bed would
 ## use (never a bypass of its own occupancy/tree/colonist validation), on the
 ## same guaranteed-safe land tile pool _spawn_starting_tools() above draws
@@ -860,8 +867,7 @@ static func _spawn_starting_beds(new_world: WorldStateType, mapgen: Dictionary) 
 			"type": "place_object", "payload": {"x": tile.x, "y": tile.y, "kind": "bed"},
 		})
 
-## The spawn clearing's own guaranteed-safe land tile pool (issue #300 round 2
-## review), shared by _spawn_starting_tools()/_spawn_starting_beds() so both
+## The spawn clearing's own guaranteed-safe land tile pool, shared by _spawn_starting_tools()/_spawn_starting_beds() so both
 ## draw from the same deterministic list instead of guessing independent
 ## offsets that could collide with each other or with a colonist's own tile.
 ## `needed` is a hint only (both callers request their own full-size slice and
@@ -915,8 +921,8 @@ func _replace_world(new_world: WorldStateType) -> void:
 	autosave_trigger.attach(new_world, save_manager, _current_epoch)
 	if _map_view != null:
 		_map_view.set_world(new_world)
-		# Reapplies camera bounds for the newly attached world's own dimensions
-		# (round 1 review): without this, panning to a large world's far corner
+		# Reapplies camera bounds for the newly attached world's own dimensions.
+		# Without this, panning to a large world's far corner
 		# and then loading/starting a smaller one left the camera at its old,
 		# now out-of-range position, leaving the viewport blank until another
 		# pan/zoom. center_colonists() already calls cancel_gesture() first.
@@ -931,10 +937,10 @@ func _replace_world(new_world: WorldStateType) -> void:
 	_update_active_seed_label()
 	_refresh_room_label()
 
-## The running world's own documented seed (round 5 review finding 2):
+## The running world's own documented seed:
 ## refreshed here and by _replace_world() so it always names whichever
 ## WorldState is actually live, unlike _seed_input (an editable draft for the
-## NEXT New Game -- see its own doc comment above).
+## next New Game -- see its comment in _build_ui()).
 func _update_active_seed_label() -> void:
 	if _active_seed_label == null:
 		return
@@ -949,8 +955,8 @@ func _update_last_saved_label() -> void:
 	else:
 		_status_label.text = _text_table.format("status.last_saved_label", [int(good["tick"])])
 
-## Matches the issue's "resumed from autosave 2 (tick N) because autosave 1
-## was unreadable" framing: names the slot actually used, and -- only when
+## Builds a "resumed from autosave 2 (tick N) because autosave 1 was
+## unreadable" style message: names the slot actually used, and -- only when
 ## load_best() had to skip a newer candidate to get there -- the first
 ## skipped slot's own typed reason, read straight from SaveIO's failure
 ## code rather than re-derived here.

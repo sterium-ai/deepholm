@@ -1,15 +1,15 @@
 extends SceneTree
 
-## Acceptance coverage for issue #406's persistent construction-site model
-## (docs/decisions/038): a `build` order creates a ConstructionSiteTable
-## record and reserves its footprint immediately, a new job-giver
-## (construction_giver.gd) submits site_fetch/site_work jobs over time to
-## deliver materials and then build, and `cancel_site` tears the whole thing
-## down. test_build.gd owns the `build` command's own contract (payload
-## validation, footprint/enclosure rules, wall/door/bed regression); this
-## file owns the site's own lifecycle: immediate creation, incremental
-## delivery into held_materials, exact-build_ticks completion timing,
-## cancellation, and the find_orphaned_reservations() extra-owners contract.
+## Coverage for the persistent construction-site model (ADR 040): a `build`
+## order creates a ConstructionSiteTable record and reserves its footprint
+## immediately, a new job-giver (construction_giver.gd) submits
+## site_fetch/site_work jobs over time to deliver materials and then build, and
+## `cancel_site` tears the whole thing down. test_build.gd owns the `build`
+## command's own contract (payload validation, footprint/enclosure rules,
+## wall/door/bed regression); this file owns the site's own lifecycle: immediate
+## creation, incremental delivery into held_materials, exact-build_ticks
+## completion timing, cancellation, and the find_orphaned_reservations()
+## extra-owners contract.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
@@ -80,7 +80,7 @@ func _held_quantity(site: Dictionary, item_kind: String) -> int:
 			return int(entry["quantity"])
 	return -1
 
-## Acceptance: "ordering a workbench creates a site immediately... before any
+## Requirement: "ordering a workbench creates a site immediately, before any
 ## material arrives".
 func _check_workbench_order_creates_site_immediately_before_any_material() -> void:
 	var world := _build_world(320000)
@@ -94,7 +94,7 @@ func _check_workbench_order_creates_site_immediately_before_any_material() -> vo
 	_expect(world.get_object(10, 10).is_empty(), "no object may exist before construction completes")
 	_expect(result.get("site_id", "") == site["id"], "the command's own response must name the created site's id")
 
-## Acceptance: "one colonist with build labour enabled delivers 3 wood + 4
+## Requirement: "one colonist with build labour enabled delivers 3 wood + 4
 ## stone; ... held_materials on the site reflects each delivery."
 func _check_one_colonist_delivers_multi_kind_cost_and_held_materials_track_each_delivery() -> void:
 	var world := _build_world(320100)
@@ -116,7 +116,7 @@ func _check_one_colonist_delivers_multi_kind_cost_and_held_materials_track_each_
 		_expect(wood_held >= 0 and wood_held <= 3, "held wood must never exceed the declared 3-unit requirement")
 		_expect(stone_held >= 0 and stone_held <= 4, "held stone must never exceed the declared 4-unit requirement")
 		# Each declared quantity (3 wood, 4 stone) fits in a single hands-load
-		# (capacity 4, #400), so a delivery jumps a single kind from 0 straight
+		# (capacity 4), so a delivery jumps a single kind from 0 straight
 		# to its full amount rather than climbing gradually -- "reflects each
 		# delivery" is instead proven by observing one kind fully held while
 		# the other is not (the first of the solo colonist's two trips landed,
@@ -129,7 +129,7 @@ func _check_one_colonist_delivers_multi_kind_cost_and_held_materials_track_each_
 	_expect(materials_met, "a solo colonist must eventually deliver the full 3 wood + 4 stone (hands cap 4, so at least two trips)")
 	_expect(saw_intermediate_delivery, "held_materials must be observed reflecting the first delivery before the second one lands")
 
-## Acceptance: "delivered items are absent from get_items()/ground and cannot
+## Requirement: "delivered items are absent from get_items()/ground and cannot
 ## be picked up by a second colonist."
 func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_second_colonist() -> void:
 	var world := _build_world(320200)
@@ -160,7 +160,7 @@ func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_se
 	for item in world.get_items():
 		_expect(String(item.get("id", "")) != item_id, "the delivered item must no longer exist on the ground once construction completes")
 
-## Acceptance: "construction completes exactly build_ticks ticks after the
+## Requirement: "construction completes exactly build_ticks ticks after the
 ## last delivery." The `work` toil itself runs for exactly build_ticks ticks
 ## (ConstructionSiteTable.progress sums 1 per tick, verified directly against
 ## build_ticks below); this scenario additionally bounds the small,
@@ -199,7 +199,7 @@ func _check_completion_takes_exactly_build_ticks_after_materials_are_met() -> vo
 		work_ticks_observed = int(site["progress"])
 	_fail("the wall site did not complete within the tick budget")
 
-## Acceptance: "the workbench then occupies both footprint tiles (get_object()
+## Requirement: "the workbench then occupies both footprint tiles (get_object()
 ## on each), both impassable, held_materials empty, site record gone."
 func _check_completed_workbench_occupies_both_footprint_tiles_impassable_and_site_is_gone() -> void:
 	var world := _build_world(320400)
@@ -223,7 +223,7 @@ func _check_completed_workbench_occupies_both_footprint_tiles_impassable_and_sit
 	_expect(not bool(world.passability(site_origin.x + 1, site_origin.y)["passable"]), "the second footprint tile must be impassable")
 	_expect(world.get_construction_sites().is_empty(), "no construction site record may remain once the workbench is complete")
 
-## Acceptance: "cancelling mid-delivery drops held_materials on the nearest
+## Requirement: "cancelling mid-delivery drops held_materials on the nearest
 ## free tiles adjacent to the site, releases every reservation
 ## (find_orphaned_reservations() empty), removes the site/ghost."
 func _check_cancel_mid_delivery_drops_held_materials_adjacent_and_releases_reservations() -> void:
@@ -265,8 +265,8 @@ func _check_cancel_mid_delivery_drops_held_materials_adjacent_and_releases_reser
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(world._scheduler.queue.get_reservation_table(), world._scheduler.queue.get_jobs())
 	_expect(orphans.is_empty(), "find_orphaned_reservations() must be empty after cancel_site (found %s)" % [orphans])
 
-## Acceptance: "a builder mid-fetch deposits its carried hands per #400's
-## rule" -- a colonist already carrying picked-up material when cancel_site
+## Requirement: "a builder mid-fetch deposits its carried hands per the
+## hands-filling rules" -- a colonist already carrying picked-up material when cancel_site
 ## runs must drop it on its own current tile, not lose or teleport it.
 func _check_cancel_mid_fetch_drops_the_carrying_builders_own_hands() -> void:
 	var world := _build_world(320600)
@@ -293,10 +293,10 @@ func _check_cancel_mid_fetch_drops_the_carrying_builders_own_hands() -> void:
 			dropped_at_carrier = true
 	_expect(dropped_at_carrier, "the mid-fetch builder's own carried wood must land on the builder's own tile, not the site")
 
-## Acceptance: "find_orphaned_reservations() with no extra-owners argument
-## behaves exactly as before this task on every existing caller." A
+## Requirement: "find_orphaned_reservations() with no extra-owners argument
+## behaves unchanged for every existing caller." A
 ## construction site's own footprint reservation is owned by "site:<id>", not
-## a job id -- without the new parameter, the pre-existing function must still
+## a job id -- without the extra-owners argument, the function must still
 ## flag it as an orphan (the exact behaviour every caller who does not know
 ## about sites already relies on).
 func _check_find_orphaned_reservations_default_behaviour_is_unchanged() -> void:
@@ -317,7 +317,7 @@ func _check_find_orphaned_reservations_extra_owners_excludes_a_sites_own_footpri
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(table, jobs, owner_key)
 	_expect(not orphans.has("tile:10,10"), "passing the site's own owner key must exclude its footprint reservation from the orphan list (got %s)" % [orphans])
 
-## Acceptance: "a save mid-construction (partial materials, partial progress,
+## Requirement: "a save mid-construction (partial materials, partial progress,
 ## one builder) round-trips with hash equality."
 func _check_save_load_round_trip_mid_construction_preserves_hash() -> void:
 	var world := _build_world(320900)

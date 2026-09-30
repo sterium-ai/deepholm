@@ -1,8 +1,8 @@
 class_name SaveManager
 extends RefCounted
 
-## Slot policy on top of SaveIO's validate-before-replace writer/reader
-## (t2). One save directory (default "user://saves", injectable for tests)
+## Slot policy on top of SaveIO's validate-before-replace writer/reader.
+## One save directory (default "user://saves", injectable for tests)
 ## holds exactly four files:
 ##   - "manual.json"      -- the single manual save slot. Only save_manual()
 ##                            ever writes it; save_autosave() never touches it.
@@ -11,7 +11,7 @@ extends RefCounted
 ##   - "autosave-3.json"
 ##
 ## Rotation order: each save_autosave() call writes to whichever of the three
-## autosave files currently holds the OLDEST recorded (epoch, tick) pair (an
+## autosave files currently holds the oldest recorded (epoch, tick) pair (an
 ## empty or unreadable slot counts as oldest and is always picked first), so
 ## the newest write always replaces the oldest survivor -- never a fixed
 ## round-robin index. With four consecutive calls at the same epoch the 1st
@@ -21,15 +21,14 @@ extends RefCounted
 ## rotation and load_best() both behave the same whether or not the process
 ## restarted between calls.
 ##
-## "epoch" (issue #299 round 1) is a caller-supplied game-session marker, not
-## a WorldState field: every save_manual()/save_autosave() call defaults to
+## "epoch" is a caller-supplied game-session marker, not a WorldState field: every save_manual()/save_autosave() call defaults to
 ## epoch 0 (an ordinary continuing game), but boot.gd's New Game control
 ## mints a strictly higher epoch (see next_epoch()/highest_known_epoch()
 ## below) for the fresh game it starts, so ordering below always compares
 ## (epoch, tick) lexicographically -- a higher epoch outranks any tick from a
 ## lower one. Raw tick alone is not a valid cross-game recency signal: an old
 ## game's autosave at tick 1000 must never outrank a brand-new game's manual
-## save at tick 10 just because 1000 > 10 (round 1 review finding). Within a
+## save at tick 10 just because 1000 > 10. Within a
 ## single epoch, tick ordering behaves exactly as it always has.
 ##
 ## last-known-good pointer: get_last_known_good() reports the slot/file/tick
@@ -117,7 +116,7 @@ func get_last_known_good():
 ## or none carry one. boot.gd's New Game control uses this (see next_epoch()
 ## below) to mint a session marker strictly newer than anything already
 ## saved, so a fresh game's own saves always outrank whatever came before
-## regardless of tick (round 1 review).
+## regardless of tick.
 func highest_known_epoch() -> int:
 	var highest := -1
 	for path in _all_slot_paths():
@@ -193,7 +192,7 @@ func _order_candidates_newest_first() -> Array[Dictionary]:
 ## example a truncated write), in which case callers fall back to treating
 ## it as oldest. "epoch" defaults to 0 for a pre-epoch-field body (matching
 ## SaveMigrations' own v19->v20 backfill) so an old save on disk from before
-## this task still orders sanely against a genuinely epoch-tagged one.
+## epochs existed still orders sanely against a genuinely epoch-tagged one.
 static func _peek_epoch_tick(path: String):
 	if not FileAccess.file_exists(path):
 		return null

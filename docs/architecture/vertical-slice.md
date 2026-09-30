@@ -1,5 +1,9 @@
 # Vertical slice contract
 
+> **In short:** The first playable version of the game is deliberately small.
+> This page lists exactly what it must include, what it leaves out, and how we
+> check that it works.
+
 The first playable slice proves the colony loop on one finite map. It is the
 minimum implementation target; everything outside this list is deferred.
 The slice's visual direction is documented in [docs/art/style.md](../art/style.md).

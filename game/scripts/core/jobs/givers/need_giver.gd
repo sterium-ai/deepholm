@@ -2,7 +2,7 @@ class_name NeedGiver
 extends RefCounted
 
 ## Job-giver for eat_food/drink_water/sleep (colonist-ai.md 3.1/3.6/3.8):
-## decides WHEN a need job should exist. Needs decay/thresholds are content
+## decides when a need job should exist. Needs decay/thresholds are content
 ## data (content/needs.json) and needs *state* stays on WorldState
 ## (colonist.needs) -- this module only reads both, injected below -- and,
 ## once a threshold is crossed, submits a job through the exact same
@@ -12,8 +12,8 @@ extends RefCounted
 ## stepping lives here (AGENTS.md "one work engine").
 ##
 ## Kind -> job mapping (colonist-ai.md "Implemented: increment D"): food ->
-## eat_food, water -> drink_water, rest -> sleep. Fixed; a fourth kind is out
-## of scope (see the owning task's Non-goals).
+## eat_food, water -> drink_water, rest -> sleep. Fixed; there is no
+## mapping for any other kind.
 ##
 ## Critical needs (colonist-ai.md 3.6) interrupt a colonist's in-progress
 ## `work` toil immediately: interrupt_current_job frees the colonist's
@@ -137,7 +137,7 @@ func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, 
 ## 3.1): still mid-search, not yet committed to any job, so the fair
 ## scheduler must not also offer this colonist unrelated work the same tick
 ## it is deciding whether to eat/drink/sleep. A colonist with an already-
-## submitted (pending) job is deliberately NOT excluded: it is still free to
+## submitted (pending) job is deliberately not excluded: it is still free to
 ## be proposed the routing/activation phases the shared submit()/tick()
 ## pipeline runs for it -- restrict_to (see _commit()) already guarantees no
 ## other colonist may ever be offered that same job.
@@ -177,7 +177,7 @@ func advance(colonists: Array[Dictionary], tick: int) -> void:
 			continue
 		_evaluate(colonist, tick)
 
-## F3 (issue #290): a need job is never created for an actor whose faction's
+## F3: a need job is never created for an actor whose faction's
 ## rules.may_be_ordered is not true, read through the registry -- never a
 ## hardcoded "colony" string -- so a future orderable non-colony faction needs
 ## no change here. Fails open for an actor naming no faction id at all.
@@ -254,7 +254,7 @@ func _evaluate(colonist: Dictionary, tick: int) -> void:
 	if kind.is_empty():
 		return
 	# colonist.route/work both null already means this is a toil boundary (no
-	# route, no in-progress work), but it does NOT mean the colonist is free of
+	# route, no in-progress work), but it does not mean the colonist is free of
 	# a job: a multi-toil job (haul) idles between its instant pick_up/place
 	# toils, which set neither field, while the scheduler's own assignment for
 	# it stays live. interrupt_current_job is a no-op when there is truly

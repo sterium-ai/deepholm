@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Issue #299 instrumentation: proves map_view.gd's TileMapLayer refresh does
-## NOT clear and rebuild all width*height cells on a tick with no terrain
+## Instrumentation check: proves map_view.gd's TileMapLayer refresh does
+## not clear and rebuild all width*height cells on a tick with no terrain
 ## change, on a 256x256 world (65536 cells) -- only set_world()'s one-time
 ## full rebuild touches every cell; an ordinary tick touches zero, and a
 ## single completed order touches exactly the one cell that actually changed.
@@ -32,7 +32,7 @@ func _init() -> void:
 			% [WIDTH, HEIGHT, expected_full, map_view.last_tile_map_cells_touched])
 
 	# A tick with no terrain/object change must touch zero cells, never the
-	# full 65536 (issue #299's own instrumentation wording).
+	# full 65536.
 	world.tick()
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == 0,

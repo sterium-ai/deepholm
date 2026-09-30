@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #359 (ADR 025 t3): trap-on-trench-entry and hostile climb-out.
+## Trap-on-trench-entry and hostile climb-out (ADR 026).
 ## Exercises WorldState._check_trench_arrival() through real gameplay --
 ## submitting jobs and ticking -- never by calling private trap methods
 ## directly, so the whole route-step -> trap -> release -> (hostile)
@@ -98,7 +98,7 @@ func _spawn_wolf(world: WorldStateType, id: String, x: int, y: int) -> Dictionar
 	world._colonists.append(wolf)
 	return wolf
 
-## Round-4 review: a trader (content/actors.json's "trader" kind -- no worker
+## A trader (content/actors.json's "trader" kind -- no worker
 ## component, and its own "traders" faction is neutral toward "colony", never
 ## hostile) is the Non-goals-named non-hostile, non-colonist actor trap-on-
 ## entry/hostile climb-out must never extend to. Mirrors _spawn_wolf() above.
@@ -130,7 +130,7 @@ func _tick_until_trapped(world: WorldStateType, colonist: Dictionary, bound: int
 			return true
 	return false
 
-## Acceptance: "any actor whose route step lands it on a trench tile becomes
+## Requirement: "any actor whose route step lands it on a trench tile becomes
 ## trapped: its current job is released like a cancel (every reservation
 ## freed)". A straight one-row corridor: the till job's only route crosses
 ## the trench tile at (1,0) on the way to its (2,0) soil target.
@@ -156,7 +156,7 @@ func _check_colonist_falls_into_trench_releases_job() -> void:
 	_expect((report["orphaned_reservations"] as Array).is_empty(),
 		"trapping must free every ReservationTable key the released job held, leaving no orphans")
 
-## Acceptance: "it cannot start a new job while trapped" -- a second order,
+## Requirement: "it cannot start a new job while trapped" -- a second order,
 ## submitted directly through GlobalAssignment.submit() (the
 ## test_faction_reservations.gd precedent for isolating the scheduler's own
 ## gate from the command layer), must be refused not_ordered_by_player at
@@ -184,7 +184,7 @@ func _check_trapped_colonist_refuses_new_job() -> void:
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a trapped actor must never start a new job -- refused not_ordered_by_player, got status '%s' reason '%s'" % [job.get("status"), job.get("reason")])
 
-## Acceptance: "its needs keep decaying" through the existing, untouched
+## Requirement: "its needs keep decaying" through the existing, untouched
 ## needs-decay tick.
 func _check_trapped_colonist_needs_keep_decaying() -> void:
 	var world := _fresh_world(303001)
@@ -201,8 +201,8 @@ func _check_trapped_colonist_needs_keep_decaying() -> void:
 	_expect(int(colonist["needs"]["food"]) < food_before,
 		"a trapped colonist's needs must keep decaying through the ordinary needs-decay tick")
 
-## Acceptance: "a colonist that becomes trapped stays trapped with no
-## auto-exit and no auto-submitted job".
+## A colonist that becomes trapped stays trapped, with no auto-exit and no
+## auto-submitted job.
 func _check_colonist_stays_trapped_indefinitely() -> void:
 	var world := _fresh_world(304001)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
@@ -214,11 +214,11 @@ func _check_colonist_stays_trapped_indefinitely() -> void:
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
 	for _i in 200:
 		world.tick()
-	_expect(colonist.get("trapped") != null, "a trapped colonist must stay trapped -- no auto-exit without rescue (t4)")
+	_expect(colonist.get("trapped") != null, "a trapped colonist must stay trapped -- no auto-exit without rescue")
 	for job in world.get_jobs():
 		_expect(String(job.get("kind", "")) != "escape_trench", "a colonist must never get an auto-submitted escape_trench job")
 
-## Acceptance: "a hostile actor (Relations.is_hostile true) auto-submits an
+## Requirement: "a hostile actor (Relations.is_hostile true) auto-submits an
 ## escape_trench job on becoming trapped, waits content/actors.json's
 ## wild.trench_climb_ticks (default 40), then moves to the tile it fell from
 ## (or another adjacent passable tile) and is no longer trapped." The
@@ -256,7 +256,7 @@ func _check_hostile_actor_auto_escapes() -> void:
 	_expect(maxi(absi(final_tile.x - 1), absi(final_tile.y - 0)) == 1,
 		"the escaped actor must land adjacent to the trench tile it climbed out of")
 
-## Acceptance: "a case with an equal-cost trench-free alternative follows the
+## Requirement: "a case with an equal-cost trench-free alternative follows the
 ## existing route_search.gd:220 ascending row-major tie-break, unmodified,
 ## and is documented as such rather than avoiding the trench." A diamond
 ## detour around a blocked center tile gives two equal-cost (4-tile) routes,
@@ -293,7 +293,7 @@ func _check_route_choice_unaffected_by_trench() -> void:
 	_expect(not trench_path.is_empty() and trench_path == floor_path,
 		"route_search.gd:220's ascending row-major tie-break is unmodified: a trench tile costs and routes exactly like floor, so the resolved path must be identical whether the equal-cost detour tile is trench or floor -- proof no trench-avoidance was added, trench=%s floor=%s" % [trench_path, floor_path])
 
-## Acceptance: "a save/load round-trip preserves trapped state (tile,
+## Requirement: "a save/load round-trip preserves trapped state (tile,
 ## remaining ticks for a hostile) for every entity."
 func _check_save_load_round_trip_preserves_trapped_state() -> void:
 	var world := _fresh_world(307001)
@@ -310,11 +310,11 @@ func _check_save_load_round_trip_preserves_trapped_state() -> void:
 	_expect(restored.state_hash() == world.state_hash(),
 		"a save/load round trip must reproduce the exact same state_hash() once trapped state is restored")
 
-## Round 1 review (task-body patch): _actor_may_reserve_target()'s narrow
+## _actor_may_reserve_target()'s narrow
 ## self-tile exception must let escape_trench reserve the trapped actor's own
 ## tile even when it holds colony property -- one case per property kind.
-## The wolf's OWN entry job targets a tile PAST the trench (2,0), routing
-## THROUGH the property-laden trench tile as an intermediate step (never
+## The wolf's own entry job targets a tile past the trench (2,0), routing
+## through the property-laden trench tile as an intermediate step (never
 ## reserving it) -- exactly like the file's very first colonist check -- so
 ## this isolates escape_trench's own self-tile reservation (the thing under
 ## test) from the pre-existing, unrelated bare-tile gate on an entry job that
@@ -362,7 +362,7 @@ func _check_hostile_escapes_despite_stockpile_cell_on_trench() -> void:
 	var wolf := _spawn_wolf(world, "trap_wolf_zone", 0, 0)
 	_escape_and_confirm(world, wolf, "trap_wolf_zone", Vector2i(1, 0), "stockpile cell")
 
-## Round 2 review finding 3: a go_to arrival and this same tick's work
+## A go_to arrival and this same tick's work
 ## completion can land together -- a real IncidentScheduler.propose() wait
 ## job with wait_ticks=1 targeting a trench tile. Trapping must preempt the
 ## incident's own completion effect and despawn, not run after it.
@@ -395,7 +395,7 @@ func _check_incident_wait_job_traps_before_despawn() -> void:
 			break
 	_expect(escaped, "the wolf must still auto-escape normally after this trap")
 
-## Round 2 review finding 4: the exit must prefer the tile the actor fell
+## The exit must prefer the tile the actor fell
 ## from over the fixed row-major order, for an entry from a direction other
 ## than west (already exercised by _check_hostile_actor_auto_escapes()).
 func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
@@ -417,7 +417,7 @@ func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
 	_expect(Vector2i(int(wolf["x"]), int(wolf["y"])) == Vector2i(1, 1),
 		"the escaped actor must prefer the tile it fell from (south, (1,1)) over the row-major fallback order, which would otherwise pick west (0,0)")
 
-## Round 2 review finding 4: once fromTile itself becomes impassable
+## Once fromTile itself becomes impassable
 ## mid-climb, the exit must fall back to the row-major order among the
 ## remaining candidates, never leave the actor stuck on a stale preference.
 func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
@@ -438,7 +438,7 @@ func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 	_expect(Vector2i(int(wolf["x"]), int(wolf["y"])) == Vector2i(0, 0),
 		"once the entry tile is blocked, the exit must fall back to the row-major fallback order (west, (0,0)) rather than the now-impassable entry tile")
 
-## Round 2 review finding 4: the exit must use the actor's OWN faction
+## The exit must use the actor's own faction
 ## passability, never the colony default -- a door open to the colony but
 ## closed to wildlife (content/factions.json's may_pass_doors) must never be
 ## used as a hostile actor's own exit, even when it is the first row-major
@@ -471,10 +471,10 @@ func _check_hostile_exit_never_uses_forbidden_door() -> void:
 	_expect(final_tile == Vector2i(0, 1),
 		"with the entry tile blocked and the north candidate a forbidden door, the exit must fall back to the next passable row-major candidate (west, (0,1))")
 
-## Round 2 review finding 4: a "recoverable blocked-exit outcome" -- every
+## A "recoverable blocked-exit outcome" -- every
 ## candidate impassable for the actor's own faction must leave it trapped
 ## and retrying, never silently clear trapped or leave it with no job at all.
-## Sealed with TILE_ROCK, not a "wooden_wall" object (#342 merge): a wall has combat
+## Sealed with TILE_ROCK, not a "wooden_wall" object: a wall has combat
 ## health and CombatResolver lets a hostile actor sieging an adjacent hostile
 ## object break one down over time, which would eventually free the wolf via
 ## combat rather than proving escape_trench's own retry-forever behaviour.
@@ -500,7 +500,7 @@ func _check_hostile_stays_trapped_and_retries_when_no_exit_available() -> void:
 			still_retrying = true
 	_expect(still_retrying, "a blocked climb-out must keep retrying with a freshly submitted escape_trench job, not give up")
 
-## Round 2 review finding 5: trapped.ticksRemaining must mirror the real
+## trapped.ticksRemaining must mirror the real
 ## escape_trench work timer tick by tick (no separate countdown engine), and
 ## a save/load round trip mid-climb must preserve exactly that live value.
 func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
@@ -531,7 +531,7 @@ func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
 			break
 	_expect(escaped, "the restored wolf must still complete its climb and escape after continuing from a mid-climb save")
 
-## Round 2 review finding 6: two hostiles trapped on the same tile must never
+## Two hostiles trapped on the same tile must never
 ## let the second job's real climb inherit the first job's already-cleared
 ## work-progress key -- the second escape must take its own full configured
 ## duration, stamped only once IT activates (_activate_pending_escapes()),
@@ -595,7 +595,7 @@ func _remove_save_io_target() -> void:
 	if FileAccess.file_exists(SAVE_IO_TARGET):
 		DirAccess.remove_absolute(SAVE_IO_TARGET)
 
-## Round 3 review finding 1: to_save_state()/from_save_state() are plain
+## to_save_state()/from_save_state() are plain
 ## StateCodec.encode()/decode() calls (world_state.gd) -- they never run
 ## SaveIO's own schema/bounds validation, the gate an actual save/load uses.
 ## A hostile trapped through real gameplay must also round-trip through
@@ -632,7 +632,7 @@ func _check_save_io_round_trip_preserves_trapped_hostile() -> void:
 		_expect(escaped, "the SaveIO-restored hostile must still complete its climb and escape")
 	_remove_save_io_target()
 
-## Round 3 review finding 1: _valid_entity_trapped() must actually validate
+## _valid_entity_trapped() must actually validate
 ## fromTile's own shape/bounds now that it is allowed, not merely accept the
 ## key -- an out-of-bounds fromTile must still be a typed schema_error.
 func _check_save_io_rejects_malformed_from_tile() -> void:
@@ -653,7 +653,7 @@ func _check_save_io_rejects_malformed_from_tile() -> void:
 	_expect(not validation.get("ok", true) and validation.get("code", "") == "schema_error",
 		"an out-of-bounds trapped.fromTile must be rejected as a typed schema_error, got %s" % validation)
 
-## Round 3 review finding 2: a save/load taken the same tick a hostile is
+## A save/load taken the same tick a hostile is
 ## trapped -- before its escape_trench job has even had a chance to activate
 ## a second time -- must not lose the configured climb duration once it does
 ## activate after loading. world_state.gd's _activate_pending_escapes() reads
@@ -682,7 +682,7 @@ func _check_save_load_immediately_after_trapping_preserves_escape_duration() -> 
 	_expect(ticks_to_escape >= WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS and ticks_to_escape <= WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS + 5,
 		"a save taken immediately after trapping must not lose the configured climb duration -- expected close to %d ticks, got %d" % [WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS, ticks_to_escape])
 
-## Round 3 review finding 2: a save/load taken while a second escape_trench
+## A save/load taken while a second escape_trench
 ## job is still queued behind the first's own tile reservation must not lose
 ## its own configured duration once it later activates after loading.
 func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> void:
@@ -737,7 +737,7 @@ func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> vo
 	_expect(ticks_for_second_climb >= WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS,
 		"a save/load taken while the second escape was still queued must not lose its own configured duration once activated -- expected >= %d ticks, got %d" % [WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS, ticks_for_second_climb])
 
-## Round 3 review finding 2: a save/load taken mid-retry, after a blocked
+## A save/load taken mid-retry, after a blocked
 ## climb-out resubmits a fresh escape_trench job for the same tile, must not
 ## lose that retry's own configured duration either.
 func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
@@ -787,7 +787,7 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 	_expect(ticks_to_escape >= WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS - 5,
 		"a save/load taken just as a blocked-exit retry appears must not lose that retry's own configured climb duration -- expected close to %d ticks, got %d" % [WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS, ticks_to_escape])
 
-## Round 3 review finding 3: trapping must resolve a cancelled need job's
+## Trapping must resolve a cancelled need job's
 ## NeedGiver association exactly like _apply_job_command()'s own cancel_job
 ## path does -- otherwise the cancelled job's id stays in NeedGiver._pending
 ## indefinitely, silently blocking that colonist from ever getting a fresh
@@ -815,8 +815,8 @@ func _check_trapping_during_need_journey_resolves_need_giver() -> void:
 	_expect(world._need_giver.get_pending_job(colonist_id).is_empty(),
 		"trapping must clear the trapped colonist's own pending-job pointer in NeedGiver")
 
-## Round 3 review finding 3: an actor whose route step lands it exactly on
-## its OWN job's target -- which happens to already be trench -- can have
+## An actor whose route step lands it exactly on
+## its own job's target -- which happens to already be trench -- can have
 ## the work toil start (writing an initial work-progress entry for that
 ## tile) in the very same tick trapping cancels the job. That cancelled
 ## job's progress must not survive the trap.
@@ -831,7 +831,7 @@ func _check_trapping_on_work_target_arrival_clears_progress() -> void:
 	_expect(world._get_work_progress(Vector2i(2, 0)) == null,
 		"trapping on arrival at a work target must clear that target's owned work-progress key, not leave the cancelled job's progress behind")
 
-## Round 3 review finding 3: an actor trapped while carrying a haul item
+## An actor trapped while carrying a haul item
 ## (mid-second-leg, walking to the stockpile cell) must release both the
 ## item's own reservation and the destination cell's reservation exactly
 ## like a real cancel_job, and must not strand the carried item in
@@ -869,7 +869,7 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 	_expect((report["orphaned_reservations"] as Array).is_empty(),
 		"trapping mid-haul must free both the item's own reservation and the destination cell's reservation, leaving no orphans")
 
-## Round 3 review finding 4: _toil_on_work_complete()'s own trap pre-check
+## _toil_on_work_complete()'s own trap pre-check
 ## must require the actor to have actually arrived ON target this tick, not
 ## merely that _trap_tile_before != target -- a paused dig resumed from an
 ## adjacent tile, after another worker has already dug its target into
@@ -912,7 +912,7 @@ func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "invalid_target",
 		"the stale dig target must be rejected like any other invalid target once its tile no longer matches, got status '%s' reason '%s'" % [job.get("status"), job.get("reason")])
 
-## Round-4 review: _remove_colonist_by_id()'s trapped-actor despawn
+## _remove_colonist_by_id()'s trapped-actor despawn
 ## suppression exists only to stop IncidentScheduler's own ordinary
 ## incident-lifecycle despawn from vanishing a trapped actor; it must never
 ## suppress an ACTUAL death. A trapped colonist killed in combat (or any
@@ -934,15 +934,14 @@ func _check_trapped_colonist_removed_on_death() -> void:
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "death while trapped must leave no orphaned reservations")
 
-## Round-4/round-5 review: the same death-must-win guarantee for a hostile
-## actor killed WHILE its own auto-submitted escape_trench job is ACTIVE --
-## the scenario the review named explicitly ("a trapped hostile killed during
-## escape"). Round-4's version killed the wolf right after submission, before
-## the job ever activated or acquired its own self-tile reservation, so it
-## never actually exercised the cleanup it claimed to check. Ticks until the
-## escape_trench job reports "active", asserts its assignment (restricted to
-## the wolf) and its own self-tile reservation both exist, THEN kills the
-## wolf and verifies removal, job termination, and reservation release.
+## The same death-must-win guarantee for a hostile
+## actor killed while its own auto-submitted escape_trench job is active.
+## Killing the wolf right after submission would not exercise the cleanup,
+## because the job would not yet have activated or acquired its self-tile
+## reservation. So this ticks until the escape_trench job reports "active",
+## asserts its assignment (restricted to the wolf) and its self-tile
+## reservation both exist, then kills the wolf and verifies removal, job
+## termination, and reservation release.
 func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 	var world := _fresh_world(332001)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
@@ -980,8 +979,8 @@ func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 	_expect((report["orphaned_reservations"] as Array).is_empty(),
 		"death mid-escape must release the active escape_trench job's own reservations, leaving no orphans")
 
-## Round-4 review / Non-goals: "Do not extend trap/climb-out behaviour to
-## non-hostile, non-colonist actors (a trader)". A trader (no worker
+## Trap/climb-out behaviour does not extend to non-hostile, non-colonist
+## actors (ADR 026 non-goal). A trader (no worker
 ## component, faction "traders" -- neutral toward "colony", never hostile per
 ## Relations) must land on a trench tile via a real, ticked job -- go_to's
 ## own route step, then work's own arrival -- completely unaffected: never
@@ -1009,7 +1008,7 @@ func _check_trader_crosses_trench_unaffected() -> void:
 	_expect(String(job.get("status", "")) == "completed",
 		"the trader's own job must complete normally, exactly like any other non-trapped incident actor's, got status '%s'" % job.get("status"))
 
-## Round-4/round-5 review: CombatGiver still receives a trapped actor (it
+## CombatGiver still receives a trapped actor (it
 ## filters only on the "combat" component, never trapped state) and would
 ## otherwise submit a `flee` job for one below its own flee_hp_fraction
 ## through submit_autonomous() -- bypassing _colonist_may_be_ordered()
@@ -1017,12 +1016,12 @@ func _check_trader_crosses_trench_unaffected() -> void:
 ## _actor_may_reserve_target() now refuses every autonomous target for a
 ## trapped actor except its own tile, so every flee candidate CombatGiver
 ## considers is refused and it can never actually submit one; a trapped actor
-## also never moves. Round-4's version lowered hp without ever creating a
-## hostile threat, so CombatGiver's own `threat.is_empty()` guard short-
-## circuited before it ever reached the reservation gate this fix targets --
-## it passed for the wrong reason. This version introduces a real hostile
-## threat (a raider, `_spawn_raider`) AFTER trapping, and adds an identical,
-## untrapped control colonist exposed to the SAME threat and hp to prove
+## also never moves. Lowering hp alone is not enough: without a hostile
+## threat, CombatGiver's `threat.is_empty()` guard short-circuits before the
+## reservation gate, so the check would pass for the wrong reason. This check
+## introduces a real hostile threat (a raider, `_spawn_raider`) after
+## trapping, and adds an identical, untrapped control colonist exposed to the
+## same threat and hp to prove
 ## CombatGiver actually attempts (and succeeds at) fleeing under these exact
 ## conditions -- so the trapped colonist's own lack of a flee job is proven to
 ## be the reservation gate at work, not an absent threat.
@@ -1055,11 +1054,11 @@ func _check_trapped_colonist_cannot_flee_via_combat_giver() -> void:
 	_expect(Vector2i(int(control["x"]), int(control["y"])) != control_start,
 		"control: an untrapped colonist facing the same hostile threat and hp must actually flee, proving CombatGiver was exercised for real -- otherwise the trapped colonist's own lack of a flee job proves nothing")
 
-## Round-4 review: "this also affects a colonist that falls into a trench
-## during an existing flee episode" -- an actor already mid-flee (its own
+## Trapping also applies to a colonist that falls into a trench during an
+## existing flee episode: an actor already mid-flee (its own
 ## `flee` job active, walking its resolved path) that steps onto a trench
 ## tile must be trapped exactly like any other job's actor: released like
-## cancel_job, no auto-exit (a colonist, per Non-goals), and CombatGiver must
+## cancel_job, no auto-exit (a colonist, per ADR 026's non-goals), and CombatGiver must
 ## never resurrect a replacement flee leg for it while it stays trapped (the
 ## same _actor_may_reserve_target() fix that backs the check above).
 ## Boxes (x, y) in with impassable rock on every one of its 8 neighbours
@@ -1109,7 +1108,7 @@ func _check_colonist_trapped_during_active_flee_episode() -> void:
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "trapping mid-flee must leave no orphaned reservations")
 
-## Round-4 review: "including save/load continuation" -- a colonist trapped
+## "including save/load continuation" -- a colonist trapped
 ## mid-flee must survive a save/load round trip without CombatGiver
 ## resurrecting a replacement flee leg once ticking resumes on the restored
 ## world, exactly like the live-world check above.

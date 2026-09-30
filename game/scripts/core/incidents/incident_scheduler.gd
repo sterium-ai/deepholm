@@ -2,27 +2,27 @@ class_name IncidentScheduler
 extends RefCounted
 
 ## F5 incidents (docs/architecture/foundation-for-breadth.md section F5, ADR
-## 018, issue #294): day-gated, budgeted spawns of passive non-colony actors
+## 017): day-gated, budgeted spawns of passive non-colony actors
 ## (content/incidents.json). A spawned actor's walk-then-wait is a real job
 ## (content/jobs.json's "incident" kind: labour "", toils
 ## [reserve, go_to, work, release_all]) driven through the same
 ## WorldState._advance_colonists()/_toils.advance() dispatch every other job
-## uses -- this module only decides WHEN an incident draws and WHERE an actor
+## uses -- this module only decides when an incident draws and where an actor
 ## spawns/targets, exactly like NeedGiver/HaulGiver decide when their own
 ## jobs exist, then hands the job to WorldState._submit_incident_job()
-## (GlobalAssignment.submit_autonomous(), ADR 015 Amendment). No per-actor
+## (GlobalAssignment.submit_autonomous(), ADR 014 Amendment). No per-actor
 ## walk/wait state machine and no synchronous full-path search live here.
 ##
 ## Lifecycle (see docs/architecture/orders-and-movement.md, "Incident jobs"):
-##   propose()  -> job submitted; the actor is STAGED (_staged), offered to
-##                 GlobalAssignment.tick() as a worker but NOT yet in the world
+##   propose()  -> job submitted; the actor is staged (_staged), offered to
+##                 GlobalAssignment.tick() as a worker but not yet in the world
 ##   activate_pending() (once per WorldState tick, after _scheduler.tick())
 ##              -> job "active": actor appended to the world, wait stamped
 ##              -> job blocked unreachable: retired (never spawned)
 ##              -> job terminal/unknown: forgotten (never spawned)
 ##   on_job_finished() (from WorldState._finish_job(), every terminal
 ##                 transition) -> staged entry dropped, or spawned actor
-##                 removed -- UNLESS content's own spawn.lingers (issue #398)
+##                 removed -- unless content's own spawn.lingers
 ##                 marked it to stay in the world instead, e.g. a hostile
 ##                 actor left for ApproachGiver/CombatGiver to keep driving
 ##                 once its own arrival routine ends.
@@ -84,21 +84,21 @@ var _next_actor_ordinal: int = 1
 ## incident id -> the day index a fresh draw may next consider it eligible.
 var _cooldown_until_day: Dictionary = {}
 ## job_id -> {"actor": Dictionary, "wait_ticks": int}: proposed actors whose
-## job has not activated yet. Not in the world; not persisted (t4).
+## job has not activated yet. Not in the world; not persisted.
 var _staged: Dictionary = {}
 ## job_id -> actor_id for every actor actually in the world: an identity
 ## lookup, not execution state (the job itself lives in the shared queue).
 var _actor_by_job: Dictionary = {}
 ## actor_id -> true for every spawned actor whose own incident row declared
-## spawn.lingers (content extension point, issue #398): its arrival job's own
+## spawn.lingers (content extension point): its arrival job's own
 ## normal completion (travel + wait) must not despawn it -- it stays in the
 ## world exactly like any other actor, left for whatever other generic
 ## per-tick system applies to it (ApproachGiver's own hostile search,
 ## CombatGiver's flee, CombatResolver's adjacent-attack) to keep driving.
 ## Populated in activate_pending() when the actor is appended; not persisted
-## (this module persists nothing, t4) -- adopt() cannot recover it after a
-## load, so a reloaded lingering actor's job despawns on finish exactly like
-## before this change (see docs/decisions/ ADR for issue #398).
+## (this module persists nothing) -- adopt() cannot recover it after a
+## load, so a reloaded lingering actor's job despawns on finish like a
+## non-lingering one (see docs/decisions/034-incident-lingering-actors.md).
 var _lingering_actors: Dictionary = {}
 
 ## append_colonist/remove_colonist are method-bound callables onto
@@ -133,7 +133,7 @@ func _init(world_seed: int, content_registry, append_colonist: Callable, remove_
 func is_enabled() -> bool:
 	return _enabled
 
-## WorldState.enable_incidents() (recovery review round 3, issue #294): a
+## WorldState.enable_incidents(): a
 ## restored world's own decode() always constructs this scheduler disabled
 ## (no save data names the flag), so the boot layer flips it on the same way
 ## for a restored world as for a fresh one.
@@ -141,7 +141,7 @@ func set_enabled(enabled: bool) -> void:
 	_enabled = enabled
 
 ## Prevents a freshly spawned actor's id from colliding with one already in
-## a restored roster (recovery review round 3): scans for the highest
+## a restored roster: scans for the highest
 ## "incident_actor_<N>" id among existing_actors and continues numbering
 ## past it, never behind.
 func reserve_actor_ordinal_above(existing_actors: Array) -> void:
@@ -168,7 +168,7 @@ func advance(tick: int) -> void:
 
 ## Debug command entry point (spawn_incident {id}, WorldState.apply()):
 ## bypasses min_day/cooldown/budget gating entirely, but still records the
-## same cooldown a natural draw would. Returns the PROPOSED actor ids: each
+## same cooldown a natural draw would. Returns the proposed actor ids: each
 ## enters the world only once its job activates (activate_pending()).
 func force_spawn(incident_id: String, tick: int) -> Array:
 	if not _enabled:
@@ -229,7 +229,7 @@ func activate_pending() -> void:
 			_staged.erase(job_id)
 			if not _spawn_tile_still_valid(actor):
 				# The spawn tile's own multi-tick route search began before a
-				# door or wall landed on it (recovery review round 3): that
+				# door or wall landed on it: that
 				# already-checked start is now forbidden under the actor's
 				# faction, so the proposal is retired, never appended to the
 				# world, through the same finish boundary an unreachable
@@ -251,7 +251,7 @@ func activate_pending() -> void:
 ## successful terminal transition of an "incident" job: work completion,
 ## unreachable travel, gate refusal, complete/cancel/fail/invalidate_job
 ## commands): drops a staged actor that never spawned, or removes a spawned
-## one from the world -- UNLESS content's own spawn.lingers marked it to stay
+## one from the world -- unless content's own spawn.lingers marked it to stay
 ## (_lingering_actors), in which case the actor remains, left for whatever
 ## other generic system (ApproachGiver, CombatGiver) already has a job
 ## association pending against this same worker. A no-op for a job this
@@ -268,7 +268,7 @@ func on_job_finished(job_id: String) -> void:
 	_remove_colonist.call(actor_id)
 
 ## Re-associates an active incident job with its actor after a save/load
-## (this module persists nothing, t4), so on_job_finished() still despawns it.
+## (this module persists nothing), so on_job_finished() still despawns it.
 func adopt(job_id: String, actor_id: String) -> void:
 	_actor_by_job[job_id] = actor_id
 

@@ -1,5 +1,7 @@
 # ADR 008: Calendar content schema and CalendarService
 
+> **In short:** The game counts days from its internal clock and defines seasonal windows (such as a sowing window) in a data file, so jobs can be boosted and the player warned ahead of time.
+
 - **Status:** accepted
 - **Date:** 2026-09-19
 - **Scope:** content (`game/content/calendar.json`), simulation (new
@@ -7,7 +9,7 @@
 - **Implements:** [ADR 004](004-global-assignment-fairness-policy.md) (the
   "calendar boost" term in the effective-priority formula, `docs/architecture/
   colonist-ai.md` section 3.2); `docs/architecture/colonist-ai.md` section 3.7
-  (calendar urgency); objective #197.
+  (calendar urgency).
 
 ## Context
 
@@ -17,10 +19,9 @@ boosts: [{labour: farm, from: spring/1, to: spring/20, boost: +1, label:
 "sowing window"}]}`. That sketch names a `season` concept (`spring/1`) no
 other subsystem defines yet — there is no season-length content, no
 season-boundary tick, nothing a `CalendarService` could read to convert
-`spring/1` into a tick or a day number. This task needed a schema and a pure
-`CalendarService` today, without waiting on season content that isn't part
-of this objective and that no later task in the current gating chain
-introduces either.
+`spring/1` into a tick or a day number. A schema and a pure
+`CalendarService` were needed without waiting on season content, which was
+out of scope and not planned by any follow-up work either.
 
 Per `AGENTS.md`'s simulation rules, this service must be plain GDScript
 driven by explicit ticks and never read wall-clock time, so "day" and
@@ -41,7 +42,7 @@ file — not calendar dates.
    boosts: [...]}` sketch: it drops the undefined `season windows` wrapper
    and the `spring/1`-style qualified day, and adds `id` (needed so a
    specific seeded window, `sow`, is addressable by tests and later wiring
-   tasks without matching on `label` text). A later task adding summer/
+   without matching on `label` text). Later content adding summer/
    autumn/winter content adds windows whose `from`/`to` account for the
    fixed length of the seasons before them; neither the schema nor
    `CalendarService` changes to support that.
@@ -49,15 +50,15 @@ file — not calendar dates.
    match.** Multiple windows with the same `labour` and overlapping days are
    legal content (e.g. a general priority boost stacked with a
    labour-specific one); summing is the simpler contract and degenerates to
-   a single window's boost in the one-window case this task ships.
+   a single window's boost in the one-window case shipped here.
 4. **`alert_state` takes colony facts as plain booleans, not a `WorldState`
    reference.** `has_labour_enabled`, `has_plowed_plot`, `has_seed_stock`,
-   and `already_fired` are passed in by the caller. This task's non-goals
-   explicitly exclude wiring the alert into live game state (that is t4,
-   which introduces plowed-plot/seed-stock tracking); taking booleans instead
+   and `already_fired` are passed in by the caller. Wiring the alert into
+   live game state is explicitly out of scope (it belongs to the later work
+   that introduces plowed-plot/seed-stock tracking); taking booleans instead
    of querying `WorldState` directly means this class has no dependency on
-   that state existing yet, and t4 only has to compute the four booleans
-   and call this pure function.
+   that state existing yet, and the later wiring only has to compute the four
+   booleans and call this pure function.
 5. **A fixed `ALERT_LEAD_DAYS = 3` lead time, named and exported.** 3.7 says
    only "N days before a window"; 3 is a reasonable default lead (enough
    turnaround for the player to plow and stock seed without alerting so
@@ -67,33 +68,31 @@ file — not calendar dates.
    hand-copied value.
 6. **`already_fired` is caller-tracked state, not calendar-owned.** Whether
    a given window's alert has already fired for its current occurrence is a
-   one-shot flag the caller (t4) owns and persists; `CalendarService` stays
+   one-shot flag the caller owns and persists; `CalendarService` stays
    pure and stateless across calls, consistent with every other query on
    this class.
 
 ## Alternatives considered
 
 - **Keep the `spring/1`-style qualified date and add a season-length table
-  to this task.** Rejected: no other subsystem tracks seasons, and this
-  objective's non-goals exclude modifying `world_state.gd` or introducing
-  new colonist/farm-order state — inventing season content here would be
-  scope creep beyond what #197 asks for, and flat day numbers already
-  satisfy the one seeded example (spring days 1-20 = days 1-20).
+  now.** Rejected: no other subsystem tracks seasons, and this change
+  deliberately excludes modifying `world_state.gd` or introducing new
+  colonist/farm-order state — inventing season content here would be scope
+  creep, and flat day numbers already satisfy the one seeded example (spring days 1-20 = days 1-20).
 - **`active_boost` returns the first matching window's boost instead of
   summing.** Rejected: summing is no more complex to implement or test and
   does not foreclose stacked windows later; "first match" would silently
   drop a second window's boost with no signal to content authors.
-- **`alert_state` reads `WorldState` directly.** Rejected: the task
-  explicitly requires colony facts as booleans so t4 (which introduces
-  plowed-plot/seed-stock tracking) is not a dependency of this task; a
-  direct `WorldState` reference would create exactly the dependency the
-  task instructions call out to avoid.
+- **`alert_state` reads `WorldState` directly.** Rejected: colony facts are
+  taken as booleans so that the later plowed-plot/seed-stock tracking is
+  not a dependency of the calendar; a direct `WorldState` reference would
+  create exactly that dependency.
 
 ## Consequences
 
 - `game/content/calendar.json` declares `day_length_ticks` and one seeded
   window: `{id: "sow", labour: "farm", from: 1, to: 20, boost: 1, label:
-  "sowing window"}`. [ADR 023](023-needs-decay-points-per-day.md) (issue #349)
+  "sowing window"}`. [ADR 024](024-needs-decay-points-per-day.md)
   changes `day_length_ticks` from 100 to 2200 so each day takes longer; the
   window's `from`/`to` day numbers are unchanged, since they are day numbers,
   not ticks.
@@ -106,8 +105,8 @@ file — not calendar dates.
   schema and `CalendarService`'s contract in place of the old `{season
   windows, boosts: [...]}` sketch.
 - Wiring `active_boost` into the effective-priority formula (3.2) and
-  `alert_state` into the alert list and live colony state is deferred to t3
-  and t4 respectively, per this task's non-goals.
+  `alert_state` into the alert list and live colony state is deferred to
+  later work.
 
 ## Acceptance criteria
 

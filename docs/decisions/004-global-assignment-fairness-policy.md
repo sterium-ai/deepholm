@@ -1,8 +1,11 @@
 # ADR 004: Global assignment with bounded aging and route work
 
-- Status: accepted task contract for #47
-- Date: 2026-09-15
-- Implements [ADR 003](003-scheduling-explainability-save-integrity-mobile-first.md), principle 1 (fair scheduling under load).
+> **In short:** Colonists pick up work through one shared, fair scheduler, so urgent jobs go first but no job waits forever, and the work done each game tick stays within a fixed limit.
+
+- **Status:** accepted
+- **Date:** 2026-09-15
+- **Scope:** simulation (`WorldState`, global scheduler, job queue, route search)
+- **Implements:** [ADR 003](003-scheduling-explainability-save-integrity-mobile-first.md), principle 1 (fair scheduling under load).
 
 ## Policy and acceptance contract (declared before implementation)
 
@@ -32,12 +35,12 @@ enter one global ready set ranked again using these estimates before activation.
 Only the best available candidate per worker is activated; the unused candidate
 remains queued. Each worker and job appears at most once in the assignment set.
 A search in progress is never reported unreachable.
-Unreachable results use t2's block reason and can be retried on a later scan.
+Unreachable results use the job queue's block reason and can be retried on a later scan.
 
 A scheduling adapter exposes only selected jobs and proven blocking cases to
-one call of t2's queue tick, then restores the full job collection. It does
+one call of the job queue's tick, then restores the full job collection. It does
 not rewrite reservation or block-reason transitions. Deferred evaluation is
-not a block reason. Reservations remain exclusively owned by t2. Block reasons
+not a block reason. Reservations remain exclusively owned by the job queue. Block reasons
 describe the last bounded evaluation and refresh when its cursor next visits;
 the standalone queue's unbounded every-job polling is not run by WorldState.
 
@@ -45,11 +48,10 @@ the standalone queue's unbounded every-job polling is not run by WorldState.
 
 `test_scheduling_fairness.gd` is the executable workload contract: 8 idle
 colonists on a finite open 20-by-10 soil grid (surrounded by rock in the
-48-by-48 world), 200 initially continuously
-eligible unique dig orders cycling LOW/NORMAL/HIGH, and one new HIGH order
+48-by-48 world), 200 initially continuously eligible unique dig orders cycling LOW/NORMAL/HIGH, and one new HIGH order
 every 10 ticks for 600 ticks. New targets reuse completed tiles only. The
 execution fixture completes each active order by explicit command before the
-next tick; movement and excavation belong to a later task. Eligibility
+next tick; movement and excavation are outside this contract. Eligibility
 means a passable target without a conflicting reservation and available
 workers. Every initial and arriving order must transition to active within
 300 ticks of submission, with zero starved orders. Arrivals continue while
@@ -70,7 +72,8 @@ iteration order. Both reproduce the starvation risk ranked second in ADR 003;
 bounded travel influence and aging avoid it.
 
 The adapter and scheduler remain plain in-memory core objects. Existing save
-schema and content examples are unchanged, as with t2/t3: these read models
+schema and content examples are unchanged, as with the job queue and route
+search: these read models
 are not valid save payloads. A future versioned save migration must include
 submission ordinals/ticks, scan cursors, assignments and unfinished searches.
 WorldState's diagnostic hash includes this continuation state. New command

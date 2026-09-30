@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Acceptance coverage for issue #189/#195's colonist_panel.gd toil display:
+## Coverage for colonist_panel.gd's toil display:
 ## a hauling colonist's panel line must show its job kind ("Hauling") and its
 ## current toil name, exercised end to end through a real WorldState (auto
 ## haul submission, the global scheduler, and the toil executor) rather than
@@ -77,7 +77,7 @@ func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	var atlas: Dictionary = load("res://scripts/viewer/tile_atlas_map.gd").ITEM_ATLAS_MAP[item_kind]
 	_expect(marker.visible, "real haul must show the carried " + item_kind)
 	_expect(marker.texture.resource_path == atlas["texture_path"] and marker.region_rect == atlas["rect"], "cargo badge must resolve the actual carried kind: " + item_kind)
-	# issue #364: marker position now follows the sprite's own interpolated,
+	# Marker position now follows the sprite's own interpolated,
 	# feet-anchored position (SPRITE_POSITION_OFFSET) instead of the raw tile
 	# origin -- this sprite is freshly spawned as of set_world() above (no
 	# prior motion state), so it is snapped with t=0 at its current tile,
@@ -233,7 +233,7 @@ func _check_handover_reason() -> void:
 			for job in world.get_jobs():
 				if job["id"] == forage_a_id and job["status"] == "completed":
 					forage_a_done = true
-					# colonist_a's own NEXT dispatched job -- submitted only
+					# colonist_a's own next dispatched job -- submitted only
 					# now, so a third job is never queued while colonist_b
 					# waits -- is what makes its first toil drop_tool.
 					var forage_b := _command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})

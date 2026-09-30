@@ -1,5 +1,7 @@
 # Colonist AI: decision, movement and priorities (design, 2026-09-18)
 
+> **In short:** How colonists decide what to do next, reserve what they need, walk around furniture, fetch and share tools, eat and sleep, and rescue each other, so they behave predictably instead of getting stuck.
+
 The colonists' ability to solve tasks, gather resources, do activities and find the nearest
 food or drink is the heart of a colony simulation, and the area where colony sims most often
 feel broken: colonists collide with objects they should pass (chairs, doors), never drop a
@@ -68,7 +70,7 @@ the same cost table, so nothing "collides" unexpectedly.
 | Failure mode | Structural cause | Game rule |
 | --- | --- | --- |
 | Colonists collide with chairs, doors, things they should pass | Pathfinder and movement used different notions of "blocked"; object passability hard-coded per class | **One `passability(tile, object) -> cost|blocked` function** in core, data-driven from content, used by route search, movement stepping and order validation. Objects declare `passable`, `passable_cost`, `opens` (door). A route is re-validated one tile ahead each step; a newly blocked tile triggers re-route, not a stall. |
-| A tool stays in a colonist's hand/back while another colonist needs it | Tools lived on the colonist with no reservation and no release step | **Implemented: tools (objective #266).** Tools are colony items with a reservation like any target. A job that needs a tool reserves the nearest free one as a toil ("fetch tool"); the last toil of every job is "release": the tool stays *held but unreserved*, so the scheduler may assign it to another job — the holder's next job either reuses it (same kind) or begins with "drop tool at stockpile/here". No job ever ends holding a reservation. |
+| A tool stays in a colonist's hand/back while another colonist needs it | Tools lived on the colonist with no reservation and no release step | **Implemented: tools.** Tools are colony items with a reservation like any target. A job that needs a tool reserves the nearest free one as a toil ("fetch tool"); the last toil of every job is "release": the tool stays *held but unreserved*, so the scheduler may assign it to another job — the holder's next job either reuses it (same kind) or begins with "drop tool at stockpile/here". No job ever ends holding a reservation. |
 | Colonists stop working / go idle with work pending | Unfair or blocked-prefix selection, stale reservations, races between managers | Already addressed by ADR 004 (aging, cursor past blocked jobs, bounded routes) and the invariant test "no idle colonist while a reachable unreserved eligible job exists". Extended here to items: a job blocked on a missing item says so (`blocked_missing_input`) and does not consume the colonist. |
 | In fertile months they did other things instead of planting | No notion of urgency over time; planting competed equally with hauling | **Calendar urgency**: content declares windows (e.g. `sow` in spring days 1–20) that add a priority boost to a labour kind while the window is open, visible on the work table ("Planting ↑ sowing window, 12 days left"). Higher than normal orders, lower than critical needs. The scheduler's aging still guarantees other work is not starved forever. |
 | Not storing resources | Hauling was a labour with no reservation of the destination slot; two haulers targeted one slot or none | Hauling jobs reserve **both** the item and the destination stockpile cell; a full/forbidden destination is a typed block, not a dropped item. |
@@ -96,7 +98,7 @@ the tick budget. If no source exists the colonist keeps working and the reason i
 
 ### 3.2 Labour table and priorities
 
-**Implementation file map (F2, #281–#283):**
+**Implementation file map (F2):**
 `game/scripts/core/actors/actor_table.gd` exposes the worker component;
 `game/scripts/core/actors/components/worker.gd` owns this section's labour
 table and the held-tool accessors used by the tool flow. Callers use these
@@ -107,15 +109,15 @@ dictionary; there is no nested `worker` key (see
 
 Each colonist has a table `labour kind → 0 (off) | 1 | 2 | 3 | 4`, editable
 by the player (default all 3). Labour kinds for the slice: `mine`, `chop`, `farm`, `haul`,
-`build`, `craft`, `cook`. The `mine` job kind (issue #347, rock outcrops mined for stone) joins
+`build`, `craft`, `cook`. The `mine` job kind (rock outcrops mined for stone) joins
 `dig` under the existing `mine` labour kind rather than adding a new one, so the labour-table UI
-(#233) needs no change (ADR 024). The global scheduler (ADR 004) keeps its aging queue, but a
+needs no change (ADR 025). The global scheduler (ADR 004) keeps its aging queue, but a
 colonist only examines jobs whose kind is enabled for it, and the job's effective priority is
 `16 * (order priority + calendar boost + 4 - colonist labour level) + ticks waiting`, capped
 so that aging still dominates after a bounded wait. This keeps one scheduler (no per-labour
 queues) and one fairness proof.
 
-**Implemented** (issue #267): `global_assignment.gd`'s per-(worker, job) scoring extends this
+**Implemented**: `global_assignment.gd`'s per-(worker, job) scoring extends this
 formula exactly, in both the proposal loop and the ready-list rescoring, via
 `GlobalAssignment._priority_bracket()`. A candidate whose job's labour is 0 for a worker
 (`ToilExecutor.get_labour(job.kind)` read against that worker's `labourTable`) is never
@@ -128,8 +130,8 @@ every other service reads (ADR 010/`extension-points.md`), not a second independ
 `calendar.json` read — and both `ToilExecutor.get_labour` and `CalendarService.active_boost` are
 passed into `GlobalAssignment.tick()` as callables (`world_state.gd`'s own `tick()`), keeping the
 scheduler itself free of a direct `WorldState`/`ToilExecutor` dependency. `WorldState.
-get_active_calendar_boost(labour: String) -> int` exposes the same query read-only for a later
-presentation task. The bracketed term `(order priority + calendar boost + 4 - labour level)` is
+get_active_calendar_boost(labour: String) -> int` exposes the same query read-only for the
+presentation layer. The bracketed term `(order priority + calendar boost + 4 - labour level)` is
 capped at `GlobalAssignment.MAX_PRIORITY_BRACKET` (20) the same way `MAX_TRAVEL_PENALTY` already
 caps travel, but never floored: `calendar.schema.json` permits a negative boost, and a resulting
 negative bracket is a real, valid score (summed with `ticks_waiting` as usual), not a sentinel —
@@ -138,8 +140,8 @@ precisely so a negative boost on an enabled labour can never be mistaken for "la
 Without the upper cap, calendar content could stack arbitrarily large boosts (`active_boost`
 sums every matching window) and defeat ADR 004's aging-dominance argument by making the bracket
 win forever regardless of `ticks_waiting`. Both callables default to an invalid `Callable` for a
-caller that predates this wiring (this file's own lower-level scheduler tests), which reproduces
-ADR 004's original priority-only formula bit for bit.
+caller that does not supply them (the lower-level scheduler tests), which reproduces ADR 004's
+original priority-only formula bit for bit.
 
 Section 3.1's needs-before-work layering does not rely on scoring at all. `GlobalAssignment.submit()`
 has a `restrict_to` parameter that both `NeedGiver._commit()` (a committed need job) and
@@ -163,10 +165,10 @@ When every colonist that could ever perform a queued job's labour has it set to 
 marked with the non-terminal reason `labour_disabled` while it stays queued (not failed) —
 `GlobalAssignment` recomputes this once per tick from the **full colony roster** (a separate
 `all_colonists` parameter on `tick()`, defaulting to the scheduling pool for a caller that
-predates it), not the pool `tick()` itself schedules against: `world_state.gd`'s `tick()` already
+omits it), not the pool `tick()` itself schedules against: `world_state.gd`'s `tick()` already
 filters that pool down to colonists not mid-search for a need (section 3.1), and a colonist
 mid-search still has a real labour table that must count toward "every colonist" regardless of
-whether it can take work this exact tick. `GlobalAssignment` calls the new
+whether it can take work this exact tick. `GlobalAssignment` calls the
 `JobQueue.set_labour_disabled(job_id, disabled)` setter, which mirrors the existing
 `_block()`/`job_unblocked` pattern `blocked_destination_full`/`blocked_target_reserved` already
 use (`job_queue.gd`'s private `_block()`/`job['reason']`/`job_blocked` event) rather than
@@ -198,17 +200,17 @@ precondition first (target still valid, item still there, cell still free, tool 
 and fails with a typed reason otherwise. The existing `route`/`work` fields on the colonist
 become the state of the current `go_to`/`work` toil.
 
-Cargo uses the `hands` list defined by [ADR 035](../decisions/035-hands-multi-unit-carrying.md):
+Cargo uses the `hands` list defined by [ADR 037](../decisions/037-hands-multi-unit-carrying.md):
 each entry is `{kind, count}`, and all entries together are capped at 4 units. A colonist
 picks up an item only for its job's purpose and deposits everything through the ordinary drop
 path when that job ends for any reason. For the multi-source build behavior in
-[ADR 036](../decisions/036-build-multi-source-fetch-efficiency.md), each next source is the
+[ADR 038](../decisions/038-build-multi-source-fetch-efficiency.md), each next source is the
 nearest reachable unreserved source by deterministic route cost. After pickup, delivery starts
 when the build cost is covered, hands are full, or no source remains; otherwise the "very close"
 rule delivers early when the destination is strictly cheaper to reach than the next source.
 This decision is made once at the pickup boundary and is not re-evaluated mid-route.
 
-**Implemented: tools (objective #266, issues #270-#274).** `fetch_tool` and
+**Implemented: tools.** `fetch_tool` and
 `drop_tool` are toils inside the existing executor, not a new job-giver or a
 second job queue. Content declares `needs_tool` (pick for dig, axe for chop).
 Fetching reserves the nearest available matching item, including an unreserved
@@ -223,7 +225,7 @@ active drop-leg marker without overwriting haul cargo's `item_id`. The detached
 `get_jobs()` handover overlay reuses `reason`, `remedy`, `item_id`, and
 `blocking_job_id` to describe the requester and holder; that display overlay
 is not persisted or consulted by simulation decisions. See
-[ADR 012: tool toils](../decisions/012-tool-toils.md) for cancellation,
+[ADR 013: tool toils](../decisions/013-tool-toils.md) for cancellation,
 interruption, destruction, reservation-release and load semantics.
 
 The viewer reads `held_tool` and `get_tool_item()` to display the held kind.
@@ -270,112 +272,119 @@ and `haul_giver.gd` for job creation, `game/scripts/core/jobs/job_queue.gd` and
 `scheduling/global_assignment.gd` for shared assignment, and the consolidated
 `game/scripts/core/jobs/toil_executor.gd` for toil execution and release.
 
-**Implemented: rescue (issue #360, [ADR 025](../decisions/025-trench-trapped-actor-and-rescue.md)'s own t4).** A trapped colonist (`colonist.trapped`,
-ADR 025/#359) cannot act, and no colonist auto-escapes a trench (only a hostile actor does, via
-`escape_trench`) — a colonist stays trapped until another colonist rescues it. `rescue_giver.gd`
-decides when a `rescue` job exists, one priority layer of its own, slotted **above ordinary work
-(layer 5) and below both need layers (2 and 4)**: it reuses the exact same committed-proposal
-pathway (`get_pending_assignments()` feeding `GlobalAssignment.tick()`'s `committed_needs`,
-`world_state.gd`'s `_committed_jobs()`) a need job already uses, so a pending rescue pre-empts
-ordinary labour precisely the way a need job does — but it never pre-empts a need itself: the
-candidate pool `world_state.gd`'s `_rescue_candidates()` hands it every tick has already excluded
-any colonist mid need-search or already committed to a need job (mirroring `_colonists_not_
-searching_need()`'s own exclusion style), any colonist itself trapped, any colonist `CombatGiver`
-owns, and any actor whose faction may not be ordered (F3, issue #290) — so a hostile "colonist"-
-def actor (a raider) is never offered a colony victim to rescue. The job's target is never the
-trench tile itself, only one of the victim's own passable, non-trench neighbours. Round-3 review
-(finding 2) replaced an earlier scheme that searched with the victim's own trench tile made
-impassable, which only proved that SOME detour existed, never that the real `go_to` leg (which
-always routes with the same unrestricted, no-trench-avoidance passability every other job uses,
-ignoring any detour a restricted search found) would actually walk it. Every search now runs with
-that exact unrestricted routable-to callable, and a (candidate, target) pair is only accepted when
-the resulting real path crosses no trench tile at all — not merely the victim's own (round-2
-review round-4 finding 1: a candidate's only route can cross a completely unrelated trench
-elsewhere on the map) — a pair whose only real route crosses any trench is rejected outright,
-never replaced by an assumed, unfollowed detour; if every candidate's real route to every target
-would cross a trench, the giver reports
-`no_rescuer_available` exactly as if no candidate existed, rather than send a rescuer in to fall in
-itself. Because a rescue candidate is a moving colonist, not a fixed tile, and can keep walking its
-own ordinary job while this multi-tick search is in progress, the search also re-validates the
-candidate's live position once each full sweep across every target finishes, discarding and
-redoing a sweep whose position has since gone stale rather than committing to a route computed from
-a tile the candidate has already left — bounded (round-4 finding 2) to `MAX_STALE_RETRIES`
-consecutive discards per candidate, so one continuously-moving ordinary worker can never
-monopolize the search and starve out a later, idle candidate forever. Every search the giver runs
-shares ADR 004's per-colonist, per-tick route budget with the scheduler and the toil executor
-(round-4 review finding 4): `RescueGiver.advance()` runs right after `GlobalAssignment.tick()`
-(which clears the shared `_route_budget` ledger) and before `_advance_colonists()`, spends at most
-one `resume()` per candidate colonist per tick — skipping, and retaining unfinished, a search whose
-candidate the scheduler or another victim's search already routed for this tick — and marks the
-ledger so a toil re-route later in the same tick defers likewise; `get_route_telemetry()` reports
-the actual calls. The giver validates the commit-time route only; everything a committed rescue
-does afterwards is kept trench-safe by `world_state.gd` at its existing boundaries, never by a
-synchronous search run to completion (round-4 findings 4 and 5): the go_to toil's passability hook
-hands a rescue job `_rescue_routable_to()`, under which every trench tile is impassable and the
-target gets none of `_routable_to()`'s impassable-target exception, so a mid-travel re-route around
-a newly blocked corridor can never cross a trench and a target made impassable reads as unreachable
-rather than being trimmed to start rescue work one tile off; a resume after a need interrupt
-(`_resume_paused_rescue()`) re-derives its route through the toil executor's own budgeted,
-multi-tick re-route under that same passability and requires the colonist to be exactly on the
-target — never merely Chebyshev-adjacent — before work may start; and the first drive of a fresh
-activation (`_rescue_activation_safe()`) scans the scheduler's already-computed path tile by tile
-(no trench, ends on the target, target still passable) since the map may have changed between
-commit and activation. Whenever any of these finds the commitment can no longer be completed
-safely — including the scheduler's own `blocked_target_unreachable` verdict on a queued commitment,
-which the giver retires the same tick — `_retire_rescue_job()` cancels it through the shared finish
-boundary and resolves the giver's association: it is never resubmitted under the same rescuer, so
-the victim's next search is free to choose any available rescuer. Work progress is keyed by the
-job's own explicit identity (`_work_progress_key_for_job()`), scoped by job id only when that job
-is a `rescue` (round-4 finding 4): two rescue jobs that share one target tile — one suspended
-mid-work, the other activating on the freed tile — can never read or clear each other's saved
-progress. Every other job kind keeps the plain tile key every existing test and save already
-assumes, since an ordinary job's own target changes kind (or is otherwise no longer a valid target)
-the moment it completes, so a same-kind job can never really reuse that exact tile the way two
-rescues can. Every terminal boundary (a cancel/fail/invalidate command on an active OR suspended
-rescue, trapping, death, refused reservation, retirement) clears a rescue's own key by that explicit
-identity, never by a reservation-owner lookup that has already been released (round-4 review
-finding 2), so a paused ordinary job's plain-key progress on the same tile is never erased. Once
-the rescuer's `work` toil (`content/jobs.json`'s
-`rescue` entry, 20 ticks,
-reusing the ordinary `reserve, go_to, work, release_all` sequence) completes, the trapped colonist
-is moved onto the rescuer's own tile and its `trapped` field is cleared — it re-enters the fair
-scheduler's pool exactly like any other idle colonist, never resuming whatever job it was doing
-before it fell in (that job was already released, cancelled like `cancel_job`, the instant it
-became trapped). If the job's own assigned victim no longer exists or is no longer trapped by the
-time the work completes (round-3 review finding 4 — it died, say), the completion effect treats
-this as an obsolete rescue and does nothing beyond the ordinary unconditional cleanup below: it
-never substitutes a different, merely-adjacent trapped colonist, which could otherwise free the
-wrong victim or bypass that other victim's own separate, still-live rescue claim. When no rescuer
-candidate exists at all (every other colonist trapped, or itself mid-need), `get_colonist_rescue_reason()` exposes `no_rescuer_available`, mirroring `get_colonist_
-need_reason()`'s own `need_unmet:<kind>` pattern, for a panel to render as "trapped in a trench,
-no one can help" (a later task's own presentation wiring). A second rescue job can never be
-proposed for the same victim: alongside the job's own ordinary `tile:x,y` reservation key, a
-committed rescue job needs a new key-domain, `trapped:<victim_id>` (orders-and-movement.md
-"ReservationTable key domains"). Round-2 review found the original design — `rescue_giver.gd`
-acquiring that key directly on the shared table the instant it commits — violated the invariant
-that a reservation exists only while its job is actually active, and broke across a need/combat
-interrupt's own suspend/resume cycle. `job_queue.gd`'s now-generic `set_extra_reservation_keys()`
-callback fixes this: the key moves through the exact same activation/reactivation boundary the
-target key itself does, so it is correctly released on suspend and reacquired on resume, with no
-`reservation_table.gd` change (`acquire()`/`is_reserved()` stay generic) and no per-job-kind
-special case beyond the callback itself (haul already needed the analogous thing for its own
-`item:`/`cell:` pair). Deduplication reads `rescue_giver.gd`'s own victim-association record
-directly rather than the reservation table, since a merely-queued or suspended rescue job holds no
-`trapped:` key at all under this scheme. A rescue job's association with its own victim is not a
-per-job field (no per-job field may name "which colonist is being rescued," this task's own
-non-goal); target-tile-plus-adjacency alone cannot stand in for it either (round-3 review finding
-3) — two victims can share a target tile or have overlapping candidate adjacency, so a job
-restored by adjacency guesswork can end up matched to the wrong victim, or to none at all. Instead
-`RescueGiver` exposes its own `job_id -> victim_id` map as its own save data
-(`get_job_victims()`), persisted verbatim alongside the giver's other continuation state and
-restored losslessly on load (`restore_victim_assignments()`/`restore_pending_assignments()`,
-called from `state_codec.gd`'s `decode()`) — never re-derived by guesswork. `_committed_jobs()`
-always lets a need commitment overwrite a
-rescue one for the same actor — never the reverse — so a rescuer who develops a critical need
-mid-rescue is still governed by "below both need layers" for as long as that need is pending. The
-implemented file map is `game/scripts/core/jobs/givers/rescue_giver.gd` for job creation,
+**Implemented: rescue ([ADR 026](../decisions/026-trench-trapped-actor-and-rescue.md)).** A
+trapped colonist (`colonist.trapped`) cannot act. Colonists never escape a trench on their own
+(only a hostile actor does, via `escape_trench`), so a trapped colonist stays trapped until
+another colonist rescues it.
+
+*Priority.* `rescue_giver.gd` decides when a `rescue` job exists. Rescue is a priority layer of
+its own, **above ordinary work (layer 5) and below both need layers (2 and 4)**. It reuses the
+committed-proposal pathway a need job uses (`get_pending_assignments()` feeding
+`GlobalAssignment.tick()`'s `committed_needs`, `world_state.gd`'s `_committed_jobs()`), so a
+pending rescue pre-empts ordinary labour exactly as a need job does. It never pre-empts a need:
+the candidate pool that `world_state.gd`'s `_rescue_candidates()` supplies each tick excludes any
+colonist mid need-search or committed to a need job (mirroring `_colonists_not_searching_need()`),
+any trapped colonist, any colonist `CombatGiver` owns, and any actor whose faction may not be
+ordered, so a hostile actor built on the colonist definition (a raider) is never offered a victim
+to rescue. `_committed_jobs()` always lets a need commitment overwrite a rescue one for the same
+actor, never the reverse, so a rescuer who develops a critical need mid-rescue stays below both
+need layers for as long as that need is pending.
+
+*Choosing a safe route.* The job's target is never the trench tile itself, only one of the
+victim's passable, non-trench neighbours. Every search uses the same unrestricted routable-to
+callable the real `go_to` leg uses, and a (candidate, target) pair is accepted only when the
+resulting path crosses no trench tile at all, not merely the victim's own: a candidate's only
+route can cross an unrelated trench elsewhere on the map. (An earlier scheme searched with only
+the victim's trench tile made impassable. That proved some detour existed, but not that the real
+`go_to` leg, which does not avoid trenches, would walk it.) A pair whose only route crosses a
+trench is rejected outright; if every pair is rejected, the giver reports `no_rescuer_available`
+exactly as if no candidate existed, rather than send a rescuer in to fall in itself.
+
+A candidate is a moving colonist that may keep walking its ordinary job while this multi-tick
+search runs, so the search re-validates the candidate's live position after each full sweep
+across every target and redoes a sweep whose start position has gone stale. This is bounded to
+`MAX_STALE_RETRIES` consecutive discards per candidate, so one continuously moving worker cannot
+starve out a later, idle candidate.
+
+*Shared route budget.* Every search the giver runs shares ADR 004's per-colonist, per-tick route
+budget with the scheduler and the toil executor. `RescueGiver.advance()` runs right after
+`GlobalAssignment.tick()` (which clears the shared `_route_budget` ledger) and before
+`_advance_colonists()`. It spends at most one `resume()` per candidate per tick, skips (and keeps
+unfinished) a search whose candidate the scheduler or another victim's search already routed this
+tick, and marks the ledger so a later toil re-route in the same tick defers likewise.
+`get_route_telemetry()` reports the actual calls.
+
+*Staying safe after commit.* The giver validates the route at commit time only. Afterwards
+`world_state.gd` keeps a committed rescue trench-safe at its existing boundaries, never by a
+synchronous search run to completion:
+
+- The `go_to` toil's passability hook gives a rescue job `_rescue_routable_to()`, under which
+  every trench tile is impassable and the target gets none of `_routable_to()`'s
+  impassable-target exception. A mid-travel re-route around a newly blocked corridor therefore
+  never crosses a trench, and a target made impassable reads as unreachable instead of being
+  trimmed so that rescue work starts one tile off.
+- A resume after a need interrupt (`_resume_paused_rescue()`) re-derives its route through the
+  toil executor's budgeted, multi-tick re-route under the same passability, and requires the
+  colonist to stand exactly on the target (not merely Chebyshev-adjacent) before work may start.
+- The first drive of a fresh activation (`_rescue_activation_safe()`) scans the scheduler's
+  already-computed path tile by tile (no trench, ends on the target, target still passable),
+  since the map may have changed between commit and activation.
+
+Whenever one of these checks finds that the commitment can no longer be completed safely,
+including the scheduler's own `blocked_target_unreachable` verdict on a queued commitment (which
+the giver retires the same tick), `_retire_rescue_job()` cancels the job through the shared
+finish boundary and clears the giver's association. The job is never resubmitted under the same
+rescuer, so the victim's next search is free to choose any available rescuer.
+
+*Work progress.* Work progress is keyed by the job's explicit identity
+(`_work_progress_key_for_job()`), scoped by job id only for `rescue` jobs: two rescue jobs that
+share one target tile (one suspended mid-work, the other activating on the freed tile) can never
+read or clear each other's saved progress. Every other job kind keeps the plain tile key, since
+an ordinary job's target changes kind (or stops being a valid target) the moment the job
+completes, so a same-kind job cannot reuse that tile the way two rescues can. Every terminal
+boundary (a cancel/fail/invalidate command on an active or suspended rescue, trapping, death, a
+refused reservation, retirement) clears a rescue's key by that explicit identity, never by a
+lookup of a reservation owner that has already been released, so a paused ordinary job's
+plain-key progress on the same tile is never erased.
+
+*Completion.* The rescuer's `work` toil (`content/jobs.json`'s `rescue` entry, 20 ticks, reusing
+the ordinary `reserve, go_to, work, release_all` sequence) moves the trapped colonist onto the
+rescuer's tile and clears its `trapped` field. The freed colonist re-enters the scheduler's pool
+like any idle colonist; it does not resume the job it had before falling in (that job was
+released, as by `cancel_job`, the instant it became trapped). If the assigned victim no longer
+exists or is no longer trapped when the work completes (it died, say), the completion effect
+treats the rescue as obsolete and does nothing beyond the ordinary cleanup. It never substitutes
+a different adjacent trapped colonist, which could free the wrong victim or bypass that victim's
+own live rescue claim.
+
+When no rescuer candidate exists at all (every other colonist is trapped or busy with a need),
+`get_colonist_rescue_reason()` exposes `no_rescuer_available`, mirroring
+`get_colonist_need_reason()`'s `need_unmet:<kind>` pattern, for the panel to render as "trapped
+in a trench, no one can help".
+
+*One rescue per victim.* Alongside the job's ordinary `tile:x,y` reservation key, a committed
+rescue job holds a key in its own domain, `trapped:<victim_id>` (`orders-and-movement.md`,
+"ReservationTable key domains"). The key moves through the same activation/reactivation boundary
+as the target key, via `job_queue.gd`'s generic `set_extra_reservation_keys()` callback, so it is
+released on suspend and reacquired on resume. This needs no `reservation_table.gd` change and no
+per-kind special case beyond the callback (haul uses the same mechanism for its `item:`/`cell:`
+pair). An earlier design had `rescue_giver.gd` acquire the key directly at commit time; that
+broke the invariant that a reservation exists only while its job is active, and failed across a
+need or combat interrupt's suspend/resume cycle. Deduplication reads `rescue_giver.gd`'s
+victim-association record directly rather than the reservation table, since a queued or
+suspended rescue job holds no `trapped:` key.
+
+*Persistence.* A rescue job's victim is deliberately not a per-job field, and target tile plus
+adjacency cannot stand in for it: two victims can share a target tile or have overlapping
+candidate adjacency, so guessing could match a restored job to the wrong victim or to none.
+`RescueGiver` instead exposes its `job_id -> victim_id` map as save data (`get_job_victims()`),
+persisted verbatim with the giver's other continuation state and restored on load
+(`restore_victim_assignments()`/`restore_pending_assignments()`, called from `state_codec.gd`'s
+`decode()`).
+
+The implemented file map is `game/scripts/core/jobs/givers/rescue_giver.gd` for job creation,
 `job_queue.gd` for the generic extra-reservation-keys mechanism, `state_codec.gd` for load-time
-continuation, and `world_state.gd`'s own `_toil_on_work_complete()` `"rescue"` case for the
+continuation, and `world_state.gd`'s `_toil_on_work_complete()` `"rescue"` case for the
 completion effect.
 
 ### 3.7 Calendar urgency
@@ -384,11 +393,10 @@ completion effect.
 label}]}` (ADR 008). `day_length_ticks` is the tick count of one in-game day; `from`/`to` are
 1-indexed, inclusive day-of-year numbers (day 1 is spring day 1; no other season-length
 content exists yet, so later seasons are added by offsetting their windows' day numbers, not
-by changing the schema). `day_length_ticks` is **2200** (issue #349, ADR 023: at x1/2 ticks-
-per-second a day takes ~18.3 real minutes, slow enough for needs decay — see below — to be
+by changing the schema). `day_length_ticks` is **2200** (ADR 024: at x1, 2 ticks per second,
+a day takes about 18.3 real minutes, slow enough for needs decay — see below — to be
 survivable). The seeded window is `{id: "sow", labour: "farm", from: 1, to: 20, boost: 1,
-label: "sowing window"}`, unchanged by issue #349: `from`/`to` are day numbers, not ticks, so
-lengthening `day_length_ticks` changes how long a day takes without changing which day numbers
+label: "sowing window"}`; `from`/`to` are day numbers, not ticks, so lengthening `day_length_ticks` changes how long a day takes without changing which day numbers
 the sowing season spans.
 
 `CalendarService` (`game/scripts/core/calendar/calendar_service.gd`) is a plain, scene-
@@ -402,8 +410,7 @@ table shows these active boosts.
 `ALERT_LEAD_DAYS` (3) days before the soonest upcoming window opens, and only when nobody has
 that window's labour enabled and the colony already has both a plowed plot and seed stock —
 the colonist/farm-order facts this needs are passed in as plain booleans rather than read from
-`WorldState`, so this method is wireable by a later task without this one depending on that
-state existing. Once `already_fired` is true for a window it reports `due: false` even at the
+`WorldState`, so the service has no dependency on `WorldState`. Once `already_fired` is true for a window it reports `due: false` even at the
 exact lead-day tick, so the alert fires at most once per window. This is a data change to add
 new windows (harvest, winter firewood).
 
@@ -414,8 +421,7 @@ Every colonist exposes `activity`, `job_id`, `toil`, `reason`, `remedy`. New rea
 `trapped`, `no_rescuer_available`, `rerouting`, `retry_in:<ticks>`, `labour_disabled`. `trapped`
 identifies a colonist unable to act after trench entry; `no_rescuer_available` is exposed for a
 trapped colonist when the rescue giver finds no reachable eligible rescuer. The panel shows them;
-headless tests
-assert them.
+headless tests assert them.
 
 ## 4. Testing the AI without a full game
 
@@ -439,9 +445,9 @@ the minimum content its tests need; every test is headless, seeded and hash-chec
 - **Invariant**: after every scenario, `ReservationTable` contains only keys owned by active
   jobs; no colonist is idle while an eligible reachable unreserved job exists.
 
-## Implemented: increment D, the needs layer (issues #201-#206)
+## Implemented: increment D, the needs layer
 
-Increment D (the table row above) shipped across five tasks: needs decay and
+Increment D (the table row above) shipped in five steps: needs decay and
 thresholds (schema v6), berry/water/bed content and their tile representation
 (schema v7), the needs decision layer itself (need jobs, nearest-reachable-
 unreserved-source search), critical-need interrupts that keep a paused
@@ -456,7 +462,7 @@ the design left room:
   form throughout). Each has `warn`/`urgent`/`critical` thresholds and a
   `restore` value, declared in `content/needs.json`, matching the three-
   threshold design in 3.1. Decay is declared in **points per day**
-  (`rate_per_day`, issue #349, ADR 023: food 67, water 100, rest 80) rather
+  (`rate_per_day`, ADR 024: food 67, water 100, rest 80) rather
   than points per tick, applied through a deterministic per-colonist,
   per-need integer accumulator (`ActorNeeds.apply_tick()`) so the exact tick
   a need loses its next point is reproducible and float-free regardless of
@@ -473,10 +479,9 @@ the design left room:
   list (`blocked_missing_input`, `blocked_no_tool`, `blocked_destination_full`,
   `retry_in:<ticks>`, `labour_disabled`) belonged to later increments (tools,
   labour table) and was still design-only at the time this section shipped;
-  `labour_disabled` shipped with the labour table/calendar work (issue #267)
-  and `blocked_missing_input` with till/sow (issue #268, see "Implemented:
-  farming" below). An earlier task's own prose named
-  the no-source-available case `need_source_missing:<kind>`; the shipped
+  `labour_disabled` shipped with the labour table/calendar work
+  and `blocked_missing_input` with till/sow (see "Implemented: farming"
+  below). An earlier draft of this design named the no-source-available case `need_source_missing:<kind>`; the shipped
   reason string is `need_unmet:<kind>` for both "still searching, found
   nothing" and "searched, nothing reachable" — there is no separate
   `need_source_missing` reason in the code. The presentation layer (below)
@@ -490,7 +495,7 @@ the design left room:
   immediately, keeping its tick count on `WorldState._work_progress` (keyed
   by tile, not colonist) exactly as 3.6 specifies; urgent needs wait for the
   current toil to end. The paused job resumes rather than restarts.
-- **Presentation** (this task, #206): `colonist_panel.gd` reads three need
+- **Presentation**: `colonist_panel.gd` reads three need
   bars straight off `get_colonists()`'s `needs` field, and shows a committed
   need job's activity ("Eating"/"Drinking"/"Sleeping") and toil by resolving
   the job id carried on the colonist's own `route`/`work` field through
@@ -506,7 +511,7 @@ the design left room:
   recomputed (not appended) on every refresh so it never grows and clears the
   instant the reason does.
 
-## Implemented: farming — till/sow job kinds (issue #268)
+## Implemented: farming — till/sow job kinds
 
 Two new job kinds, content-only (`content/jobs.json`), both `labour: "farm"` and composed of
 the same toils as `dig`/`chop`/`forage` (`reserve`, `go_to`, `work`, `release_all`) — no new
@@ -517,7 +522,7 @@ toil, matching this page's own "jobs as toils" design (3.3) exactly:
   `move_cost: 1`, matching `floor`'s shape).
 - **`sow`**: target must be a `plowed_soil` tile *and* at least one `seed` item (a new
   `content/items.json` entry, `{"id": "seed", "kind": "seed"}`) must exist anywhere in the
-  world — on the ground/stockpile *or* mid-haul in a colonist's hands (issue #402, ADR 035),
+  world — on the ground/stockpile *or* mid-haul in a colonist's hands (ADR 037),
   since hauling moves an item out of the ground-item map into `colonist["hands"]`
   (`toil_executor.gd`'s `pick_up`) and a seed in transit still counts — else the order is
   rejected at submission — the
@@ -537,13 +542,13 @@ toil, matching this page's own "jobs as toils" design (3.3) exactly:
   rather than later placing an emptied stack.
 
 Both job kinds use the existing `farm` labour kind (already in `LABOUR_KINDS`) and the existing
-`work(ticks)` toil, so t1's labour-priority formula, `labour_disabled` reason and calendar
+`work(ticks)` toil, so the labour-priority formula, `labour_disabled` reason and calendar
 boost (3.2/3.7, the seeded `sow` window already names `labour: "farm"`) apply unchanged: a
 colonist with `farm` preferred over `haul` activates a queued till/sow job before its own haul
 jobs, and `farm` disabled for every colonist leaves till/sow jobs queued with reason
 `labour_disabled` while other labour kinds proceed. Starting seed stock, a toolbar order for
-till/sow, and wiring the calendar alert into live state are out of this slice
-(`game/scripts/viewer/`, `boot.gd` — a later task's concern).
+till/sow, and wiring the calendar alert into live state were not part of this increment; they
+belong to the viewer (`game/scripts/viewer/`, `boot.gd`) and the world state.
 
 The `"tile:"` reservation only guarantees no other order-driven job was *active* on till/sow's
 target at the same time, not that the tile still matches by completion time: a critical-need
@@ -552,14 +557,14 @@ queued for the same tile can activate and complete first. `_toil_on_work_complet
 re-checks its own target — till against `soil`, sow against `plowed_soil` — immediately before
 applying its effect, and fails a stale job `invalid_target` (mirroring `dig`/`chop`'s own
 submission-time rejection) rather than overwriting a tile another job already changed or
-re-consuming a seed on an already-planted tile (issue #268 review round 4).
+re-consuming a seed on an already-planted tile.
 
 `HaulGiver` attaches a loose seed to a haul job the instant it appears on the ground, whether or
 not any stockpile has room for it; with none, that haul job sits queued forever under
 `blocked_destination_full`, never having picked the item up. When `sow`'s completion effect
 consumes that same ground seed, the dangling haul job is failed `blocked_missing_input` and its
 reservations released the same way a mid-carry consumption already fails the hauler (see above),
-rather than left retrying forever for an item that no longer exists (issue #268 review round 4).
+rather than left retrying forever for an item that no longer exists.
 
 ## 5. Sequencing
 
@@ -572,7 +577,7 @@ rather than left retrying forever for an item that no longer exists (issue #268 
 | E. Tools | axe/pick as items; fetch/release toils; two-colonist handover test |
 
 A is small and unblocks B; B is the core of this design and the one to review most carefully;
-C–E can be reordered by priority. Each increment is one milestone of 4–7 tasks.
+C–E can be reordered by priority. Each increment is a milestone of several smaller changes.
 
 ## 6. What this design does not do (yet)
 

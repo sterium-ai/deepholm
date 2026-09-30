@@ -1,9 +1,9 @@
 extends SceneTree
 
-## Acceptance coverage for issue #401: a max_builders-2 site (the workbench)
+## Multi-builder construction coverage: a max_builders-2 site (the workbench)
 ## may hold two build-labour colonists fetching/working at once, never a
 ## third; a second concurrent site_fetch job picks the declared-cost source
-## nearest the site the other builder has not already reserved (#400's
+## nearest the site the other builder has not already reserved (the
 ## per-builder nearest-unclaimed-source rule); two active builders double
 ## ConstructionSiteTable.progress's own accumulation rate, reaching
 ## build_ticks in roughly build_ticks / 2 ticks; and a builder leaving
@@ -101,7 +101,7 @@ func _held_site_job_count(world: WorldStateType, origin: Vector2i) -> int:
 			count += 1
 	return count
 
-## Acceptance: "two colonists with build labour enabled are both assigned to
+## Test A: "two colonists with build labour enabled are both assigned to
 ## the same workbench site; a third eligible colonist is not assigned to it"
 ## -- and never more than max_builders (2) jobs are held on the site at once,
 ## whichever mix of fetching/working they are.
@@ -130,11 +130,11 @@ func _check_two_builders_assigned_third_never_assigned() -> void:
 	_expect(ever_builders.size() == 2,
 		"exactly two of the three eligible colonists may ever build this site, never all three (got %s)" % [ever_builders.keys()])
 
-## Acceptance: "each of the two builders fetches from the source nearest the
+## Test B: "each of the two builders fetches from the source nearest the
 ## site that the other has not reserved (assert the two chosen sources/items
 ## differ)". Two colonists start at the same distance from two equally
 ## eligible wood sources (one item id would win any solo nearest-source tie);
-## once both site_fetch jobs are concurrently active, #400's per-builder
+## once both site_fetch jobs are concurrently active, the per-builder
 ## exclusion (_next_site_fetch_source()) must have routed the second one onto
 ## the other source rather than duplicating the first's own pick.
 func _check_two_concurrent_fetchers_pick_different_nearest_unclaimed_sources() -> void:
@@ -168,7 +168,7 @@ func _check_two_concurrent_fetchers_pick_different_nearest_unclaimed_sources() -
 		_expect(String(item_id) == item_a_id or String(item_id) == item_b_id,
 			"each builder must pick one of the two pre-placed equally-eligible wood sources (got %s)" % [item_id])
 
-## Acceptance: "with both builders actively working, the site's progress
+## Test C: "with both builders actively working, the site's progress
 ## reaches build_ticks in build_ticks / 2 ticks."
 func _check_two_active_builders_double_the_progress_rate() -> void:
 	var world := _build_world(340003)
@@ -219,7 +219,7 @@ func _check_two_active_builders_double_the_progress_rate() -> void:
 			"two continuously active builders must finish in roughly (build_ticks - progress) / 2 ticks from the moment both joined, not build_ticks like a lone builder would (expected ~%d, got %d)"
 				% [expected, elapsed])
 
-## Acceptance: "one builder leaving mid-work (need interrupt) halves the rate
+## Test D: "one builder leaving mid-work (need interrupt) halves the rate
 ## again; the remaining builder's progress continues from its last value,
 ## never resetting or double-counting."
 func _check_builder_leaving_mid_work_halves_rate_and_preserves_progress() -> void:

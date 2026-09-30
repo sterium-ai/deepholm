@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers issue #352/#347: the "mine" job kind (content/jobs.json, content/items.json),
+## Covers the "mine" job kind (content/jobs.json, content/items.json),
 ## wired into world_state.gd's own _apply_job_command()/_toil_on_work_complete() the same way
 ## dig/chop are (docs/architecture/orders-and-movement.md). mine's target must be a TILE_ROCK
 ## tile (rejected invalid_target otherwise, no passability check -- rock is impassable, like
@@ -9,7 +9,7 @@ extends SceneTree
 ## fetch_tool/JobQueue.block_no_tool() path dig/chop already exercise; on completion the target
 ## tile becomes TILE_FLOOR and one "stone" ground item spawns there; that item then hauls into a
 ## stockpile zone through the existing, unmodified generic "haul" job kind; and mining a rock
-## tile does not disturb passability() for any OTHER, un-mined rock tile.
+## tile does not disturb passability() for any other, un-mined rock tile.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const RouteSearchType = preload("res://scripts/core/routing/route_search.gd")
@@ -171,7 +171,7 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 			break
 	_expect(hauled, "the mined stone item must be hauled into the stockpile zone within the tick budget")
 
-## Round-1 review (#352): two mine orders queued for the SAME rock tile, with a single colonist
+## Two mine orders queued for the same rock tile, with a single colonist
 ## and a single pick forcing them to run sequentially, must not both spawn a stone.
 ## _toil_on_work_complete()'s "mine" branch revalidates TILE_ROCK before spawning/flooring
 ## (mirroring till/sow's own stale-duplicate-order pattern, test_farming_content.gd): the first

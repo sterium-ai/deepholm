@@ -27,40 +27,40 @@ var _assignments: Dictionary = {}
 var _metrics: Dictionary = {}
 ## colonist_id -> true once its one-resume-per-tick routing allowance (ADR
 ## 004) is spent this tick(); cleared at the top of every call. Shared by
-## reference with ToilExecutor via WorldState.set_route_budget() (ADR 012).
+## reference with ToilExecutor via WorldState.set_route_budget() (ADR 013).
 var _route_budget: Dictionary = {}
 ## job_id -> the waiting-queue entry captured when a job is first chosen and
 ## removed from _waiting, kept live so suspend_assignment() (colonist-ai.md
 ## 3.6) can restore its exact waiting position. Erased only on finish().
 var _activated_entries: Dictionary = {}
-## F3 (issue #290): consulted twice -- an early-exit optimization before an
+## F3: consulted twice -- an early-exit optimization before an
 ## unrestricted worker is proposed for any job (reaches haul, see
 ## haul_giver.gd), and again, authoritatively, alongside _may_reserve
 ## immediately before any job's reserve step, since a restrict_to'd/
-## committed-need worker's faction can change before that finishes (ADR 015).
+## committed-need worker's faction can change before that finishes (ADR 014).
 ## Callable(worker_id: String) -> bool; unset (Callable()) fails open.
 var _may_be_ordered: Callable = Callable()
-## F3 (issue #290): consulted immediately before a chosen job's reserve step
+## F3: consulted immediately before a chosen job's reserve step
 ## would acquire a tile:/item:/cell: key -- never after, so a refused actor's
 ## reservation is never even transiently held. Callable(worker_id: String)
 ## -> bool; unset fails open.
 var _may_reserve: Callable = Callable()
 ## {"job_id", "worker"} pairs refused by _may_be_ordered/_may_reserve since the
-## last take_refused_reservations() drain. `worker` travels with `job_id` (F3,
-## issue #290 round 2) so WorldState can identify a refused HAUL RESUMPTION's
+## last take_refused_reservations() drain. `worker` travels with `job_id`
+## (F3) so WorldState can identify a refused haul resumption's
 ## colonist and return its carried item -- by the time it is refused,
 ## _assignments no longer names the worker for that job_id.
 var _refused_reservations: Array[Dictionary] = []
-## F5 (issue #294, ADR 015 Amendment): the reservation gate consulted for an
-## AUTONOMOUS entry instead of _may_reserve -- Callable(worker_id: String,
-## target: Vector2i) -> bool, so the owner can answer "may this actor reserve
-## THIS target" (a bare tile yes, a colony-owned item/object/cell no) rather
+## F5 (ADR 014 Amendment): the reservation gate consulted for an
+## autonomous entry instead of _may_reserve -- Callable(worker_id: String,
+## target: Vector2i) -> bool, so the caller can answer "may this actor reserve
+## this target" (a bare tile yes, a colony-owned item/object/cell no) rather
 ## than _may_reserve's target-blind "may this faction reserve colony items"
 ## (false for every non-colony faction). Unset falls back to _may_reserve,
 ## i.e. an autonomous entry is then gated exactly like any other.
 var _may_reserve_autonomous: Callable = Callable()
-## F5 (issue #294): Callable(worker_id: String, tile: Vector2i) -> cost for an
-## AUTONOMOUS entry's own route search, so a non-colony actor's initial
+## F5: Callable(worker_id: String, tile: Vector2i) -> cost for an
+## autonomous entry's own route search, so a non-colony actor's initial
 ## bounded search runs under its own faction's door permissions instead of
 ## tick()'s colony-bound `passable`. Unset falls back to `passable`.
 var _passable_autonomous: Callable = Callable()
@@ -124,19 +124,19 @@ func take_refused_reservations() -> Array[Dictionary]:
 
 ## restrict_to: when non-empty, only that worker's own scan may propose this
 ## entry; used both for a committed need job (NeedGiver._commit()) and a
-## critical-need-interrupted work job (suspend_assignment() below) -- NOT
+## critical-need-interrupted work job (suspend_assignment() below) -- not
 ## equivalent: tick()'s `committed_needs` param, not this flag, is what makes
 ## a need strictly precede work. Empty for an ordinary order.
-## autonomous (F5, issue #294, ADR 015 Amendment): when true, the "ready"
+## autonomous (F5, ADR 014 Amendment): when true, the "ready"
 ## loop's authoritative gate check below never calls _worker_may_be_ordered()
-## for this entry -- _may_be_ordered exists to stop a PLAYER ORDER from
+## for this entry -- _may_be_ordered exists to stop a player order from
 ## targeting a non-colony actor (WorldState._apply_job_command()'s assignee
 ## check), not to veto that actor's own autonomous submission of its own job.
 ## restrict_to must still name the one worker this entry may ever activate
 ## for; submit_autonomous() below is the narrow entry point that sets both.
-## The flag is stored on the entry ONLY when true (absence reads false), so
+## The flag is stored on the entry only when true (absence reads false), so
 ## every ordinary entry -- and every snapshot()/save taken of a world that
-## never submits an autonomous job -- keeps its exact pre-#294 shape.
+## never submits an autonomous job -- keeps the shape it had without it.
 func submit(target: Vector2i, priority: int, tick_number: int, kind: String = "dig", restrict_to: String = "",
 		autonomous: bool = false) -> Dictionary:
 	var result := queue.submit_dig(target, priority, kind)
@@ -156,7 +156,7 @@ func submit(target: Vector2i, priority: int, tick_number: int, kind: String = "d
 				_cursors[worker] += 1
 	return result
 
-## Narrow autonomous-actor activation path (ADR 015 Amendment, issue #294):
+## Narrow autonomous-actor activation path (ADR 014 Amendment):
 ## submits target restricted to worker's own scan, exactly like submit()'s
 ## restrict_to, but additionally exempted from _worker_may_be_ordered() at
 ## the "ready" loop's authoritative check -- never from the reservation gate
@@ -206,7 +206,7 @@ func finish(job_id: String, operation: String) -> Dictionary:
 ## committed_needs (worker id -> job id) names each worker's committed need
 ## job: nothing else is proposed to it (colonist-ai.md 3.1/3.6).
 ## region_check(a, b) -> bool (F5 "Regions"): checked once per pending candidate
-## before RouteType construction; unset fails open (pre-#292 callers unchanged).
+## before RouteType construction; unset fails open (callers without it are unchanged).
 func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 		bounds_min: Vector2i, bounds_max: Vector2i,
 		get_job_labour: Callable = Callable(), get_calendar_boost: Callable = Callable(),
@@ -219,7 +219,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 	var proposals: Array[Dictionary] = []
 	var selected: Array[String] = []
 	var reachable: Dictionary = {}
-	# A committed need discards any of this worker's OTHER pending route batch
+	# A committed need discards any of this worker's other pending route batch
 	# (not its own, still resuming across ticks -- see _pending_matches_job()).
 	for worker in committed_needs:
 		if not _pending_matches_job(worker, String(committed_needs[worker])):
@@ -259,10 +259,10 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 			var restrict_to := String(entry.get("restrict_to", ""))
 			if not restrict_to.is_empty() and restrict_to != worker:
 				continue
-			# F3 (issue #290): an unrestricted entry (haul, or any order with
+			# F3: an unrestricted entry (haul, or any order with
 			# no assignee) is never even proposed to an order-ineligible
 			# worker -- an early-exit optimization only. A restrict_to'd
-			# entry skips this filter (vetted at submission time) but is NOT
+			# entry skips this filter (vetted at submission time) but is not
 			# exempt from eligibility: the "ready" loop below revalidates
 			# _worker_may_be_ordered() for every proposal, since its faction
 			# can still change during a multi-tick route search.
@@ -353,20 +353,20 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 		if chosen_workers.has(pair["worker"]):
 			continue
 		chosen_workers[pair["worker"]] = true
-		# F3 (issue #290, round 2): both gates are revalidated here, right
+		# F3: both gates are revalidated here, right
 		# before advance_selection() below ever acquires this job's
-		# reservation -- never after. This is the ONE point every proposal
+		# reservation -- never after. This is the one point every proposal
 		# reaches regardless of how it got here (unrestricted scan,
 		# restrict_to'd order/committed-need entry, or a multi-tick pending
 		# routing batch): the scan loop's own early filter above is only an
 		# optimization, not proof of current eligibility -- a restrict_to'd
 		# worker's faction can still change before its route search finishes.
-		# F5 (issue #294, ADR 015 Amendment): an "autonomous" entry (an
-		# incident actor's own submission, never a player order) skips ONLY
-		# _may_be_ordered here -- that gate exists to keep a PLAYER ORDER from
+		# F5 (ADR 014 Amendment): an "autonomous" entry (an
+		# incident actor's own submission, never a player order) skips only
+		# _may_be_ordered here -- that gate exists to keep a player order from
 		# naming a non-colony assignee. Its reservation gate is never skipped:
 		# _pair_may_reserve() consults the target-aware
-		# _may_reserve_autonomous ("may this actor reserve THIS target": a
+		# _may_reserve_autonomous ("may this actor reserve this target": a
 		# bare tile yes, a colony-owned item/object/cell no) so the
 		# colony-item restriction still holds, and the reservation table's
 		# own target-conflict check (JobQueue.tick()/advance_selection(),
@@ -383,7 +383,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 		var job_id: String = pair["entry"]["id"]
 		if queue.get_job(job_id)["status"] == "active":
 			var path: Array = pair.get("path", [])
-			# _routable() lets the search terminate ON an impassable resource tile
+			# _routable() lets the search terminate on an impassable resource tile
 			# (a chop job's tree); trim that last step so execution stops adjacent
 			# to it instead, after scoring so travel-cost math is untouched.
 			if path.size() > 1 and not _is_passable_value(_passable_for(pair["worker"], pair["entry"], passable).call(pair["entry"]["target"])):
@@ -461,10 +461,10 @@ func _refresh_labour_disabled_reasons(colony: Array[Dictionary], job_kinds: Dict
 func clear_assignment(worker: String) -> void:
 	_assignments.erase(worker)
 
-## F5/#302 (round-5 review, dead-worker gap): erases worker's own in-flight
+## F5 (dead-worker gap): erases worker's own in-flight
 ## candidate-routing batch, if any. tick() rebuilds claimed_jobs from every
 ## entry still in _pending on every call, which excludes those job ids from
-## being proposed to any OTHER worker -- a removed worker that never advances
+## being proposed to any other worker -- a removed worker that never advances
 ## its own batch again (it no longer appears in the `colonists` array tick()
 ## receives) would otherwise starve them of it forever, even though the jobs
 ## themselves remain valid for a living worker to pick up. Leaves _waiting,
@@ -488,9 +488,9 @@ func suspend_assignment(worker: String, job_id: String) -> void:
 	queue.suspend(job_id)
 	ToolMatchingType.reinsert_activated_entry(_waiting, _cursors, _activated_entries, job_id, worker, _entry_before)
 
-## Ordinary requeue for a failure unrelated to a critical-need interrupt
-## (issue #271 round 6): the same aging-preserved reinsert as
-## suspend_assignment(), but keeps the entry's ORIGINAL restrict_to (empty
+## Ordinary requeue for a failure unrelated to a critical-need interrupt:
+## the same aging-preserved reinsert as
+## suspend_assignment(), but keeps the entry's original restrict_to (empty
 ## for an ordinary order) so any eligible colonist may pick it back up.
 func requeue_assignment(worker: String, job_id: String) -> void:
 	clear_assignment(worker)
@@ -503,10 +503,10 @@ func requeue_assignment(worker: String, job_id: String) -> void:
 ## different job claimed the target meanwhile, this is a no-op: job_id stays
 ## queued/restricted for the ordinary fair-queue path (ADR 009).
 func resume_assignment(worker: String, job_id: String) -> void:
-	# F3 (issue #290, round 2): both gates checked before reactivate() below
+	# F3: both gates checked before reactivate() below
 	# re-acquires the reservation -- never after -- so a faction change made
 	# while suspended cannot reacquire on resume. Same gates as the "ready"
-	# loop (F5/#302 round 7): an autonomous entry skips _worker_may_be_ordered().
+	# loop (F5): an autonomous entry skips _worker_may_be_ordered().
 	var entry: Dictionary = _activated_entries.get(job_id, {})
 	if not (_is_autonomous(entry) or _worker_may_be_ordered(worker)) or not _pair_may_reserve(worker, entry):
 		_refused_reservations.append({"job_id": job_id, "worker": worker})
@@ -561,7 +561,7 @@ func get_pending() -> Dictionary:
 
 ## Overwrites waiting/cursor/pending/assignment continuation state from a
 ## prior save state, rebuilding pending routes with the same _routable()
-## wrapper tick() uses. Round-8 review: routed per-entry through
+## wrapper tick() uses. Routed per-entry through
 ## _passable_for(), exactly like tick()'s own live search, so a restored
 ## autonomous entry is gated by its own actor's faction, not the colony's.
 func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i) -> void:

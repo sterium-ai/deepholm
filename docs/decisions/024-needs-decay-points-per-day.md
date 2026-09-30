@@ -1,4 +1,8 @@
-# ADR 023: Needs decay in points per day; day length 2200 ticks
+# ADR 024: Needs decay in points per day; day length 2200 ticks
+
+> **In short:** A game day is now about 18 real minutes long at normal speed, and hunger, thirst
+> and tiredness are measured per day instead of per tick, so colonists no longer starve within a
+> minute.
 
 - **Status:** accepted
 - **Date:** 2026-09-23
@@ -9,11 +13,10 @@
   persistence (`game/scripts/core/persistence/state_codec.gd`,
   `save_migrations.gd`, `save_io.gd`, `docs/architecture/contracts/game-state.schema.json`,
   schemaVersion 22).
-- **Implements:** issue #349 (blocked by #345).
 
 ## Context
 
-Owner decision 2026-09-22: `content/needs.json` decayed food/water/rest 1/2/1
+Before this change (design decision of 2026-09-22), `content/needs.json` decayed food/water/rest 1/2/1
 points per tick from a 100-point full value, and `content/calendar.json` set
 `day_length_ticks` to 100. At the default x1 speed (2 ticks/s) a colonist
 starved in 50 real seconds and a game day lasted 50 s — far too fast for any
@@ -52,9 +55,9 @@ real play session.
    `SaveIO._validate_state()` (non-negative integers for food/water/rest, no
    upper bound — unlike `needs` itself, an accumulator's range is
    `[0, day_length_ticks)`, and hardcoding that content-derived bound into the
-   schema would drift the day content is rebalanced again). This is
+   schema would drift the next time the day length is rebalanced). This is
    schemaVersion 22's only shape change; `SaveMigrations._migrate_v21_to_v22()`
-   backfills every pre-#349 entity's `needsAccumulator` to zero for each kind
+   backfills every pre-v22 entity's `needsAccumulator` to zero for each kind
    its `needs` already tracks — honest, since no v21 save ever tracked a
    sub-point carry to lose.
 5. **The sowing window's day-number range is unchanged.** Per ADR 008,
@@ -73,12 +76,12 @@ real play session.
 ## Consequences
 
 - No floats enter simulation state: `needs`, `needsAccumulator`, and every
-  content value this task touches are integers.
+  content value this change touches are integers.
 - `test_needs.gd`, `test_need_jobs.gd`, `test_new_game_forage_chop.gd`,
   `test_calendar.gd`, and `test_labour_priority_scheduling.gd` are rewritten
   against the new scale (`day_length_ticks: 2200`, `rate_per_day` fixtures),
   not weakened.
-- `test_save_migration.gd` adds a v21→v22 fixture proving a pre-#349 save
+- `test_save_migration.gd` adds a v21→v22 fixture proving a pre-v22 save
   loads with every accumulator backfilled to 0.
 - `NeedGiver` and `CalendarService` needed no code change: neither reads
   `rate`/`rate_per_day` directly (`NeedGiver` only reads thresholds;
@@ -87,12 +90,11 @@ real play session.
 ## Alternatives considered
 
 - **Keep `rate` as points-per-tick and just divide `day_length_ticks` by 22 in
-  the accumulator instead.** Rejected: the acceptance contract requires
-  `rate_per_day` as the new content field name, and points-per-day is far
-  easier for a content author to reason about and balance than a
+  the accumulator instead.** Rejected: the design names the new content
+  field `rate_per_day`, and points-per-day is far easier for a content author to reason about and balance than a
   fractional-points-per-tick rate would be.
 - **Rescale the sowing window's `to` by the same factor `day_length_ticks`
   grew by (to 419).** Rejected: `from`/`to` are day numbers under ADR 008,
   not ticks, so there is no fraction-of-a-day ratio to preserve; rescaling
-  them changes the sowing season's actual length in days, a gameplay change
-  this task never authorized.
+  them changes the sowing season's actual length in days, an unintended
+  gameplay change.

@@ -1,7 +1,8 @@
 extends SceneTree
 
-## Acceptance coverage for issue #450's `build_line` command (docs/decisions/
-## 040, extends docs/decisions/038's construction-site model): a batch of
+## Coverage for the `build_line` command (ADR 042,
+## docs/decisions/042-build-line-batch-command.md, which extends ADR 040's
+## construction-site model): a batch of
 ## tiles submitted as one command instead of one `build` per tile, so a wall
 ## line or a rectangle drag creates every site in one atomic step and the
 ## enclosure check sees the whole shape at once. `test_build.gd`/
@@ -102,7 +103,7 @@ func _held_quantity(site: Dictionary, item_kind: String) -> int:
 			return int(entry["quantity"])
 	return -1
 
-## Acceptance: "a 5-tile wall-line build_line command creates 5 construction
+## Requirement: "a 5-tile wall-line build_line command creates 5 construction
 ## sites, ids/positions in row-major order" -- the payload's own tiles array
 ## is deliberately shuffled to prove the command canonicalizes, never
 ## trusting caller order.
@@ -126,7 +127,7 @@ func _check_five_tile_line_creates_five_sites_in_row_major_order_regardless_of_i
 		seen_ids[String(site["id"])] = true
 	_expect(seen_ids.size() == 5, "every created site must have a distinct id: %s" % [sites])
 
-## Acceptance: "a build_line rectangle including an occupied tile creates
+## Requirement: "a build_line rectangle including an occupied tile creates
 ## sites for every other tile and reports the occupied one in skipped with
 ## its reason."
 func _check_rectangle_with_occupied_tile_skips_it_and_builds_the_rest() -> void:
@@ -172,7 +173,7 @@ func _check_unknown_or_non_buildable_kind_rejected() -> void:
 	var no_cost_kind := _command(world, "b", "build_line", {"kind": "table", "tiles": [_tile(0, 0)]})
 	_expect(_reason_of(no_cost_kind) == "invalid_payload", "a kind with an empty build_cost must be rejected invalid_payload: %s" % no_cost_kind)
 
-## Acceptance: "a build_line whose combined footprint would enclose a
+## Requirement: "a build_line whose combined footprint would enclose a
 ## reachable area is rejected as a whole, typed blocked_target_unreachable,
 ## with zero sites created and zero reservations taken." The room's north
 ## side is left as one whole 4-tile opening (not a single-tile gap) so that
@@ -204,7 +205,7 @@ func _check_line_that_would_enclose_rejects_whole_batch_with_zero_sites_and_rese
 		_expect(table.owner("tile:%d,%d" % [pos.x, pos.y]).is_empty(),
 			"no reservation may be taken at (%d, %d) after the whole batch was rejected" % [pos.x, pos.y])
 
-## Acceptance (WorldState.preview() gains the matching read-only check):
+## WorldState.preview() runs the matching read-only check:
 ## preview() must agree with apply() on both the ok/reject verdict and the
 ## reported skipped tiles, and must never mutate the world either way.
 func _check_preview_matches_apply_including_skipped() -> void:
@@ -225,7 +226,7 @@ func _check_preview_matches_apply_including_skipped() -> void:
 		"apply must report the same skipped tile preview reported: %s" % applied)
 	_expect((applied.get("sites", []) as Array).size() == 2, "apply must create sites for the 2 clear tiles: %s" % applied)
 
-## Acceptance: "cancelling one site in a line drops only its own held
+## Requirement: "cancelling one site in a line drops only its own held
 ## material; cancelling every site in the line leaves find_orphaned_
 ## reservations() empty -- both exercise only already-existing per-site
 ## mechanics."
@@ -240,7 +241,7 @@ func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_
 
 	# Which of the 3 sites the shared scheduler delivers to first is an
 	# implementation detail of GlobalAssignmentScheduler, not this command's
-	# own contract -- this scenario only needs ANY one of them holding
+	# own contract -- this scenario only needs any one of them holding
 	# material to prove cancelling it leaves its siblings untouched.
 	var delivered_to: Vector2i = Vector2i(-1, -1)
 	for _i in CANCEL_TEST_MAX_TICKS:
@@ -281,7 +282,7 @@ func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_
 		world._scheduler.queue.get_reservation_table(), world._scheduler.queue.get_jobs())
 	_expect(orphans.is_empty(), "find_orphaned_reservations() must be empty once every site in the line is cancelled (found %s)" % [orphans])
 
-## Regression (review round 1): "workbench"'s footprint is [2, 1] -- two tiles
+## Regression: "workbench"'s footprint is [2, 1] -- two tiles
 ## wide. Origins (10, 10) and (11, 10) both individually pass the single-tile
 ## occupancy check (neither one's own reservation exists in the table yet
 ## during classification), but their footprints share tile (11, 10). Before
@@ -346,7 +347,7 @@ func _check_overlapping_footprints_within_one_batch_skip_the_later_origin_vertic
 	_expect(table.owner("tile:20,20") == owner and table.owner("tile:20,21") == owner,
 		"the single surviving vertical site must hold the reservation for both of its own footprint tiles")
 
-## Regression (review round 1): _would_enclose_tiles() must not subtract the
+## Regression: _would_enclose_tiles() must not subtract the
 ## WHOLE candidate set's size from a single reachable component's baseline.
 ## Only (1,1)-(3,1) and the isolated (10,10) are passable; a colonist at
 ## (1,1) can reach (1,1)-(3,1) but never (10,10), a disconnected one-tile
@@ -389,7 +390,7 @@ func _pick_up_count(world: WorldStateType) -> int:
 			count += 1
 	return count
 
-## Acceptance (issue #451, docs/decisions/041): a colonist whose hands hold 4
+## Requirement (ADR 043): a colonist whose hands hold 4
 ## units of wood must deliver to 4 separate one-quantity wall blocks in a row
 ## with no intervening trip back to the stockpile -- asserted directly by the
 ## pick_up count (one hop consumes the entire 4-unit stack and every block
@@ -422,7 +423,7 @@ func _check_hands_load_serves_four_one_quantity_blocks_with_a_single_pick_up() -
 			wood_left += int(item["count"])
 	_expect(wood_left == 0, "all 4 units of wood must be fully consumed, %d left on the ground" % wood_left)
 
-## Acceptance: chaining must not disturb ordinary N-builder concurrency -- 3
+## Requirement: chaining must not disturb ordinary N-builder concurrency -- 3
 ## build-enabled colonists, each fed its own separate 1-unit wood stock, must
 ## still complete 3 different one-quantity blocks concurrently, each finishing
 ## build_ticks (plus only the small, already-documented scheduling latency
@@ -465,7 +466,7 @@ func _check_three_colonists_build_three_blocks_concurrently_each_declared_ticks_
 			"block (%s) must finish build_ticks (%d) after its own material lands, plus only a small scheduling latency (got %d)"
 				% [key, declared_ticks, elapsed])
 
-## Shared mid-chain fixture (issue #451): a single colonist, a single 3-unit
+## Shared mid-chain fixture: a single colonist, a single 3-unit
 ## wood stock exactly matching 3 spaced-out one-quantity wall sites' combined
 ## need, ticked until a site_fetch job has already chained past its own FIRST
 ## site (job["site"] no longer names it) while its colonist still carries
@@ -501,8 +502,8 @@ func _reach_mid_chain(seed_value: int) -> Dictionary:
 					"held": InventoryType.count_of_kind(colonist, "wood")}
 	return {}
 
-## Acceptance (issue #451): a critical-need interrupt mid-chain must pause and
-## resume at the SAME leg (the chained site the job had already retargeted
+## Requirement: a critical-need interrupt mid-chain must pause and
+## resume at the same leg (the chained site the job had already retargeted
 ## onto, not the first one), losing no held material -- exercising the
 ## ordinary ADR 009 interrupt boundary directly (world._interrupt_current_job/
 ## _resume_interrupted_job(), test_build.gd's own established pattern),
@@ -538,10 +539,10 @@ func _check_critical_need_interrupt_mid_chain_resumes_same_leg_no_material_lost(
 			break
 	_expect(completed, "the interrupted chain must resume and finish building every site within budget")
 
-## Acceptance (issue #451): cancelling mid-chain must drop exactly what the
+## Cancelling mid-chain must drop exactly what the
 ## colonist currently holds (already less than the original hands-load, since
 ## earlier sites in the chain already consumed some of it) at its own current
-## tile -- the existing terminal-drop path (#400's rule), unchanged.
+## tile -- the existing terminal-drop path, unchanged.
 func _check_cancel_mid_chain_drops_exactly_what_is_currently_held() -> void:
 	var state := _reach_mid_chain(451400)
 	_expect(not state.is_empty(), "setup must reach a mid-chain state")
@@ -594,7 +595,7 @@ func _total_ground_kind(world: WorldStateType, kind: String) -> int:
 			total += int(item["count"])
 	return total
 
-## Regression (round-1 review, issue #451): _toil_on_deposit_success() used to
+## Regression: _toil_on_deposit_success() used to
 ## resolve the delivery kind from _site_fetch_picked_kind, a runtime cache
 ## never saved by state_codec.gd -- a save/load taken before the job's first
 ## deposit left the cache empty after load, so the very next deposit read
@@ -604,13 +605,13 @@ func _total_ground_kind(world: WorldStateType, kind: String) -> int:
 ## the fix does not depend on _site_fetch_picked_kind having been populated at
 ## all this session.
 ##
-## Regression (round-2 review, issue #451): asserting only "eventually all 4
+## Regression: asserting only "eventually all 4
 ## complete with empty hands" cannot distinguish a preserved chain from a
 ## prematurely-completed job whose dropped leftover got hauled and re-fetched
 ## by a brand new job -- both would satisfy that assertion. This now drives
 ## the unloaded source and its restore identically, tick for tick, and
 ## requires state_hash() to match every tick (test_save_determinism.gd's own
-## save/load idiom); requires the SAME job_id (not a replacement) to reach
+## save/load idiom); requires the same job_id (not a replacement) to reach
 ## "completed" in both copies; and requires neither copy to ever record a
 ## second pick_up (the unloaded source's trace against its own pre-load count,
 ## the restore's fresh trace against zero, since ToilExecutor.trace is
@@ -658,17 +659,17 @@ func _check_save_load_before_first_deposit_preserves_the_chain() -> void:
 	_expect(_pick_up_count(loaded) == 0,
 		"no additional pick_up may occur after loading: the restore's fresh trace must record zero, since the whole chain finishes on the material already in hands at load time")
 
-## Regression (round-1 review, issue #451): same defect as above, but the
+## Regression: same defect as above, but the
 ## save/load lands strictly BETWEEN two chained deposits (job already
 ## retargeted onto its second site, first site already fully served) --
 ## exactly the window _reach_mid_chain() catches -- proving a chain already
 ## in progress survives a reload, not only one that has not yet started.
 ##
-## Regression (round-2 review, issue #451): as above, "eventually empty hands"
+## Regression: as above, "eventually empty hands"
 ## alone cannot rule out a premature completion plus a drop-and-re-fetch
 ## masquerading as a preserved chain. This drives the unloaded source (still
 ## holding the pre-load material) and its restore identically, tick for tick,
-## requires state_hash() to match every tick, requires the SAME job_id to
+## requires state_hash() to match every tick, requires the same job_id to
 ## reach "completed" in both copies, and requires neither copy to ever record
 ## a second pick_up (the source's trace against its own pre-load count, the
 ## restore's fresh trace -- ToilExecutor.trace is diagnostic-only and is not
@@ -711,12 +712,12 @@ func _check_save_load_between_chained_deposits_preserves_the_chain() -> void:
 	_expect(_pick_up_count(loaded) == 0,
 		"no additional pick_up may occur after loading: the restore's fresh trace must record zero, since the remaining sites come from the material already in hands at load time")
 
-## Regression (round-1 review, issue #451): retarget_site_fetch_site() used to
+## Regression: retarget_site_fetch_site() used to
 ## move an active job onto a sibling site with no capacity check at all, so a
 ## sibling already holding its own max_builders' worth of committed fetch/work
 ## jobs could receive one more anyway. Site B is driven to its own cap (1, a
 ## one-quantity wall block's max_builders) by a directly-injected competing
-## fetch job BEFORE colonist_0's job ever reaches its own deposit-time chain
+## fetch job before colonist_0's job ever reaches its own deposit-time chain
 ## decision, proving the capacity check applies at retarget time, not only at
 ## ConstructionGiver's submission time (which never sees a retarget at all).
 func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -> void:
@@ -753,11 +754,11 @@ func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -
 	_expect(_total_ground_kind(world, "wood") == 1,
 		"the 1 leftover unit must be dropped on the ground, not destroyed or silently delivered")
 
-## Regression (round-1 review, issue #451): ending a chain used to call
+## Regression: ending a chain used to call
 ## _finish_job() directly even while hands still held leftover material,
 ## stranding it there forever (nothing else ever drains "hands" once a job is
 ## terminal). Cancelling every remaining site in the chain while the colonist
-## still carries the full hands-load reproduces the reviewer's exact scenario:
+## still carries the full hands-load reproduces the reported scenario:
 ## pick up for 4 blocks, lose 3 destinations before ever delivering, then
 ## deposit to the one that remains.
 func _check_cancelling_future_destinations_mid_chain_drops_leftover_and_completes() -> void:
@@ -789,10 +790,10 @@ func _check_cancelling_future_destinations_mid_chain_drops_leftover_and_complete
 	_expect(_total_ground_kind(world, "wood") == 3,
 		"the 3 units that lost their destinations must be dropped on the ground, not destroyed (exact conservation: 1 built + 3 dropped = 4)")
 
-## Regression (round-1 review, issue #451): the same stranding defect as
+## Regression: the same stranding defect as
 ## above, reached through legitimate competition instead of cancellation --
 ## "competing deliveries that satisfy the remaining sites produce the same
-## failure" (round-1 review). Sites 2-4 are driven to fully-met directly
+## failure". Sites 2-4 are driven to fully-met directly
 ## (mirroring a competing colonist's own deliveries landing first) after
 ## colonist_0's hands are already sized and loaded for all 4, but before its
 ## own first deposit -- proving the leftover-drop path fires regardless of

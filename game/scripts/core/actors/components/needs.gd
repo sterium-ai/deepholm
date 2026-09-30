@@ -4,7 +4,7 @@ extends RefCounted
 ## F2 needs component. Per-instance state lives at the actor's own "needs"
 ## key, Dictionary[kind -> int], exactly the shape a pre-F2 colonist has
 ## always carried, plus a sibling "needsAccumulator" key, Dictionary[kind ->
-## int in [0, day_length_ticks)] (issue #349): a deterministic integer
+## int in [0, day_length_ticks)]: a deterministic integer
 ## sub-point carry so a point-per-day rate need not divide evenly into a
 ## single tick's decay. Tunables (content/actors.json): {"rates":
 ## Dictionary[kind -> int >= 0]}, the per-day decay rate for each need kind
@@ -15,7 +15,7 @@ extends RefCounted
 ## Wired into WorldState's own decay path (world_state.gd's _decay_needs()
 ## calls apply_tick() below, passing "day_length_ticks" alongside "rates" in
 ## the same tunables Dictionary); see docs/decisions/012-actors-and-components.md
-## and docs/decisions/023-needs-decay-points-per-day.md.
+## and docs/decisions/024-needs-decay-points-per-day.md.
 
 static func validate(tunables: Dictionary) -> bool:
 	if not tunables.has("rates"):
@@ -45,7 +45,7 @@ static func build_full_accumulator(registry) -> Dictionary:
 	return accumulator
 
 ## Decays every tracked need by its own rate_per_day, applied as a
-## deterministic integer accumulator (issue #349): each tick adds rate_per_day
+## deterministic integer accumulator: each tick adds rate_per_day
 ## to that kind's carry, and while the carry reaches day_length_ticks it is
 ## reduced by day_length_ticks and the need drops by one point, clamped at 0.
 ## Integer-only and platform-independent by construction (no float division).

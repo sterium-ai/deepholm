@@ -1,7 +1,7 @@
 extends SceneTree
 
 ## Exercises colonist-ai.md 3.2's wired effective-priority formula and the
-## non-terminal "labour_disabled" reason (issue #267): a candidate whose
+## non-terminal "labour_disabled" reason: a candidate whose
 ## job's labour is 0 for a worker is never proposed to that worker; an
 ## eligible candidate's score is
 ## `16 * (order_priority + calendar_boost + 4 - labour_level) + ticks_waiting`,
@@ -287,14 +287,14 @@ func _check_replay_determinism() -> void:
 	_expect(first.state_hash() == second.state_hash(),
 		"state_hash() diverged: %s vs %s" % [first.state_hash(), second.state_hash()])
 
-## Review round 1 finding: colonist-ai.md 3.2's labour/calendar bonus gives
+## colonist-ai.md 3.2's labour/calendar bonus gives
 ## ordinary work a positive bracket even at the default labour level (e.g.
 ## `4 - 3 = 1`), while a need job's labour is "" and always scores the
 ## neutral bracket (`4 - 4 = 0`, see _priority_bracket()'s LABOUR_LEVEL_MAX
 ## default). Left unchecked, that bonus can let a queued dig order outscore
 ## and win a colonist's slot over its own already-committed, restricted need
 ## job, breaking colonist-ai.md 3.1's needs-before-work layering. A heavy
-## calendar boost on "mine" and a HIGH-priority dig order both stack the deck
+## calendar boost on "mine" and a high-priority dig order both stack the deck
 ## as hard as possible in work's favor; the need job must still win.
 func _check_committed_need_job_precedes_work_with_labour_and_calendar_boost() -> void:
 	var world := _needs_isolated_world(700)
@@ -349,7 +349,7 @@ func _check_negative_calendar_boost_stays_eligible() -> void:
 	_expect(String(scheduler.queue.get_job(job_id)["reason"]) != "labour_disabled",
 		"an enabled labour with a negative boost must never be marked labour_disabled")
 
-## Finding: eligibility used to be folded into the bracket's own sign, so a
+## Regression: eligibility used to be folded into the bracket's own sign, so a
 ## negative calendar boost discovered while a multi-tick route batch was
 ## still pending could make the ready-list rescore silently drop an otherwise
 ## eligible, already-routed candidate. A target far enough away to force the
@@ -385,7 +385,7 @@ func _needs_isolated_world(seed_value: int) -> WorldStateType:
 		world._need_definitions[kind]["rate_per_day"] = 0
 	return world
 
-## Finding: _refresh_labour_disabled_reasons() used to read tick()'s own
+## Regression: _refresh_labour_disabled_reasons() used to read tick()'s own
 ## (need-search-filtered) `colonists` list instead of the full colony, so it
 ## could report labour_disabled while the only enabled colonist was simply
 ## mid-search (a), fail to report it once every colonist happened to be
@@ -417,7 +417,7 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	_expect(String(_find_job(only_enabled_searching, String(dig_a["job_id"]))["reason"]) != "labour_disabled",
 		"the only colonist with mine enabled must still count while it is mid-search")
 
-	# (b) every colonist has mine off AND is mid-search at once.
+	# (b) every colonist has mine off and is mid-search at once.
 	var all_searching := _needs_isolated_world(702)
 	all_searching._tiles[all_searching._tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	all_searching._tiles[all_searching._tile_index(0, 1)] = WorldStateType.TILE_WATER
@@ -470,7 +470,7 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 			saw_unblocked_c = true
 	_expect(saw_unblocked_c, "a job_unblocked event must fire once every colonist's mine is no longer all off")
 
-## Finding: GlobalAssignment's reservation-recheck branch used to run before
+## Regression: GlobalAssignment's reservation-recheck branch used to run before
 ## the labour eligibility check, so a labour-disabled job whose target stayed
 ## reserved by another active job kept re-entering JobQueue.tick() (via
 ## advance_selection()) every tick, alternating its reason between
@@ -530,7 +530,7 @@ func _check_labour_disabled_reservation_no_flapping_and_unblocks_once() -> void:
 	_expect(String(scheduler.queue.get_job(second)["reason"]) == "blocked_target_reserved",
 		"the job must immediately re-block on the still-held reservation, got %s" % scheduler.queue.get_job(second))
 
-## Finding (issue #267 review round 2): the needs-before-work fix used to rely
+## Regression: the needs-before-work fix used to rely
 ## on tick()'s own bounded JOB_EVALUATION_BUDGET scan discovering a
 ## restrict_to entry, so a committed need job sitting past the scan window was
 ## invisible to it and ordinary work kept being proposed to that worker
@@ -557,7 +557,7 @@ func _check_committed_need_outside_scan_window_still_wins() -> void:
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == need_job_id,
 		"a committed need job past the scan window must still win the worker's slot")
 
-## Finding: a committed need job whose target is currently reserved by a
+## A committed need job whose target is currently reserved by a
 ## different active job must still exclude ordinary work from the worker's
 ## slot this tick -- blocked is still a higher decision layer than open work
 ## (colonist-ai.md 3.1), not a reason to fall through to work.
@@ -591,7 +591,7 @@ func _check_committed_need_with_reserved_target_blocks_other_work() -> void:
 	_expect(String(scheduler.queue.get_job(filler_job_id)["status"]) == "queued",
 		"freely available ordinary work must never be offered to a worker with a blocked committed need")
 
-## Finding: a worker's own in-progress ordinary-work route search (still
+## Regression: a worker's own in-progress ordinary-work route search (still
 ## `_pending`, not yet an assignment) used to be untouched by a need
 ## committing for that same worker mid-search, so it could still win the
 ## worker's slot once its own search concluded, entirely bypassing the need.
@@ -629,7 +629,7 @@ func _check_committed_need_discards_stale_pending_work_batch() -> void:
 func _boost_mine_only(labour: String, _tick: int) -> int:
 	return 20 if labour == "mine" else 0
 
-## Finding: suspend_assignment() restores an interrupted work job to `_waiting`
+## suspend_assignment() restores an interrupted work job to `_waiting`
 ## restricted to the same worker (so it may resume later), but that restrict_to
 ## must never be mistaken for need priority: a heavily labour/calendar-boosted
 ## interrupted work entry must not be able to outscore its own replacement
@@ -666,7 +666,7 @@ func _check_committed_need_beats_boosted_interrupted_work() -> void:
 	_expect(String(scheduler.queue.get_job(work_job_id)["status"]) == "queued",
 		"the interrupted work must stay queued, not reactivated, while the need is committed")
 
-## Finding: a stale multi-tick route search that fails after its job's labour
+## Regression: a stale multi-tick route search that fails after its job's labour
 ## has since gone globally disabled used to still call `selected.append()`
 ## unconditionally, so advance_selection() overwrote the labour_disabled
 ## reason with blocked_target_unreachable -- and a later re-enable then missed
@@ -714,12 +714,11 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 			unblocked += 1
 	_expect(unblocked == 1, "labour re-enable must emit exactly one job_unblocked event, got %d" % unblocked)
 
-## Review round 3 finding: the prior haul-backoff-vs-labour_disabled regression
-## (test_job_queue.gd) called JobQueue directly, exercising neither
-## GlobalAssignment's own labour refresh/reservation-recheck path nor
-## HaulGiver's auto-submission -- so a defect confined to
-## _refresh_labour_disabled_reasons() or the scan's reservation branch (the
-## actual code this task changed) could slip past it. This drives the same
+## The haul-backoff-vs-labour_disabled regression in test_job_queue.gd calls
+## JobQueue directly, exercising neither GlobalAssignment's own labour
+## refresh/reservation-recheck path nor HaulGiver's auto-submission -- so a
+## defect confined to _refresh_labour_disabled_reasons() or the scan's
+## reservation branch could slip past it. This drives the same
 ## scenario end to end through WorldState.tick(): a loose item with no
 ## stockpile zone establishes a real destination backoff; disabling "haul" for
 ## the colony's only colonist must show labour_disabled immediately, queued,
@@ -809,7 +808,7 @@ func _events_for_job(world: WorldStateType, event_type: String, job_id: String) 
 ## only cares about haul/labour scheduling), and a loose wood item at distance
 ## 2 with no stockpile zone anywhere on the map -- HaulGiver.find_free_haul_cell()
 ## then always returns null, so the very first activation attempt establishes a
-## real BLOCKED_DESTINATION_FULL backoff (colonist-ai.md 3.3/3.4/#189).
+## real BLOCKED_DESTINATION_FULL backoff (colonist-ai.md 3.3/3.4).
 func _haul_backoff_world(seed_value: int) -> WorldStateType:
 	var world := _needs_isolated_world(seed_value)
 	world._colonists.clear()
@@ -859,7 +858,7 @@ func _default_labour_table() -> Dictionary:
 ## target) and a tree at (0,1) (chop target), both distance 1 from the
 ## colonist -- reused by the labour_disabled, haul and calendar checks. A pick
 ## and an axe sit right under the colonist so dig/chop's needs_tool
-## fetch_tool toil (issue #271) resolves without travel, matching this
+## fetch_tool toil resolves without travel, matching this
 ## fixture's original tool-free assumption of reaching "active"/"completed"
 ## in a single tick.
 func _single_colonist_world(seed_value: int) -> WorldStateType:

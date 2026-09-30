@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #300 acceptance:
+## River generation contract (ADR 019/020):
 ## - a fixed suite of >=20 seeds reproduces its map for the same seed/version,
 ##   its river crosses two opposite edges, all its water is a single
 ##   4-connected component, with no isolated water tile;
@@ -13,12 +13,12 @@ extends SceneTree
 ##   distance), independently of WorldGenerator.place_spawn()'s own distance
 ##   fields;
 ## - the search never had to use its documented fallback across the suite;
-## - for every seed, the colony has at least colonist_count DISTINCT reachable
-##   berry bushes within the food step bound, independently re-counted here
-##   (round 5 review): forage fully consumes its bush (one non-regrowing meal),
-##   so a short route to the NEAREST bush is not "sufficient" when that same
-##   bush is also the nearest one for the other two colonists.
-## - for every seed (issue #351/#347), at least one compact rock outcrop
+## - for every seed, the colony has at least colonist_count distinct reachable
+##   berry bushes within the food step bound, independently re-counted here.
+##   Forage fully consumes its bush (one non-regrowing meal),
+##   so a short route to the nearest bush is not "sufficient" when that same
+##   bush is also the nearest one for the other two colonists;
+## - for every seed, at least one compact rock outcrop
 ##   exists: an independent 4-connected TILE_ROCK component scan (mirroring
 ##   _water_components() below, never reusing WorldGenerator's own internal
 ##   state) filtered to components >= mapgen's outcrop_min_size, and at least
@@ -73,7 +73,7 @@ func _fail(message: String) -> void:
 	push_error(message)
 	_failed = true
 
-## -------- connectivity primitive, exercised against synthetic AND real maps --------
+## -------- connectivity primitive, exercised against synthetic and real maps --------
 
 ## Every water tile's 4-connected component id, plus the total component
 ## count. Shared by the synthetic broken/diagonal fixtures below and by the
@@ -111,7 +111,7 @@ func _water_components(tiles: Array[String], width: int, height: int) -> int:
 ## discovery order -- mirrors _water_components() above but returns full
 ## membership (not just a count) so the caller can filter by size. An
 ## independent implementation, never reusing WorldGenerator's own internal
-## _land_components()/blob-growth state (issue #351/#347).
+## _land_components()/blob-growth state.
 func _rock_components(tiles: Array[String], width: int, height: int) -> Array:
 	var visited: Dictionary = {}
 	var components: Array = []
@@ -142,7 +142,7 @@ func _rock_components(tiles: Array[String], width: int, height: int) -> Array:
 			components.append(component)
 	return components
 
-## Issue #351/#347 acceptance: at least one compact rock outcrop exists (a
+## At least one compact rock outcrop exists (a
 ## 4-connected TILE_ROCK component of at least outcrop_min_size tiles -- big
 ## enough to distinguish it from a rock_vein_count thin vein cross-section),
 ## and at least one tile of at least one such component is real-route-
@@ -171,7 +171,7 @@ func _check_rock_outcrops(world: WorldStateType, tiles: Array[String], width: in
 			return
 	_fail("seed %d must have at least one rock outcrop tile real-route-reachable from a spawned colonist within %d steps" % [seed_value, TREE_STEP_LIMIT])
 
-## Round 2 review (issue #351/#347): mapgen's schema permits
+## Mapgen's schema permits
 ## outcrop_placement_attempts=0 (minimum 0, like hazard/tree placement
 ## attempts), meaning "spend no growth attempts, place only the seed tile" --
 ## _grow_rock_outcrop()'s own while-loop already honors that (0 < 0 is false),
@@ -232,11 +232,11 @@ func _check_diagonal_only_river_detected() -> void:
 	if count != 2:
 		_fail("connectivity check must treat a diagonal-only touch as two separate components, got %d (expected 2)" % count)
 
-## -------- corridor-continuity primitive (round 1 review finding 5) --------
+## -------- corridor-continuity primitive --------
 ##
 ## The plain "longest run per cross-section" width check (below) cannot see a
 ## river that is 4-connected and every individual cross-section wide enough,
-## yet whose ACTUAL walkable corridor across a curve is far narrower: two
+## yet whose actual walkable corridor across a curve is far narrower: two
 ## fully-valid 6-wide bands offset so they overlap by only one tile remain one
 ## component and pass every existing width assertion. This computes every
 ## disjoint water run per dominant-axis position (a real river must have
@@ -247,7 +247,7 @@ func _check_diagonal_only_river_detected() -> void:
 ## Every disjoint [start, end] (inclusive, transversal-coordinate) water run
 ## at each dominant-axis position, in dominant order. A real single-band river
 ## has exactly one run per position; more than one is a braided/self-
-## intersecting artifact this task's contract forbids ("one band ... never joined
+## intersecting artifact the river contract forbids ("one band ... never joined
 ## only by diagonals or points").
 func _cross_section_runs(tiles: Array[String], width: int, height: int, horizontal: bool) -> Array:
 	var dominant := width if horizontal else height
@@ -352,7 +352,7 @@ func _check_multi_run_cross_section_detected() -> void:
 	if not found_multi:
 		_fail("width check must detect a cross-section with multiple disjoint water runs (a braided/self-intersecting artifact)")
 
-## Positive control (round 1 review rigor: prove no false positives): a smooth
+## Positive control (proves no false positives): a smooth
 ## curve drifting by at most 1 tile every 2 columns, width held at 6, so every
 ## adjacent overlap is 5 or 6 tiles -- comfortably above NECK_FLOOR. Must pass
 ## both the multi-run and corridor-overlap checks untouched.
@@ -378,7 +378,7 @@ func _check_smooth_curve_not_flagged() -> void:
 	if not message.is_empty():
 		_fail("width check must not flag a smooth, adequately-overlapping curve: %s" % message)
 
-## -------- simulation-RNG isolation (round 1 review finding 2) --------
+## -------- simulation-RNG isolation --------
 
 ## _generate_map()/_spawn_colonists() must consume their own
 ## GEOGRAPHY_SEED_SALT/PLACEMENT_SEED_SALT-derived local RNGs, never
@@ -401,10 +401,10 @@ func _check_generation_does_not_perturb_simulation_stream() -> void:
 	if int(actual["seed"]) != baseline.seed or int(actual["state"]) != baseline.state:
 		_fail("world generation and spawn placement must never advance WorldState's own simulation RNG stream (it must still read as freshly seeded right after construction)")
 
-## -------- per-colonist accessibility rigor (round 1 review finding 4) --------
+## -------- per-colonist accessibility rigor --------
 
 ## Only colonist_0 sits near the manually placed water tile; colonist_1/2 sit
-## far past WATER_STEP_LIMIT. A merged multi-source BFS (the round 1 bug)
+## far past WATER_STEP_LIMIT. A merged multi-source BFS (an earlier bug)
 ## would report the minimum over all three and pass; checking each colonist
 ## independently must fail.
 func _check_only_one_colonist_reachable_detected() -> void:
@@ -444,8 +444,8 @@ func _check_bush_blocked_route_detected() -> void:
 	if steps != -1:
 		_fail("accessibility BFS must respect blocking objects (a berry bush must not be treated as passable soil), got distance %d instead of unreachable" % steps)
 
-## Round 5 review: exactly one berry bush sits well within FOOD_STEP_LIMIT of
-## all three colonists -- the same shape the pre-round-5 per-colonist
+## Exactly one berry bush sits well within FOOD_STEP_LIMIT of
+## all three colonists -- the same shape an earlier per-colonist
 ## nearest-distance check accepted as "each colonist has a reachable bush".
 ## Forage fully consumes its bush (one non-regrowing meal), so this single
 ## bush can feed only one of the three; _count_reachable_food_sources() (the
@@ -469,13 +469,13 @@ func _check_single_shared_bush_insufficient_food_detected() -> void:
 	if food_sources >= colonists.size():
 		_fail("distinct-food-source check must detect a single shared bush as insufficient for %d colonists, counted %d" % [colonists.size(), food_sources])
 
-## Round 6 review: the near footprint/colonist tile sits directly next to the
+## The near footprint/colonist tile sits directly next to the
 ## target bush (distance 1, trivially "within budget"), but the far tile is
-## separated from it by a 3-tile-thick wall of OTHER berry_bush objects that
+## separated from it by a 3-tile-thick wall of other berry_bush objects that
 ## fully blocks the only direct line between them; the sole legal route is a
 ## long detour (verified below to total 30 hops, all soil, no rock). A
 ## reachability search that does not exclude bush-occupied tiles from its own
-## traversal (both when seeding from the footprint/colonists AND when walking
+## traversal (both when seeding from the footprint/colonists and when walking
 ## outward from the candidate bush) can cut straight through that wall as if
 ## it were plain soil and falsely certify the far tile at 14 hops, well under
 ## the 20-hop limit used here, when the real route needs 30. Both
@@ -611,7 +611,7 @@ func _cross_section_widths(tiles: Array[String], width: int, height: int, horizo
 		widths.append(max_run)
 	return widths
 
-## Independent single-source BFS per colonist (round 1 review finding 4: a
+## Independent single-source BFS per colonist (a
 ## merged multi-source search reports the minimum over the three and can pass
 ## when two of three are actually unreachable/over-budget), from real
 ## passability() (never a raw tile-kind check -- a colonist's route can never
@@ -643,7 +643,7 @@ func _check_spawn_accessibility(world: WorldStateType, seed_value: int) -> void:
 	if bool(clearing.get("fallback", true)):
 		_fail("seed %d spawn search used its documented fallback instead of finding a candidate within the step limits" % seed_value)
 
-	# Round 5 review: distance-to-nearest-bush alone (checked per colonist
+	# Distance-to-nearest-bush alone (checked per colonist
 	# above) does not prove "sufficient" -- forage fully consumes its bush (one
 	# non-regrowing meal), so the same single bush could be every colonist's
 	# own nearest one. Independently re-count distinct reachable bushes (never
@@ -655,13 +655,13 @@ func _check_spawn_accessibility(world: WorldStateType, seed_value: int) -> void:
 
 ## Independent second implementation (never reusing WorldGenerator.place_spawn()'s
 ## own _count_reachable_food_sources()/_reaches_every_tile()) of the
-## distinct-reachable-food-source count this task's spawn contract requires
-## (round 5 review). Round 6 review: a merged multi-source BFS from all
-## colonists at once only proves a bush is reachable from the UNION of their
+## distinct-reachable-food-source count the spawn contract requires.
+## A merged multi-source BFS from all
+## colonists at once only proves a bush is reachable from the union of their
 ## positions, which a single colonist standing far from that bush would still
 ## wrongly pass -- forage fully consumes its bush (one meal, no regrowth), so
 ## "sufficient" means every one of the `limit`-required distinct bushes must be
-## independently reachable from EVERY spawned colonist's own real position,
+## independently reachable from every spawned colonist's own real position,
 ## the same worst-case guarantee WorldGenerator's own counter claims. Runs one
 ## single-source BFS per colonist (each via real world.passability(), never a
 ## raw tile-kind check) and intersects their reachable-bush sets.
@@ -682,7 +682,7 @@ func _count_reachable_food_sources(world: WorldStateType, colonists: Array, limi
 
 ## Single-source BFS from `start` (real world.passability(), matching
 ## WorldGenerator._distance_field()'s own "walk to reach it, plus one
-## interaction step" metric) collecting every DISTINCT berry_bush object index
+## interaction step" metric) collecting every distinct berry_bush object index
 ## reached within `limit` hops.
 func _reachable_bushes_from(world: WorldStateType, start: Vector2i, limit: int) -> Dictionary:
 	var width := world.get_map_width()
@@ -715,11 +715,11 @@ func _reachable_bushes_from(world: WorldStateType, start: Vector2i, limit: int) 
 	return found
 
 ## Single-source BFS from `start`, expanding only through world.passability()
-## (round 1 review finding 4: a raw tile-kind check treats every soil/floor
+## (a raw tile-kind check treats every soil/floor
 ## cell as walkable even when a blocking object like a berry bush sits on it)
 ## to the nearest neighbour `is_target` accepts -- the walk to reach it, plus
 ## one interaction step onto/into the resource itself, matching
-## WorldGenerator._distance_field()'s own metric (docs/decisions/020).
+## WorldGenerator._distance_field()'s own metric (ADR 020).
 func _bfs_route_distance(world: WorldStateType, start: Vector2i, is_target: Callable) -> int:
 	var width := world.get_map_width()
 	var height := world.get_map_height()

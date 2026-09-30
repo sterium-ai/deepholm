@@ -1,5 +1,7 @@
 # Deepholm — Godot project
 
+> **In short:** This folder holds the playable game. It explains how to start it, where each part of the code lives, and how to run the automated tests.
+
 This directory is the Godot 4 project. The authoritative simulation is written
 from its own contracts (`docs/architecture/`) and never depends on scenes,
 rendering or wall-clock time.

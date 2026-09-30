@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #278: an allied migrant uses the incident job to walk in, remains at
+## An allied migrant uses the incident job to walk in, remains at
 ## the colony after arrival, and becomes an ordinary colonist through the
 ## existing set_faction command. The next scheduler tick must then assign its
 ## queued dig job using the colonist definition's default labour table.

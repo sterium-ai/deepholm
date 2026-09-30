@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Identity-bearing tool item CRUD + reservation lifecycle (axe/pick: a stable
 ## id and a location -- ground, held, or stockpile -- distinct from
-## WorldState._items' stackable piles), extracted out of world_state.gd purely
-## to keep that file under its line budget (docs/architecture/
+## WorldState._items' stackable piles), extracted from world_state.gd to
+## keep that file within its line budget (docs/architecture/
 ## core-budgets.json). Holds exactly the state world_state.gd owned directly
 ## before (items, next_id, reservations); state_hash()/state_codec.gd read and
 ## rebuild them through the plain fields below exactly as they read any other
@@ -98,7 +98,7 @@ func _clear_holder(item_id: String) -> void:
 		WorkerType.clear_held_tool(colonist)
 
 ## Releases whatever job reservation item_id currently carries, for an
-## explicit drop -- distinct from set_held()'s pickup path, which must NOT
+## explicit drop -- distinct from set_held()'s pickup path, which must not
 ## clear the picking-up job's own reservation.
 func _release_reservation_for_drop(item_id: String) -> void:
 	var owner_job_id := reservations.owner(item_id)

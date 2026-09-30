@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #299 acceptance: save/load round-trips both the 48x48 fixture size
+## Save/load round-trips both the 48x48 fixture size
 ## and the 256x256 large size without regenerating stored terrain, 100 ticks
 ## after loading equal an uninterrupted continuation with the same commands,
 ## SaveIO rejects a snapshot with mismatched/unsupported dimensions or an
@@ -52,10 +52,9 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 ## A world with a real, tool-equipped, in-flight dig job at its far corner,
-## advanced a few ticks before saving. Round 1 review: a prior version of
-## this fixture applied the dig with no pick tool present and never checked
-## the result, so the "in-flight job" it claimed to round-trip was actually a
-## silently rejected no-op the whole time.
+## advanced a few ticks before saving. The dig is applied with a pick tool
+## present and its result is checked, so the in-flight job really exists
+## rather than being a silently rejected no-op.
 func _prepared_world(width: int, height: int, seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, width, height)
 	var colonists := world.get_colonists()
@@ -94,13 +93,13 @@ func _check_round_trip(width: int, height: int, seed_value: int) -> void:
 	_expect(loaded.state_hash() == world.state_hash(),
 		"decoded world's state_hash() must equal the original's right after load (%dx%d)" % [width, height])
 
-## "100 ticks after loading equal an uninterrupted continuation with the same
-## commands" (issue #299 acceptance): the loaded world and the original are
-## ticked in lockstep with NO injected commands of any kind (round 1 review:
-## a prior version forced every active job to complete via a synthetic
-## complete_job command each tick, which proves nothing about natural work
-## continuation -- a colonist actually walking to and digging its far-corner
-## target, exactly the same way in both worlds, is what this must show).
+## 100 ticks after loading equal an uninterrupted continuation with the same
+## commands: the loaded world and the original are
+## ticked in lockstep with no injected commands of any kind (forcing jobs
+## to complete via a synthetic complete_job command each tick would prove
+## nothing about natural work continuation -- a colonist actually walking to
+## and digging its far-corner target, exactly the same way in both worlds,
+## is what this must show).
 func _check_continuation_equivalence(width: int, height: int, seed_value: int) -> void:
 	var world := _prepared_world(width, height, seed_value)
 	var loaded := StateCodecType.decode(StateCodecType.encode(world))
@@ -111,14 +110,13 @@ func _check_continuation_equivalence(width: int, height: int, seed_value: int) -
 		_expect(world.state_hash() == loaded.state_hash(),
 			"world and its save/load round trip must stay hash-equal after tick %d of natural continuation (%dx%d)" % [i, width, height])
 
-## "Orders and routes near the far edge work" (issue #299 acceptance):
+## Orders and routes near the far edge work:
 ## a dig order actually near the world's real far boundary (254/255 on a
 ## 256x256 map, not merely past the legacy 48x48 fixture's max coordinate of
 ## 47) must route a colonist all the way there and complete, turning the
-## target to floor. Round 2 review: the prior version targeted (60,60), well
-## inside the map, and never asserted arrival -- this now asserts every route
+## target to floor. This asserts every route
 ## tile stays in bounds, that the colonist actually arrives at the target,
-## that the dig naturally completes, AND that a save taken mid-flight (route
+## that the dig naturally completes, and that a save taken mid-flight (route
 ## arrived, work toil active) round-trips hash-equal and stays hash-equal for
 ## 100 ticks of continuation after loading, exactly like
 ## _check_continuation_equivalence() above but starting mid-job instead of
@@ -126,13 +124,12 @@ func _check_continuation_equivalence(width: int, height: int, seed_value: int) -
 ## (rather than far away at (0,0)) so the single long walk this exercises is
 ## the far-edge route itself, not an unrelated tool-fetch detour.
 ##
-## Issue #300 round 1 revision picked whichever of the four corners was
-## real-route-reachable from spawn (a river can strand one corner across the
-## water under the new independent-tile-free river generator), but round 2
-## review correctly found this let the check pass on a nearby low-coordinate
-## corner like (1,1), silently losing the legacy-48x48-bounds regression this
-## item exists to catch. This now carves a short, deterministic, guaranteed-
-## soil corridor (a real generated world's own colonist origin straight to
+## A river can strand a map corner across the water, but picking whichever
+## corner happens to be reachable could let the check pass on a nearby
+## low-coordinate corner like (1,1), silently losing the legacy-48x48-bounds
+## regression this check exists to catch. Instead it carves a short,
+## deterministic, guaranteed-soil corridor (a real generated world's own
+## colonist origin straight to
 ## (254,254), never touching the river's own water tiles anywhere else on the
 ## map) so the far coordinate itself is always exercised, never weakened to
 ## whichever corner happened to be reachable.
@@ -167,7 +164,7 @@ func _check_far_edge_order_completes() -> void:
 	var arrived_working := false
 	var ticks := 0
 	# Phase 1: drive `world` alone until the colonist has arrived at the
-	# far-edge target AND begun the work toil, checking every route tile
+	# far-edge target and begun the work toil, checking every route tile
 	# stays in bounds along the way. Stops the instant that condition is met
 	# (rather than running to completion) so the mid-flight snapshot below
 	# reflects the exact same point `world` continues from -- letting `world`
@@ -238,7 +235,7 @@ func _check_far_edge_order_completes() -> void:
 ## outside this one corridor, so the rest of the real generated map (the
 ## river included) is untouched; this exists only to guarantee the far-edge
 ## coordinate itself stays reachable regardless of where the river happened
-## to land for this seed, per round 2 review.
+## to land for this seed.
 func _carve_land_corridor(world: WorldStateType, from: Vector2i, to: Vector2i) -> void:
 	var x := from.x
 	var y := from.y
@@ -315,7 +312,7 @@ func _nearest_soil_tile(world: WorldStateType, origin: Vector2i) -> Vector2i:
 					return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
-## File-backed round trip (issue #299 round 1 review): exercises the actual
+## File-backed round trip: exercises the actual
 ## SaveIO.write_atomic()/read() file pipeline, not just StateCodec.encode()/
 ## decode() in memory, at both required sizes.
 func _check_file_backed_round_trip(width: int, height: int, seed_value: int) -> void:
@@ -336,10 +333,10 @@ func _check_file_backed_round_trip(width: int, height: int, seed_value: int) -> 
 			"a file-backed round trip's state_hash() must equal the original's (%dx%d)" % [width, height])
 	_remove(path)
 
-## issue #299 round 1 review: a saved map below WorldGenerator's 16-tile
+## A saved map below WorldGenerator's 16-tile
 ## new-game minimum (a small fixture, e.g. 3x2) must decode at its own exact
 ## size, not be silently re-clamped to 16x16 with a mismatched tile array --
-## StateCodec.decode() must preserve every SUPPORTED saved dimension exactly,
+## StateCodec.decode() must preserve every supported saved dimension exactly,
 ## restoration being a distinct concern from new-world size clamping.
 func _check_small_map_decodes_at_exact_size() -> void:
 	var state := _minimal_state_at_size(3, 2, 401)
@@ -351,13 +348,13 @@ func _check_small_map_decodes_at_exact_size() -> void:
 	var validation := SaveIOType._validate_state(state)
 	_expect(validation["ok"], "a 3x2 saved map must pass SaveIO validation (no lower bound on restore): %s" % validation.get("message", ""))
 
-## issue #299 round 1 review: the largest size WorldGenerator/WorldState ever
+## The largest size WorldGenerator/WorldState ever
 ## support (512x512, mapgen.json's max_world_size) must round-trip through
 ## the real file pipeline exactly like any other supported size.
 func _check_supported_limit_round_trip() -> void:
 	_check_file_backed_round_trip(512, 512, 402)
 
-## issue #299 round 1 review: a map above the supported maximum must be
+## A map above the supported maximum must be
 ## rejected before it can ever replace a working save or reach WorldState,
 ## even when its tiles array length matches width*height (isolating the new
 ## oversized-dimension check from the pre-existing tile-count check below).
@@ -399,7 +396,7 @@ func _minimal_state_at_size(width: int, height: int, seed_value: int) -> Diction
 		"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": seed_value, "state": 0}},
 	}
 
-## issue #299: a save whose tiles array does not have width*height entries
+## A save whose tiles array does not have width*height entries
 ## must be rejected (schema_error), and the previously-written good target
 ## must survive untouched.
 func _check_rejects_tile_count_mismatch() -> void:
@@ -419,7 +416,7 @@ func _check_rejects_tile_count_mismatch() -> void:
 	_expect(still_good["ok"] and still_good["state"]["seed"] == good["seed"],
 		"the previously-written good save must survive a rejected dimension-mismatched write")
 
-## issue #299: an entity at or beyond the map's own width/height must be
+## An entity at or beyond the map's own width/height must be
 ## rejected the same way a negative coordinate always was.
 func _check_rejects_out_of_bounds_entity() -> void:
 	var good := StateCodecType.encode(WorldStateType.new(323, 10, 48, 48))
@@ -439,7 +436,7 @@ func _check_rejects_out_of_bounds_entity() -> void:
 	_expect(still_good["ok"] and still_good["state"]["seed"] == good["seed"],
 		"the previously-written good save must survive a rejected out-of-bounds-entity write")
 
-## issue #299: a zone rectangle extending past the map's own width/height
+## A zone rectangle extending past the map's own width/height
 ## must be rejected the same way an entity out of bounds is.
 func _check_rejects_out_of_bounds_zone() -> void:
 	var good := StateCodecType.encode(WorldStateType.new(325, 10, 48, 48))
@@ -454,13 +451,13 @@ func _check_rejects_out_of_bounds_zone() -> void:
 	_expect(still_good["ok"] and still_good["state"]["seed"] == good["seed"],
 		"the previously-written good save must survive a rejected out-of-bounds-zone write")
 
-## Round 5 review finding 3: decode() constructs a sub-16-tile saved map (e.g.
+## decode() constructs a sub-16-tile saved map (e.g.
 ## 8x8) through the constructor's own resolve_size()-clamped 16x16 build, then
 ## only overwrites WorldState._width/_height afterward -- leaving NeedGiver's
 ## _bounds_max and IncidentScheduler's _map_width/_map_height stuck at 16.
 ## trader_visit's east-edge spawn (content/incidents.json) would then search
 ## for x = 15, entirely outside an 8-wide map, and never spawn. Proves both
-## services are rebuilt from the SAVED dimensions, and that a trader actually
+## services are rebuilt from the saved dimensions, and that a trader actually
 ## spawns on the map's own real east edge (x = width-1).
 const SMALL_MAP_TICK_BUDGET := 200
 

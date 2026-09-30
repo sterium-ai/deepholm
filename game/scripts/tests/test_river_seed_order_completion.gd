@@ -1,28 +1,21 @@
 extends SceneTree
 
-## Issue #300 round 5 review finding 3: docs/decisions/020's Owner
-## verification text and the previous handoff deferred the two-seed
-## interactive PC check ("recognize the river, locate nearby food and water,
-## complete a player-selected initial order") entirely to after merge, while
-## the only automated coverage of "complete an order" under real need decay
-## (test_new_game_forage_chop.gd) exercises a different seed (555002) than
-## the two the task's own captures/owner-verification section names (1337,
-## 20260919), and the capture test (test_river_map_capture.gd) never submits
-## or completes any order at all.
+## Headless check that, for the verification seeds 1337 and 20260919 (ADR
+## 020), a new game lets the colonists locate nearby food and water and
+## complete a player-selected initial order. test_new_game_forage_chop.gd
+## covers order completion under real need decay for a different seed
+## (555002), and test_river_map_capture.gd never submits an order.
 ##
-## This closes that specific gap for exactly seeds 1337 and 20260919: boots
+## For each seed this boots
 ## the real New Game path (boot.gd's own _start_new_game(), same as
 ## test_new_game_forage_chop.gd), independently re-verifies the food/water
 ## accessibility contract for that exact generated map (a real BFS through
 ## world.passability(), never reused from test_river_generation.gd or
 ## WorldGenerator's own distance fields), then submits and drives to
-## completion one real player-selected forage order -- the automatable proxy
-## for "locate nearby food and water, complete a player-selected initial
-## order". Recognizing the river visually at a glance and operating a mouse
-## remain genuinely human steps this headless sandbox cannot perform; that
-## residual, non-automatable half of the owner's check is recorded as pending
-## in docs/decisions/020's Owner verification section and in HANDOFF.md's
-## Known limitations, never silently marked done.
+## completion one real player-selected forage order, submitted directly
+## through WorldState.apply(). Recognizing the river visually and operating
+## the mouse are not covered here; test_river_seed_viewer_interaction.gd
+## drives the same check through the running viewer's input path.
 
 const BootScenePath := "res://scenes/boot.tscn"
 const SEEDS := [1337, 20260919]
@@ -64,8 +57,8 @@ func _check_seed(seed_value: int) -> void:
 	var colonists: Array = world.get_colonists()
 	_expect(colonists.size() == 3, "seed %d: New Game must spawn exactly 3 colonists, found %d" % [seed_value, colonists.size()])
 
-	# "locate nearby food and water": an independent real-route BFS per
-	# colonist, matching this task's own documented step bounds.
+	# Locate nearby food and water: an independent real-route BFS per
+	# colonist, against the documented step bounds.
 	for colonist in colonists:
 		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
 		var colonist_id: String = String(colonist["id"])
@@ -76,8 +69,8 @@ func _check_seed(seed_value: int) -> void:
 		_expect(food_steps != -1 and food_steps <= FOOD_STEP_LIMIT,
 			"seed %d colonist %s must locate food within %d steps, got %d" % [seed_value, colonist_id, FOOD_STEP_LIMIT, food_steps])
 
-	# "complete a player-selected initial order": one real forage order,
-	# assignee-restricted (F3, issue #290) so the fair scheduler cannot hand it
+	# Complete a player-selected initial order: one real forage order,
+	# assignee-restricted so the fair scheduler cannot hand it
 	# to a different colonist, driven to completion under the real work engine.
 	if not colonists.is_empty():
 		var origin := Vector2i(int(colonists[0]["x"]), int(colonists[0]["y"]))
@@ -130,7 +123,7 @@ func _bfs_route_distance(world, start: Vector2i, is_target: Callable) -> int:
 				queue.append(Vector2i(nx, ny))
 	return -1
 
-## Nearest REAL-route object of `kind`, expanding only through
+## Nearest real-route object of `kind`, expanding only through
 ## world.passability() (never a Chebyshev-ring geometric search, which could
 ## pick a closer-as-the-crow-flies object across the river that a colonist can
 ## never actually walk to, stalling the order forever). Vector2i(-1, -1) when

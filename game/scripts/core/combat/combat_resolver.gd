@@ -1,8 +1,8 @@
 class_name CombatResolver
 extends RefCounted
 
-## F5/#302 combat resolution (ADR 020): the one new system this objective
-## adds. Plain, scene-independent GDScript (AGENTS.md): every method is
+## F5 combat resolution (ADR 021). Plain, scene-independent GDScript
+## (AGENTS.md): every method is
 ## static, driven by WorldState.tick()'s own explicit tick counter, with no
 ## scene/node/rendering/wall-clock/global-RNG dependency. Resolves rule (1)
 ## (an actor with a `combat` component deals its `damage` every `cooldown`
@@ -18,7 +18,7 @@ const TargetingType = preload("res://scripts/core/combat/combat_targeting.gd")
 const HealthType = preload("res://scripts/core/actors/components/health.gd")
 
 ## docs/architecture/orders-and-movement.md's typed event/reason vocabulary,
-## extended here exactly as the objective names: `attacked_by` (an event,
+## extended here with two entries: `attacked_by` (an event,
 ## recorded once per landed hit) and `fighting` (a per-tick reason exposed
 ## through WorldState.get_actor_combat_reason(), mirroring
 ## get_colonist_need_reason()'s "need_unmet:"/"rerouting" pattern).
@@ -26,13 +26,12 @@ const EVENT_ATTACKED_BY := "attacked_by"
 
 ## flee_hp_fraction defaults to 0.0 (never flee) for any actor definition that
 ## does not declare one -- content, not this module, opts an actor kind in
-## (colonist's own tunables, this task; a wild/trader tunable is a later
-## task's scope, per the objective's Non-goals). Read from the actor
-## DEFINITION's tunables, not the per-instance "combat" component dict:
-## ActorCombat.build() (docs/decisions/012-actors-and-components.md, owned by
-## a different task) only carries attack/damage/cooldown/cooldown_remaining
-## into runtime state, so a generic tunable this task adds has nowhere to
-## round-trip on the instance itself.
+## (via its "combat" tunables in content/actors.json). Read from the actor
+## *definition's* tunables, not the per-instance "combat" component dict:
+## ActorCombat.build() (docs/decisions/012-actors-and-components.md) only
+## carries attack/damage/cooldown/cooldown_remaining into runtime state, so
+## any other combat tunable has nowhere to round-trip on the instance
+## itself.
 static func _flee_hp_fraction(actor: Dictionary, content) -> float:
 	var definition: Dictionary = content.get_entry("actors", String(actor.get("kind", "")))
 	var combat_tunables: Dictionary = (definition.get("tunables", {}) as Dictionary).get("combat", {})
@@ -48,9 +47,9 @@ static func _hp_fraction(actor: Dictionary) -> float:
 ## already use): decrements every combat actor's cooldown by one on every
 ## applicable tick -- independent of whether it currently has an adjacent
 ## target or is below its own flee threshold, since the rule is elapsed
-## ticks, not ticks spent engaged (round-1 review: an actor that attacks,
-## disengages for longer than its own cooldown, then re-engages must not
-## still wait out the stale remaining value) -- attacks once the cooldown
+## ticks, not ticks spent engaged (an actor that attacks, disengages for
+## longer than its own cooldown, then re-engages must not still wait out
+## the stale remaining value) -- attacks once the cooldown
 ## reaches zero, and reports every actor that reached 0 hp this call for the
 ## caller to apply (rule 2: dead, removed from scheduling, drops inventory).
 ## Object damage/destruction (rule 3) is applied immediately through

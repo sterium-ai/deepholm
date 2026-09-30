@@ -2,8 +2,8 @@ class_name ReservationTable
 extends RefCounted
 
 ## Generic String-keyed reservation ledger (colonist-ai.md 3.4): key -> job id.
-## Callers build namespaced keys ("tile:x,y" today; future "item:"/"cell:" keys
-## from t3/t4 use the same table without ever colliding with a tile key). This
+## Callers build namespaced keys ("tile:x,y" today; "item:"/"cell:" keys can
+## share the same table without ever colliding with a tile key). This
 ## module knows nothing about tiles, items or jobs; it only tracks ownership.
 
 var _owners: Dictionary = {}

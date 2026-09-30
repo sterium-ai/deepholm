@@ -707,7 +707,7 @@ static func _has_valid_v2_scheduling_shape(value) -> bool:
 static func _migrate_v1_to_v2(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 2
-	# Version 1 predates scheduler snapshots: these are the truthful initial
+	# Version 1 predates scheduler snapshots: these are the actual initial
 	# continuation values, not defaults inferred from the current save.
 	migrated["scheduling"] = {
 		"nextJobId": 1,
@@ -730,7 +730,7 @@ static func _migrate_v2_to_v3(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 3
 	# Version 2 predates trees and ground wood: no map tile could ever have
-	# been a tree, so there is truthfully nothing to backfill here.
+	# been a tree, so there is nothing to backfill here.
 	migrated["groundItems"] = []
 	var entities: Array = []
 	for entity in migrated["entities"]:
@@ -742,7 +742,7 @@ static func _migrate_v2_to_v3(state: Dictionary) -> Dictionary:
 		entities.append(updated)
 	migrated["entities"] = entities
 	# Version 2 assignments predate the resolved path field; an in-flight
-	# assignment truthfully has no recorded route to backfill.
+	# assignment has no recorded route to backfill.
 	var scheduling: Dictionary = (migrated["scheduling"] as Dictionary).duplicate(true)
 	var assignments: Dictionary = (scheduling["assignments"] as Dictionary).duplicate(true)
 	for worker in assignments.keys():
@@ -758,12 +758,12 @@ static func _migrate_v3_to_v4(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 4
 	# Version 3 predates placeable objects: no tile could ever have carried
-	# one, so there is truthfully nothing to backfill besides an empty list.
+	# one, so there is nothing to backfill besides an empty list.
 	migrated["objects"] = []
 	return migrated
 
 ## Version 4 predates re-routing: no existing route was ever mid-search, so
-## there is truthfully nothing to backfill. A route's schemaVersion-5
+## there is nothing to backfill. A route's schemaVersion-5
 ## "rerouting" field is optional and omitted entirely for the normal
 ## (non-rerouting) state (see StateCodec._encode_route_field()), which is
 ## exactly the state every schemaVersion-4 route was already in -- so a v4
@@ -776,14 +776,14 @@ static func _migrate_v4_to_v5(state: Dictionary) -> Dictionary:
 
 ## Version 5's groundItems was a per-tile wood counter ({target, wood}); this
 ## becomes one first-class item per unit of wood (colonist-ai.md 3.3/3.4), each
-## a truthful count-1 "wood" item at that tile. Ids are assigned sequentially
+## a count-1 "wood" item at that tile. Ids are assigned sequentially
 ## ("item_1", "item_2", ...) in groundItems' own (already tile-sorted, see
 ## StateCodec._encode_ground_items()) order, so the scheme is both stable
 ## (same input always yields the same ids) and non-colliding (every id is
 ## used exactly once); itemsNextId continues from the last id handed out here
 ## so a WorldState that keeps ticking after load never reuses one. Version 5
 ## also predates the colonist "carrying" field: no item could ever have been
-## picked up, so every entity truthfully carries nothing.
+## picked up, so every entity carries nothing.
 static func _migrate_v5_to_v6(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 6
@@ -812,7 +812,7 @@ static func _migrate_v5_to_v6(state: Dictionary) -> Dictionary:
 	return migrated
 
 ## Version 6 predates stockpile zones: no zone could ever have been drawn, so
-## there is truthfully nothing to backfill besides an empty list, and the
+## there is nothing to backfill besides an empty list, and the
 ## fresh id counter that hands out the first zone's id starts at 1.
 static func _migrate_v6_to_v7(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
@@ -821,8 +821,8 @@ static func _migrate_v6_to_v7(state: Dictionary) -> Dictionary:
 	migrated["nextZoneId"] = 1
 	return migrated
 
-## Version 7 predates the haul job kind (#189): no job could ever have been a
-## haul job, so every existing job truthfully carries an unclaimed item, no
+## Version 7 predates the haul job kind: no job could ever have been a
+## haul job, so every existing job carries an unclaimed item, no
 ## reserved cell, and no backoff -- itemId "", cell null, retryAt 0,
 ## backoffTicks 0, exactly JobQueue.submit_dig()'s own harmless defaults.
 static func _migrate_v7_to_v8(state: Dictionary) -> Dictionary:
@@ -839,8 +839,8 @@ static func _migrate_v7_to_v8(state: Dictionary) -> Dictionary:
 	migrated["jobs"] = jobs
 	return migrated
 
-## Version 8 predates colonist needs (#201): no colonist could ever have had
-## food, water, or rest tracked, so every entity truthfully starts with a
+## Version 8 predates colonist needs: no colonist could ever have had
+## food, water, or rest tracked, so every entity starts with a
 ## full (100) value of each kind (colonist-ai.md 3.1/3.8) -- the same value a
 ## freshly spawned colonist gets today (WorldState._full_needs()/NEED_FULL).
 static func _migrate_v8_to_v9(state: Dictionary) -> Dictionary:
@@ -854,12 +854,12 @@ static func _migrate_v8_to_v9(state: Dictionary) -> Dictionary:
 	migrated["entities"] = entities
 	return migrated
 
-## Version 9 predates berry bushes and forage (#202): no forage job could ever
-## have completed, so there is truthfully nothing to backfill besides an
-## empty groundBerries list, mirroring the pre-#192 groundItems wire shape
-## ({target, wood}) rather than the unified first-class items store --
-## ground berries stay a simple per-tile counter (colonist-ai.md 3 result
-## bullet 2), not a pickable item, so they get their own top-level array
+## Version 9 predates berry bushes and forage: no forage job could ever
+## have completed, so there is nothing to backfill besides an
+## empty groundBerries list, mirroring the old per-tile groundItems wire
+## shape ({target, wood}) rather than the unified first-class items store --
+## ground berries stay a simple per-tile counter (colonist-ai.md 3), not a
+## pickable item, so they get their own top-level array
 ## instead of joining "items".
 static func _migrate_v9_to_v10(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
@@ -867,9 +867,9 @@ static func _migrate_v9_to_v10(state: Dictionary) -> Dictionary:
 	migrated["groundBerries"] = []
 	return migrated
 
-## Version 10 predates tile work_progress and paused jobs (#205): no `work`
+## Version 10 predates tile work_progress and paused jobs: no `work`
 ## toil could ever have been interrupted mid-tick-count, so there is
-## truthfully nothing to backfill besides two honestly empty collections.
+## nothing to backfill besides two empty collections.
 static func _migrate_v10_to_v11(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 11
@@ -877,8 +877,8 @@ static func _migrate_v10_to_v11(state: Dictionary) -> Dictionary:
 	migrated["pausedJobs"] = []
 	return migrated
 
-## Version 11 predates the labour table (#207): no colonist could ever have
-## had a labour kind toggled, so every entity truthfully starts at the same
+## Version 11 predates the labour table: no colonist could ever have
+## had a labour kind toggled, so every entity starts at the same
 ## default all-3 table (colonist-ai.md 3.2) a freshly spawned colonist gets
 ## today (WorldState._default_labour_table()).
 static func _migrate_v11_to_v12(state: Dictionary) -> Dictionary:
@@ -895,8 +895,8 @@ static func _migrate_v11_to_v12(state: Dictionary) -> Dictionary:
 	migrated["entities"] = entities
 	return migrated
 
-## Version 12 predates tool items (#213): no axe/pick could ever have
-## existed, so there is truthfully nothing to backfill besides two honestly
+## Version 12 predates tool items: no axe/pick could ever have
+## existed, so there is nothing to backfill besides two
 ## empty collections (colonist-ai.md 2/3.4). No entity could ever have held a
 ## tool either, so a v12 entity's absent heldTool is left absent rather than
 ## backfilled to "" -- StateCodec's own decoder already treats a missing
@@ -908,19 +908,19 @@ static func _migrate_v12_to_v13(state: Dictionary) -> Dictionary:
 	migrated["toolReservations"] = {}
 	return migrated
 
-## Version 13 predates two review-round-2 additions for #241's critical-need
-## interrupt (colonist-ai.md 3.6): NeedGiver's own colonist_id -> job_id
+## Version 13 predates two additions for the critical-need interrupt
+## (colonist-ai.md 3.6): NeedGiver's own colonist_id -> job_id
 ## association (persisted so resolve_job() survives a save/load round trip)
 ## and each scheduler queue entry's "restrictTo" worker constraint (so a
 ## submitted need job can only ever be offered to the colonist whose need
 ## created it). A v13 save's need job, if any was queued or active at save
-## time, truthfully never had that association recorded -- NeedGiver's own
+## time, never had that association recorded -- NeedGiver's own
 ## _pending was not persisted at all before this -- so there is nothing to
-## backfill besides an honestly empty needJobAssignments list; every existing
+## backfill besides an empty needJobAssignments list; every existing
 ## queue entry (waiting, each pending batch's candidates/found, and the
-## fresh activatedEntries map itself) truthfully never restricted to a
+## fresh activatedEntries map itself) never restricted to a
 ## worker either, so "restrictTo" backfills to "" throughout and
-## activatedEntries backfills to an honestly empty map (no v13 save ever
+## activatedEntries backfills to an empty map (no v13 save ever
 ## tracked a job's original waiting-queue entry past its activation).
 static func _migrate_v13_to_v14(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
@@ -944,21 +944,21 @@ static func _migrate_v13_to_v14(state: Dictionary) -> Dictionary:
 	migrated["scheduling"] = scheduling
 	return migrated
 
-## Version 14 saves are migrated explicitly to version 15 (task #257,
-## docs/architecture/foundation-for-breadth.md F1): a v14 save's shape is
+## Version 14 saves are migrated explicitly to version 15
+## (docs/architecture/foundation-for-breadth.md F1): a v14 save's shape is
 ## otherwise unchanged -- schemaVersion 15 only starts sourcing
 ## `contentVersion` from ContentRegistry.version() instead of a hard-coded
 ## literal (StateCodec.content_version()) and adds SaveIO's own contentVersion
 ## mismatch check on read, neither of which touches a save's persisted shape
-## -- so there is truthfully nothing to backfill besides the version counter.
+## -- so there is nothing to backfill besides the version counter.
 static func _migrate_v14_to_v15(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 15
 	return migrated
 
-## Version 15 predates the sowing-window calendar alert (issue #269, ADR 008
+## Version 15 predates the sowing-window calendar alert (ADR 008
 ## consequence 6): no window could ever have fired yet, so there is
-## truthfully nothing to backfill besides an honestly empty fired-window set.
+## nothing to backfill besides an empty fired-window set.
 static func _migrate_v15_to_v16(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 16
@@ -966,9 +966,8 @@ static func _migrate_v15_to_v16(state: Dictionary) -> Dictionary:
 	return migrated
 
 ## Version 16 predates the fetch_tool toil's own persisted excluded-candidate
-## set (issue #271 round 6, ADR 012): no fetch attempt could ever have
-## excluded a candidate under a pre-#271 or round-1-through-5 save, so there
-## is truthfully nothing to backfill besides an honestly empty list.
+## set (ADR 013): no fetch attempt in an older save could have excluded a
+## candidate, so there is nothing to backfill besides an empty list.
 static func _migrate_v16_to_v17(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 17
@@ -976,15 +975,15 @@ static func _migrate_v16_to_v17(state: Dictionary) -> Dictionary:
 	return migrated
 
 ## Version 17 predates per-actor faction membership and this schema's own
-## persisted health (issue #284; the "health" runtime field itself was added
-## to a colonist's live shape by issue #283's actor-component work, ADR 012,
-## but the wire format never carried it -- WorldState._ensure_health()
+## persisted health (the "health" runtime field itself was added to a
+## colonist's live shape by the actor-component work, ADR 012, but the wire
+## format never carried it -- WorldState._ensure_health()
 ## rebuilt a fresh one after every load instead). No entity could ever have
 ## belonged to a faction other than the colony, and no entity's hp/maxHp/dead
 ## was ever actually restored across a save/load round trip, so every
-## existing entity is honestly backfilled with factionId: "colony" and a
+## existing entity is backfilled with factionId: "colony" and a
 ## full-health snapshot ({hp: 100, maxHp: 100, dead: false}, matching
-## ActorHealth.build_full()'s own colonist default) -- there is truthfully
+## ActorHealth.build_full()'s own colonist default) -- there is
 ## nothing else to recover.
 static func _migrate_v17_to_v18(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
@@ -998,16 +997,16 @@ static func _migrate_v17_to_v18(state: Dictionary) -> Dictionary:
 	migrated["entities"] = entities
 	return migrated
 
-## Version 18 predates per-object/per-item faction ownership (issue #288): the
-## persisted counterpart of the "faction_id" runtime field issue #287 added to
+## Version 18 predates per-object/per-item faction ownership: the
+## persisted counterpart of the "faction_id" runtime field on
 ## WorldState.get_objects()/get_items() -- StateCodec's own encode() never
 ## wrote it to the wire before this version, mirroring how _migrate_v17_to_v18
 ## backfilled the same default for entities a version earlier. No object or
 ## item could ever have belonged to a faction other than the colony (the
 ## runtime field itself already defaults every not-yet-tracked object/item to
 ## "colony", see WorldState.get_objects()/get_items()), so every existing
-## entry is honestly backfilled with factionId: "colony" -- there is
-## truthfully nothing else to recover.
+## entry is backfilled with factionId: "colony" -- there is
+## nothing else to recover.
 static func _migrate_v18_to_v19(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 19
@@ -1028,12 +1027,12 @@ static func _migrate_v18_to_v19(state: Dictionary) -> Dictionary:
 	return migrated
 
 ## Version 19 predates a persisted generator-algorithm identifier and a
-## save's game-session epoch (issue #299, ADR 019): "map.width"/"map.height"
+## save's game-session epoch (ADR 019): "map.width"/"map.height"
 ## already existed at v19 (the schema always declared them, encode() had
 ## simply always written the fixture's own 48/48 there), so no migration is
 ## needed for those. "map.generatorVersion" is new, backfilled to 1, the only
 ## worldgen algorithm that has ever produced a save
-## (WorldGenerator.GENERATOR_VERSION did not exist before this task). "epoch"
+## (WorldGenerator.GENERATOR_VERSION did not exist before v20). "epoch"
 ## is new too, backfilled to 0 (SaveManager's own default for a save that
 ## never crossed a New Game boundary -- see save_manager.gd's header comment):
 ## every pre-v20 save was necessarily written before "New Game" existed.
@@ -1046,17 +1045,17 @@ static func _migrate_v19_to_v20(state: Dictionary) -> Dictionary:
 	migrated["epoch"] = 0
 	return migrated
 
-## Version 20 saves are migrated explicitly to version 21 (F5, issue #294;
-## docs/decisions/004-global-assignment-fairness-policy.md's "WorldState's
+## Version 20 saves are migrated explicitly to version 21
+## (docs/decisions/004-global-assignment-fairness-policy.md's "WorldState's
 ## diagnostic hash includes this continuation state"): a v20 save predates
 ## incidents, so no incident could ever have drawn or started a cooldown --
-## `incidentScheduler.cooldownUntilDay` starts truthfully empty. `lastProcessedDay`
+## `incidentScheduler.cooldownUntilDay` starts empty. `lastProcessedDay`
 ## is synced to the save's own current calendar day (`CalendarService.day_of_tick(tick)`),
 ## not 0, so a restored world does not treat every day it never actually lived
 ## through as newly due the moment incidents are enabled. `rng` is freshly
 ## re-seeded the exact same deterministic way `IncidentScheduler._init()`
 ## derives it from the save's own seed (`seed + IncidentScheduler.SEED_SALT`)
-## -- there is truthfully nothing else to backfill.
+## -- there is nothing else to backfill.
 static func _migrate_v20_to_v21(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 21
@@ -1103,12 +1102,11 @@ static func _is_schema_v22_state(state: Dictionary) -> bool:
 ## backfilling "trapped"; the shape checks for entities/scheduling/items/jobs
 ## are still needed so a malformed-but-v23-shaped save is rejected here rather
 ## than accepted and crashing migration's casts. "digFindRng" is optional on
-## the wire (ADR 025 round 2 amendment), so it is allowed but not required.
-## "combatBlockedTargets" (round-4 review, #342/#302 merge) is likewise
-## optional here: origin/main's own schemaVersion-23 encoder
-## (StateCodec.encode(), CombatGiver's own flee-episode exclusions) has always
-## written it unconditionally, even as an empty list, since the combat system
-## landed on main -- but SaveIO._validate_state() itself already treats it as
+## the wire (ADR 026 amendment), so it is allowed but not required.
+## "combatBlockedTargets" is likewise optional here: the schemaVersion-23
+## encoder (StateCodec.encode(), CombatGiver's own flee-episode exclusions)
+## writes it unconditionally, even as an empty list, since the combat system
+## was added -- but SaveIO._validate_state() itself already treats it as
 ## optional (see save_io.gd's own `optional_top_level`), so an ordinary
 ## pre-combat v23 save that never carries the key must keep migrating too.
 static func _is_schema_v23_state(state: Dictionary) -> bool:
@@ -1142,7 +1140,7 @@ static func _is_schema_v23_state(state: Dictionary) -> bool:
 		return false
 	return _has_valid_v2_scheduling_shape(state["scheduling"])
 
-## Version 24 predates the hands model (issue #402, ADR 035): the top-level
+## Version 24 predates the hands model (ADR 037): the top-level
 ## shape is otherwise identical to v23's own (the v23->v24 step above added
 ## no top-level key, only each entity's "trapped"), so "required"/"optional"
 ## below mirror SaveIO._validate_state()'s own top_level/optional_top_level
@@ -1181,10 +1179,10 @@ static func _is_schema_v24_state(state: Dictionary) -> bool:
 		return false
 	return _has_valid_v2_scheduling_shape(state["scheduling"])
 
-## Version 21 predates the per-need decay accumulator (issue #349, ADR 023):
+## Version 21 predates the per-need decay accumulator (ADR 024):
 ## no entity could ever have carried one, and since a v21 save's needs were
 ## always decayed by a whole point per tick (no sub-point carry to lose), the
-## honest backfill for every entity that already carries "needs" is a fresh
+## correct backfill for every entity that already carries "needs" is a fresh
 ## zero accumulator for the same kinds -- not a guess, since v21 never tracked
 ## a fractional day any way.
 static func _migrate_v21_to_v22(state: Dictionary) -> Dictionary:
@@ -1202,9 +1200,9 @@ static func _migrate_v21_to_v22(state: Dictionary) -> Dictionary:
 	migrated["entities"] = entities
 	return migrated
 
-## Version 22 predates the persisted dig-find RNG continuation (ADR 025
-## amendment, issue #358 round 2 review): world._dig_find_random's own draw
-## sequence was never written to the wire before this task, so no v22 save
+## Version 22 predates the persisted dig-find RNG continuation (ADR 026
+## amendment): world._dig_find_random's own draw sequence was never written
+## to the wire before v23, so no v22 save
 ## can carry a live run's true continuation to recover -- "digFindRng" is
 ## backfilled the exact same deterministic way WorldState._init() itself
 ## derives a fresh stream from the save's own seed (seed + WorldState.DIG_FIND_SEED_SALT),
@@ -1221,10 +1219,10 @@ static func _migrate_v22_to_v23(state: Dictionary) -> Dictionary:
 	migrated["digFindRng"] = {"seed": random.seed, "state": random.state}
 	return migrated
 
-## Version 23 predates a trapped actor's persisted state (issue #359, ADR 025
-## t3): no actor could ever have stepped onto a trench tile and become trapped
-## before this task's trap-on-entry mechanic landed, so every existing entity
-## truthfully carries trapped: null -- mirroring _migrate_v5_to_v6()'s
+## Version 23 predates a trapped actor's persisted state (ADR 026): no actor
+## could ever have stepped onto a trench tile and become trapped before the
+## trap-on-entry mechanic existed, so every existing entity
+## carries trapped: null -- mirroring _migrate_v5_to_v6()'s
 ## identical carrying: null backfill.
 static func _migrate_v23_to_v24(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
@@ -1237,7 +1235,7 @@ static func _migrate_v23_to_v24(state: Dictionary) -> Dictionary:
 	migrated["entities"] = entities
 	return migrated
 
-## Version 24 predates the hands model (issue #402, ADR 035): a colonist's
+## Version 24 predates the hands model (ADR 037): a colonist's
 ## single-slot "carrying" field ({"itemId","kind","count"} or null) becomes
 ## "hands", a list of {"kind","count"} entries -- empty when carrying was
 ## null, one entry carrying's own kind/count when it was populated. The
@@ -1270,7 +1268,7 @@ static func _backfilled_entry(entry: Dictionary) -> Dictionary:
 	updated["restrictTo"] = ""
 	return updated
 
-# --- content-rename hook (task #257) ----------------------------------------
+# --- content-rename hook ----------------------------------------
 
 ## Resolves a schemaVersion mismatch between a save's own `contentVersion` and
 ## the content bundle currently on disk (docs/architecture/foundation-for-
@@ -1283,20 +1281,19 @@ static func _backfilled_entry(entry: Dictionary) -> Dictionary:
 static var _content_renames: Dictionary = {}
 
 ## Godot's static-variable initializer callback (run once, at class load,
-## before any static method executes): registers this task's own real
-## production entry (issue #449) alongside whatever a test additionally
+## before any static method executes): registers the real production entry alongside whatever a test additionally
 ## registers/unregisters for its own scenario.
 static func _static_init() -> void:
 	register_content_rename(WALL_RENAME_FROM_CONTENT_VERSION, Callable(SaveMigrations, "_rename_wall_to_wooden_wall"))
 
-## manifest.json's own "version" field before this task renamed
+## manifest.json's own "version" field before the content change that renamed
 ## content/objects.json's "wall" row to "wooden_wall"/"stone_wall" -- read
 ## live off the pre-change checkout (game/content/manifest.json), never
 ## hand-typed or guessed. Every save written under this exact contentVersion
 ## can still carry a persisted object of kind "wall".
 const WALL_RENAME_FROM_CONTENT_VERSION := "1.0.0"
 
-## Issue #449's own real content rename: every persisted object whose kind is
+## The wall content rename: every persisted object whose kind is
 ## the retired "wall" id becomes "wooden_wall", content/objects.json's own
 ## replacement for it (build_cost wood, matching "wall"'s own former
 ## build_cost exactly; "stone_wall" is a new addition, not a rename target,
@@ -1304,32 +1301,32 @@ const WALL_RENAME_FROM_CONTENT_VERSION := "1.0.0"
 ## sets the returned state's own contentVersion, so this remap only ever
 ## touches content-id fields already present on the state: a completed
 ## object's own "kind", an in-progress construction site's own "kind"
-## (round 2 review: a pre-task save can carry an unfinished "wall" site just
-## as easily as a completed "wall" object, and ADR 038's own persisted
+## (a save from before the rename can carry an unfinished "wall" site just
+## as easily as a completed "wall" object, and ADR 040's own persisted
 ## requiredMaterials/heldMaterials/progress/buildTicks/builderIds on that site
 ## record are left untouched here -- only "kind" is a content id, the rest is
-## the site's own truthful history), and a still-legacy (pre-#406) build
-## job's own retired "buildKind" field (round 2 review: SaveIO now resolves
+## the site's own history), and a still-legacy (pre-construction-site) build
+## job's own retired "buildKind" field (SaveIO resolves
 ## this rename before SaveMigrations.migrate_legacy_build_jobs() looks
 ## buildKind up against the current content bundle, so a queued/active
 ## legacy "wall" build job must have its own buildKind renamed here too, or
 ## that lookup would still miss and synthesize an empty-cost site).
-## Round 2 review: a save missing "objects"/"jobs" (or carrying either as the
+## A save missing "objects"/"jobs" (or carrying either as the
 ## wrong type, or an entry inside one of the three renamed collections that is
 ## not itself a Dictionary) must reach _validate_state() exactly as malformed
 ## as it arrived -- never fabricated into an empty (and therefore
 ## structurally valid-looking) collection, and never blindly cast in a way
 ## that raises a script error before validation ever runs. Each collection
-## below is therefore only ever touched when it is already present AND typed
+## below is therefore only ever touched when it is already present and typed
 ## as an Array; a present-but-wrong-typed field, or a non-Dictionary entry
 ## inside it, is passed through completely untouched so the real error
 ## surfaces from _validate_state()'s own type/shape checks, not from a script
-## error or an invented default here. Round 4 review: the same rule applies one
+## error or an invented default here. The same rule applies one
 ## level deeper -- each entry's own "kind"/"buildKind" field is only compared
 ## against "wall" (via `is String`, matching every other type check in this
 ## file and save_io.gd) when it is already a String; a numeric, Array,
 ## Dictionary, or null value there is left untouched rather than passed
-## through the former unconditional String() cast, which raises a script error
+## through an unconditional String() cast, which would raise a script error
 ## for those types.
 static func _rename_wall_to_wooden_wall(state: Dictionary) -> Dictionary:
 	var migrated: Dictionary = state.duplicate(true)
@@ -1395,11 +1392,11 @@ static func resolve_content_version(state: Dictionary, to_content_version: Strin
 	resolved["contentVersion"] = to_content_version
 	return {"ok": true, "state": resolved}
 
-# --- legacy build-job compatibility (issue #406) ----------------------------
+# --- legacy build-job compatibility ----------------------------
 
 ## A save written before construction sites existed can still carry a "build"
-## job (JobQueue.BUILD_KIND, the single-worker fetch-then-work job issue #406
-## replaced with the persistent site model) even though schemaVersion never
+## job (JobQueue.BUILD_KIND, the single-worker fetch-then-work job that the
+## persistent site model replaced) even though schemaVersion never
 ## moved for this change -- "site_fetch"/"site_work" and constructionSites
 ## only widened the existing wire shape (see save_io.gd's own job kind enum
 ## and optional_top_level list), the same additive-compatibility rule every
@@ -1410,10 +1407,10 @@ static func resolve_content_version(state: Dictionary, to_content_version: Strin
 ##
 ## A legacy build job's own progress lived entirely in the builder's hands
 ## (spent atomically at completion) and a job-id-keyed workProgress entry --
-## neither maps onto a site's own held_materials/progress, which this task's
-## model tracks on the site record itself. There is truthfully nothing to
+## neither maps onto a site's own held_materials/progress, which the site
+## model tracks on the site record itself. There is nothing to
 ## resume, so a still-queued or -active legacy build job is converted into a
-## fresh, empty construction site at its own site tile (the honest "restart
+## fresh, empty construction site at its own site tile (the "restart
 ## cleanly" backfill _migrate_v22_to_v23's RNG restart already established)
 ## and its own job becomes a "site_fetch" job pointed at it; ConstructionGiver
 ## re-derives real fetch/work jobs for it from scratch on the very next tick.

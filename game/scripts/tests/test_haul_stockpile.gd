@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Acceptance coverage for issue #189/#194's haul job kind (colonist-ai.md 3.3/3.4):
+## Coverage for the haul job kind (colonist-ai.md 3.3/3.4):
 ## WorldState auto-submits one haul job per unreserved loose item every tick,
 ## driven through the same toils (reserve item+cell, go_to item, pick_up,
 ## go_to cell, place, release_all) and the same ADR 004 global scheduler as

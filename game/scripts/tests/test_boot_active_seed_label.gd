@@ -1,12 +1,12 @@
 extends SceneTree
 
-## Round 5 review finding 2: boot.gd's editable seed field (_seed_input) is
+## boot.gd's editable seed field (_seed_input) is
 ## only ever written by _on_new_game_pressed() -- after restarting into a
 ## saved colony it stayed blank, and after creating seed 2 and then loading a
 ## saved seed 42 colony it kept showing "2". No other UI element displayed
-## the actually-running world's seed, so the "visible seed" requirement did
-## not survive Load. Proves boot.gd's separate _active_seed_label (distinct
-## from the editable draft field) always names the LIVE world's real seed:
+## the actually-running world's seed, so the visible seed was wrong after
+## Load. Proves boot.gd's separate _active_seed_label (distinct
+## from the editable draft field) always names the live world's real seed:
 ## right after startup build, immediately after New Game, unaffected by
 ## cancelling a regeneration, and correctly restored (not the last unsaved
 ## draft) after a Save/Load round trip.
@@ -35,7 +35,7 @@ func _run() -> void:
 	await process_frame
 	if boot._map_view == null:
 		boot._build_ui()
-	# Reassign only AFTER _ready() has already used the default manager to
+	# Reassign only after _ready() has already used the default manager to
 	# restore any prior autosave (same ordering test_map_experience_seed42_flow.gd
 	# uses): every save/load in this test must stay isolated from a real
 	# playthrough's own "user://saves" slot.
@@ -65,10 +65,10 @@ func _run() -> void:
 	_expect(boot._seed_input.text == str(SEED_B), "the draft seed field may still show the not-yet-applied seed")
 
 	# Save seed A, then move on to an unsaved seed B, then Load: this is the
-	# exact round 5 review scenario ("after creating seed 2 and loading a
-	# saved seed 42 colony it still displays 2") -- Load must restore both the
-	# world AND the label to the SAVED seed, not leave either on the last
-	# unsaved draft.
+	# regression scenario ("after creating seed 2 and loading a saved seed 42
+	# colony it still displays 2") -- Load must restore both the world and
+	# the label to the saved seed, not leave either on the last unsaved
+	# draft.
 	boot._on_save_pressed()
 	_expect(FileAccess.file_exists(SAVE_DIR.path_join("manual.json")), "saving seed %d's game must succeed" % SEED_A)
 	boot._seed_input.text = str(SEED_B)

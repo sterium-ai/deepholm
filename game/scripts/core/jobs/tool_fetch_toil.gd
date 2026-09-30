@@ -1,7 +1,7 @@
 class_name ToolFetchToil
 extends RefCounted
 
-## fetch_tool toil (colonist-ai.md 2/3.3, issue #271): finds (or resumes
+## fetch_tool toil (colonist-ai.md 2/3.3): finds (or resumes
 ## travel toward) the nearest free matching tool -- ground, stockpile, or held
 ## by another colonist but unreserved -- reserves it, walks there via the
 ## injected advance_go_to (ToilExecutor's own go_to stepping, reused like a
@@ -32,10 +32,10 @@ var _get_colonists: Callable
 var _advance_go_to: Callable
 var _record: Callable
 ## job_id -> Array[String] of tool ids already proven unreachable within a
-## job's current fetch_tool attempt (issue #271 round 3), so the next-nearest
+## job's current fetch_tool attempt, so the next-nearest
 ## match is tried instead of the same excluded one forever. Persisted via
-## get_excluded()/restore_excluded() below (issue #271 round 6 review/ADR
-## 012, state_codec.gd schemaVersion 17): a save/load mid-attempt that forgot
+## get_excluded()/restore_excluded() below (ADR 013, "Persistence";
+## state_codec.gd schemaVersion 17): a save/load mid-attempt that forgot
 ## this set would re-try an already-excluded candidate, changing every
 ## subsequent tick from an uninterrupted run's.
 var _excluded: Dictionary = {}
@@ -60,14 +60,14 @@ func _tool_kind_for(job: Dictionary) -> String:
 	return String(_job_kinds.get(String(job["kind"]), {}).get("needs_tool", ""))
 
 ## Read-only counterpart of satisfied(), for callers outside ToilExecutor.
-## advance() (WorldState._resume_paused_job(), round 4 review) that must decide
+## advance() (WorldState._resume_paused_job()) that must decide
 ## whether to route/start-work directly or defer entirely to this toil --
 ## starting a route toward the job target, or the work timer, before this
 ## check would let a stale route/work state get reused as this toil's own
-## travel leg once advance() runs. Deliberately does NOT call satisfied()
-## itself: that method's own "already holds a free matching tool" branch
-## reserves it as a side effect, and calling that a tick-phase earlier than
-## before measurably reordered downstream fair-queue scoring across a long run
+## travel leg once advance() runs. Deliberately does not call satisfied()
+## itself: that method's "already holds a free matching tool" branch
+## reserves it as a side effect, and reserving a tick-phase earlier
+## measurably reordered downstream fair-queue scoring across a long run
 ## and pushed an already-tight idle-streak bound over its limit
 ## (test_movement_scheduling_load.gd). Mirrors satisfied()'s own
 ## same-colonist-holds-it-and-it's-free-or-already-ours logic without ever
@@ -87,7 +87,7 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	return not (owner == job_id or owner.is_empty())
 
 ## True once job["kind"] has no needs_tool, or the colonist holds a matching
-## item AND job_id owns (or can acquire) its reservation -- kind alone is not
+## item and job_id owns (or can acquire) its reservation -- kind alone is not
 ## enough, or a reused held tool would stay unreserved and a different job
 ## could take it mid-work; already reserved by a different job is not
 ## satisfied either.
@@ -114,12 +114,12 @@ func _held_tool_kind(colonist: Dictionary) -> String:
 func _colonist_position_map() -> Dictionary:
 	return ToolMatchingType.colonist_position_map(_get_colonists.call())
 
-## Round 2 review (issue #266): a candidate reserved this same tick may
-## already be held by a different, currently BUSY colonist (route or work in
-## flight) -- exactly ToolDropToil.waiting_for_handover()'s own "case (b)"
-## condition, duplicated here (rather than injected from ToolDropToil, which
-## does not exist yet at ToolFetchToil construction time) because
-## ToilExecutor.advance()'s own waiting_for_handover() gate only runs BEFORE
+## A candidate reserved this same tick may
+## already be held by a different, currently busy colonist (route or work in
+## flight) -- the same condition as ToolDropToil.waiting_for_handover(),
+## duplicated here (rather than injected from ToolDropToil, which does not
+## exist yet at ToolFetchToil construction time) because
+## ToilExecutor.advance()'s waiting_for_handover() gate only runs before
 ## calling this method, so it cannot see a reservation this very call is about
 ## to create: without this check, advance() below would start travel (or, for
 ## an already-adjacent holder, arrive and pick up) the same tick the
@@ -137,11 +137,10 @@ func _held_by_busy_foreign(item_id: String, colonist_id: String) -> String:
 		return ""
 	return holder
 
-## Every tool item id currently held by a DIFFERENT, busy colonist (round 6
-## review): advance()'s own first candidate search excludes these so a free
-## alternative is preferred over manufacturing a handover wait a farther match
-## would have avoided. Reuses _held_by_busy_foreign()'s own case (b) test
-## rather than duplicating it.
+## Every tool item id currently held by a different, busy colonist:
+## advance()'s first candidate search excludes these so a free alternative is
+## preferred over starting a handover wait that a farther match would avoid.
+## Reuses _held_by_busy_foreign() rather than duplicating it.
 func _busy_held_item_ids(colonist_id: String) -> Array:
 	var ids: Array = []
 	for item in (_get_tool_items.call() as Array):
@@ -166,11 +165,8 @@ func _route_effective_target(route: Dictionary) -> Vector2i:
 	return path[path.size() - 1]
 
 ## Read-only: job_id's currently pursued fetch_tool destination, or null when
-## this job does not need fetch_tool at all or has no reservation yet.
-## ToolDropToil.is_dropping() calls this (round 2 review) to tell an in-flight
-## fetch_tool leg apart from a genuine drop leg -- both can be true at once
-## for the SAME colonist (a leftover foreign-reserved tool held while fetching
-## an unrelated new one) without the fetch leg's own route ever being a drop.
+## this job does not need fetch_tool at all or has no reservation yet. Like
+## needs(), it has no side effects.
 func current_target(colonist: Dictionary, job: Dictionary, job_id: String) -> Variant:
 	if not needs(colonist, job, job_id):
 		return null
@@ -190,7 +186,7 @@ func _exclude(job_id: String, item_id: String) -> void:
 func _clear_excluded(job_id: String) -> void:
 	_excluded.erase(job_id)
 
-## Persistence (toil_executor.gd/state_codec.gd, issue #271 round 6/ADR 012).
+## Persistence (toil_executor.gd/state_codec.gd/ADR 013).
 func get_excluded() -> Dictionary:
 	return _excluded.duplicate(true)
 
@@ -214,20 +210,16 @@ func _reserved_tool_for(job_id: String) -> Dictionary:
 ## tried until one works or all are exhausted; only then is blocked_no_tool
 ## reported.
 ##
-## Round 6 review (issue #266): the search runs TWICE when freshly reserving --
-## first excluding every candidate currently held by a busy colonist (issue
-## #266's own handover case), falling back to the unfiltered search (which can
-## land on a busy-held candidate, exactly as before this round) only when that
-## first pass finds nothing. Before this, the plain nearest-match search could
-## park a freshly assigned job into an immediate multi-tick handover wait while
-## a farther but immediately free tool of the same kind sat unused, even though
-## that busy holder's OWN other job was itself eligible work a colonist could
-## otherwise be doing -- test_movement_scheduling_load.gd's own "no idle while
-## eligible work exists" invariant caught this directly once restored to its
-## original, unexempted form (docs/decisions/012-tool-toils.md's "Round 6
-## review"). A genuine handover wait (no free match anywhere) still happens
-## when it must; this only avoids manufacturing one that a free alternative
-## would have avoided.
+## The search runs twice when freshly reserving: first excluding every
+## candidate currently held by a busy colonist (the handover case), then
+## falling back to the unfiltered search (which can land on a busy-held
+## candidate) only when that first pass finds nothing. A plain nearest-match
+## search could park a freshly assigned job in a multi-tick handover wait
+## while a farther, immediately free tool of the same kind sat unused --
+## test_movement_scheduling_load.gd's "no idle while eligible work exists"
+## invariant detects exactly that (docs/decisions/013-tool-toils.md,
+## "Candidate preference"). A genuine handover wait (no free match anywhere)
+## still happens when it must.
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var kind := _tool_kind_for(job)
 	var reserved := _reserved_tool_for(job_id)
@@ -248,9 +240,9 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		_reserve_tool.call(String(found["item_id"]), job_id)
 		reserved = _get_tool_item.call(String(found["item_id"]))
 	var item_id := String(reserved["id"])
-	# Round 2 review: this candidate may have just been reserved from a busy
-	# foreign holder this very tick, before ToilExecutor's own
-	# waiting_for_handover() gate ever gets a chance to run again -- checked
+	# This candidate may have just been reserved from a busy
+	# foreign holder this very tick, before ToilExecutor's
+	# waiting_for_handover() gate gets a chance to run again -- checked
 	# here, before any travel/pickup starts, not merely on the next call.
 	if not _held_by_busy_foreign(item_id, String(colonist["id"])).is_empty():
 		return
@@ -258,14 +250,14 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	if target == null:
 		_exclude_candidate(job_id, item_id)
 		return
-	# Round 2 review: a reservation freshly (re)acquired this call -- there was
-	# none a moment ago -- means the PREVIOUS attempt's own route, if any, was
+	# A reservation freshly (re)acquired this call -- there was
+	# none a moment ago -- means the previous attempt's route, if any, was
 	# frozen while waiting_for_handover() blocked this toil from running (or
 	# simply abandoned after an exclusion): its target is stale the instant a
 	# holder's own drop_tool toil physically moves the item, and
 	# advance_go_to() never re-targets an already-resolved route on its own, so
 	# it must be discarded here to search fresh toward `target`. Gated to
-	# freshly_reserved only: an ALREADY-held reservation's target legitimately
+	# freshly_reserved only: an already-held reservation's target legitimately
 	# drifts tick to tick while its idle holder simply walks around (never
 	# releasing/re-reserving), and that ordinary case must keep following the
 	# same already-in-flight route rather than restarting it every tick.
@@ -279,15 +271,15 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		_exclude_candidate(job_id, item_id)
 
 ## Releases item_id and remembers it as tried-and-unreachable. Deliberately
-## does NOT re-enter advance() for the next-nearest candidate in the same tick:
+## does not re-enter advance() for the next-nearest candidate in the same tick:
 ## each candidate's own go_to search already consumes its per-tick
 ## route-search budget (advance_go_to()/MeasuredRoute.resume()), so chaining
 ## candidate after candidate here could run an unbounded number of resume()
 ## calls for one colonist in one tick whenever several candidates in a row
 ## prove immediately unreachable -- violating ADR 004's aggregate routing
-## bound (round 4 review). The next candidate is instead picked up naturally
+## bound. The next candidate is instead picked up naturally
 ## on the next tick's ToilExecutor.advance() -> satisfied() -> advance() call,
-## which excludes every id _attempts already recorded.
+## which excludes every id _excluded already records.
 func _exclude_candidate(job_id: String, item_id: String) -> void:
 	_release_tool.call(item_id, job_id)
 	_exclude(job_id, item_id)
@@ -302,9 +294,9 @@ func _report_no_tool_found(job_id: String, colonist_id: String, kind: String, ho
 ## colonist-held tool can outlast the holder standing still. A colonist that
 ## finished an unrelated job still holding its own now-unreserved tool (e.g. a
 ## pick, arriving to fetch an axe) drops it to the ground first: set_tool_item_
-## held() refuses to hand over a second tool, and dropping it here -- not a
-## full drop_tool toil/handover wait, both out of this task's scope -- is the
-## minimal behaviour that lets one colonist do more than one needs_tool labour.
+## held() refuses to hand over a second tool. This simple ground drop (not the
+## drop_tool toil, which handles foreign-reserved tools) is the minimal
+## behaviour that lets one colonist do more than one needs_tool labour.
 func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String, hooks: Dictionary) -> void:
 	var item: Dictionary = _get_tool_item.call(item_id)
 	var owner := String(_tool_reservation_of.call(item_id))

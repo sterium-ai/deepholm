@@ -2,8 +2,9 @@ extends SceneTree
 
 ## Exercises WorldState.apply()'s place_object/remove_object commands: both
 ## apply immediately (no job queue), validated against the same
-## passability()/object storage as tasks t1-t2. Also proves end-to-end
-## interaction with task t2's passability rule: a wall placed via
+## passability()/object storage as test_passability.gd and
+## test_object_storage.gd. Also proves end-to-end interaction with the
+## passability rule: a wall placed via
 ## place_object blocks a subsequent dig, mirroring test_passability.gd's
 ## _check_dig_rejects_blocked_object() but reached through the command path.
 
@@ -82,8 +83,8 @@ func _check_place_object_valid() -> void:
 	_expect(world.get_object(tile.x, tile.y) == "chair", "get_object() must report the placed kind")
 	_expect(world.get_object_faction_id(tile.x, tile.y) == "colony",
 		"a freshly placed object must default to faction_id 'colony'")
-	# issue #300: get_objects() can now also list generator-placed berry_bush
-	# entries (docs/decisions/020), so this looks up the specific entry just
+	# get_objects() can also list generator-placed berry_bush
+	# entries (ADR 020), so this looks up the specific entry just
 	# placed rather than assuming it is the only (or the first) one.
 	var placed_entry := {}
 	for entry in world.get_objects():
@@ -192,7 +193,7 @@ func _find_floor_pair(world: WorldStateType) -> Vector2i:
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
-## issue #405: a [2, 1] footprint placed "horizontal" must occupy both its
+## A [2, 1] footprint placed "horizontal" must occupy both its
 ## origin and its +x neighbour, each independently impassable and each
 ## reporting the placed kind from get_object().
 func _check_place_object_footprint_occupies_both_tiles() -> void:
@@ -207,7 +208,7 @@ func _check_place_object_footprint_occupies_both_tiles() -> void:
 	_expect(not bool(world.passability(origin.x, origin.y)["passable"]), "the origin footprint tile must be impassable")
 	_expect(not bool(world.passability(origin.x + 1, origin.y)["passable"]), "the second footprint tile must be impassable")
 
-## issue #405: an object already occupying the SECOND footprint tile (not the
+## An object already occupying the second footprint tile (not the
 ## origin) must still reject the whole placement invalid_target -- the exact
 ## reason single-tile placement already uses for an occupied tile.
 func _check_place_object_footprint_rejects_overlap_on_second_tile() -> void:
@@ -221,9 +222,9 @@ func _check_place_object_footprint_rejects_overlap_on_second_tile() -> void:
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is already occupied must be rejected invalid_target")
 
-## issue #405: a tree on the SECOND footprint tile must reject the whole
+## A tree on the second footprint tile must reject the whole
 ## placement invalid_target, the exact reason single-tile placement already
-## uses for a tree tile. Round 4 review: a map-generation search for a
+## uses for a tree tile. A map-generation search for a
 ## naturally-occurring floor/tree pair could silently find none and skip this
 ## case entirely, so this forces the fixture deterministically instead --
 ## _find_floor_pair() guarantees an adjacent floor pair, then the second tile
@@ -239,7 +240,7 @@ func _check_place_object_footprint_rejects_tree_on_second_tile() -> void:
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is a tree must be rejected invalid_target")
 
-## issue #405 review round 1/4: water on the SECOND footprint tile must
+## Water on the second footprint tile must
 ## reject the whole placement invalid_target, the exact reason single-tile
 ## placement uses for a water tile (_check_place_object_rejects_water_tile
 ## below). Forces the fixture deterministically like the tree case above,
@@ -254,7 +255,7 @@ func _check_place_object_footprint_rejects_water_on_second_tile() -> void:
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is water must be rejected invalid_target")
 
-## issue #405 review round 1/4: a single-tile place_object directly on a
+## A single-tile place_object directly on a
 ## water tile must be rejected invalid_target, the same reason a tree or
 ## occupied tile already uses -- water is never a valid place_object target.
 ## Forces the fixture deterministically (a floor tile from _find_tile()
@@ -270,7 +271,7 @@ func _check_place_object_rejects_water_tile() -> void:
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object on a water tile must be rejected invalid_target")
 
-## issue #405 review round 4: a colonist standing on the SECOND footprint
+## A colonist standing on the second footprint
 ## tile must reject the whole placement invalid_target, the exact reason
 ## single-tile placement already uses for a colonist's own tile. Forces the
 ## fixture deterministically -- _find_floor_pair() guarantees an adjacent
@@ -289,7 +290,7 @@ func _check_place_object_footprint_rejects_colonist_on_second_tile() -> void:
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile holds a colonist must be rejected invalid_target")
 
-## issue #405: a footprint that would extend past the map's right edge must
+## A footprint that would extend past the map's right edge must
 ## reject the whole placement invalid_target, the exact reason single-tile
 ## placement already uses for an out-of-bounds tile.
 func _check_place_object_footprint_rejects_out_of_bounds() -> void:

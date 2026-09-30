@@ -1,18 +1,17 @@
 extends SceneTree
 
-## Issue #300 round 1 review finding 6 / round 2 review: test_new_game_dig_
-## chop.gd tops every colonist's needs up to 100 every single tick, so it
-## never actually proves the "normal initial gameplay" acceptance -- that a
+## test_new_game_dig_chop.gd tops every colonist's needs up to 100 every
+## tick, so it never proves normal initial gameplay -- that a
 ## fresh New Game's generator-placed resources are enough to service real
 ## food/water/rest decay for all three colonists while ordinary player orders
 ## also get worked. This drives a real New Game (boot.gd's own build path,
 ## never a hand-built fixture) with needs decaying exactly like real play.
 ##
-## The bounded initial-needs scenario this proves (docs/decisions/020's round
-## 2 revision): mapgen.json's berry_bush_count is a starting allotment, not a
+## The bounded initial-needs scenario this proves (ADR 020): mapgen.json's
+## berry_bush_count is a starting allotment, not a
 ## regrowing supply (each forage yields exactly one ground berry -- see
 ## world_state.gd's _spawn_berries_item()). WorldGenerator.place_spawn() only
-## ever guarantees ONE reachable bush per colonist (the nearest one, within
+## ever guarantees one reachable bush per colonist (the nearest one, within
 ## spawn_food_step_limit), never a distinct one for each of the three -- so
 ## this forages every distinct bush within a wide net of the colony's own
 ## centroid (BUSH_SEARCH_RADIUS, never per-colonist exclusive picking, which
@@ -24,19 +23,19 @@ extends SceneTree
 ## the real work engine -- need-driven eat_food/drink_water/sleep jobs
 ## interleave with the player orders exactly as they would in a real session,
 ## sleep included now that boot.gd places one starting bed per colonist
-## (round 2 review: normal generation previously supplied no rest-need source
-## at all). Real need-driven eat_food then distributes the resulting ground
+## (without them normal generation supplies no rest-need source at all).
+## Real need-driven eat_food then distributes the resulting ground
 ## berries to whichever hungry colonist reaches one first, exactly like real
 ## play, rather than this test hand-assigning "whose" berry each one is.
 ## Within a bounded but generous tick budget (see TICK_BUDGET's own doc
-## comment), this asserts per COLONIST (not just an aggregate count): its own
+## comment), this asserts per colonist (not just an aggregate count): its own
 ## chop order completes, and it individually experiences at least one real
 ## food-need restore and one real rest-need restore (detected as a large
 ## single-tick jump in that colonist's own need value -- a real eat_food/
 ## sleep completion, not merely a bush being cleared). This deliberately does
 ## not assert needs never bottom out:
-## NeedGiver (game/scripts/core/jobs/givers/need_giver.gd, out of this
-## task's owned paths) only searches reactively once a need crosses "urgent"
+## NeedGiver (game/scripts/core/jobs/givers/need_giver.gd) only searches
+## reactively once a need crosses "urgent"
 ## (25), so a source near the documented 40-step travel bound can legitimately
 ## let a need reach 0 while a colonist is en route to it -- the guarantee this
 ## proves is that the initial forage/chop/eat/sleep cycle actually completes,
@@ -44,7 +43,7 @@ extends SceneTree
 ## zero-avoidance promise this codebase's existing need-search behaviour
 ## cannot make.
 ##
-## Round 3 review: an UNRESTRICTED forage/chop order pool let the fair
+## An unrestricted forage/chop order pool lets the fair
 ## scheduler hand any one colonist a run of several regular jobs in a row
 ## (on seed 555002, colonist_2 alone ate 4 of the colony's 5 one-time
 ## berries while colonist_0 got none) -- not because colonist_0 could not
@@ -53,23 +52,24 @@ extends SceneTree
 ## same tick, which can then hand it a fresh multi-tick regular-job route
 ## before its own need is ever reconsidered (NeedGiver has no interrupt for
 ## "en route to a regular job, toil not yet started", only for "already
-## working" -- also out of this task's owned paths). Every forage/chop order
-## below now names its own colonist as "assignee" (F3, issue #290's existing
-## dig/chop/forage restriction), so the fair scheduler can never hand one
+## working"). Every forage/chop order below names its own colonist as
+## "assignee" (the existing dig/chop/forage assignee restriction), so the
+## fair scheduler can never hand one
 ## colonist's own guaranteed order to a different colonist.
 
 const BootScenePath := "res://scenes/boot.tscn"
 const NEW_GAME_SEED := 555002
 ## A colonist's in-progress "work" toil is interruptible by its own critical
-## need (NeedGiver._evaluate(), out of this task's owned paths): with three
+## need (NeedGiver._evaluate()): with three
 ## colonists all starting at full needs simultaneously, their first few
 ## urgent/critical onsets land in a similar tick window, so a work session
 ## (25-40 ticks) can keep losing a race against a fresh interruption several
 ## times before the timing desynchronises enough for an uninterrupted stretch
-## to complete it. Issue #349/ADR 023 slowed decay to points-per-day against a
+## to complete it. ADR 024 slowed decay to points-per-day against a
 ## 2200-tick day: a need no longer starts its first urgent onset until roughly
 ## 1650-2500 ticks in (water/rest/food respectively, from full to the urgent
-## threshold of 25), where the pre-#349 scale reached it within ~40-75 ticks.
+## threshold of 25), where the earlier per-tick scale reached it within
+## ~40-75 ticks.
 ## 60000 keeps the prior budget's own contention-absorbing margin (20000, the
 ## single-colonist predecessor's empirically-needed value) on top of that
 ## much later first-onset floor, generous enough for all three colonists at
@@ -77,7 +77,7 @@ const NEW_GAME_SEED := 555002
 const TICK_BUDGET := 60000
 const SEARCH_RADIUS := 60
 ## Wider than SEARCH_RADIUS/the generator's own per-colonist 40-step
-## accessibility guarantee (which only promises ONE reachable bush, never a
+## accessibility guarantee (which only promises one reachable bush, never a
 ## distinct one per colonist): gathering distinct bushes from this much wider
 ## net around the colony's own centroid is what actually finds enough of
 ## them, real forage yield being one berry per bush with no regrowth.
@@ -85,7 +85,7 @@ const BUSH_SEARCH_RADIUS := 120
 ## A restore (eat_food/drink_water/sleep completing) always jumps a need back
 ## to at least "restore" (needs.json, >= 100 for every kind today) in a
 ## single tick; ordinary decay only ever moves a need by at most 1 point per
-## tick (ActorNeeds.apply_tick()'s accumulator, issue #349/ADR 023: every
+## tick (ActorNeeds.apply_tick()'s accumulator, ADR 024: every
 ## content rate_per_day is below day_length_ticks, so at most one point can
 ## ever be subtracted in a single tick). 30 comfortably separates the two so
 ## this never misreads decay as a restore.
@@ -117,27 +117,27 @@ func _run() -> void:
 	if not colonists.is_empty():
 		centroid /= colonists.size()
 
-	# Round 3 review: an UNRESTRICTED forage order lets the fair scheduler hand
-	# ANY colonist's bush to ANY colonist, with no floor on how many any one of
+	# An unrestricted forage order lets the fair scheduler hand
+	# any colonist's bush to any colonist, with no floor on how many any one of
 	# them ends up doing -- on seed 555002 this let colonist_2 alone complete
 	# (and eat from) 4 of the colony's 5 one-time, non-regrowing berries while
-	# colonist_0 never won a single race, because an UNRESTRICTED regular job
+	# colonist_0 never won a single race, because an unrestricted regular job
 	# also leaves a colonist that just went idle (NeedGiver's own onset_failed,
 	# candidates empty, sets no reservation) immediately available for the fair
 	# scheduler to hand a fresh multi-tick travel commitment the very same tick
 	# -- during which the colonist en route (route set, "work" not yet started)
 	# cannot be interrupted by any need at all, critical or otherwise (that gap
-	# lives in NeedGiver, out of this task's owned paths). So each colonist
-	# gets ONE guaranteed bush of its own first, submitted with "assignee" (F3,
-	# issue #290's existing dig/chop/forage restriction, not a new mechanism)
+	# lives in NeedGiver). So each colonist
+	# gets one guaranteed bush of its own first, submitted with "assignee" (the
+	# existing dig/chop/forage assignee restriction, not a new mechanism)
 	# so the fair scheduler can never hand it to a different colonist -- this
 	# is what actually keeps a single colonist's own real timing from starving
 	# it out from under a shared, unrestricted pool. Berries never regrow, so
-	# this ALSO still gathers the wider shared pool up to a generous cap (never
+	# this also gathers the wider shared pool up to a generous cap (never
 	# per-colonist exclusive picking for the bonus bushes, which could walk a
 	# colonist's own target arbitrarily far chasing distinctness) as slack on
 	# top of each colonist's own guaranteed one -- real need-driven eat_food
-	# distributes THOSE extra berries to whichever hungry colonist reaches one
+	# distributes those extra berries to whichever hungry colonist reaches one
 	# first, exactly like real play.
 	var own_bushes: Array[Vector2i] = []
 	var bush_targets: Array[Vector2i] = []
@@ -168,10 +168,10 @@ func _run() -> void:
 		if tree != Vector2i(-1, -1):
 			used_trees.append(tree)
 			tree_targets[colonist_id] = tree
-			# assignee-restricted (F3, issue #290): this is already "the
+			# assignee-restricted: this is already "the
 			# colonist's own" tree by construction (nearest, excluding others'
 			# already-picked ones) -- restricting the job to match stops the
-			# fair scheduler from instead handing a DIFFERENT colonist's own
+			# fair scheduler from instead handing a different colonist's own
 			# tree assignment to it, which starved food-seeking for the same
 			# reason the unrestricted bush pool did above.
 			_submit(world, "chop", tree, colonist_id)

@@ -1,9 +1,12 @@
 # ADR 011: One work engine and behaviour extension points
 
+> **In short:** Everything a colonist does goes through one shared system for creating, assigning and carrying out jobs, and new behaviour must plug into it rather than work around it.
+
 - **Status:** accepted
 - **Date:** 2026-09-19
 - **Scope:** behaviour additions under `game/scripts/core/`
-- **Supersedes:** no accepted contract; this ADR makes the existing one-work-engine rule explicit.
+
+This ADR makes the existing one-work-engine rule explicit; it supersedes no earlier decision.
 
 ## Decision
 

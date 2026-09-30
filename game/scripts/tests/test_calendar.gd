@@ -1,9 +1,9 @@
 extends SceneTree
 
 ## Exercises CalendarService (colonist-ai.md 3.7): content/calendar.json
-## declares a day length in ticks (2200, issue #349/ADR 023) and one boost
-## window ("sow", spring days 1-20, unchanged by issue #349 since from/to are
-## day numbers per ADR 008, not ticks -- +1 to farm, "sowing window");
+## declares a day length in ticks (2200/ADR 024) and one boost
+## window ("sow", spring days 1-20, independent of the day length since
+## from/to are day numbers per ADR 008, not ticks -- +1 to farm, "sowing window");
 ## active_boost() must return that boost for every tick inside the window and
 ## 0 outside it or for any other labour; alert_state() must report due=true
 ## only N days before a window
@@ -15,7 +15,7 @@ extends SceneTree
 ## instead of content/calendar.json's real one -- see calendar_service.gd's
 ## _init() docstring.
 ##
-## Also exercises CalendarAlertGiver (issue #269, ADR 008 consequence 6),
+## Also exercises CalendarAlertGiver (ADR 008 consequence 6),
 ## wired into WorldState.tick() as the job-giver for this alert: it computes
 ## has_labour_enabled/has_plowed_plot/has_seed_stock from real colony state,
 ## calls CalendarService.alert_state(), and emits a one-shot "calendar_alert"
@@ -57,8 +57,8 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-## game/content/calendar.json must declare day_length_ticks 2200 (issue
-## #349/ADR 023) and exactly one window: sow/farm/1-20/+1/"sowing window".
+## game/content/calendar.json must declare day_length_ticks 2200 (ADR 024)
+## and exactly one window: sow/farm/1-20/+1/"sowing window".
 ## from/to are day numbers per ADR 008, not ticks, so day_length_ticks
 ## changing from 100 to 2200 does not rescale them.
 func _check_calendar_content_file() -> void:
@@ -76,7 +76,7 @@ func _check_calendar_content_file() -> void:
 	var day_length = parsed.get("day_length_ticks")
 	_expect(typeof(day_length) == TYPE_FLOAT or typeof(day_length) == TYPE_INT,
 		"calendar.json must declare a numeric 'day_length_ticks'")
-	_expect(int(day_length) == 2200, "calendar.json's day_length_ticks must be 2200 (issue #349), got %s" % day_length)
+	_expect(int(day_length) == 2200, "calendar.json's day_length_ticks must be 2200, got %s" % day_length)
 	var windows = parsed.get("windows")
 	_expect(typeof(windows) == TYPE_ARRAY and windows.size() == 1,
 		"calendar.json must declare exactly one window, got %s" % [windows])
@@ -87,15 +87,15 @@ func _check_calendar_content_file() -> void:
 	_expect(String(window.get("labour")) == "farm", "the seed window's labour must be 'farm'")
 	_expect(int(window.get("from")) == 1, "the seed window must start at day 1 (spring day 1)")
 	_expect(int(window.get("to")) == 20,
-		"the seed window must end at day 20, unchanged by issue #349 since from/to are day numbers (ADR 008), not ticks")
+		"the seed window must end at day 20, independent of the day length, since from/to are day numbers (ADR 008), not ticks")
 	_expect(int(window.get("boost")) == 1, "the seed window's boost must be +1")
 	_expect(String(window.get("label")) == "sowing window", "the seed window's label must be 'sowing window'")
 
 ## active_boost('farm', tick) must be 1 for every tick inside spring days
 ## 1-20 and 0 for every tick on day 21 or any other labour. Exhaustively
 ## walks every tick from day 1 through the end of day 21 at the new
-## 2200-tick day length (21 * 2200 = 46200 ticks), same as before issue #349
-## rescaled the day length, not weakened to sampling.
+## 2200-tick day length (21 * 2200 = 46200 ticks), exhaustively rather than
+## by sampling.
 func _check_active_boost_inside_and_outside_window() -> void:
 	if _failed:
 		return
@@ -286,7 +286,7 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 		"WorldState must not emit calendar_alert once a colonist's farm labour is enabled before the due tick, got %s"
 			% [_calendar_alert_events(world, window_id)])
 
-## Round 3 review regression: _has_seed_stock must count a seed mid-haul in a
+## Regression: _has_seed_stock must count a seed mid-haul in a
 ## colonist's carrying slot, not only a ground/stockpile item -- the exact
 ## ground+carrying query world_state.gd's _has_item_of_kind docstring
 ## promises and sow's own blocked_missing_input precondition already relies
@@ -327,7 +327,7 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 	_expect(world._items.is_empty(),
 		"the carried seed must never have been placed on the ground by this check, got %s" % [world._items])
 
-## Round 2 review regression: already_fired is real persisted state
+## Regression: already_fired is real persisted state
 ## (calendarAlerts.fired, ADR 008 consequence 6), not an in-memory flag a
 ## reload conveniently resets. Fires the alert, saves through
 ## WorldState.to_save_state(), restores through WorldState.from_save_state(),

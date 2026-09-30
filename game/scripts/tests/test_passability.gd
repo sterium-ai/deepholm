@@ -56,8 +56,8 @@ func _check_dig_rejects_blocked_object() -> void:
 	})
 	_expect(not result["ok"] and result["rejection"]["reason"] == "invalid_target", "dig on a wall must be rejected as invalid_target")
 
-## Issue #405: "test_footprint_crate" (content/objects.json, footprint
-## [2, 1], impassable) placed horizontal must make BOTH occupied tiles
+## "test_footprint_crate" (content/objects.json, footprint
+## [2, 1], impassable) placed horizontal must make both occupied tiles
 ## impassable, not just its origin -- passability() reads get_object() per
 ## tile, which _set_object() must have duplicated the kind onto every
 ## footprint tile for.

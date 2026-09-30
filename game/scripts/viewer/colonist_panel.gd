@@ -9,8 +9,8 @@ extends Control
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 
-## Job-kind and toil display labels (issue #189 acceptance item 7: "panel
-## shows the current toil name and reason") are read from data/text/en.json
+## Job-kind and toil display labels (the panel shows the current toil name
+## and reason) are read from data/text/en.json
 ## via "status.job.%s" and "status.toil.%s", the same TextTableType lookup
 ## convention the reason/remedy display below already uses.
 ##
@@ -20,7 +20,7 @@ const TextTableType = preload("res://scripts/viewer/text_table.gd")
 ## colonist's *current* toil while a job is active, so only the five
 ## observable ones have a "status.toil.%s" entry.
 ##
-## Issue #206 (colonist-ai.md 3.8/4-item-7) extends this with each
+## The needs layer (colonist-ai.md 3.8 and 4) extends this with each
 ## colonist's three need bars (food/water/rest, from get_colonists()'s
 ## "needs" field) and the needs decision layer's own activity/reason
 ## vocabulary: a committed need job (eat_food/drink_water/sleep) is detected
@@ -99,14 +99,13 @@ func _on_recruit_pressed(actor_id: String) -> void:
 	})
 	refresh()
 
-## A trade-offer prompt per outstanding trader visit (issue #278/#305):
+## A trade-offer prompt per outstanding trader visit:
 ## give_item/want_item are read straight off WorldState.get_pending_trade_offers()
 ## (state only, extension-points.md's Presentation rule -- no decision made
 ## here about whether to accept) and the Accept button issues the new
 ## accept_trade command exactly the way boot.gd's own debug buttons already
-## issue world.apply(). data/text/en.json is outside this task's owned paths
-## (game/content/ and this file only), so this prompt's text is a plain
-## literal rather than going through _text_table like every other line here.
+## issue world.apply(). Hard-coded English text; unlike every other line
+## here, this prompt is not yet routed through the text table.
 func _refresh_trade_offers() -> void:
 	var offers := world.get_pending_trade_offers()
 	offers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["trader_id"]) < String(b["trader_id"]))
@@ -132,7 +131,7 @@ func _on_accept_trade_pressed(trader_id: String) -> void:
 	})
 	refresh()
 
-## colonist-ai.md 4 acceptance item 7's "panel bars": the three need kinds
+## The panel's need bars (colonist-ai.md section 4): the three need kinds
 ## content/needs.json declares, in a fixed display order, read straight off
 ## get_colonists()'s "needs" field -- never re-derived from thresholds or
 ## decay rate, both of which stay core-only.
@@ -146,8 +145,8 @@ const NEED_KIND_ORDER: Array[String] = ["food", "water", "rest"]
 ## from the reason, not read from a getter.
 ##
 ## need_source_missing:<kind> is handled the same way need_unmet:<kind> is,
-## even though the shipped WorldState (colonist-ai.md's "Implemented:
-## increment D" note) only ever emits need_unmet:<kind> today, for both
+## even though the shipped WorldState (see colonist-ai.md's needs-layer
+## section) only ever emits need_unmet:<kind> today, for both
 ## "still searching" and "no source exists at all" -- this panel renders
 ## whatever string get_colonist_need_reason() returns, so if WorldState is
 ## ever changed to expose the distinct need_source_missing reason, the panel
@@ -226,7 +225,7 @@ func _hands_text(colonist: Dictionary) -> String:
 	return ", ".join(parts)
 
 ## Reads the three need bars directly off get_colonists()'s "needs" field
-## (colonist-ai.md 4 acceptance item 7), formatted "<Kind>: <value>/<max>"
+## (colonist-ai.md section 4), formatted "<Kind>: <value>/<max>"
 ## with the max the same NEED_FULL every need starts at and restores toward
 ## (WorldStateType.NEED_FULL), never a hardcoded 100.
 func _need_bar_lines(colonist: Dictionary) -> Array[String]:
@@ -290,7 +289,7 @@ func _status_for(colonist: Dictionary) -> Dictionary:
 ## no `work` phase, so for the single tick between route arrival and the
 ## instant `consume` toil neither route nor work names the job any more;
 ## world.get_active_need_job_id() is the fallback for exactly that tick
-## (colonist-ai.md 3.8, "Implemented: increment D"). {} means this colonist is
+## (colonist-ai.md 3.8 and its needs-layer section). {} means this colonist is
 ## not currently pursuing a committed need job (idle, working, or still
 ## searching for a source with nothing reserved yet); the caller falls back
 ## to the ordinary work/idle status in that case.
@@ -320,13 +319,13 @@ func _need_job_status_for(colonist: Dictionary) -> Dictionary:
 	return {"idle": false, "job_kind": job["kind"], "toil": _toil_for(colonist, job), "reason": reason, "remedy": remedy,
 		"target": job["target"], "route_length": route_length}
 
-## The colonist's current toil name (issue #189 acceptance item 7), inferred
+## The colonist's current toil name, inferred
 ## from route/work/hands exactly the way WorldState itself branches
 ## (_advance_colonists for dig/chop, _advance_haul_colonist for haul) rather
 ## than a new persisted field: dig/chop/forage/sleep only ever drive
 ## go_to/work; haul drives go_to (twice, once per leg) plus the two instant
-## toils pick_up and place, distinguished by whether the colonist is
-## hands are empty yet. eat_food/drink_water (issue #206) have no work phase: while
+## toils pick_up and place, distinguished by whether the colonist's
+## hands are empty yet. eat_food/drink_water have no work phase: while
 ## route is set they are traveling (go_to); once route and work are both null
 ## the job is in its instant consume toil (WorldState._advance_need_colonist()
 ## calls _toils.consume() the moment it sees both fields null), reported here

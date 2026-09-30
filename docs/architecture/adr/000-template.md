@@ -1,9 +1,11 @@
-# ADR-NNNN: Short decision title
+# ADR NNN: Short decision title
+
+> **In short:** one or two plain-language sentences.
 
 - **Status:** proposed | accepted | superseded | rejected
 - **Date:** YYYY-MM-DD
-- **Owners:** names or roles
 - **Scope:** product | simulation | content | presentation | persistence
+- **Implements / Depends on / Supersedes / Extends:** optional; related ADRs or documents
 
 ## Context
 

@@ -1,12 +1,14 @@
 # ADR 019: World dimensions, pure worldgen module, and incremental map presentation
 
-- Status: accepted for issue #299 (PC map milestone)
-- Date: 2026-09-21
-- Scope: core (world_state.gd, worldgen, persistence), presentation (viewer)
+> **In short:** New games get a much larger map (256 by 256 tiles) generated from a seed, so the same seed always gives the same world, while the map display only redraws the parts that change.
+
+- **Status:** accepted
+- **Date:** 2026-09-21
+- **Scope:** core (`world_state.gd`, worldgen, persistence), presentation (viewer); PC map milestone
 
 ## Context
 
-Issue #299 must deliver a large (256x256), seeded, reproducible new game
+The PC map milestone needs a large (256x256), seeded, reproducible new game
 while keeping the existing 48x48 fixtures valid for tests, without exceeding
 `world_state.gd`'s `core-budgets.json` cap and without rebuilding every tile
 each simulation tick just to present a much larger map.
@@ -40,15 +42,15 @@ loaded from the stored tile array, never regenerated -- see below).
 and placement-attempt budget scales by `(width*height) / (reference_width*reference_height)`
 (`mapgen.json`'s new `reference_width`/`reference_height`, default 48x48,
 ratio 1 so nothing about the 48x48 fixture case changes). This is what keeps
-a 256x256 map from carrying the same 40 trees the 48x48 map has (Non-goal:
-no naive constant substitution).
+a 256x256 map from carrying the same 40 trees the 48x48 map has, which a
+naive constant substitution would do.
 
 **New-game size is content-driven.** `mapgen.json`'s `default_new_game_width`/
 `default_new_game_height` (256x256) is what boot.gd's New Game control passes;
 it is a data value, not a literal duplicated in presentation code.
 
 **Save/load never regenerates terrain.** `map.width`/`map.height` were
-already part of the schema before this task (schemaVersion 19 already
+already part of the schema before this change (schemaVersion 19 already
 declared them, always encoded as 48 in practice); schemaVersion 20 adds
 `map.generatorVersion` and the save's own session `epoch` (both backfilled on
 migration -- `generatorVersion` to 1, the only worldgen algorithm that has
@@ -71,7 +73,7 @@ coordinate outside `[0, width)`x`[0, height)` anywhere in the save --
 entities, items, objects, zones, tool items, job targets/cells, scheduling
 queue entries, pending route searches, assignments, and nested route
 `start`/`target`/`frontier`/`visited`/`cameFrom`/`path` fields alike. None of
-these checks existed before this task (only a non-negative lower bound was
+these checks existed before this change (only a non-negative lower bound was
 checked, and only for entities/items/objects/zones/tool items), so a save
 with mismatched dimensions or an out-of-bounds coordinate anywhere in the
 tree is now refused before it can replace a working save or corrupt a loaded
@@ -90,15 +92,15 @@ designation overlay were already `O(colonists)`/`O(jobs)`, not `O(map)`, so
 they need no change. The flat-colour debug renderer (no art assets) still
 redraws every visible tile each frame -- inherent to Godot's immediate-mode
 `CanvasItem._draw()` and the non-default fallback path, not the target of
-this task's "no reconstruye 65536 celdas" instrumentation requirement, which
-names the `TileMapLayer` rebuild specifically.
+the requirement that a tick must not rebuild all 65,536 cells, which names
+the `TileMapLayer` rebuild specifically.
 
 ## Consequences
 
 `world_state.gd` stays within its existing 1877-line `core-budgets.json` cap
-(this task's own scope forbids raising a core cap): the width/height
+(raising a core cap was ruled out for this change): the width/height
 plumbing, dirty-cell tracking, generator-version provenance field, and new
-getters this task adds are offset by extracting the terrain algorithm itself
+getters added here are offset by extracting the terrain algorithm itself
 into the pure `WorldGenerator` module and trimming comments elsewhere in the
 file, rather than by raising the cap.
 
@@ -108,7 +110,7 @@ save), `epoch` is backfilled to `0` (every pre-v20 save necessarily predates
 "New Game"), and `map.width`/`map.height` need no migration since the schema
 already required them at v19.
 
-## Non-goals carried over
+## Non-goals
 
-No river, no biome set, no infinite/streamed world, no mobile-specific
-camera work; this slice's own Non-goals (see the task body) still apply.
+No river, no biome set, no infinite/streamed world, and no mobile-specific
+camera work.

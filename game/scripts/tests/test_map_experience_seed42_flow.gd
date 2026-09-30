@@ -1,14 +1,14 @@
 extends SceneTree
 
-## Issue #299 round 2 review: an automated GRAPHICAL exercise of the seed-42
-## "create, reach the opposite corner, save, reload" flow named in the task's
-## Owner verification section, run through the real Boot scene, the real New
+## An automated graphical exercise of the seed-42
+## "create, reach the opposite corner, save, reload" manual verification
+## flow, run through the real Boot scene, the real New
 ## Game/Save/Load button handlers, and (with `--capture`, non-headless) a
 ## real OpenGL renderer -- not just the headless StateCodec-level round trips
-## test_save_dimensions.gd already covers. This automates the MECHANICAL
+## test_save_dimensions.gd already covers. This automates the mechanical
 ## claim (does the actual UI-driven save/load preserve terrain, colonist
-## positions and orders, on a real render) so only the SUBJECTIVE claim (does
-## it look/feel right at a glance) remains owner verification after merge --
+## positions and orders, on a real render) so only the subjective claim (does
+## it look/feel right at a glance) is left to manual verification --
 ## see docs/architecture/map-experience.md.
 ##
 ## Uses an isolated SaveManager directory (never the default "user://saves" a
@@ -45,10 +45,10 @@ func _run() -> void:
 	await process_frame
 	await process_frame
 
-	# New Game with a visible/editable seed (issue #299 acceptance), exactly
+	# New Game with a visible/editable seed, exactly
 	# through the buttons a player uses. Timed on its own -- separately from
 	# Save below -- so "generation" and "Save" are never the same number
-	# under a shared label (round 3 review).
+	# under a shared label.
 	boot._seed_input.text = str(SEED)
 	var generation_start := Time.get_ticks_usec()
 	boot._on_new_game_pressed()
@@ -75,7 +75,7 @@ func _run() -> void:
 	# step waits for the real GPU/renderer to actually finish drawing the
 	# frame (RenderingServer.frame_post_draw), not just for the engine to
 	# queue it, so this is genuine rendered-pan frame time, not CPU-only
-	# transform math (round 3 review; see test_map_experience_benchmark.gd
+	# transform math (see test_map_experience_benchmark.gd
 	# for the existing CPU-only pan_by() cost). Headless runs still exercise
 	# pan_by() itself, just without a compositor to time against.
 	var graphical := "--capture" in OS.get_cmdline_user_args() and DisplayServer.get_name() != "headless"
@@ -96,7 +96,7 @@ func _run() -> void:
 
 	# Clamp to the true opposite (far) corner regardless of how
 	# PAN_STEPS*PAN_STEP_DELTA compares to this world's own size, mirroring
-	# the owner verification's "reach the opposite corner" step exactly.
+	# the manual verification's "reach the opposite corner" step exactly.
 	camera.pan_by(Vector2(-1000000, -1000000))
 	await process_frame
 	await _capture("seed42-opposite-corner")

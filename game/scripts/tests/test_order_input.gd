@@ -150,7 +150,7 @@ func _run() -> void:
 	_expect(mine_jobs.size() == 1 and mine_jobs[0]["kind"] == "mine",
 		"the valid rock tile in a mixed Mine rectangle must receive a mine job")
 
-	# Build tools (issue #278/#303 round 2): the toolbar's build buttons build
+	# Build tools: the toolbar's build buttons issue
 	# a real `build` command, so the hover preview runs WorldState.preview()'s
 	# own rule (valid on an open floor tile once wood is stockpiled, invalid
 	# on rock), and Cancel resolves a pending build by its construction site,
@@ -185,7 +185,7 @@ func _run() -> void:
 		_expect(world.apply(cancel_build).get("ok", false), "cancelling the build at its site must be accepted")
 	boot_node._select_tool(-1)
 
-	# F3 (issue #290): a dig command naming an assignee whose faction may not
+	# F3: a dig command naming an assignee whose faction may not
 	# be ordered by the player is rejected not_ordered_by_player, typed.
 	var raider_id: String = world.get_colonists()[0]["id"]
 	var set_faction_result: Dictionary = world.apply({
@@ -310,8 +310,8 @@ func _max_job_id(jobs: Array[Dictionary]) -> int:
 		best = maxi(best, int(String(job["id"]).trim_prefix("job_")))
 	return best
 
-## width/height read from the world itself, not hardcoded (issue #300: the
-## default boot world is now 256x256, not the debug scenario's 48x48 -- see
+## width/height read from the world itself, not hardcoded (the
+## default boot world is 256x256, not the debug scenario's 48x48 -- see
 ## boot.gd's build_default_world()).
 func _find_tile(world, kind: String, excluded: Array[Vector2i] = []) -> Vector2i:
 	var tiles: Array[String] = world.get_tiles()

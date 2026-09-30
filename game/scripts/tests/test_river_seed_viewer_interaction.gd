@@ -1,26 +1,25 @@
 extends SceneTree
 
-## Issue #300 Owner verification, driven through the RUNNING VIEWER for
-## exactly seeds 1337 and 20260919: "recognise the river at a glance,
-## find food and water next to the colonists and complete an initial
-## order without being blocked by the river".
+## Verification check for seeds 1337 and 20260919 (ADR 020), driven through
+## the running viewer: the river is recognisable, food and water are next to
+## the colonists, and an initial order completes without being blocked by the
+## river.
 ##
-## Review rounds 5-7 kept this item open because the earlier automation
-## (test_river_seed_order_completion.gd) submitted the forage command
-## straight into WorldState.apply() and ticked the world by hand -- it never
-## touched the viewer's own input path. This test does what a player at the
+## test_river_seed_order_completion.gd submits the forage command straight
+## into WorldState.apply() and ticks the world by hand, so it never touches
+## the viewer's own input path. This test does what a player at the
 ## PC does, through the same engine input routing a real mouse uses
 ## (Viewport.push_input, the pattern test_map_camera.gd already relies on):
 ##
 ##   1. types the seed into the visible seed field and clicks the real
 ##      "New Game" button, then the real ConfirmationDialog OK button;
-##   2. checks the new game starts PAUSED with an empty job queue (no debug
+##   2. checks the new game starts paused with an empty job queue (no debug
 ##      scenario dig orders) and the HUD shows the active seed;
 ##   3. checks food and water are within the documented route bounds of every
 ##      colonist (an independent BFS through world.passability(), so a bush
 ##      or bank across the river never counts);
 ##   4. checks the river is drawn as water by the viewer's own terrain
-##      overlay (one overlay cell per water tile) and, in a graphical run, by
+##      layer (one water cell per water tile) and, in a graphical run, by
 ##      sampling the actually rendered pixels: a river tile must render
 ##      blue-dominant and a plain soil tile must not;
 ##   5. clicks the real "Forage" tool button, then left-clicks the map at a
@@ -126,8 +125,8 @@ func _check_seed(seed_value: int) -> void:
 
 	# 4. The river reads as water in the viewer: every water tile gets its
 	#    own registered water cell in the terrain TileMapLayer -- never
-	#    another kind's cell (e.g. hazard's). Issue #301 round 3: water no
-	#    longer carries directional shore cells of its own -- the jagged
+	#    another kind's cell (e.g. hazard's). Water carries no directional
+	#    shore cells of its own -- the jagged
 	#    bank comes from the grass overlay layer on the neighbouring prairie
 	#    tiles instead, so every water tile must resolve to the single plain
 	#    water cell.
@@ -154,7 +153,7 @@ func _check_seed(seed_value: int) -> void:
 			var x: int = i % map_width
 			var y: int = i / map_width
 			var pos := Vector2i(x, y)
-			# source_id AND coords must both match: several single-crop
+			# source_id and coords must both match: several single-crop
 			# sources legitimately reuse local coords (0,0) for their own one
 			# tile (e.g. the hazard/tree/sprout decor sources), so coords
 			# alone cannot tell a water cell apart from one of those.
@@ -164,7 +163,7 @@ func _check_seed(seed_value: int) -> void:
 			"%s: every river tile must render as the plain water cell -- source_id %d, coords %s (%d painted, %d water tiles)" % [tag, water_source_id, water_coords, painted_water, water_tiles])
 
 		# Headless-safe blue-dominant check: samples the registered water
-		# cell's OWN texture region straight from its TileSetAtlasSource, so
+		# cell's own texture region straight from its TileSetAtlasSource, so
 		# this runs under plain `--headless` and does not depend on the
 		# graphical-only rendered-frame sampling below (step 4's pixel check
 		# only runs under `-- --capture`).

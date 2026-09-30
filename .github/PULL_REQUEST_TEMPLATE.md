@@ -4,7 +4,7 @@
 
 ## Contract and source of truth
 
-- Issue or design note:
+- Design note or ADR:
 - Canonical implementation/data location:
 - Inputs, outputs, and invariants:
 
@@ -23,7 +23,7 @@ Commands run:
 
 Result and known limitations:
 
-## Handoff notes
+## Notes for reviewers
 
-<!-- Mention changed files, assumptions, follow-up work, and any agent that
-should review or consume this change. -->
+<!-- Mention changed files, assumptions, follow-up work, and anyone who
+should review or build on this change. -->

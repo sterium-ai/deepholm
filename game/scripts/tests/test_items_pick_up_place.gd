@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Exercises ToilExecutor.pick_up()/place() directly (colonist-ai.md 3.3,
-## issue #402): a ground wood item moves from one tile to another via a
+## Exercises ToilExecutor.pick_up()/place() directly (colonist-ai.md 3.3):
+## a ground wood item moves from one tile to another via a
 ## colonist's hands list, each toil's precondition re-check fails with a
 ## typed reason rather than crashing when it no longer holds, and a pick_up
 ## moves at most HANDS_CAPACITY units regardless of how large the ground
@@ -259,7 +259,7 @@ func _check_save_load_preserves_next_item_id_continuation() -> void:
 	_expect(world._next_item_id == restored._next_item_id,
 		"the source and its restore must advance the counter identically after generating an item")
 
-## Issue #402 acceptance: 4 units from a ground stack of exactly 4 move in one
+## 4 units from a ground stack of exactly 4 move in one
 ## pick_up call, entirely filling the colonist's hands.
 func _check_pick_up_four_unit_stack_moves_fully_in_one_call() -> void:
 	if _failed:
@@ -276,7 +276,7 @@ func _check_pick_up_four_unit_stack_moves_fully_in_one_call() -> void:
 	_expect(InventoryType.count_of_kind(colonist, "wood") == 4, "hands must hold all 4 units")
 	_expect(_hands_total(colonist) == 4, "hands total must be exactly 4")
 
-## Issue #402 acceptance: a ground stack of 6 leaves 2 on the ground after one
+## A ground stack of 6 leaves 2 on the ground after one
 ## pick_up of 4 (hands capped at InventoryType.HANDS_CAPACITY), and hands
 ## total count never exceeds 4 at any point, checked after every tick of the
 ## scenario through to the haul completing.
@@ -303,8 +303,8 @@ func _check_pick_up_six_unit_stack_leaves_two_and_hands_never_exceed_capacity() 
 			_expect(_hands_total(other) <= InventoryType.HANDS_CAPACITY,
 				"no colonist's hands total may ever exceed capacity at tick %d" % i)
 
-## Issue #402: pick_up on a colonist whose hands are already completely full
-## must fail with the new typed reason, moving nothing.
+## pick_up on a colonist whose hands are already completely full
+## must fail with a typed reason, moving nothing.
 func _check_pick_up_fails_hands_full() -> void:
 	if _failed:
 		return
@@ -323,7 +323,7 @@ func _check_pick_up_fails_hands_full() -> void:
 	_expect(world.get_ground_wood(2, 2) == 1, "a failed pick_up must leave the second item untouched on the ground")
 	_expect(_hands_total(colonist) == 4, "hands total must stay at 4 after a failed pick_up")
 
-## Issue #402 revision: an explicit count: 0 request must succeed as a no-op
+## An explicit count: 0 request must succeed as a no-op
 ## -- moving nothing, leaving the ground item's count untouched, and never
 ## creating a zero-count hands entry (ActorInventory's count >= 1 invariant).
 func _check_pick_up_zero_count_is_a_no_op() -> void:

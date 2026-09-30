@@ -1,11 +1,13 @@
-# ADR 016: Regions wiring raises two core budgets
+# ADR 015: Regions wiring raises two core budgets
+
+> **In short:** Adding map regions (connected areas colonists can walk between) needed a few more lines in two core files, so their size limits were raised to match.
 
 - **Status:** accepted
 - **Date:** 2026-09-20
 - **Scope:** `docs/architecture/core-budgets.json` caps for
   `game/scripts/core/world_state.gd` and
   `game/scripts/core/scheduling/global_assignment.gd`.
-- **Implements:** F5 in `docs/architecture/foundation-for-breadth.md`; issue #292.
+- **Implements:** F5 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 

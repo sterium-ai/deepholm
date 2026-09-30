@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Exercises WorldState's set_faction debug command (F3, issue #287): mirrors
-## test_labour_table.gd's own test style for _apply_set_labour_command, the
+## Exercises WorldState's set_faction debug command, mirroring
+## test_labour_table.gd's test style for _apply_set_labour_command, the
 ## shape/validation pattern set_faction follows exactly. Also covers the
 ## faction_id default ("colony") on a chopped/foraged item -- world_state.gd's
 ## _spawn_wood_item()/_spawn_berries_item(), called directly the same way
@@ -95,7 +95,7 @@ func _check_set_faction_rejects_unknown_faction() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(6, 10)
-	world.state_hash() # forces _ensure_health()'s factionId backfill (issue #284)
+	world.state_hash() # forces _ensure_health()'s factionId backfill
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var before: String = world._find_colonist(colonist_id)["factionId"]
 	var result := _set_faction_command(world, "set_unknown_faction", colonist_id, "spaceship_crew")
@@ -107,7 +107,7 @@ func _check_set_faction_mutates_only_target_actor() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(7, 10)
-	world.state_hash() # forces _ensure_health()'s factionId backfill (issue #284)
+	world.state_hash() # forces _ensure_health()'s factionId backfill
 	var colonists := world.get_colonists()
 	_expect(colonists.size() >= 2, "expected at least two colonists for this check")
 	if colonists.size() < 2:
@@ -120,7 +120,7 @@ func _check_set_faction_mutates_only_target_actor() -> void:
 	_expect(world._find_colonist(target_id)["factionId"] == "allies", "the targeted actor's factionId must change")
 	_expect(world._find_colonist(other_id)["factionId"] == other_before, "a different actor's factionId must be untouched")
 
-## Round-1 review finding (issue #287): a non-worker actor (no "worker"
+## Regression: a non-worker actor (no "worker"
 ## component, e.g. a wolf) fails _ensure_needs()'s labour_table_missing check
 ## on every call, forcing its colonist dict through a key-by-key rebuild. That
 ## rebuild used to omit "factionId" entirely, so _ensure_health() (which only

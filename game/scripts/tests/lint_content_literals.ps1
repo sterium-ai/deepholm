@@ -8,17 +8,17 @@ param()
 # alias content_registry.gd's (ContentRegistryType.TILE_ROCK, etc.) rather than
 # redeclaring the literals, so world_state.gd is not exempted here: any core
 # file assigning one of these strings directly to a constant is exactly the
-# duplication this lint exists to catch (issue #255).
+# duplication this lint exists to catch.
 
 $tileKinds = @('rock', 'soil', 'floor', 'hazard', 'tree', 'water')
 $literalPattern = '"(' + ($tileKinds -join '|') + ')"'
 $constPattern = "const\s+\w+\s*(:=|:\s*\w+\s*=|=)\s*$literalPattern"
 
-# Also fails (issue #256) on: a WORK_TICKS-shaped dictionary literal (a const
+# Also fails on: a WORK_TICKS-shaped dictionary literal (a const
 # dict keyed by at least three of dig/chop/forage/sleep) or a bare
 # MOVE_TICKS_PER_TILE const, either of which would mean the move/work tick
-# costs task #256 moved into content/jobs.json and content/tiles.json crept
-# back into a hardcoded GDScript literal outside the registry.
+# costs that live in content/jobs.json and content/tiles.json had crept
+# back into a hard-coded GDScript literal outside the registry.
 $workTicksKeys = @('dig', 'chop', 'forage', 'sleep')
 $workTicksDictPattern = 'const\s+\w+\s*(:=|:\s*\w+\s*=|=)\s*\{'
 $moveTicksConstPattern = 'const\s+\w*MOVE_TICKS_PER_TILE\w*\s*(:=|:\s*\w+\s*=|=)\s*\d+'
@@ -80,9 +80,9 @@ function Find-ContentLiteralOffenders {
     return $found
 }
 
-# Self-test (issue #256 review): proves Find-ContentLiteralOffenders rejects a
+# Self-test: proves Find-ContentLiteralOffenders rejects a
 # WORK_TICKS dict split across lines, one key per line, not just the
-# single-line shape the earlier version of this lint only checked for. Runs
+# single-line shape. Runs
 # against synthetic text, never against a file under scripts/core/, and stops
 # the whole lint with a clear message if the detector regresses rather than
 # silently scanning the real tree with a broken rule.

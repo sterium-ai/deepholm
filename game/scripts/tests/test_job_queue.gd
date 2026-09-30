@@ -39,7 +39,7 @@ func _submit(queue: JobQueue, target: Vector2i, priority: int = QueueType.Priori
 	_expect(result["ok"], "expected valid submission")
 	return result.get("job_id", "")
 
-## Finding (issue #267 review round 2): set_labour_disabled() used to leave a
+## Regression: set_labour_disabled() used to leave a
 ## haul job's blocked_destination_full reason untouched while its backoff was
 ## unexpired, so a colony with the labour off entirely never displayed
 ## labour_disabled on it. Backoff timing (retry_at) is now tracked
@@ -348,14 +348,14 @@ func _check_shared_table_releases_every_owned_key() -> void:
 				released_keys.append(event["data"]["key"])
 		_expect("item:1" in released_keys, "%s must emit reservation_released for the extra key too" % operation)
 
-## set_active_item_marker()/get_active_item_marker() (issue #266 round 5
-## review): the live handle ToolDropToil now uses to persist which tool item
-## an in-flight drop_tool leg concerns, directly on the job's own field, so
-## the marker survives a save/load through JobQueue's ordinary job encoding
-## (state_codec.gd) without a new field. Round 6 review: that field is
-## blockingJobId, not itemId -- itemId already carries a haul job's own
-## cargo identity (see job_queue.gd's set_active_item_marker() doc comment),
-## and this marker is written for ANY active job kind drop_tool runs against,
+## set_active_item_marker()/get_active_item_marker(): the live handle
+## ToolDropToil uses to persist which tool item an in-flight drop_tool leg
+## concerns, directly on the job's own field, so the marker survives a
+## save/load through JobQueue's ordinary job encoding (state_codec.gd)
+## without a new field. That field is blockingJobId, not itemId -- itemId
+## already carries a haul job's own cargo identity (see job_queue.gd's
+## set_active_item_marker() doc comment), and this marker is written for
+## any active job kind drop_tool runs against,
 ## haul included, so it must never collide with itemId's existing meaning.
 ## Covers: a no-op on a queued job (nothing to mark before activation), a
 ## no-op on a terminal job (dig_1 already finished, no in-flight leg left to

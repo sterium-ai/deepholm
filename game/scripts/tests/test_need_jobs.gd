@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers issue #203: the needs decision layer (colonist-ai.md 3.1) drives a
+## Covers the needs decision layer (colonist-ai.md 3.1), which drives a
 ## colonist with an urgent/critical food/water/rest need through a new
 ## eat_food/drink_water/sleep job -- reserve the nearest reachable unreserved
 ## source, walk there, consume/sleep, release -- using the same colonist.route/
@@ -215,12 +215,12 @@ func _run_mid_dig_then_eat_scenario(seed_value: int, mutate_at_tick: int, total_
 			for i in world._colonists.size():
 				if String(world._colonists[i]["id"]) == "colonist_0":
 					world._colonists[i]["needs"]["food"] = 20
-		# Issue #205 added a critical-need interrupt (colonist-ai.md 3.6): pin
+		# A critical need interrupts work (colonist-ai.md 3.6), so pin
 		# food's decay rate to 0 the moment it drops to 20 (still above the
 		# "critical" threshold of 10, only "urgent") so this scenario keeps
-		# testing what it always tested -- an urgent need waiting for the toil
-		# boundary -- rather than continuing to decay into "critical" mid-dig,
-		# where an interrupt is now the correct, intended behavior.
+		# testing an urgent need waiting for the toil boundary, rather than
+		# decaying into "critical" mid-dig, where an interrupt is the intended
+		# behavior.
 		world._need_definitions["food"]["rate_per_day"] = 0
 		if dig_completed_tick < 0:
 			var dig_job := world._scheduler.queue.get_job(dig_job_id)
@@ -381,9 +381,8 @@ func _check_sleep_completes_and_releases_bed() -> void:
 		"completing sleep must release the bed's reservation")
 
 ## With no bed reachable anywhere, the colonist's reason exposes need_unmet:rest
-## (colonist-ai.md 3.8's documented vocabulary; normalized from this task's own
-## prose, which also names "need_source_missing:bed" for the same condition --
-## see the handoff) and it never sleeps.
+## (colonist-ai.md 3.8's documented vocabulary; "need_source_missing:bed" is
+## not used for this condition) and it never sleeps.
 func _check_no_bed_reachable_reports_need_unmet_rest() -> void:
 	var world := _build_world(110001)
 	_isolate_need(world, "rest")
@@ -399,7 +398,7 @@ func _check_no_bed_reachable_reports_need_unmet_rest() -> void:
 	_expect(int(colonist["needs"]["rest"]) < 100, "the colonist must never have slept")
 	_expect(_jobs_of_kind(world, "sleep").is_empty(), "no sleep job may ever be created with no bed reachable")
 
-## Issue #241 review round 1 (ADR 009): a critical need must interrupt a
+## ADR 009: a critical need must interrupt a
 ## colonist's in-progress dig immediately (colonist-ai.md 3.6), and the
 ## interrupted job must go back through the scheduler's own waiting queue
 ## with its aging preserved -- not merely left invisible with only the
@@ -480,7 +479,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 		_expect(String(requeued_entry.get("restrict_to", "")) == "colonist_0",
 			"the requeued entry must be restricted to the colonist it was interrupted from (ADR 009)")
 
-	# Round-6 review (#278/#303): a suspended job's progress moves OUT of the
+	# A suspended job's progress moves out of the
 	# shared tile cache into per-job storage (world_state.gd's own
 	# _suspend_work_progress()), so a different job that later works the same
 	# tile can never inherit or clobber it -- checked here instead of
@@ -518,16 +517,15 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	_expect(colonist_0_ever_fed,
 		"the interrupted colonist's own food need must be restored at some point, not some other colonist's")
 
-## Issue #241 review round 2: NeedGiver must pick the source with the
+## NeedGiver must pick the source with the
 ## shortest real (bounded-route) path, not the one with the smallest
 ## straight-line Manhattan distance. The colonist starts at (0,0); candidate
 ## A sits inside a walled 21x21 box whose only entrance is a single gap on
 ## the box's far side, so its real route is well over 60 tiles even though
 ## its Manhattan distance (4) is the smaller of the two; candidate B sits on
 ## a fully clear straight path with Manhattan distance 20 -- also its real
-## route length, since nothing blocks it. A colonist that committed to A
-## anyway (the exact defect flagged in review round 2, which sorted and
-## committed by Manhattan distance alone) would pick the far, walled source
+## route length, since nothing blocks it. A colonist that sorted and
+## committed by Manhattan distance alone would pick the far, walled source A
 ## over the truly nearest reachable one.
 func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> void:
 	var world := _build_world(130001)
@@ -560,7 +558,7 @@ func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> voi
 		("NeedGiver must choose the shorter real route (0,20), not the Manhattan-nearer "
 			+ "but route-blocked (2,2) (got %s)") % [target])
 
-## Issue #241 review round 1 (ADR 009): when a need job's first-leg target
+## ADR 009: when a need job's first-leg target
 ## becomes unreachable, WorldState cancels and resubmits it under a fresh id
 ## (colonist-ai.md 3.3) -- NeedGiver's own ownership association must follow
 ## the new id, restricted to the same colonist, rather than being dropped.
@@ -602,13 +600,13 @@ func _check_unreachable_need_job_resubmission_keeps_colonist_ownership() -> void
 	_expect(String(new_entry.get("restrict_to", "")) == "colonist_0",
 		"the resubmitted need job must stay restricted to the colonist whose need created it")
 
-## Issue #241 review round 2: an urgent need reaching this module's evaluation
+## An urgent need reaching this module's evaluation
 ## exactly at a toil boundary (colonist-ai.md 3.6) must interrupt whatever
 ## active job the colonist still holds through the shared scheduler, not just
 ## wait for colonist.route/work to go null. A haul job idles between its
 ## instant pick_up/place toils -- neither sets colonist.route or colonist.work
 ## -- so the colonist looks idle at world_state level while its haul job's own
-## scheduler assignment is still live. The finding this regresses: without
+## scheduler assignment is still live. The regression guarded here: without
 ## suspending that assignment, GlobalAssignment.tick() skips this worker (it
 ## already has one), so the restricted need job would sit "queued" forever --
 ## never even proposed for colonist_0 -- until the haul job finishes entirely
@@ -703,7 +701,7 @@ func _check_urgent_need_interrupts_haul_at_toil_boundary() -> void:
 	_expect(eat_completed, "the urgent eat_food job must eventually complete for colonist_0")
 	_expect(colonist_0_ever_fed, "the interrupted colonist's own food need must be restored")
 	_expect(haul_completed, "the interrupted haul job must resume and eventually complete, not be lost")
-	# place() now always mints a fresh item id (issue #402: hands entries have
+	# place() always mints a fresh item id (hands entries have
 	# no id of their own to preserve across a pick_up/place round trip), so
 	# the delivered item is found by kind, not by its original "item_1" id.
 	var delivered := {}

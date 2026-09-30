@@ -3,7 +3,7 @@ extends RefCounted
 ## F5 "Rooms" (foundation-for-breadth.md §3): a room is a maximal connected
 ## component of tiles reachable through passable, non-door tiles -- both an
 ## impassable tile/object (a wall) and a door object stop the flood, unlike
-## t1's RegionMap where a door is just another passable tile. Reuses
+## RegionMap (regions.gd), where a door is just another passable tile. Reuses
 ## RegionMapType's own incremental split/merge algorithm by wrapping a second
 ## instance built over that stricter "open" predicate (physically passable
 ## and not a door), rather than re-implementing flood-fill. Because the flood
@@ -19,9 +19,9 @@ extends RefCounted
 ## unconditionally refreshes every room touching (x, y)'s neighbourhood:
 ## unlike the inner RegionMap, a bed changes a room's has_bed flag without
 ## ever flipping physical passability, so this cannot gate on that flip the
-## way t1 does.
+## way RegionMap does.
 ##
-## "Enclosed by impassable tiles/walls" (the task contract) means a
+## "Enclosed by impassable tiles/walls" means a
 ## component's flood never reaches the map boundary: _rebuild_area() treats
 ## an out-of-bounds neighbour of a member tile the same as it treats a
 ## boundary door candidate below -- it marks the component "open to the

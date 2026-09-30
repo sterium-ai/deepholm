@@ -1,8 +1,8 @@
 class_name ActorInventory
 extends RefCounted
 
-## F2 inventory component: held items, tool slot. Data + validate() only in
-## this task (see docs/decisions/012-actors-and-components.md and task t3).
+## F2 inventory component: held items, tool slot, plus the colonist hands
+## helpers below (see docs/decisions/012-actors-and-components.md).
 ## Tunables (content/actors.json): {"capacity": int >= 1}.
 
 static func validate(tunables: Dictionary) -> bool:
@@ -13,7 +13,7 @@ static func validate(tunables: Dictionary) -> bool:
 static func build(tunables: Dictionary) -> Dictionary:
 	return {"items": [], "tool": "", "capacity": int(tunables.get("capacity", 1))}
 
-## Issue #402 (docs/decisions/035): a colonist's single-slot "carrying" field
+## ADR 037: a colonist's single-slot "carrying" field
 ## (ADR 006/012) is replaced by "hands", a list of {"kind","count"} entries --
 ## at most one entry per distinct kind actually held, every entry's count
 ## >= 1, the sum of every entry's count never exceeding HANDS_CAPACITY. This

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #299 round 1 review: generator provenance and seed fidelity, both
+## Generator provenance and seed fidelity, both
 ## exercised through actual SaveIO writes and reads (not just StateCodec
 ## encode()/decode() in memory).
 ##
@@ -123,10 +123,10 @@ func _item_kinds_near(world: WorldStateType, target: Vector2i) -> Array:
 	kinds.sort()
 	return kinds
 
-## Issue #358 round 2 review: a completed dig turns its target tile into
-## `trench` (ADR 025); game-state.schema.json/SaveIO._validate_state() must
-## accept that tile kind, not just reject it as "invalid map tile" the way a
-## pre-round-2 build did the moment any dig ever completed. Exercises a real
+## A completed dig turns its target tile into
+## `trench` (ADR 026); game-state.schema.json/SaveIO._validate_state() must
+## accept that tile kind rather than reject it as "invalid map tile" the
+## moment any dig completes. Exercises a real
 ## dig through world.apply()/tick(), not a hand-built dictionary, then a real
 ## SaveIO.write_atomic()/read() round trip, not just StateCodec.encode()/decode()
 ## in memory.
@@ -148,11 +148,11 @@ func _check_completed_dig_saves_and_reloads_through_save_io() -> void:
 			"a reloaded world must keep its dug tile as trench")
 	_remove(path)
 
-## Issue #358 round 2 review: world._dig_find_random's own continuation must
+## world._dig_find_random's own continuation must
 ## survive a real SaveIO.write_atomic()/read() round trip (not just an
 ## in-memory StateCodec.encode()/decode(), already covered by
 ## test_save_migration.gd's own _check_dig_find_rng_continuation_survives_save_load_round_trip()),
-## and a restored world's NEXT dig-find roll after several already-completed
+## and a restored world's next dig-find roll after several already-completed
 ## digs must match an uninterrupted live run's own next roll exactly -- proving
 ## the restored stream keeps going from where the saved run left off instead
 ## of restarting.

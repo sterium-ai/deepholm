@@ -1,14 +1,16 @@
 # ADR 002: Phase-based agent ownership and independent review
 
+> **In short:** Each part of the code has one clear owner at a time, and every change is checked by someone other than its author.
+
 - **Status:** accepted
 - **Date:** 2026-09-10
-- **Owners:** project integrator
+- **Scope:** development process
 
 ## Context
 
 Claude Code, Codex, and GitHub Copilot can all perform design, implementation,
-testing, and review. Rigidly assigning one model to “thinking” and another to
-“typing” creates unnecessary handoffs and duplicated context.
+testing, and review. Rigidly assigning one model to "thinking" and another to
+"typing" creates unnecessary handoffs and duplicated context.
 
 ## Decision
 

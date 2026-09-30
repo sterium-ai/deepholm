@@ -370,7 +370,7 @@
       "items": { "$ref": "#/$defs/object" }
     },
     "constructionSites": {
-      "description": "One record per active construction site (issue #406). Optional top-level field, like combatBlockedTargets/digFindRng before it: absent for any save written before this task, in which case WorldState loads with no active sites -- exactly a fresh world's own starting state.",
+      "description": "One record per active construction site. Optional top-level field, like combatBlockedTargets/digFindRng: absent in saves written before construction sites existed, in which case WorldState loads with no active sites, the same as a fresh world.",
       "type": "array",
       "items": { "$ref": "#/$defs/constructionSite" }
     },
@@ -563,7 +563,7 @@
           "itemId", "cell", "retryAt", "backoffTicks"],
         "allOf": [
           {
-            "description": "SaveIO._valid_state()'s own site-job rule (issue #406, supersedes the single-worker `build` job's own buildKind-carrying shape): a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' looser (optional-for-legacy) shape below.",
+            "description": "SaveIO._valid_state()'s site-job rule (supersedes the single-worker `build` job's buildKind-carrying shape): a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' looser (optional-for-legacy) shape below.",
             "if": { "properties": { "kind": { "enum": ["site_fetch", "site_work"] } } },
             "then": {
               "required": ["site"],
@@ -592,7 +592,7 @@
           "retryAt": { "type": "integer", "minimum": 0 },
           "backoffTicks": { "type": "integer", "minimum": 0 },
           "site": {
-            "description": "site_fetch/site_work jobs only (issue #406): the construction site's own origin tile. Optional for backward compatibility with a same-version save written before either kind existed; a job of kind site_fetch or site_work must carry a non-null tile here (enforced by the allOf rule above, matching SaveIO).",
+            "description": "site_fetch/site_work jobs only: the construction site's origin tile. Optional for backward compatibility with a same-version save written before either kind existed; a job of kind site_fetch or site_work must carry a non-null tile here (enforced by the allOf rule above, matching SaveIO).",
             "anyOf": [
               { "type": "null" },
               { "$ref": "#/$defs/tile" }

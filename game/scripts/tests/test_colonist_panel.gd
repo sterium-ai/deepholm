@@ -1,7 +1,7 @@
 extends SceneTree
 
-## Acceptance coverage for issue #206: colonist_panel.gd must render each
-## colonist's three need bars (colonist-ai.md 4 acceptance item 7) and the
+## colonist_panel.gd must render each colonist's three need bars
+## (colonist-ai.md section 4) and the
 ## needs decision layer's own activity/reason vocabulary (colonist-ai.md
 ## 3.1/3.8: eating, sleeping, need_unmet:<kind>, blocked_source_reserved),
 ## driven end to end through a real WorldState -- the same needs decision
@@ -205,7 +205,7 @@ func _check_drinking_colonist_shows_activity_and_toil() -> void:
 	_expect(line.find("Drinking") >= 0, "the panel must show the drink_water job's activity label (got: %s)" % line)
 	_expect(line.find("Toil: Traveling") >= 0, "the panel must show the go_to toil while walking to the water source (got: %s)" % line)
 
-## Review round 1 finding: for the single tick between route arrival and the
+## Regression: for the single tick between route arrival and the
 ## instant `consume` toil, the toil executor has already nulled colonist.route
 ## but has not yet called _toils.consume() -- that happens on the *next*
 ## tick's call -- so both route and work are null while the job is still
@@ -387,7 +387,7 @@ func _check_need_source_missing_colonist_shows_reason_and_remedy() -> void:
 	_expect(boot._need_alerts_label.text.find("colonist_0: Water source missing") >= 0,
 		"boot's alert area must list the need_source_missing:water colonist (got: %s)" % boot._need_alerts_label.text)
 
-## colonist-ai.md 4 acceptance item 7 / boot.gd's own contract: the alert list
+## colonist-ai.md section 4 / boot.gd's own contract: the alert list
 ## lists each currently-unmet-need colonist exactly once no matter how many
 ## refreshes run while the condition holds, and drops the colonist the instant
 ## its reason clears -- never by removing a line, but by rebuilding the whole
@@ -412,7 +412,7 @@ func _check_need_alert_list_dedupes_and_clears() -> void:
 	_expect(boot._need_alerts_label.text.find("colonist_0") < 0,
 		"the alert list must clear once the colonist's need reason clears (got: %s)" % boot._need_alerts_label.text)
 
-## F5 (issue #296 acceptance item 6): a real spawn_incident command's
+## F5: a real spawn_incident command's
 ## resulting incident_started event must appear in the same alert list the
 ## need lines above populate, unlike a need reason it is never dropped again
 ## on a later refresh with no new incident, since the event stays in

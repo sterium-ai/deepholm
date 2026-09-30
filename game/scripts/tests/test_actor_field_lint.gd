@@ -1,35 +1,33 @@
 extends SceneTree
 
-## Source-scanning lint (issue #282, ADR 012 "an accessor layer, not a new
-## colonist shape"): proves that core simulation code reads a colonist/
-## actor's needs, labourTable, route or held_tool fields only through
+## Source-scanning lint (ADR 012 "an accessor layer, not a new colonist
+## shape"): proves that core simulation code reads a colonist/actor's needs,
+## labourTable, route or held_tool fields only through
 ## ActorTable.has_component()/get_component(), never by indexing the raw
 ## dict directly, and never compares a bare "colonist" string literal outside
 ## the actor spawn path. Modeled on test_architecture_rules.gd's own
 ## _check_viewer_purity(): a plain text scan (regex-based), not a parser.
 ##
-## "work" and "carrying" are deliberately NOT in PROTECTED_FIELDS: ADR 012's
+## "work" and "carrying" are deliberately not in PROTECTED_FIELDS: ADR 012's
 ## component vocabulary is mover/worker/needs/health/inventory/combat/wild/
 ## visitor only -- work/carrying are ToilExecutor-owned per-job execution
 ## state with no component of their own (the ADR is explicit that real
 ## movement/work stays owned by ToilExecutor/GlobalAssignment against the
 ## actual route/work shape, not a second accessor). Routing them through
-## get_component() would require adding a component actor_table.gd does not
-## declare, which is out of this task's Owned paths.
+## get_component() would require a component actor_table.gd does not
+## declare.
 ##
-## EXCLUDED_DIRS/EXCLUDED_FILES cover directories/modules this task does not
-## own and that legitimately need the raw shape: persistence/*.gd is the
-## save/load wire-format boundary (task t4's own domain, explicitly out of
-## this task's Non-goals); tool_item_store.gd/tool_fetch_toil.gd/
-## tool_drop_toil.gd/calendar_alert_giver.gd are pre-existing companion
-## modules toil_executor.gd/WorldState delegate to that this task's Owned
-## paths do not list.
+## EXCLUDED_DIRS/EXCLUDED_FILES cover modules that legitimately need the raw
+## shape: persistence/*.gd is the save/load wire-format boundary;
+## tool_item_store.gd/tool_fetch_toil.gd/tool_drop_toil.gd/
+## calendar_alert_giver.gd are companion modules that toil_executor.gd and
+## WorldState delegate to.
 ##
-## Detection is provenance-based, not name-based (round 2 review: a blanket
-## "any receiver ending in _component is exempt" rule let a raw actor alias
-## renamed to foo_component evade the lint entirely, and the old "anchor"
-## allowlist only recognized colonist/actor and a few fixed aliases, so
-## _colonists[0]["needs"] and worker["needs"] passed through undetected).
+## Detection is provenance-based, not name-based. (An earlier name-based
+## version exempted any receiver ending in _component, which let a raw actor
+## alias renamed to foo_component evade the lint, and its fixed allowlist of
+## colonist/actor aliases let _colonists[0]["needs"] and worker["needs"]
+## through undetected.)
 ## Per function (reset at every "func " line):
 ##  - a receiver is flagged when it is a literal "colonist"/"actor", an
 ##    underscore-delimited alias of one (target_colonist, other_actor,
@@ -40,11 +38,11 @@ extends SceneTree
 ##    assignment, a trailing "# comment" after the assignment, and a
 ##    "for worker in _colonists:" loop header (the loop variable is tainted
 ##    from the iterable's provenance the same as a plain alias);
-##  - a receiver is exempt ONLY when it was itself assigned from
+##  - a receiver is exempt only when it was itself assigned from
 ##    ActorTable.get_component(...) earlier in the same function -- tracked
 ##    by the actual assignment, never by the variable's name. A raw actor
 ##    alias that happens to be named ..._component (var foo_component =
-##    actor) is NOT exempt: it was never actually routed through the
+##    actor) is not exempt: it was never actually routed through the
 ##    accessor, so the lint still flags it. Reassigning a name that
 ##    currently holds a verified component result -- worker =
 ##    ActorTableType.get_component(...) followed later by worker = colonist
@@ -53,9 +51,9 @@ extends SceneTree
 ##    had, then re-derives it from the new right-hand side alone, so a name
 ##    is never both "exempt" and "tainted" from different points in time.
 ##  - each statement's reads are checked against provenance as it stood
-##    BEFORE that statement, and provenance updates for later statements only
-##    afterward (round 5 finding): a statement that both reassigns a tainted
-##    name AND reads a protected field on its own right-hand side --
+##    before that statement, and provenance updates for later statements only
+##    afterward: a statement that both reassigns a tainted
+##    name and reads a protected field on its own right-hand side --
 ##    worker = ActorTableType.get_component(worker["needs"], "worker",
 ##    _content), worker = lookup[worker.get("needs")], or
 ##    for worker in lookup[worker.get("needs")]: -- must still flag that
@@ -64,8 +62,7 @@ extends SceneTree
 ## This is still a text scan, not a type checker: a receiver with no
 ## traceable link back to a colonist/actor name (request, saved,
 ## _pending[worker] -- GlobalAssignment's own routing-request bookkeeping,
-## which legitimately has its own unrelated "route" field) is left alone,
-## same as before.
+## which legitimately has its own unrelated "route" field) is left alone.
 
 const CORE_DIR := "res://scripts/core"
 const PROTECTED_FIELDS: Array[String] = ["needs", "labourTable", "route", "held_tool"]
@@ -93,7 +90,7 @@ const COLONIST_LITERAL_EXEMPT_FUNCS := {
 }
 
 ## A receiver's base identifier counts as a colonist/actor anchor when one of
-## its underscore-delimited parts IS "colonist"/"colonists"/"actor"/"actors"
+## its underscore-delimited parts is "colonist"/"colonists"/"actor"/"actors"
 ## (so both singular receivers like "colonist" and plural collections like
 ## "_colonists"/"all_actors" match, but an unrelated word that merely
 ## contains "actor" as a substring -- route_search_factory, refactor -- does
@@ -153,7 +150,7 @@ func _compile_patterns() -> void:
 	_colonist_literal_regex = RegEx.new()
 	_colonist_literal_regex.compile("['\"]colonist['\"]\\s*(==|!=)|(==|!=)\\s*['\"]colonist['\"]")
 	# var? NAME[: TYPE] = <anything>ActorTable...get_component( -- provenance
-	# for the ONLY legitimate exemption: NAME actually came out of the
+	# for the only legitimate exemption: NAME actually came out of the
 	# accessor, regardless of what NAME is called. The assignment operator is
 	# either inferred-type ":=" or a plain "=" (optionally preceded by an
 	# explicit ": TYPE" annotation) -- both spellings Godot accepts.
@@ -187,7 +184,7 @@ func _expect(condition: bool, message: String) -> void:
 
 ## Self-test coverage for the scanner itself, run against small in-memory
 ## snippets before any real file is scanned: proves the quote/whitespace/
-## alias/multi-occurrence gaps prior review rounds found are actually closed,
+## alias/multi-occurrence evasions the scanner must catch are actually closed,
 ## that provenance (not the receiver's name) decides the component-wrapper
 ## exemption, and that legitimate accessor usage and unrelated dictionaries
 ## (GlobalAssignment's own routing-request bookkeeping) are never flagged.
@@ -213,7 +210,7 @@ func _run_self_tests() -> void:
 	_expect(_violations_for_lines(['colonist["labourTable"] = {}']).size() == 0,
 		"a whole-field assignment target must not be flagged (ActorTable has no setter)")
 
-	# Collection-index receiver (round 2 finding): a direct chain off a
+	# Collection-index receiver: a direct chain off a
 	# colonist collection, with no intermediate variable to name-match on.
 	_expect(_violations_for_lines(['_colonists[0]["needs"]']).size() == 1,
 		"indexing straight into a colonist collection must be flagged even with no named receiver")
@@ -224,7 +221,7 @@ func _run_self_tests() -> void:
 	_expect(_violations_for_lines(['_pending[worker]["route"]']).size() == 0,
 		"a non-actor routing-request dictionary must not be flagged just because its receiver is indexed")
 
-	# Ordinary alias (round 2 finding): a plain local variable that holds a
+	# Ordinary alias: a plain local variable that holds a
 	# colonist/actor, under a name the lint cannot recognize on its own.
 	_expect(_violations_for_lines(["func f():", "\tvar worker = colonist", '\tworker["needs"]']).size() == 1,
 		"an alias assigned from colonist must be flagged under its own name, not just as colonist itself")
@@ -235,9 +232,9 @@ func _run_self_tests() -> void:
 	_expect(_violations_for_lines(["func f():", "\tvar request = {}", '\trequest["route"]']).size() == 0,
 		"a dictionary never assigned from colonist/actor must not be flagged")
 
-	# Raw actor renamed to look like a component wrapper (round 2 finding):
-	# proves the _component-suffix exemption is gone -- only an actual
-	# get_component() call earns the exemption now.
+	# Raw actor renamed to look like a component wrapper: proves there is no
+	# _component-suffix exemption -- only an actual get_component() call
+	# earns the exemption.
 	_expect(_violations_for_lines(["func f():", "\tvar foo_component = actor", '\tfoo_component["needs"]']).size() == 1,
 		"a raw actor alias named *_component with no get_component() call must still be flagged")
 
@@ -260,7 +257,7 @@ func _run_self_tests() -> void:
 			'var route = ActorTableType.get_component(colonist, "mover", _content)']).size() == 0,
 		"the accessor call itself must not be flagged")
 
-	# Inferred-type alias (round 3 finding): "var worker := colonist" must
+	# Inferred-type alias: "var worker := colonist" must
 	# taint "worker" exactly like "var worker = colonist" does.
 	_expect(_violations_for_lines(["func f():", "\tvar worker := colonist", '\tworker["needs"]']).size() == 1,
 		"an inferred-type alias (:=) assigned from colonist must be flagged under its own name")
@@ -270,12 +267,12 @@ func _run_self_tests() -> void:
 			'\tworker["labourTable"]']).size() == 0,
 		"an inferred-type (:=) get_component() result must not be flagged")
 
-	# Trailing comment on the assignment line (round 3 finding): "$" in the
+	# Trailing comment on the assignment line: "$" in the
 	# alias regex must not be defeated by a "# comment" after the alias.
 	_expect(_violations_for_lines(["func f():", "\tvar worker = colonist  # alias", '\tworker["needs"]']).size() == 1,
 		"an alias assignment followed by a trailing comment must still be tracked")
 
-	# Iteration alias (round 3 finding): "for worker in _colonists:" taints
+	# Iteration alias: "for worker in _colonists:" taints
 	# the loop variable from the iterable's provenance, same as a plain
 	# alias assignment.
 	_expect(_violations_for_lines(["func f():", "\tfor worker in _colonists:", '\t\tworker["needs"]']).size() == 1,
@@ -285,7 +282,7 @@ func _run_self_tests() -> void:
 	_expect(_violations_for_lines(["func f():", "\tfor item in queue:", '\t\titem["route"]']).size() == 0,
 		"a for-loop over an unrelated collection must not be flagged")
 
-	# Reassignment revokes a component exemption (round 3 finding): a name
+	# Reassignment revokes a component exemption: a name
 	# that once held a verified get_component() result must lose its
 	# exemption the moment it is reassigned to a raw colonist/actor.
 	_expect(_violations_for_lines([
@@ -303,9 +300,9 @@ func _run_self_tests() -> void:
 			'\tworker["labourTable"]']).size() == 0,
 		"reassigning a tainted alias to a genuine get_component() result must grant the exemption")
 
-	# Self-referential reassignment/iteration must not lose provenance (round 4
-	# finding): resetting the target's provenance before reading the source's
-	# taint let a same-name assignment or loop header silently erase a live
+	# Self-referential reassignment/iteration must not lose provenance:
+	# resetting the target's provenance before reading the source's taint
+	# would let a same-name assignment or loop header silently erase a live
 	# alias's taint one line before its protected-field read.
 	_expect(_violations_for_lines([
 			"func f():",
@@ -326,8 +323,8 @@ func _run_self_tests() -> void:
 		"a for-loop variable that shadows its own iterable's name must not erase a previously tracked taint")
 
 	# Same-statement reassignment whose RHS itself reads a protected field
-	# through the pre-assignment alias (round 5 finding): checking this
-	# statement's reads against provenance from BEFORE the statement, before
+	# through the pre-assignment alias: checking this statement's reads
+	# against provenance from before the statement, before
 	# updating provenance for statements after it, must still flag these.
 	_expect(_violations_for_lines([
 			"func f():",
@@ -453,11 +450,11 @@ func _strip_comment(line: String) -> String:
 			return line.substr(0, i)
 	return line
 
-## Clears any provenance target previously held (exempt component-wrapper OR
+## Clears any provenance target previously held (exempt component-wrapper or
 ## tainted alias) so a fresh assignment always fully replaces the old
 ## classification instead of merely adding to it. Without this, a name that
 ## once held a verified get_component() result stayed exempt forever, even
-## after being reassigned to a raw colonist/actor (round 3 finding).
+## after being reassigned to a raw colonist/actor.
 func _reset_provenance(target: String, tainted: Dictionary, components: Dictionary) -> void:
 	tainted.erase(target)
 	components.erase(target)
@@ -471,16 +468,16 @@ func _reset_provenance(target: String, tainted: Dictionary, components: Dictiona
 ## target's prior provenance (see _reset_provenance) so reassigning an
 ## exempt name to a raw actor revokes the exemption rather than keeping it.
 ##
-## Source provenance is read BEFORE the target's reset, never after (round 4
-## finding): when the target and source share a name -- "worker = worker",
-## "worker = worker[\"needs\"]", "for worker in worker:" -- resetting the
-## target first would erase the very taint the source lookup needs to see,
-## silently untainting a name that is still a live colonist/actor alias one
-## line later. Every branch below computes its "is the source tainted"
-## boolean from the dictionaries as they stood at the start of the line, only
-## THEN calls _reset_provenance() and (conditionally) re-applies the derived
-## classification, so a self-referential assignment or loop header carries
-## its provenance forward unchanged instead of losing it.
+## Source provenance is read before the target's reset, never after: when the
+## target and source share a name -- "worker = worker", "worker =
+## worker[\"needs\"]", "for worker in worker:" -- resetting the target first
+## would erase the very taint the source lookup needs to see, silently
+## untainting a name that is still a live colonist/actor alias one line later.
+## Every branch below computes its "is the source tainted" boolean from the
+## dictionaries as they stood at the start of the line, only then calls
+## _reset_provenance() and (conditionally) re-applies the derived
+## classification, so a self-referential assignment or loop header carries its
+## provenance forward unchanged instead of losing it.
 func _update_provenance(stripped_line: String, tainted: Dictionary, components: Dictionary) -> void:
 	var line := _strip_comment(stripped_line).strip_edges()
 	var component_match := _component_assign_regex.search(line)
@@ -511,7 +508,7 @@ func _update_provenance(stripped_line: String, tainted: Dictionary, components: 
 ## True when base_identifier should be treated as holding a colonist/actor
 ## dictionary directly: recognized by name, or by a traced alias assignment
 ## earlier in the same function. components (real get_component() results)
-## are deliberately NOT eligible here -- checked separately as an exemption
+## are deliberately not eligible here -- checked separately as an exemption
 ## before this is even consulted.
 func _is_flaggable_receiver(base_identifier: String, tainted: Dictionary) -> bool:
 	return _is_anchor_identifier(base_identifier) or tainted.has(base_identifier)

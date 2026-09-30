@@ -1,21 +1,20 @@
 extends SceneTree
 
-## Issue #300 round 5 review: WorldState._water_tile_cache (added in a
-## perf-only round for _need_source_candidates("water")) assumed TILE_WATER
+## WorldState._water_tile_cache (a performance cache for
+## _need_source_candidates("water")) originally assumed TILE_WATER
 ## tiles never change after generation. That is false: a berry_bush object
 ## sitting on a TILE_WATER tile is reachable independently of place_object
-## (issue #405 round 5 made place_object itself reject a water footprint
-## tile, so this fixture forces the object directly onto _objects the way
+## (place_object itself rejects a water footprint tile, so this fixture forces the object directly onto _objects the way
 ## test_build.gd/test_colonist_sprites.gd force their own fixtures, exactly
 ## mirroring what _set_object() does internally); forage then accepts that
 ## bush as its target regardless of the tile beneath it, and
 ## _toil_on_work_complete() converts the tile to TILE_FLOOR exactly like any
-## other forage target. Before this fix, a cache already built before that
+## other forage target. Previously, a cache already built before that
 ## mutation kept offering the now-floor tile as a "water" need source
 ## forever after, while a StateCodec-decoded copy -- which always rebuilds
-## its cache from CURRENT _tiles, never a stale one -- would never make that
+## its cache from the current _tiles, never a stale one -- would never make that
 ## mistake, silently diverging live and decoded candidate discovery. This
-## proves the live world's own cache now updates at the same "tile actually
+## proves the live world's cache now updates at the same "tile actually
 ## changed kind" hook that already drives dirty-cell/region/room refreshes in
 ## _toil_on_work_complete(), so live and save/load-restored discovery agree.
 
@@ -54,13 +53,13 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "route": null, "work": null, "carrying": null})
 
-	# Force the water-tile cache to build BEFORE the mutation below, so this
+	# Force the water-tile cache to build before the mutation below, so this
 	# proves the cache is kept in sync, not merely lazily rebuilt fresh every
 	# time (which would hide the bug this test exists to catch).
 	_expect(world._get_water_tiles().has(WATER_TILE),
 		"setup: the water tile cache must include the fixture's own water tile before any mutation")
 
-	# Issue #405: place_object now rejects a water footprint tile with the
+	# place_object now rejects a water footprint tile with the
 	# same typed invalid_target reason it already used for a tree tile, so the
 	# supported command can no longer put the bush on water. Assert that
 	# contract explicitly (it replaced the old "accepted on water" assertion),
@@ -74,7 +73,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	})
 	_expect(not place_result.get("ok", false)
 			and String(place_result.get("rejection", {}).get("reason", "")) == "invalid_target",
-		"place_object must reject a berry_bush on a water tile with invalid_target (issue #405): %s" % place_result)
+		"place_object must reject a berry_bush on a water tile with invalid_target: %s" % place_result)
 	_expect(world.get_object(WATER_TILE.x, WATER_TILE.y).is_empty(),
 		"a rejected place_object must leave the water tile empty")
 	world._set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
@@ -103,7 +102,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 		"the live world's water-tile cache must stop offering a tile that is no longer water once forage converts it to floor")
 
 	# Save/load equivalence: a StateCodec-decoded copy always rebuilds its
-	# cache from CURRENT _tiles (it never had a chance to go stale), so it is
+	# cache from the current _tiles (it never had a chance to go stale), so it is
 	# independent ground truth here -- the live world's own candidates must
 	# now match it exactly, proving the invalidation fix (not merely a decode
 	# side effect) is what keeps them in sync.

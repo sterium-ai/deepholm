@@ -1,13 +1,13 @@
 extends SceneTree
 
-## Exercises the till/sow job kinds (issue #268, colonist-ai.md 3.3/3.8): both
+## Exercises the till/sow job kinds (colonist-ai.md 3.3/3.8): both
 ## are composed only of existing toils (reserve, go_to, work, release_all),
 ## matching dig/chop/forage's own shape, driven purely through world.tick()
 ## like every other job kind (AGENTS.md "one work engine"). till turns a soil
 ## tile into plowed_soil; sow turns a plowed_soil tile into planted and
 ## consumes one existing "seed" item anywhere in the world, rejected
 ## blocked_missing_input (colonist-ai.md 3.8) when none exists. Both use the
-## "farm" labour kind, so t1's labour-priority scheduling and labour_disabled
+## "farm" labour kind, so the labour-priority scheduling and labour_disabled
 ## reason (test_labour_priority_scheduling.gd) apply unchanged.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -288,7 +288,7 @@ func _first_activated_kinds(world: WorldStateType) -> Dictionary:
 ## A loose till job (plus two loose wood items with a stockpile zone, auto-
 ## submitting one "haul" labour job per colonist) proves colonist A activates
 ## its own till job before any haul job, while colonist B activates haul
-## first, exercising t1's labour-priority formula (colonist-ai.md 3.2) for
+## first, exercising the labour-priority formula (colonist-ai.md 3.2) for
 ## till specifically.
 func _check_labour_priority_till_before_haul() -> void:
 	var world := _mixed_labour_world(268004)
@@ -331,12 +331,12 @@ func _check_labour_priority_sow_before_haul() -> void:
 ## With "farm" set to 0 for the colony's only colonist, a queued till and a
 ## queued sow job must both report reason "labour_disabled" via get_jobs() and
 ## stay queued for as long as the colonist works other labour kinds -- proven
-## here by driving the world until dig, chop, AND the auto-submitted haul job
+## here by driving the world until dig, chop, and the auto-submitted haul job
 ## (three different labour kinds, none of them "farm") each actually reach
 ## "completed", re-checking till/sow's queued/labour_disabled status every
 ## tick along the way rather than once up front -- mirrors
 ## test_labour_priority_scheduling.gd's own _check_labour_disabled_reason().
-## Issue #359: the dig target moved from (3,0) -- on both item_wood_1's own
+## The dig target moved from (3,0) -- on both item_wood_1's own
 ## column (3,3) and, tried next, the straight-line path any haul delivery
 ## from further out takes back to the (10,0) zone -- to (9,9), well outside
 ## every other target/item/zone this scenario uses and never itself between
@@ -354,7 +354,7 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
 	world._next_item_id = 2
-	# dig/chop's needs_tool fetch_tool toil (issue #271) requires a matching
+	# dig/chop's needs_tool fetch_tool toil requires a matching
 	# tool to exist somewhere; both sit right under the colonist so this
 	# test's dig/chop completion checks are unaffected by travel time.
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -404,7 +404,7 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	_expect(chop_done, "chop work must proceed to completion while only farm is disabled")
 	_expect(haul_done, "haul work must proceed to completion while only farm is disabled")
 
-## Save-state regression for the new content (issue #268 review round 1):
+## Save-state regression for the new content:
 ## docs/architecture/contracts/game-state.schema.json's map.tiles.items.enum
 ## and jobs.items.properties.kind.enum both now list plowed_soil/planted and
 ## till/sow. Drives a world to hold one plowed_soil tile (tilled, not sown)
@@ -458,7 +458,7 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 	_expect(kinds.has("till"), "save state's jobs must include the literal 'till' kind the schema enum now declares")
 	_expect(kinds.has("sow"), "save state's jobs must include the literal 'sow' kind the schema enum now declares")
 
-## Review round 2 finding: a save state holding the new content must also
+## A save state holding the new content must also
 ## pass SaveIO's own runtime schema validator (save_io.gd's
 ## _validate_state()), not just the JSON contract schema the check above
 ## already proves against docs/architecture/contracts/game-state.schema.json.
@@ -495,7 +495,7 @@ func _check_save_state_passes_runtime_validator() -> void:
 	_expect(validation.get("ok", false),
 		"a save state holding plowed_soil/planted tiles and till/sow jobs must pass SaveIO._validate_state(), got %s" % validation.get("message", ""))
 
-## Review round 2 finding: consuming the last carried seed while its haul is
+## Consuming the last carried seed while its haul is
 ## paused for a critical-need interrupt must still fail that haul
 ## blocked_missing_input and clear its _paused_jobs entry, the same as when
 ## the haul is merely mid-flight (_check_sow_counts_a_seed_mid_haul() above).
@@ -588,8 +588,8 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 			break
 	_expect(eat_completed, "the need job that interrupted the haul must still be free to complete, unaffected by the haul's cancellation")
 
-## Review round 4 finding: the reservation table only guarantees no other
-## order-driven job was ACTIVE on a till job's target tile at the same time,
+## The reservation table only guarantees no other
+## order-driven job was active on a till job's target tile at the same time,
 ## not that the tile still matches by completion time (e.g. a need interrupt
 ## can release a paused till job's own reservation, letting a second order on
 ## the same tile activate and complete first). Simulates that by mutating the
@@ -626,7 +626,7 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_FLOOR,
 		"a stale till job's completion must not overwrite the tile changed by another job")
 
-## Review round 4 finding: two sow orders queued for the SAME plowed_soil
+## Two sow orders queued for the same plowed_soil
 ## tile, with two seeds available (so the seed itself is never the limiting
 ## factor), can both be accepted -- only one may be active at once, but the
 ## second activates right after the first completes and plants the tile.
@@ -673,7 +673,7 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 			remaining_seeds += int(item.get("count", 1))
 	_expect(remaining_seeds == 1, "only one of the two available seeds may be consumed; the stale second sow must not consume the other, got %d" % remaining_seeds)
 
-## Review round 4 finding: HaulGiver attaches a loose seed to a haul job the
+## HaulGiver attaches a loose seed to a haul job the
 ## moment it appears, even with no stockpile zone to receive it -- that haul
 ## job then sits queued forever under blocked_destination_full, never picking
 ## the seed up. An ordinary sow consuming that same ground seed must still

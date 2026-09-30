@@ -1,8 +1,10 @@
 # WorldState command contract
 
+> **In short:** Every change to the game world goes through a command or a clock tick. This page lists what a command looks like, how it can be rejected, and how the world can be read without changing it.
+
 `WorldState.apply(command)` and `WorldState.tick()`
 (`game/scripts/core/world_state.gd`) are the only two ways to mutate
-simulation state. This document records the wire shapes so later tasks can
+simulation state. This document records the wire shapes so callers can
 build on them without reading the implementation.
 
 ## Command envelope
@@ -18,12 +20,11 @@ A command is a `Dictionary` with:
 | `payload`    | Dictionary | yes      | values must be `String` or `int`         |
 
 Any other payload value shape (float, bool, array, nested dictionary,
-object) is rejected as `invalid_payload`. This task implements only the
-`noop` command type, which records a `command_applied` event and echoes the
-payload back; it exists to prove the mechanism, not as production content.
-Future command types register their own `match` arm in `apply()` and, if
-they introduce new rejection reasons or event `data` shapes, document them
-here.
+object) is rejected as `invalid_payload`. The `noop` command type records a
+`command_applied` event and echoes the payload back; it exists to exercise
+the mechanism, not as gameplay content. Every other command type has its own
+`match` arm in `apply()`; a new type that introduces rejection reasons or
+event `data` shapes documents them here.
 
 ## apply() result
 
@@ -62,7 +63,7 @@ attributed to.
 
 ## preview() (read-only dry run)
 
-`WorldState.preview(command) -> Dictionary` (issue #346) runs the exact same
+`WorldState.preview(command) -> Dictionary` runs the exact same
 envelope validation and pre-mutation rule `apply()` would, without mutating
 state: `state_hash()` is identical before and after a call. Returns the same
 shape as `apply()` (`{"ok": true}` on success -- no `"applied"` block, since
@@ -72,11 +73,13 @@ by `game/scripts/core/commands/command_checks.gd`'s `CommandChecks.check()`,
 the rule set both `preview()` and (for every type but `complete_job`/
 `cancel_job`/`fail_job`/`invalidate_job`) `apply()`'s own handlers consult, so
 a hover/drag preview can never disagree with what committing the same command
-would do. Covers every command type `apply()` dispatches: `dig`, `chop`,
-`forage`, `till`, `sow`, `complete_job`, `cancel_job`, `fail_job`,
-`invalidate_job`, `place_object`, `remove_object`, `set_labour`,
-`set_faction`, `spawn_incident`, `zone_add`, `zone_remove` each have a check
-function; `noop` always previews `{"ok": true}` once envelope validation
+would do. `dig`, `chop`, `forage`, `till`, `sow`, `mine`, `complete_job`,
+`cancel_job`, `fail_job`, `invalidate_job`, `place_object`, `remove_object`,
+`set_labour`, `set_faction`, `spawn_incident`, `zone_add` and `zone_remove`
+each have a check function. `build`, `build_line`, `cancel_site` and
+`place_object` are previewed through `WorldState`'s own construction and
+placement checks, the same functions their `apply()` handlers run. `noop`
+always previews `{"ok": true}` once envelope validation
 passes (its own `apply()` handler never rejects); an unrecognized type
 previews the same `unknown_command_type` rejection `apply()`'s dispatch
 fallback would produce.
@@ -92,8 +95,7 @@ mirroring it, so the rule stays in exactly one place:
   same rejection `apply()` will get from `JobQueue.submit_dig()`. It is
   consulted by `preview()`'s dispatcher only: `apply()`'s
   `_apply_job_command()` always calls through to `JobQueue.submit_dig()`
-  itself for a target-valid command (unchanged since before issue #346), so
-  an unsupported priority still produces `JobQueue`'s own `job_rejected`
+  itself for a target-valid command, so an unsupported priority still produces `JobQueue`'s own `job_rejected`
   event and advances its sequence counter, not just an early
   `WorldState`-level rejection.
 - `check_terminal_job_command()` calls `JobQueue.check_terminal(job_id,
@@ -101,8 +103,7 @@ mirroring it, so the rule stays in exactly one place:
   for `complete_job`/`cancel_job`/`fail_job`/`invalidate_job`. It, too, is
   consulted by `preview()` only: `apply()`'s own terminal branch keeps going
   through `JobQueue._finish()` itself so a rejected terminal command still
-  produces the same `job_rejected` + `command_rejected` event pair it always
-  has.
+  produces the same `job_rejected` + `command_rejected` event pair.
 
 ## Reads (non-mutating)
 
@@ -132,9 +133,9 @@ remain the only two ways to change what a later `get_*()` call returns.
 
 Colonists are placed once at construction, only on `floor` tiles inside the
 spawn rectangle (`WorldState.SPAWN_AREA_*`). `jobs` (`Array[Dictionary]`)
-and `reservations` (`Dictionary`) start empty; this task defines no schema
-for their eventual entries beyond "a later task fills them in through
-`apply()`".
+and `reservations` (`Dictionary`) start empty and are filled only through
+`apply()` and `tick()`; their entry shapes are documented with the job queue
+([`../jobs/README.md`](../jobs/README.md)).
 
 ## Event shape
 
@@ -166,4 +167,4 @@ diagnostic/test fixture for detecting divergence between two replays, not a
 save format. Persistence (`schemaVersion`, `contentVersion`, and the shapes
 in
 [`docs/architecture/contracts/game-state.schema.json`](../../../../docs/architecture/contracts/game-state.schema.json))
-is out of scope for this task and this file does not change that schema.
+is documented in [`docs/architecture/save-system.md`](../../../../docs/architecture/save-system.md).

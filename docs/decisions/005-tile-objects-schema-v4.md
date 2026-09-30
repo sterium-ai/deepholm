@@ -1,14 +1,16 @@
 # ADR 005: Persisted tile objects and schemaVersion 4
 
+> **In short:** Furniture such as chairs, doors, walls and tables can now sit on map tiles and is kept in save files, with older saves upgraded automatically.
+
 - **Status:** accepted
 - **Date:** 2026-09-18
 - **Scope:** simulation (`WorldState`), persistence (save schema and migration)
 - **Implements:** [ADR 003](003-scheduling-explainability-save-integrity-mobile-first.md),
-  principle 3 (save integrity is a named strategy); objective #176.
+  principle 3 (save integrity is a named strategy).
 
 ## Context
 
-Objective #176 asks for placeable tile objects (chair, door, wall, table) as
+The game needs placeable tile objects (chair, door, wall, table) as
 declared content, with `WorldState` tracking which tile carries which object.
 This is a new persisted, public data shape: `game-state.schema.json` and the
 save envelope both change, so per `AGENTS.md` ("update the relevant contract,
@@ -20,14 +22,14 @@ boundary") the decision needs a numbered ADR, not just an implementation.
 1. **One object per tile.** `WorldState` stores at most one object kind per
    `(x, y)` tile, mirroring the existing `_ground_items` map rather than
    introducing a second, differently-shaped collection. There is no stacking
-   or multi-object tile in this task; a future task that needs more than one
+   or multi-object tile; a future feature that needs more than one
    occupant per tile must revisit this ADR.
 2. **Content-declared kinds.** Valid object kinds are declared in
    `game/content/objects.json`, each with `passable`, `move_cost`, and
    `is_door`, matching the vocabulary in
-   [`colonist-ai.md`](../architecture/colonist-ai.md) section 3.5. This task
-   only declares the content; no passability/cost function or renderer reads
-   these fields yet (deferred to tasks t2 and t6).
+   [`colonist-ai.md`](../architecture/colonist-ai.md) section 3.5. This
+   decision only declares the content; no passability/cost function or
+   renderer reads these fields yet (both deferred to later work).
 3. **Detached accessors.** `WorldState` exposes `get_object(x, y) -> String`
    (`""` for no object) and `get_objects() -> Array[Dictionary]` (copies of
    `{x, y, kind}`), the same read shape already used for ground items, so
@@ -52,9 +54,9 @@ boundary") the decision needs a numbered ADR, not just an implementation.
   map matches how tiles and ground items are already modeled and keeps
   lookup by position O(1).
 - **Allow multiple objects per tile now, anticipating future stacking.**
-  Rejected: nothing in objective #176 or `colonist-ai.md` 3.5 asks for
-  stacking, and speculative multi-occupancy would force route/passability
-  code (task t2) to handle a case with no current content or test coverage.
+  Rejected: nothing in the tile-object requirements or `colonist-ai.md` 3.5
+  asks for stacking, and speculative multi-occupancy would force
+  route/passability code to handle a case with no current content or test coverage.
 - **Skip the schema/version bump and treat `objects` as an optional field.**
   Rejected: `save-system.md` and ADR 003 already forbid silently defaulting a
   missing required field; an optional field would let an old save silently
@@ -74,7 +76,7 @@ boundary") the decision needs a numbered ADR, not just an implementation.
   `test_save_migration.gd` gains a schemaVersion-3 fixture covering it.
 - No passability/movement-cost function, `place_object`/`remove_object`
   commands, route search, or renderer change is introduced by this ADR; they
-  are explicitly deferred to tasks t2, t5, and t6.
+  are explicitly deferred to later work.
 
 ## Acceptance criteria
 

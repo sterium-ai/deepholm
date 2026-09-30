@@ -1,13 +1,13 @@
 extends SceneTree
 
-## Coverage for issue #243/#238: a need interrupt firing while a colonist is
+## A need interrupt firing while a colonist is
 ## mid-haul must never lose or duplicate the carried item, and a save taken
 ## while a need job, a paused work job (with kept tile progress), and an
 ## in-flight haul all coexist must restore byte-for-byte, matching an
 ## uninterrupted run's state_hash() at the same tick. Both checks exercise the
 ## existing job-queue/scheduler/toil-executor pipeline and NeedGiver/HaulGiver
-## job-givers (AGENTS.md "one work engine") -- no decision logic changes here,
-## only scenario coverage and the schema-14 save-format changes it needed.
+## job-givers (AGENTS.md "one work engine"); the test adds scenario coverage
+## only, no decision logic.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -88,7 +88,7 @@ func _first_event_tick(world: WorldStateType, event_type: String, job_id: String
 
 ## The shared ReservationTable JobQueue._tick_haul()/suspend()/reactivate()
 ## acquire and release a haul job's "item:"/"cell:" keys on (colonist-ai.md
-## 3.4/#189); reused here rather than re-implemented so this test observes the
+## 3.4); reused here rather than re-implemented so this test observes the
 ## exact same ledger the scheduler enforces.
 func _reservation_owner(world: WorldStateType, key: String) -> String:
 	return world._scheduler.queue.get_reservation_table().owner(key)
@@ -212,7 +212,7 @@ func _check_combined_round_trip_matches_uninterrupted_run(seed_value: int) -> vo
 		"a save taken mid-scenario must persist NeedGiver's own colonist->job association (seed %d)" % seed_value)
 	_expect((saved["pausedJobs"] as Array).size() == 1,
 		"a save taken mid-scenario must persist the paused dig job (seed %d)" % seed_value)
-	# Round-6 review (#278/#303): a suspended job's own progress is persisted
+	# A suspended job's own progress is persisted
 	# via job-id-keyed "suspendedWorkProgress", not the shared tile-keyed
 	# "workProgress" array -- world_state.gd's own _suspend_work_progress()
 	# moves it out the instant the interrupt clears colonist.work, so a
@@ -291,8 +291,8 @@ func _check_haul_interrupted_by_need_preserves_wood(seed_value: int) -> void:
 			world._colonists[i]["needs"]["food"] = 5
 
 	# Watches the haul job's own status rather than NeedGiver.get_pending_assignments():
-	# once the scheduler actually gives the committed need job priority (issue
-	# #267's committed_needs fix, replacing the old score-based restrict_to
+	# once the scheduler actually gives the committed need job priority (the
+	# committed_needs mechanism, which replaced an old score-based restrict_to
 	# race the interrupted haul job used to always win), a short-distance need
 	# can commit, resolve, and hand the colonist straight back to the haul job
 	# within a single world.tick() call -- too fast for between-tick sampling
@@ -325,7 +325,7 @@ func _check_haul_interrupted_by_need_preserves_wood(seed_value: int) -> void:
 		"the interrupted haul job must be paused (queued, restricted back to this colonist), not terminated (seed %d)" % seed_value)
 
 	# The item/destination cell reservations JobQueue._tick_haul() acquired at
-	# activation (colonist-ai.md 3.4/#189) must not outlive the suspend() that
+	# activation (colonist-ai.md 3.4) must not outlive the suspend() that
 	# paused this job (JobQueue.suspend() -> ReservationTable.release_all()):
 	# right after interruption they are either released (owner "") or, if
 	# nothing has claimed them yet, still owned by this same haul job -- never
@@ -345,8 +345,8 @@ func _check_haul_interrupted_by_need_preserves_wood(seed_value: int) -> void:
 		_expect(_total_wood_units(world) == 1,
 			"wood must never be lost or duplicated while the haul resumes (seed %d, tick %d)" % [seed_value, world.get_tick()])
 		var ids := _wood_item_ids(world)
-		# place() now always mints a fresh item id (issue #402: hands entries
-		# have no id of their own to preserve across a pick_up/place round
+		# place() always mints a fresh item id (hands entries have no id of
+		# their own to preserve across a pick_up/place round
 		# trip), so the ground wood item's id may legitimately change once the
 		# haul deposits it -- only "never more than one at a time" still holds.
 		_expect(ids.size() <= 1,
@@ -396,7 +396,7 @@ func _check_haul_interrupted_by_need_preserves_wood(seed_value: int) -> void:
 		"the colonist must no longer be carrying anything once the haul completes (seed %d)" % seed_value)
 
 ## --- (c) a rest interrupt firing while a colonist carries wood mid-haul must
-## actually complete sleep, not stall on arrival (round-6 review): sleep's
+## actually complete sleep, not stall on arrival: sleep's
 ## toils ([reserve, go_to, work, release_all]) have no pick_up of their own,
 ## so ToilExecutor's is_first/_next_toil_after_go_to selection must be read
 ## off SLEEP's own declared sequence, never off the colonist's leftover

@@ -39,10 +39,10 @@ func _check_tile_set_and_mappings() -> void:
 	]
 	for kind in required_kinds:
 		_check_mapping(TileAtlasMapType.TILE_ATLAS_MAP, kind)
-	# issue #300 Goal: river tiles must already read as water, unambiguously,
-	# in art mode -- #299 had TILE_WATER reuse TILE_HAZARD's own cell.
+	# River tiles must already read as water, unambiguously,
+	# in art mode; an earlier version had TILE_WATER reuse TILE_HAZARD's cell.
 	_expect(not _same_cell(TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_WATER], TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_HAZARD]),
-		"TILE_WATER must not share TILE_HAZARD's atlas cell (an unambiguous representation is part of this task's acceptance)")
+		"TILE_WATER must not share TILE_HAZARD's atlas cell (water needs an unambiguous representation)")
 
 	var required_object_kinds := ["chair", "door", "wooden_wall", "stone_wall", "table", "berry_bush", "bed"]
 	for kind in required_object_kinds:
@@ -54,7 +54,7 @@ func _check_tile_set_and_mappings() -> void:
 	for kind in required_decor_kinds:
 		_check_mapping(TileAtlasMapType.TILE_DECOR_MAP, kind)
 
-	# issue #301 Goal: every tile kind AND every object kind gets its own
+	# Every tile kind AND every object kind gets its own
 	# distinct registered cell -- no sharing. Distinctness is keyed by
 	# (source_id, coords) together, not coords alone: many single-crop
 	# sources legitimately reuse local coords (0,0) for their one tile, so
@@ -92,19 +92,19 @@ func _check_tile_set_and_mappings() -> void:
 
 	_check_cells_fully_opaque(required_kinds)
 	# Every TILE_SOIL prairie variant must itself be a registered atlas tile
-	# (issue #301 Goal: hash-selected grass variants, never by frame).
+	# (grass variants are selected by hash, never by frame).
 	var variants: Array[Vector2i] = TileAtlasMapType.TILE_SOIL_VARIANTS
 	if variants.size() < 2:
 		_fail("TILE_SOIL_VARIANTS must offer discrete prairie variation (at least 2), found %d" % variants.size())
 	for variant_coords in variants:
 		if not _tile_set.get_source(TileAtlasMapType.SOURCE_FLOORS).has_tile(variant_coords):
 			_fail("TILE_SOIL_VARIANTS entry %s is not a registered atlas tile" % variant_coords)
-	# wolf/trader actor-kind lookup entries (issue #296 acceptance item 5).
+	# wolf/trader actor-kind lookup entries.
 	var required_actor_kinds := ["wolf", "trader"]
 	for kind in required_actor_kinds:
 		_check_mapping(TileAtlasMapType.ACTOR_ATLAS_MAP, kind)
-	# Carried-item marker and stockpile-count rendering (issue #189
-	# acceptance item 7) both resolve "wood" through this table.
+	# Carried-item marker and stockpile-count rendering both resolve
+	# "wood" through this table.
 	for kind in ["wood", "stone", "axe", "pick"]:
 		_expect(TileAtlasMapType.ITEM_ATLAS_MAP.has(kind), "required item mapping: %s" % kind)
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
@@ -115,7 +115,7 @@ func _check_tile_set_and_mappings() -> void:
 	if TileAtlasMapType.ITEM_ATLAS_MAP.has("stone"):
 		_check_unique(seen, TileAtlasMapType.ITEM_ATLAS_MAP["stone"], "stone item")
 		_expect(not _same_cell(TileAtlasMapType.ITEM_ATLAS_MAP["stone"], TileAtlasMapType.ITEM_ATLAS_MAP["wood"]), "stone and wood must have distinct icons")
-	# Issue #428: axe/pick must each be their own distinct registered cell,
+	# Axe/pick must each be their own distinct registered cell,
 	# not sharing wood's, stone's, or each other's (source_id, coords).
 	if TileAtlasMapType.ITEM_ATLAS_MAP.has("axe"):
 		_check_unique(seen, TileAtlasMapType.ITEM_ATLAS_MAP["axe"], "axe item")
@@ -129,11 +129,10 @@ func _check_tile_set_and_mappings() -> void:
 			_expect(not _same_cell(TileAtlasMapType.ITEM_ATLAS_MAP["pick"], TileAtlasMapType.ITEM_ATLAS_MAP["stone"]), "pick and stone must have distinct icons")
 		if TileAtlasMapType.ITEM_ATLAS_MAP.has("axe"):
 			_expect(not _same_cell(TileAtlasMapType.ITEM_ATLAS_MAP["pick"], TileAtlasMapType.ITEM_ATLAS_MAP["axe"]), "pick and axe must have distinct icons")
-	# Issue #428 rounds 1-3 regression: every registered tool crop must show a
-	# head set ACROSS its haft (hammer/hatchet/pick silhouette), never a
-	# spike, trowel or scraper blade running along the handle. Rounds 2 and 3
-	# once shipped such icons; registration and
-	# uniqueness checks cannot see the difference, the pixels can.
+	# Regression: every registered tool crop must show a head set across its
+	# haft (hammer/hatchet/pick silhouette), never a spike, trowel or scraper
+	# blade running along the handle. Earlier versions shipped such icons;
+	# registration and uniqueness checks cannot see the difference, the pixels can.
 	for kind in ["axe", "pick"]:
 		if TileAtlasMapType.ITEM_ATLAS_MAP.has(kind):
 			_check_tool_head_across_haft(kind)
@@ -185,8 +184,8 @@ func _check_tool_head_across_haft(kind: String) -> void:
 
 ## ITEM_ATLAS_MAP's direct-draw entries (drawn via
 ## draw_texture_rect_region()/region_rect, never a TileMapLayer cell) carry
-## their own texture_path/rect ALONGSIDE a source_id/coords pair that
-## resolves the SAME crop's registered TileSetAtlasSource tile. Field/file
+## their own texture_path/rect alongside a source_id/coords pair that
+## resolves the same crop's registered TileSetAtlasSource tile. Field/file
 ## existence alone would accept a texture_path/rect pointing at a crop that
 ## has drifted from what source_id/coords actually registers (an incorrect
 ## or empty crop); this instead re-derives the registered texture and pixel
@@ -315,7 +314,7 @@ func _check_cells_fully_opaque(required_kinds: Array) -> void:
 ## geometry, not trust the coordinate tables. Re-derives each grass edge/
 ## corner/concave cell's real grass (opaque) distribution directly from
 ## the terrain sheet's own pixels and asserts the named direction/quadrant has
-## LESS grass coverage than its opposite -- i.e. that direction is really
+## less grass coverage than its opposite -- i.e. that direction is really
 ## where a foreign neighbour's material would show through.
 func _check_grass_blob_orientation() -> void:
 	var source := _tile_set.get_source(TileAtlasMapType.SOURCE_FLOORS)

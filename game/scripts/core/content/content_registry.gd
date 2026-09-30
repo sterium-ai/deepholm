@@ -31,14 +31,14 @@ const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
 const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id"}
 
 ## Compile-time mirror of content/tiles.json ids and content/mapgen.json's
-## colonist_count field: the only literal source for values ~20 tests and the
-## out-of-scope viewer read as WorldState.<NAME> class constants, something
+## colonist_count field: the only literal source for values many tests and
+## the viewer read as WorldState.<NAME> class constants, something
 ## GDScript's const-folding cannot source from a runtime-loaded JSON file.
 ## world_state.gd's own TILE_*/COLONIST_COUNT consts alias these rather than
-## redeclaring the literals. There is no compile-time SPAWN_AREA_* mirror
-## (issue #300): the colonist spawn clearing is chosen dynamically per world
+## redeclaring the literals. There is no compile-time SPAWN_AREA_* mirror:
+## the colonist spawn clearing is chosen dynamically per world
 ## by WorldGenerator.place_spawn(), not a single fixed rectangle -- see
-## WorldState.get_spawn_clearing() and docs/decisions/020.
+## WorldState.get_spawn_clearing() and ADR 020.
 const TILE_ROCK := "rock"
 const TILE_SOIL := "soil"
 const TILE_FLOOR := "floor"
@@ -93,12 +93,11 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 			return
 
 	## Every discovered game/content/*.json file is loaded and validated when
-	## it has a matching game/content/schemas/*.schema.json file (the task's
-	## "every ... file that has a matching schema" clause) -- not just the
-	## fixed COLLECTION_KINDS/DOCUMENT_KINDS list, so a future content kind
-	## added with its schema is never silently skipped. A required kind
-	## missing its schema is still a fatal ERROR_MISSING_FILE, exactly as
-	## before; a non-required file with no matching schema is simply not this
+	## it has a matching game/content/schemas/*.schema.json file -- not just
+	## the fixed COLLECTION_KINDS/DOCUMENT_KINDS list, so a future content
+	## kind added with its schema is never silently skipped. A required kind
+	## missing its schema is a fatal ERROR_MISSING_FILE; a non-required file
+	## with no matching schema is simply not this
 	## registry's concern and is left unread.
 	var raw_by_kind: Dictionary = {}
 	var extra_kinds: Array[String] = []
@@ -586,10 +585,10 @@ func _validate_node(value, schema: Dictionary, path: String) -> Dictionary:
 ## A schema's "type" may be an array of type names (e.g. ["string", "null"]),
 ## standard JSON Schema for "this field is one of several primitive shapes" --
 ## used by jobs.schema.json's yields.find_table[].item, which is either an
-## item id string or null (issue #357 review round 1: a bare "item": {} schema
-## silently accepted any JSON value, so a wrong-typed item was only caught
-## later, by _check_references(), which misreported it as a dangling
-## reference instead of a structural violation). value passes when it matches
+## item id string or null (a bare "item": {} schema would silently accept
+## any JSON value, so a wrong-typed item would only be caught later, by
+## _check_references(), and misreported as a dangling reference instead of a
+## structural violation). value passes when it matches
 ## at least one option; sibling constraints (minLength, minimum, ...) are
 ## re-checked per option against a duplicated schema, so they only apply to
 ## the option they belong to -- minLength never rejects a null value just
@@ -608,23 +607,22 @@ func _validate_node_against_type_options(value, schema: Dictionary, type_options
 ## a declared item of kind "tool"; a job's toils must all be toils
 ## ToilExecutor implements; a need's source_kind must either be the reserved
 ## literal "tile" (a generated-terrain source, not content-declared -- see
-## world_state.gd's TILE_* constants, out of this task's scope to move into
-## content) or name a declared object kind; every faction's relations row
-## (docs/decisions/015-factions-and-relations.md) must name only other
+## world_state.gd's TILE_* constants, which are not content-driven) or
+## name a declared object kind; every faction's relations row
+## (docs/decisions/014-factions-and-relations.md) must name only other
 ## declared faction ids, one row per other faction, no self-row, and each
 ## value must be a JSON string that is a known relation value -- checked in
 ## that order (own type before RelationsType.is_known_relation_value()) so a
 ## non-string JSON value (number, boolean, null, array, object) never reaches
 ## a GDScript String() conversion, which throws "Nonexistent 'String'
 ## constructor" for those types instead of returning gracefully (verified
-## directly in this engine version); and an actor definition's optional faction_id (not
-## yet declared by any real content/actors.json entry -- adding it there is
-## a later task's scope, see the ADR) must name a declared faction id when
-## present. Issue #278/round-3 (issue #403: build_cost became a list of
-## {item, quantity}, one entry per required kind, not a single object): an
-## object's optional build_cost entries name the wood/stone/etc a `build` job
-## hauls from a stockpile before placing the object (see content/jobs.json's
-## "build" entry) -- exactly the same shape of cross-file reference as a
+## directly in this engine version); and an actor definition's optional
+## faction_id (not yet declared by any real content/actors.json entry; see
+## the ADR) must name a declared faction id when present. An object's
+## optional build_cost is a list of {item, quantity}, one entry per required
+## kind, naming the wood/stone/etc a construction site needs delivered
+## before the object is placed (ADR 040) -- exactly the same shape of
+## cross-file reference as a
 ## job's needs_tool above, checked the same way for every list position: an
 ## undeclared item id at any index fails construction typed
 ## dangling_reference naming objects.json, never loading as valid content
@@ -728,7 +726,7 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 				return {"ok": false, "file": "actors.json",
 					"message": "actor '%s' faction_id '%s' names an unknown faction id" % [actor_id, faction_id]}
 
-	## F5 incidents (foundation-for-breadth.md F5, issue #294): an incident's
+	## F5 incidents (foundation-for-breadth.md F5): an incident's
 	## faction must name a declared faction id, and its spawn.actor_def must
 	## name a declared actor id -- the same dangling_reference typed error as
 	## every other cross-file check above, never a silent skip.
@@ -746,8 +744,8 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 
 	return {"ok": true}
 
-## Structural validation of a job's optional yields.find_table (issue #357,
-## docs/decisions/025-trench-trapped-actor-and-rescue.md): each entry's weight
+## Structural validation of a job's optional yields.find_table
+## (docs/decisions/026-trench-trapped-actor-and-rescue.md): each entry's weight
 ## is already a non-negative integer per jobs.schema.json's "integer"/
 ## "minimum: 0", but the table's weights summing to exactly 100 is a
 ## cross-field arithmetic rule the minimal JSON Schema subset (_validate_node)

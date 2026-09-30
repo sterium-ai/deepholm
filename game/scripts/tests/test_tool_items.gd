@@ -1,14 +1,14 @@
 extends SceneTree
 
-## Covers issue #213: axe/pick tool items and their persistence.
+## Covers axe/pick tool items and their persistence.
 ## content/items.json declares axe and pick as kind "tool"; content/jobs.json's
 ## dig/chop declare needs_tool; WorldState gains identity-bearing tool item
 ## storage (ground/held/stockpile location) plus an item reservation map
 ## (colonist-ai.md 3.4's "no reservation outlives its job" invariant, reused
-## via reservation_invariants.gd). Issue #271 added the fetch_tool toil itself
+## via reservation_invariants.gd). Also covers the fetch_tool toil
 ## (colonist-ai.md 2/3.3): see _check_fetch_tool_success_frees_no_travel() and
-## _check_blocked_no_tool_frees_colonist_for_other_work() below. Issue #266
-## added drop_tool and the foreign-reservation handover wait
+## _check_blocked_no_tool_frees_colonist_for_other_work() below; drop_tool and
+## the foreign-reservation handover wait
 ## (_check_foreign_reservation_triggers_drop_tool_handover()) and the
 ## destroyed-mid-job failure path
 ## (_check_destroyed_tool_fails_job_and_requeues_with_backoff()).
@@ -427,7 +427,7 @@ func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
 	return {}
 
 ## The single wood item still on the ground, or {} when none: place() now
-## always mints a fresh item id (issue #402: hands entries have no id of
+## always mints a fresh item id (hands entries have no id of
 ## their own to preserve across a pick_up/place round trip), so a delivered
 ## item's final ground location must be found by kind, not by its original
 ## "item_1" id.
@@ -437,7 +437,7 @@ func _wood_item(world: WorldStateType) -> Dictionary:
 			return item
 	return {}
 
-## Issue #271's fetch_tool toil: a pick reachable of the colonist's own dig
+## fetch_tool toil: a pick reachable of the colonist's own dig
 ## target lets the job run to completion through fetch_tool/reserve/go_to/
 ## work/release_all with no blocked_no_tool detour.
 func _check_fetch_tool_success_frees_no_travel() -> void:
@@ -456,15 +456,15 @@ func _check_fetch_tool_success_frees_no_travel() -> void:
 	var colonist := world.get_colonists()[0]
 	_expect(String(colonist.get("held_tool", "")) != "", "the colonist must still hold the pick after the job completes")
 
-## Issue #271's blocked_no_tool: a dig job submitted where no pick exists
+## blocked_no_tool: a dig job submitted where no pick exists
 ## anywhere exposes reason blocked_no_tool/remedy craft_or_find:pick while
 ## staying an ordinary queued (non-terminal) job -- exactly like any other
 ## blocked job ADR 004 skips (job_queue.gd's own BLOCKED_TARGET_RESERVED etc.)
 ## -- freeing its colonist for other work the same tick instead of terminally
-## failing and resubmitting a lookalike replacement under a new id (round 3
-## review: that would reset its aging and make cancel_job() on the original id
-## report job_already_terminal). The colonist must go on to complete a
-## different, tool-free job (forage) in the same run, and the ORIGINAL job id
+## failing and resubmitting a lookalike replacement under a new id (which
+## would reset its aging and make cancel_job() on the original id report
+## job_already_terminal). The colonist must go on to complete a
+## different, tool-free job (forage) in the same run, and the original job id
 ## must still be the live, cancellable order the whole time.
 func _check_blocked_no_tool_frees_colonist_for_other_work() -> void:
 	var world := _build_single_dig_world(271002)
@@ -502,14 +502,14 @@ func _check_blocked_no_tool_frees_colonist_for_other_work() -> void:
 
 	var dig_after := _find_job(world, dig_id)
 	_expect(String(dig_after.get("status", "")) == "queued",
-		"the blocked dig job must remain the SAME queued job the whole time, not a terminal failure replaced by a resubmission")
+		"the blocked dig job must remain the same queued job the whole time, not a terminal failure replaced by a resubmission")
 	var cancel_result := _command(world, "cancel_dig", "cancel_job", {"job_id": dig_id})
 	_expect(cancel_result.get("ok", false),
 		"a dig job blocked on a missing tool must still be cancellable by its original id, got %s" % cancel_result)
 	_expect(String(_find_job(world, dig_id).get("status", "")) == "cancelled",
 		"cancelling the blocked dig job must actually mark it cancelled")
 
-## Issue #271 round 3 review finding: the "already holds a matching tool"
+## The "already holds a matching tool"
 ## fast path must actually reserve it for the new job (or refuse to treat it
 ## as satisfied when another job already owns that reservation), not merely
 ## compare item kind -- otherwise a colonist's second matching job proceeds
@@ -559,10 +559,10 @@ func _check_held_tool_reuse_respects_other_jobs_reservation() -> void:
 	_expect(world.get_tool_item_reservation(held_id) == "",
 		"the second dig job must also release its own reservation on completion")
 
-## Issue #271 round 3 review finding: pausing a dig job for a critical need
+## Pausing a dig job for a critical need
 ## must release its held tool's job reservation (not just its target tile
 ## reservation), so the tool is genuinely available to another job while this
-## one is suspended; resuming must reacquire the SAME physically-held tool for
+## one is suspended; resuming must reacquire the same physically-held tool for
 ## free (no extra travel) since the interrupt never made the colonist drop it.
 func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 	var world := WorldStateType.new(271004, 10)
@@ -624,7 +624,7 @@ func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 	_expect(world.get_tool_item_reservation(held_id) == "",
 		"the resumed dig job must release the reacquired tool reservation on completion")
 
-## Issue #271 round 3 review finding: find_nearest_free_tool()'s nearest-first
+## find_nearest_free_tool()'s nearest-first
 ## order must not wedge fetch_tool forever on a closer candidate that turns
 ## out unreachable -- a farther, genuinely reachable one must still be tried.
 func _check_fetch_tool_skips_unreachable_candidate_for_farther_one() -> void:
@@ -651,14 +651,14 @@ func _check_fetch_tool_skips_unreachable_candidate_for_farther_one() -> void:
 	_expect(completed,
 		"a dig job must complete by fetching the farther, reachable pick once the nearer one proves unreachable, instead of staying blocked forever")
 
-## Round 4 review finding: _exclude_fetch_candidate() must not re-enter
+## _exclude_fetch_candidate() must not re-enter
 ## _advance_fetch_tool() for the next-nearest candidate within the same tick
 ## -- each candidate's own go_to search already spends a route-search
 ## attempt, so chaining candidate after candidate in one tick could run an
 ## unbounded number of MeasuredRoute.resume() calls for a single colonist in
 ## a single tick, violating ADR 004's aggregate per-tick routing bound. With
 ## two nearer candidates walled off before a farther reachable one, at most
-## one NEW fetch_tool go_to attempt ("enter" in ToilExecutor.trace) may begin
+## one new fetch_tool go_to attempt ("enter" in ToilExecutor.trace) may begin
 ## per tick.
 func _check_fetch_tool_does_not_chain_multiple_candidates_in_one_tick() -> void:
 	var world := WorldStateType.new(271006)
@@ -693,14 +693,14 @@ func _check_fetch_tool_does_not_chain_multiple_candidates_in_one_tick() -> void:
 	_expect(completed,
 		"the dig job must still complete by eventually trying the farthest reachable pick despite two nearer unreachable candidates")
 
-## Round 4 review finding: WorldState._finish_job() unblocked/released before
-## validating the terminal operation, so a rejected command (e.g. complete_job
-## against a still-queued, blocked_no_tool order -- JobQueue.complete() is
-## active_only) permanently discarded the job's tool reservations even though
-## the job itself stayed queued and un-terminated. Round 5 folded
-## blocked_no_tool's recovery into JobQueue's own ordinary queued-job/backoff
-## state (job_queue.gd's _tool_requirement_satisfied()), so this now also
-## proves that state survives a rejected terminal command untouched.
+## WorldState._finish_job() must validate the terminal operation before
+## releasing anything: a rejected command (e.g. complete_job against a
+## still-queued, blocked_no_tool order -- JobQueue.complete() is active_only)
+## must not discard the job's tool reservations while the job itself stays
+## queued. blocked_no_tool's recovery lives in JobQueue's ordinary
+## queued-job/backoff state (job_queue.gd's _tool_requirement_satisfied()),
+## so this also proves that state survives a rejected terminal command
+## untouched.
 func _check_rejected_complete_job_preserves_tool_block_recovery() -> void:
 	var world := _build_single_dig_world(271007)
 	var dig_result := _command(world, "dig_1", "dig", {"x": 2, "y": 0, "priority": 1})
@@ -729,14 +729,13 @@ func _check_rejected_complete_job_preserves_tool_block_recovery() -> void:
 			completed = true
 			break
 	_expect(completed,
-		"a rejected complete_job against a blocked order must leave its recovery tracking intact -- supplying a tool must still reconnect and complete the SAME job id")
+		"a rejected complete_job against a blocked order must leave its recovery tracking intact -- supplying a tool must still reconnect and complete the same job id")
 
-## Round 4 review finding: _resume_paused_job() started a route toward the job
-## target (or the work timer directly) before ToilExecutor's own tool check
-## ran, so a resumed needs_tool job whose tool was taken away while paused
-## could resume its work timer at the fetched tool's location instead of the
-## job target, or reuse a stale job-target route as fetch_tool's own travel
-## leg. Simulates "taken away" by directly moving the held pick to a second,
+## _resume_paused_job() must not start a route toward the job target (or the
+## work timer directly) before ToilExecutor's tool check runs: otherwise a
+## resumed needs_tool job whose tool was taken away while paused could resume
+## its work timer at the fetched tool's location instead of the job target,
+## or reuse a stale job-target route as fetch_tool's own travel leg. Simulates "taken away" by directly moving the held pick to a second,
 ## distant colonist while colonist_0 is paused (a second colonist's own AI is
 ## not under test here) and asserts colonist_0's work toil is only ever
 ## active while it actually stands on/adjacent to the dig target, through a
@@ -810,14 +809,14 @@ func _check_interrupted_job_refetches_and_works_at_job_target_not_tool_location(
 	_expect(world.get_tool_item_reservation(held_id) == "",
 		"the resumed dig job must release the reacquired tool reservation on completion")
 
-## Round 5 review finding: blocked_no_tool's recovery must go through the
+## blocked_no_tool's recovery must go through the
 ## fair scheduler's ordinary labour eligibility check (GlobalAssignment's
 ## _is_labour_enabled(), consulted for every _waiting entry before it may ever
 ## be scored/activated) exactly like any other queued job, not a side-channel
 ## reconnect that bypasses it. Disables "mine" labour for the only colonist
 ## while its dig job sits blocked_no_tool, then supplies a pick: the job must
-## NOT reactivate while labour stays disabled, even though a matching tool
-## now exists -- only once labour is re-enabled does the SAME job (never
+## not reactivate while labour stays disabled, even though a matching tool
+## now exists -- only once labour is re-enabled does the same job (never
 ## replaced by a resubmission) complete.
 func _check_blocked_no_tool_respects_labour_disabled() -> void:
 	var world := _build_single_dig_world(271010)
@@ -852,16 +851,15 @@ func _check_blocked_no_tool_respects_labour_disabled() -> void:
 		if String(_find_job(world, dig_id).get("status", "")) == "completed":
 			completed = true
 			break
-	_expect(completed, "the SAME dig job (id %s) must complete once mine labour is re-enabled and a pick exists" % dig_id)
+	_expect(completed, "the same dig job (id %s) must complete once mine labour is re-enabled and a pick exists" % dig_id)
 
-## Round 5 review finding: dig/chop's own retry_base_ticks/retry_cap_ticks
-## (content/jobs.json) were declared but never read, so an available-but-
-## permanently-unreachable tool could repeatedly retrigger a real route-search
-## attempt every tick with no backoff, and the colonist blocked on it was
-## never proven free to do other work. Isolates a pick fully enclosed by rock
+## dig/chop's own retry_base_ticks/retry_cap_ticks (content/jobs.json) must
+## drive a backoff: otherwise an available-but-permanently-unreachable tool
+## could retrigger a real route-search attempt every tick, and the colonist
+## blocked on it might never be free to do other work. Isolates a pick fully enclosed by rock
 ## (no adjacent passable tile at all, unlike a merely-far-away one) so it can
 ## never be fetched: JobQueue's own activation gate only checks a matching
-## tool EXISTS (a cheap check, colonist-ai.md 2/3.3), so the job still goes
+## tool exists (a cheap check, colonist-ai.md 2/3.3), so the job still goes
 ## active and fetch_tool still tries and fails to reach it -- exactly as it
 ## already does for a merely-unreachable candidate -- but it must always
 ## return to queued/blocked_no_tool afterward rather than getting stuck
@@ -900,12 +898,12 @@ func _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_col
 		var job := _find_job(world, dig_id)
 		_expect(String(job.get("status", "")) in ["queued", "active"],
 			"a permanently blocked dig job must never terminate on its own")
-		# Round 6 review finding: JobQueue.tick()'s reachability check ran
-		# BEFORE the tool-backoff check, so a backed-off job's own reservation
-		# shortcut selection fed a stale/no-search-this-tick _can_reach() result
-		# back into the SAME job and overwrote blocked_no_tool's reason with
+		# The tool-backoff check must run before JobQueue.tick()'s
+		# reachability check: otherwise a backed-off job's reservation-shortcut
+		# selection feeds a stale/no-search-this-tick _can_reach() result back
+		# into the same job and overwrites blocked_no_tool's reason with
 		# blocked_target_unreachable for the entire backoff window, even though
-		# the target itself is genuinely reachable.
+		# the target itself is reachable.
 		if String(job.get("status", "")) == "queued" and int(job.get("backoff_ticks", 0)) > 0:
 			_expect(String(job.get("reason", "")) == "blocked_no_tool",
 				"a permanently-unreachable-tool dig job's reason must stay blocked_no_tool throughout its own backoff window, got '%s' at backoff_ticks=%d" % [job.get("reason", ""), job.get("backoff_ticks", 0)])
@@ -931,13 +929,13 @@ func _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_col
 	_expect(String(_find_job(world, dig_id).get("status", "")) == "queued",
 		"the permanently blocked dig job must remain the same queued job throughout, never terminated")
 
-## Round 6 review finding: JobQueue.tick()'s reachability check ran BEFORE
-## the tool-backoff check (see the reason assertion folded into
+## The tool-backoff check must run before JobQueue.tick()'s reachability
+## check (see the reason assertion in
 ## _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_
 ## colonist() above for the existing-but-unreachable-tool case). This is the
 ## missing-tool case: a dig job with no matching tool anywhere must keep
 ## reporting reason blocked_no_tool/remedy craft_or_find:pick across the
-## ENTIRE backoff window, not merely the tick it is first observed.
+## entire backoff window, not merely the tick it is first observed.
 func _check_blocked_no_tool_reason_survives_backoff_window() -> void:
 	var world := _build_single_dig_world(271012)
 	var dig_result := _command(world, "dig_1", "dig", {"x": 2, "y": 0, "priority": 1})
@@ -963,18 +961,18 @@ func _check_blocked_no_tool_reason_survives_backoff_window() -> void:
 		_expect(String(job.get("remedy", "")) == "craft_or_find:pick",
 			"a dig job's remedy must stay craft_or_find:pick throughout its own backoff window, got '%s'" % job.get("remedy", ""))
 
-## Round 6 review finding: WorldState._toil_on_no_tool_found() reused
-## GlobalAssignment.suspend_assignment(), which unconditionally pins the
-## requeued job's restrict_to to the colonist whose fetch just failed --
-## permanently binding an ordinary dig order to its first colonist even once
-## that colonist's own labour is disabled and a different, still-eligible
-## colonist could complete it. colonist_0 starts adjacent to the dig target
+## WorldState._toil_on_no_tool_found() must requeue through
+## GlobalAssignment.requeue_assignment(), not suspend_assignment(), which pins
+## the requeued job's restrict_to to the colonist whose fetch just failed --
+## that would permanently bind an ordinary dig order to its first colonist
+## even once that colonist's own labour is disabled and a different,
+## still-eligible colonist could complete it. colonist_0 starts adjacent to the dig target
 ## (so it always wins the initial assignment) but the only pick anywhere is
 ## fully enclosed by rock (so its own fetch_tool travel leg proves it
 ## unreachable and triggers on_no_tool_found); colonist_0's mine labour is
 ## then disabled, and only once a second, genuinely reachable pick appears
 ## does colonist_1 -- the only colonist still eligible for "mine" -- complete
-## the SAME order.
+## the same order.
 func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void:
 	var world := WorldStateType.new(271013)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -1016,12 +1014,12 @@ func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void
 			completed = true
 			break
 	_expect(completed,
-		"once colonist_0's labour is disabled, the SAME dig job must still complete -- via colonist_1, the only colonist still eligible -- proving the requeue was not pinned back to colonist_0")
+		"once colonist_0's labour is disabled, the same dig job must still complete -- via colonist_1, the only colonist still eligible -- proving the requeue was not pinned back to colonist_0")
 	_expect(String(_find_colonist(world, "colonist_0").get("held_tool", "")) == "",
 		"colonist_0 must never pick up the new pick while its mine labour stays disabled")
 
-## Round 6 review finding: ToolFetchToil._excluded (per-job, tried-and-
-## unreachable tool-id set) must persist across a REAL SaveIO round trip
+## ToolFetchToil._excluded (per-job, tried-and-unreachable tool-id set) must
+## persist across a real SaveIO round trip
 ## (write_atomic()/read(), schemaVersion 17) -- otherwise a restored run
 ## re-tries a candidate an uninterrupted run had already ruled out, changing
 ## every subsequent tick. Walls off a closer pick (excluded after one failed
@@ -1096,12 +1094,10 @@ func _check_save_io_round_trip_after_candidate_excluded() -> void:
 
 ## SaveMigrations.migrate() must turn an inline schemaVersion-10 Dictionary
 ## literal (no workProgress/pausedJobs/toolItems/toolReservations keys, no
-## entity heldTool/labourTable) all the way to the current schema (13) --
-## with workProgress/pausedJobs backfilled at the v10->v11 step (task #205,
-## merged from main), labourTable backfilled at the v11->v12 step (task
-## #207, merged from main), and toolItems/toolReservations backfilled at the
-## v12->v13 step (task #213's own version bump) -- and pass SaveIO's
-## current-schema validation.
+## entity heldTool/labourTable) all the way to the current schema --
+## with workProgress/pausedJobs backfilled at the v10->v11 step, labourTable
+## at the v11->v12 step, and toolItems/toolReservations at the v12->v13
+## step -- and pass SaveIO's current-schema validation.
 func _check_v10_migration_to_v11() -> void:
 	var v10_state := {
 		"schemaVersion": 10,
@@ -1140,15 +1136,15 @@ func _check_v10_migration_to_v11() -> void:
 	_expect(migrated["toolItems"]["list"] == [], "migrated state's toolItems.list must be honestly empty")
 	_expect(migrated["toolReservations"] == {}, "migrated state's toolReservations must be honestly empty")
 	_expect(not (migrated["entities"][0] as Dictionary).has("heldTool"),
-		"a migrated pre-#213 entity must leave heldTool absent, not backfilled")
+		"a migrated pre-v13 entity must leave heldTool absent, not backfilled")
 	_expect((migrated["entities"][0] as Dictionary).get("labourTable") == {
 			"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3,
-		}, "a migrated pre-#207 entity must be backfilled to the default all-3 labourTable")
+		}, "a migrated pre-v12 entity must be backfilled to the default all-3 labourTable")
 
 	var validation := SaveIOType._validate_state(migrated)
 	_expect(validation["ok"], "a migrated state must pass SaveIO's current-schema validation: %s" % validation.get("message", ""))
 
-## Issue #266: ADR 012's own "Already held" fast path (satisfied() reserves
+## ADR 013's "Already held" fast path (satisfied() reserves
 ## a matching held tool for the job with no travel) proven directly against
 ## the execution trace, not merely inferred from "the job completed quickly".
 func _check_held_tool_skips_fetch_tool_travel() -> void:
@@ -1173,9 +1169,9 @@ func _check_held_tool_skips_fetch_tool_travel() -> void:
 	_expect(world.get_tool_item_reservation(held_id) == "",
 		"the completed job must release the reused held tool's reservation")
 
-## Issue #266: a colonist holding a tool that a foreign job has reserved
-## (ADR 012 case (b)'s third location -- held by another colonist but
-## unreserved at the moment fetch_tool claimed it) must run drop_tool as the
+## A colonist holding a tool that a foreign job has reserved
+## (held by another colonist but unreserved at the moment fetch_tool
+## claimed it; ADR 013, "Holder side") must run drop_tool as the
 ## first toil of its own next dispatched job, before that job's own go_to/work,
 ## and must no longer hold the tool once dropped.
 func _check_foreign_reservation_triggers_drop_tool_handover() -> void:
@@ -1220,7 +1216,7 @@ func _check_foreign_reservation_triggers_drop_tool_handover() -> void:
 	_expect(String(world.get_tool_item(pick_id).get("location", {}).get("type", "")) in ["ground", "stockpile"],
 		"the dropped pick must rest on the ground or a stockpile cell, not stay held")
 
-## Issue #266: when a free stockpile cell lies within ToolDropToil.TOOL_DROP_RADIUS
+## When a free stockpile cell lies within ToolDropToil.TOOL_DROP_RADIUS
 ## of the holder, drop_tool must walk there and drop the tool on that cell
 ## instead of dropping in place.
 func _check_drop_tool_prefers_nearby_stockpile_cell() -> void:
@@ -1251,12 +1247,12 @@ func _check_drop_tool_prefers_nearby_stockpile_cell() -> void:
 	_expect(location.get("type", "") == "stockpile" and location.get("x") == 2 and location.get("y") == 0,
 		"a free stockpile cell within reach must be preferred over dropping the pick in place, got %s" % location)
 
-## Issue #266: a tool a job actively holds and has reserved (satisfied(), mid
+## A tool a job actively holds and has reserved (satisfied(), mid
 ## reserve/go_to/work) must fail the job's current toil the instant it is
 ## destroyed/removed, release every reservation the job held, and re-queue the
-## job through the same backoff mechanism t1 wired for an ordinary
-## blocked_no_tool failure -- proven here by supplying a fresh tool afterward
-## and reaching completion under the SAME job id.
+## job through the same backoff mechanism as an ordinary blocked_no_tool
+## failure -- proven here by supplying a fresh tool afterward and reaching
+## completion under the same job id.
 func _check_destroyed_tool_fails_job_and_requeues_with_backoff() -> void:
 	var world := _build_single_dig_world(266004)
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -1278,8 +1274,8 @@ func _check_destroyed_tool_fails_job_and_requeues_with_backoff() -> void:
 		"the dig job must own the pick's reservation while actively working")
 
 	# A second, unrelated tool reservation the same job happens to also own
-	# (round 2 review finding: the old fix released only held_id) -- both must
-	# be released by the failure below, not just the destroyed one.
+	# -- both must be released by the failure below, not just the destroyed
+	# one.
 	var extra_id := world.spawn_ground_tool_item("axe", 5, 5)
 	_expect(world.reserve_tool_item(extra_id, job_id), "reserving a second, unrelated tool for the same job must succeed")
 
@@ -1301,13 +1297,13 @@ func _check_destroyed_tool_fails_job_and_requeues_with_backoff() -> void:
 	_expect(not world.is_tool_item_reserved(held_id),
 		"every reservation the job held on the destroyed tool must be released, not left dangling")
 	_expect(not world.is_tool_item_reserved(extra_id),
-		"every OTHER reservation the failing job held must also be released, not just the destroyed item's")
+		"every other reservation the failing job held must also be released, not just the destroyed item's")
 	_expect(String(world.get_colonists()[0].get("held_tool", "")) == "",
 		"the colonist must no longer record held_tool once its actively-used tool is destroyed")
 	_expect(world.get_colonists()[0].get("work") == null,
 		"the colonist's work toil must stop the instant its active tool is destroyed")
 
-	# Supplying a fresh pick must let the SAME job id complete afterward.
+	# Supplying a fresh pick must let the same job id complete afterward.
 	world.spawn_ground_tool_item("pick", 0, 0)
 	var completed := false
 	for _i in 120:
@@ -1324,9 +1320,9 @@ func _find_job_colonist_id(world: WorldStateType, job_id: String) -> String:
 			return String(worker)
 	return ""
 
-## Round 2 review finding: the requester side of the handover was untested --
-## ToolFetchToil._arrive() used to steal the tool straight out of the
-## holder's hand instead of waiting for its own drop_tool toil. Two real
+## Requester side of the handover: ToolFetchToil must not take the tool
+## straight out of a busy holder's hand instead of waiting for the holder's
+## own drop_tool toil. Two real
 ## colonists, two real jobs throughout: colonist_0 holds a leftover pick
 ## while busy foraging; colonist_1's real dig job reserves that same pick
 ## while colonist_0 is still busy, and must wait (reason
@@ -1402,9 +1398,9 @@ func _check_requester_waits_for_real_handover_then_completes() -> void:
 			drop_seen = true
 	_expect(drop_seen, "colonist_0 must have run a drop_tool toil to release the handover: %s" % [world._toils.trace])
 
-## Round 2 review finding: a tool destroyed while fetch_tool is still
-## TRAVELLING toward it (reserved but not yet physically held) must fail the
-## job's current toil and back off exactly like a destroyed HELD tool does --
+## A tool destroyed while fetch_tool is still travelling toward it (reserved
+## but not yet physically held) must fail the job's current toil and back off
+## exactly like a destroyed held tool does --
 ## ToolFetchToil.advance() must not silently rescan and reserve the farther,
 ## still-existing candidate instead of failing.
 func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
@@ -1448,7 +1444,7 @@ func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 	_expect(requeued, "the dig job must re-queue within the tick budget once its in-flight fetch target is destroyed")
 	_expect(not world.is_tool_item_reserved(near_id), "the destroyed pick's reservation must be released")
 	_expect(not world.is_tool_item_reserved(far_id),
-		"the farther, still-existing pick must NOT have been silently reserved as a replacement")
+		"the farther, still-existing pick must not have been silently reserved as a replacement")
 	_expect(String(world.get_colonists()[0].get("held_tool", "")) == "", "the colonist must hold nothing")
 
 	var completed := false
@@ -1459,8 +1455,8 @@ func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 			break
 	_expect(completed, "the re-queued job must still complete by fetching the farther, surviving pick")
 
-## Round 2 review finding: drop_tool's own destination must stay fixed for
-## the whole leg (no per-tick recomputation) and must be REVALIDATED at
+## drop_tool's own destination must stay fixed for the whole leg (no
+## per-tick recomputation) and must be revalidated at
 ## arrival, not assumed -- a different job claiming the originally-chosen
 ## stockpile cell mid-travel must not silently retarget the colonist to a
 ## closer/farther alternative cell while it is still walking toward the old
@@ -1504,7 +1500,7 @@ func _check_drop_tool_revalidates_destination_at_arrival() -> void:
 	_expect(dropped, "the pick must be dropped within the tick budget despite the contested cell")
 	var location: Dictionary = world.get_tool_item(pick_id).get("location", {})
 	_expect(location.get("type", "") == "ground" and location.get("x") == 2 and location.get("y") == 0,
-		"the colonist must still walk all the way to (2, 0) -- its own already-chosen destination -- and only THEN fall back to dropping on the ground there, got %s" % location)
+		"the colonist must still walk all the way to (2, 0) -- its own already-chosen destination -- and only then fall back to dropping on the ground there, got %s" % location)
 
 	var completed := false
 	for _i in 200:
@@ -1514,13 +1510,12 @@ func _check_drop_tool_revalidates_destination_at_arrival() -> void:
 			break
 	_expect(completed, "colonist_0's own forage job must still complete despite the drop falling back to the ground")
 
-## Round 2 review finding: a save/load taken mid-way through a drop_tool
-## leg's own MOVEMENT (an already-resolved path, no in-flight reroute search)
-## must not lose track of it being a drop leg -- StateCodec has no new field
-## for this (ADR 012: the leg is reconstructed from already-persisted state,
-## see tool_drop_toil.gd's is_dropping()), so a naive restore could otherwise
-## treat the in-flight route as the tool-free job's own ordinary route and
-## start work at the stockpile cell instead of completing the handover.
+## A save/load taken mid-way through a drop_tool leg's own movement (an
+## already-resolved path, no in-flight reroute search) must not lose track of
+## it being a drop leg (ADR 013, "Drop-leg identity marker": the marker is
+## persisted in the job's blockingJobId field), or a restore could treat the
+## in-flight route as the tool-free job's own ordinary route and start work
+## at the stockpile cell instead of completing the handover.
 func _check_save_io_round_trip_mid_drop_tool_movement_matches_uninterrupted_run() -> void:
 	var world := WorldStateType.new(266008)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -1582,21 +1577,17 @@ func _check_save_io_round_trip_mid_drop_tool_movement_matches_uninterrupted_run(
 	_expect(String(world.get_tool_item(pick_id).get("location", {}).get("type", "")) != "held",
 		"the pick must actually have been dropped (handover completed), not stuck mid-travel forever")
 
-## Round 2 review finding: the same save/load guarantee must also hold while
-## a drop_tool leg's own bounded re-route SEARCH is still in flight
-## (rerouting != null, no resolved path yet) -- _restore_reroutes()
-## (state_codec.gd, out of this task's owned paths) reconstructs its cost
-## callable from ToilExecutor.needs_fetch_tool(), which reports false for a
-## tool-free job's drop leg; the search's own already-persisted
-## snapshot.target is still used correctly via the ordinary "job target"
-## branch in that case, since a drop's chosen stockpile cell is already
-## pre-verified passable and needs no target-tile passability exception. A
+## The same save/load guarantee must also hold while a drop_tool leg's own
+## bounded re-route search is still in flight (rerouting != null, no
+## resolved path yet) -- _restore_reroutes() (state_codec.gd) must rebuild
+## the search's cost callable with the plain passability the live drop leg
+## uses (ADR 013, "Drop-leg route restore"). A
 ## wide-open 21x21 room forces the RNG-free Dijkstra search to expand well
 ## past its own 64-per-tick budget (a uniform-cost flood fill covers ~2*r^2
 ## tiles by the time it reaches a target r tiles away) before ever reaching
 ## the target, even though the target itself sits within TOOL_DROP_RADIUS (a
 ## short, thin wall forces a small detour around it, not a long walk) -- so
-## the resolved WALK afterward stays short while the SEARCH genuinely spans
+## the resolved walk afterward stays short while the search genuinely spans
 ## more than one tick.
 func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_run() -> void:
 	var world := WorldStateType.new(266009)
@@ -1661,11 +1652,11 @@ func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_
 	_expect(world.state_hash() == restored.state_hash(),
 		"the source and SaveIO-restored runs must reach the identical final hash")
 
-## Round 2 review: a requester whose fetch_tool candidate is reserved from a
-## busy foreign holder it happens to already stand ADJACENT to must not steal
+## A requester whose fetch_tool candidate is reserved from a
+## busy foreign holder it happens to already stand adjacent to must not steal
 ## it the very same tick the reservation lands -- advance_go_to()'s own
 ## path.size()<=1 shortcut would otherwise call on_arrive (pickup) inline,
-## inside the SAME ToolFetchToil.advance() call that just reserved it, before
+## inside the same ToolFetchToil.advance() call that just reserved it, before
 ## ToilExecutor's own waiting_for_handover() gate ever runs again.
 func _check_adjacent_busy_holder_does_not_steal_tool_same_tick() -> void:
 	var world := WorldStateType.new(266011)
@@ -1718,13 +1709,13 @@ func _check_adjacent_busy_holder_does_not_steal_tool_same_tick() -> void:
 	_expect(String(_find_colonist(world, "colonist_1").get("held_tool", "")) == pick_id,
 		"colonist_1 must end up holding the pick it waited for")
 
-## Round 2 review: a fetch_tool leg that legitimately started travelling
-## toward an IDLE holder's tool must correctly retarget, not fail, once that
+## A fetch_tool leg that legitimately started travelling
+## toward an idle holder's tool must correctly retarget, not fail, once that
 ## holder later becomes busy and its own drop_tool toil relocates the tool to
 ## a stockpile cell away from where the fetch route was already heading --
 ## advance_go_to() never re-targets an already-resolved route on its own, so
 ## without ToolFetchToil.advance() discarding the stale route, the requester
-## would walk all the way to the tool's OLD position, find nothing there, and
+## would walk all the way to the tool's old position, find nothing there, and
 ## back off with blocked_no_tool instead of completing.
 func _check_fetch_tool_retargets_when_holder_drops_tool_elsewhere() -> void:
 	var world := WorldStateType.new(266012)
@@ -1782,12 +1773,12 @@ func _check_fetch_tool_retargets_when_holder_drops_tool_elsewhere() -> void:
 	_expect(not backed_off, "dig_1 must retarget toward the pick's new stockpile location instead of failing blocked_no_tool")
 	_expect(completed, "dig_1 must complete once fetch_tool retargets toward the relocated pick")
 
-## Round 2 review: is_dropping() must never reinterpret a job's own ordinary
+## is_dropping() must never reinterpret a job's own ordinary
 ## go_to leg as a drop leg just because needs_drop() also happens to turn true
-## mid-flight -- exact-equality against the (impassable, therefore one-tile-
-## trimmed) ordinary target used to misclassify every such route the instant
-## a foreign job reserved the held tool, diverting it to a stockpile cell
-## instead of letting it reach its own job's target.
+## mid-flight -- an exact-equality comparison against the (impassable,
+## therefore one-tile-trimmed) ordinary target would misclassify every such
+## route the instant a foreign job reserved the held tool, diverting it to a
+## stockpile cell instead of letting it reach its own job's target.
 func _check_ordinary_route_not_misclassified_as_drop_when_reservation_appears_midflight() -> void:
 	var world := WorldStateType.new(266013)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -1826,8 +1817,8 @@ func _check_ordinary_route_not_misclassified_as_drop_when_reservation_appears_mi
 		_expect(String(entry.get("toil", "")) != "drop_tool",
 			"an in-flight ordinary route must never run a drop_tool toil while it is still heading to its own job's target: %s" % [world._toils.trace])
 
-## Round 2 review: is_dropping() must also leave an in-flight fetch_tool leg
-## alone when a DIFFERENT held tool becomes foreign-reserved mid-travel (a
+## is_dropping() must also leave an in-flight fetch_tool leg
+## alone when a different held tool becomes foreign-reserved mid-travel (a
 ## colonist can hold one leftover tool while fetching an unrelated new one) --
 ## the route's own destination coincides with ToolFetchToil's own current
 ## target, not a drop cell, so it must never be reinterpreted as a drop leg.
@@ -1873,12 +1864,12 @@ func _check_fetch_route_not_misclassified_as_drop_when_other_reservation_appears
 	_expect(String(world.get_tool_item(pick_id).get("location", {}).get("type", "")) == "ground",
 		"the leftover pick must end up on the ground (fetch_tool's own minimal drop-at-arrival), not vanish")
 
-## Round 2 review: cancelling the requester's job WHILE its own drop_tool leg
-## is still mid-walk must not let the SAME in-flight route be reinterpreted as
-## the holder's own ordinary leg once the reservation disappears --
-## is_dropping() must keep recognizing it as a drop in progress purely from
-## colonist.held_tool/route (it never depended on needs_drop() remaining true
-## once started), completing the drop and THEN correctly starting the
+## Cancelling the requester's job while the holder's drop_tool leg is still
+## mid-walk must not let the same in-flight route be reinterpreted as the
+## holder's own ordinary leg once the reservation disappears -- is_dropping()
+## must keep recognizing it as a drop in progress from the persisted marker,
+## colonist.held_tool and route (never from needs_drop() remaining true),
+## completing the drop and then correctly starting the
 ## holder's own next toil, never mistaking the stockpile arrival for the
 ## holder's own job target.
 func _check_requester_cancellation_midflight_still_completes_drop_correctly() -> void:
@@ -1953,14 +1944,14 @@ func _check_requester_cancellation_midflight_still_completes_drop_correctly() ->
 			break
 	_expect(both_completed, "colonist_0 must still complete both of its own forage jobs, never mistaking the stockpile arrival for its own job target")
 
-## Round 4 review: unlike the cancellation test just above (tool-free forage),
-## the holder's own NEXT DISPATCHED job may itself need a DIFFERENT tool than
+## Unlike the cancellation test just above (tool-free forage),
+## the holder's own next dispatched job may itself need a different tool than
 ## the one it is dropping. The instant the foreign job that triggered the drop
 ## is cancelled, needs_drop() turns false while ToolFetchToil.needs() turns
-## true (axe != pick) -- the OLD is_dropping() read that combination as "not
-## dropping, must be fetching" and abandoned the in-flight walk to the
-## stockpile cell partway there. ToolDropToil's own _active_drop marker must
-## keep recognizing the SAME in-flight leg regardless.
+## true (axe != pick) -- a reservation-based is_dropping() would read that
+## combination as "not dropping, must be fetching" and abandon the in-flight
+## walk to the stockpile cell partway there. The persisted drop-leg marker
+## must keep recognizing the same in-flight leg regardless.
 func _check_drop_continues_when_holders_own_next_job_needs_a_different_tool() -> void:
 	var world := WorldStateType.new(266029)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -2028,13 +2019,13 @@ func _check_drop_continues_when_holders_own_next_job_needs_a_different_tool() ->
 			break
 	_expect(completed, "colonist_0 must still complete chop_1, fetching the axe after finishing the drop")
 
-## Round 4 review: the requester may ALSO hold a leftover tool that becomes
-## foreign-reserved (needs_drop() true) WHILE its own fetch_tool reservation
-## on a DIFFERENT tool is momentarily released by the holder's own drop --
+## The requester may also hold a leftover tool that becomes
+## foreign-reserved (needs_drop() true) while its own fetch_tool reservation
+## on a different tool is momentarily released by the holder's own drop --
 ## unlike _check_fetch_route_survives_drifting_handover_holder_while_requester_holds_leftover()'s
-## unreserved leftover, needs_drop() is genuinely true here, and the OLD
-## is_dropping() fell through to its position-based fallback and misread the
-## frozen fetch route as the requester's OWN drop leg for the wrong tool.
+## unreserved leftover, needs_drop() is genuinely true here, and a
+## position-based is_dropping() would misread the frozen fetch route as the
+## requester's own drop leg for the wrong tool.
 ## Also proves a SaveIO round trip taken before the holder's drop resolves the
 ## gap reaches the identical state_hash() tick by tick through it as an
 ## uninterrupted run.
@@ -2122,13 +2113,12 @@ func _check_fetch_route_not_misclassified_as_drop_when_leftover_tool_also_foreig
 	_expect(direct_completed, "chop_1 must still complete in the uninterrupted run once colonist_0 finishes relocating the axe")
 	_expect(restored_completed, "chop_1 must still complete in the SaveIO-restored run too")
 
-## Round 4 review: _find_drop_cell() previously excluded every cell reachable-
-## adjacent to an IMPASSABLE ordinary target too (a stockpile zone overlapping
-## the reach of forage's own bush, colonist-ai.md/objects.json's berry_bush is
-## never itself walkable), discarding an otherwise valid, free stockpile cell
-## for no reason once is_dropping() no longer identifies a leg from target
-## position at all (it reads ToolDropToil's own stable _active_drop marker
-## instead -- see tool_drop_toil.gd's own doc comment). The bush tile itself
+## _find_drop_cell() must not exclude cells reachable-adjacent to an
+## impassable ordinary target (a stockpile zone overlapping the reach of
+## forage's own bush; objects.json's berry_bush is never itself walkable):
+## is_dropping() does not identify a leg from target position at all (it
+## reads the persisted drop-leg marker -- see tool_drop_toil.gd's doc
+## comment), so such a cell is a valid, free stockpile cell. The bush tile itself
 ## is still naturally excluded by _cell_still_free()'s own passability check,
 ## not by any special-cased "avoid" exclusion, so the nearest remaining free
 ## cell in the zone must be used rather than falling back to the ground.
@@ -2160,11 +2150,11 @@ func _check_drop_cell_adjacent_to_impassable_ordinary_target_uses_nearest_stockp
 	_expect(location.get("type", "") == "stockpile" and location.get("x") == 2 and location.get("y") == 0,
 		"the nearest free stockpile cell adjacent to the impassable bush must be used, not discarded for a ground fallback, got %s" % location)
 
-## Round 4 review: with leg identification no longer based on target position
-## at all, a drop destination coinciding EXACTLY with the job's own passable
-## ordinary target is no longer ambiguous with that job's own ordinary/
-## fetch_tool leg (both are told apart purely by ToolDropToil's own
-## _active_drop marker) and must be used like any other qualifying free
+## With leg identification no longer based on target position
+## at all, a drop destination coinciding exactly with the job's own passable
+## ordinary target is not ambiguous with that job's own ordinary/fetch_tool
+## leg (they are told apart purely by the persisted drop-leg marker) and must
+## be used like any other qualifying free
 ## stockpile cell -- the zone here contains only that one cell, so there is no
 ## nearer alternative to prefer.
 func _check_drop_cell_exactly_on_passable_ordinary_target_is_used() -> void:
@@ -2194,13 +2184,12 @@ func _check_drop_cell_exactly_on_passable_ordinary_target_is_used() -> void:
 	_expect(location.get("type", "") == "stockpile" and location.get("x") == 3 and location.get("y") == 0,
 		"the drop destination coinciding exactly with the passable till target must be used directly, got %s" % location)
 
-## A PASSABLE ordinary target (till's own soil target, tiles.json's "soil" is
+## A passable ordinary target (till's own soil target, tiles.json's "soil" is
 ## walkable -- till, unlike dig, declares no needs_tool at all, so the held
 ## pick's own foreign reservation below can never block this job's own
 ## activation-time tool-availability gate the way it would for a pick-needing
 ## job kind). The zone here spans the target's immediate neighbours on both
-## sides; round 4 review removed _find_drop_cell()'s exclusion of the exact
-## target tile entirely (see _check_drop_cell_exactly_on_passable_ordinary_target_is_used()
+## sides; _find_drop_cell() does not exclude the exact target tile (see _check_drop_cell_exactly_on_passable_ordinary_target_is_used()
 ## below for that case directly), but the nearest of the two neighbours here
 ## is still strictly closer to the colonist than the target tile itself, so
 ## the nearest-cell tie-break must still choose one of them, not the target.
@@ -2231,10 +2220,10 @@ func _check_drop_cell_near_passable_ordinary_target_uses_nearest_stockpile_cell(
 	_expect(location.get("type", "") == "stockpile" and location.get("x") == 2 and location.get("y") == 0,
 		"the nearest free stockpile cell adjacent to the passable till target must be used, not discarded or a farther one chosen, got %s" % location)
 
-## Round 2 review: active_tool_missing()/fail_for_destroyed_tool() must scan
-## EVERY reservation job_id holds, not just the first the ReservationTable
+## active_tool_missing()/fail_for_destroyed_tool() must scan
+## every reservation job_id holds, not just the first the ReservationTable
 ## snapshot happens to yield -- and must clear colonist.held_tool only when
-## the DESTROYED item is the one actually held, never a surviving one, even
+## the destroyed item is the one actually held, never a surviving one, even
 ## when the destroyed reservation is not the job's own primary (held) tool.
 func _check_destroyed_tool_among_multiple_reservations_not_first_and_unrelated_held_tool_preserved() -> void:
 	var world := _build_single_dig_world(266017)
@@ -2251,8 +2240,8 @@ func _check_destroyed_tool_among_multiple_reservations_not_first_and_unrelated_h
 			break
 	_expect(held_id != "", "colonist_0 must be holding the pick while working")
 
-	# A second, unrelated reservation the SAME job also happens to hold, not
-	# yet physically held by anyone -- destroyed below, while the ALREADY-HELD
+	# A second, unrelated reservation the same job also happens to hold, not
+	# yet physically held by anyone -- destroyed below, while the already-held
 	# pick survives, to prove neither check depends on dictionary iteration
 	# order finding the destroyed item first.
 	var extra_id := world.spawn_ground_tool_item("axe", 5, 5)
@@ -2274,17 +2263,13 @@ func _check_destroyed_tool_among_multiple_reservations_not_first_and_unrelated_h
 	_expect(requeued, "the dig job must re-queue within the tick budget once its non-primary reserved tool is destroyed")
 	_expect(not world.is_tool_item_reserved(held_id), "the surviving pick's reservation must still be released like any other terminal transition")
 
-## Round 2/3 review: a tool destroyed while fetch_tool is still travelling
-## toward it (reserved but not held) must not clear colonist.held_tool when
-## the colonist is ALSO already holding a different, unrelated tool -- that
-## surviving item's own location still correctly says "held" by this
-## colonist, and clearing held_tool would desync it from that truth. The axe
-## sits FAR from chop_1's own job target (round 3 review: the round 2 version
-## placed the axe adjacent to the job target, which let is_dropping()'s own
-## "reachable-adjacent to the ordinary target" branch mask the real bug by
-## accident -- the destroyed-tool check must run before ANY route
-## interpretation regardless of geometry, proven here by making that branch
-## never apply in the first place).
+## A tool destroyed while fetch_tool is still travelling toward it (reserved
+## but not held) must not clear colonist.held_tool when the colonist is also
+## already holding a different, unrelated tool -- that surviving item's own
+## location still correctly says "held" by this colonist, and clearing
+## held_tool would desync it. The axe sits far from chop_1's own job target
+## so that no target-adjacency check can mask the result: the destroyed-tool
+## check must run before any route interpretation regardless of geometry.
 func _check_destroyed_fetch_target_preserves_unrelated_held_tool() -> void:
 	var world := WorldStateType.new(266018)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -2327,12 +2312,12 @@ func _check_destroyed_fetch_target_preserves_unrelated_held_tool() -> void:
 		_expect(String(entry.get("toil", "")) != "drop_tool",
 			"a destroyed in-flight fetch target must never be reinterpreted as a drop leg for the surviving leftover pick: %s" % [world._toils.trace])
 
-## Round 3 review: a fetch_tool destination trimmed one tile short by
+## A fetch_tool destination trimmed one tile short by
 ## advance_go_to()'s own target-tile trim (the tool's own tile made
 ## impassable mid-travel, e.g. a wall built on it) must never be
-## misclassified as a drop leg -- the old is_dropping() compared the route's
-## frozen destination against ToolFetchToil.current_target() for EXACT
-## position equality, which the trim always broke. colonist_0 holds an
+## misclassified as a drop leg -- comparing the route's frozen destination
+## against ToolFetchToil.current_target() for exact position equality would
+## break on the trim. colonist_0 holds an
 ## unrelated leftover pick throughout, so is_dropping()'s entry gate stays
 ## active the whole time.
 func _check_fetch_route_survives_impassable_fetch_destination_trim() -> void:
@@ -2373,14 +2358,14 @@ func _check_fetch_route_survives_impassable_fetch_destination_trim() -> void:
 		_expect(String(entry.get("toil", "")) != "drop_tool",
 			"a fetch_tool leg trimmed short by an impassable fetch destination must never be reinterpreted as a drop leg: %s" % [world._toils.trace])
 
-## Round 3 review: a busy foreign holder's OWN drop_tool leg physically walks
+## A busy foreign holder's own drop_tool leg physically walks
 ## while still holding the requester's reserved tool -- ToolMatchingType.
-## item_target() reports a "held" item's location as the holder's CURRENT
+## item_target() reports a "held" item's location as the holder's current
 ## position, so it moves every tick the holder is mid-walk, drifting
 ## ToolFetchToil.current_target() away from the requester's already-in-flight
 ## route (frozen by design once reserved, see tool_fetch_toil.gd's own
 ## "freshly_reserved" gate) until the holder finally arrives and actually
-## drops it. The requester ALSO holds an unrelated leftover tool throughout,
+## drops it. The requester also holds an unrelated leftover tool throughout,
 ## so is_dropping()'s entry gate stays active the whole time this drift is
 ## happening, and must never misclassify the frozen route as a drop leg --
 ## proven here by asserting the requester's own leftover pick is only ever
@@ -2446,12 +2431,12 @@ func _check_fetch_route_survives_drifting_handover_holder_while_requester_holds_
 		"colonist_1 must hold either its own leftover pick or the freshly fetched axe at every tick, never neither -- a mid-travel drop_tool misclassification would empty its hands early")
 	_expect(completed, "chop_1 must still complete once colonist_0 finishes relocating the axe and the fetch route retargets to it")
 
-## Round 2 review: _restore_reroutes() must reconstruct a drop_tool leg's
-## in-flight search with the SAME plain passability the live toil always
+## _restore_reroutes() must reconstruct a drop_tool leg's
+## in-flight search with the same plain passability the live toil always
 ## uses, not job.target's own target-tile exception -- proven here by placing
 ## the job's own impassable target directly on a full-width wall between the
-## holder and its chosen stockpile cell, the one geometry where the old
-## exception opened a "shortcut" a live/direct run could never take (the live
+## holder and its chosen stockpile cell, the one geometry where that
+## exception would open a "shortcut" a live/direct run could never take (the live
 ## search is always plain, no exception, regardless of save/load). Compares
 ## state_hash() after every tick, not merely at completion, so any single
 ## diverging tick fails immediately.
@@ -2515,7 +2500,7 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 	_expect(String(world.get_tool_item(pick_id).get("location", {}).get("type", "")) == "ground",
 		"with the wall having no legitimate crossing, the pick must fall back to dropping on the ground, not reach the stockpile via a fake shortcut")
 
-## Round 2 review: _find_drop_cell()/_cell_still_free() must also treat a
+## _find_drop_cell()/_cell_still_free() must also treat a
 ## cell already holding a ground/stockpiled tool item as occupied -- the
 ## general cell_occupied callable only ever checked colonists and stackable
 ## items, never tool items.
@@ -2548,7 +2533,7 @@ func _check_drop_tool_skips_cell_already_occupied_by_another_tool() -> void:
 	_expect(location.get("type", "") == "stockpile" and location.get("x") == 3 and location.get("y") == 0,
 		"the cell already holding an axe must be skipped in favor of the next free cell, got %s" % location)
 
-## Round 2 review: removing the destination zone mid-travel must also be
+## Removing the destination zone mid-travel must also be
 ## revalidated at arrival -- storing location.type "stockpile" for a cell
 ## that no longer belongs to any zone would be wrong, so arrival must fall
 ## back to dropping on the ground when the zone is gone.
@@ -2586,7 +2571,7 @@ func _check_drop_tool_falls_back_to_ground_when_destination_zone_removed_midflig
 	_expect(dropped, "the pick must be dropped within the tick budget despite its destination zone disappearing")
 	var location: Dictionary = world.get_tool_item(pick_id).get("location", {})
 	_expect(location.get("type", "") == "ground" and location.get("x") == 2 and location.get("y") == 0,
-		"the colonist must still walk all the way to its own already-chosen cell (2, 0) and only THEN fall back to the ground once that cell no longer belongs to any zone, got %s" % location)
+		"the colonist must still walk all the way to its own already-chosen cell (2, 0) and only then fall back to the ground once that cell no longer belongs to any zone, got %s" % location)
 
 	var completed := false
 	for _i in 200:
@@ -2596,15 +2581,13 @@ func _check_drop_tool_falls_back_to_ground_when_destination_zone_removed_midflig
 			break
 	_expect(completed, "colonist_0's own forage job must still complete despite the drop falling back to the ground")
 
-## Round 5 review: seed_active_drop()'s restore-time heuristic could not
-## reconstruct the drop leg's identity in three unbounded-duration cases
-## (docs/decisions/012-tool-toils.md's "Round 5 review"). ToolDropToil no
-## longer has any restore-time heuristic at all: JobQueue.
-## set_active_item_marker()/get_active_item_marker() persist the SAME marker
-## advance() already maintains directly on the job's own already-round-tripped
-## itemId field, so a restore needs no bootstrap step -- the marker is simply
-## already there. This proves the first of the three cases: a save taken
-## AFTER the requester's job that triggered the drop is cancelled (releasing
+## Reconstructing the drop leg's identity from reservation state on restore
+## is unsound in three cases (docs/decisions/013-tool-toils.md, "Drop-leg
+## identity marker"). JobQueue.set_active_item_marker()/
+## get_active_item_marker() persist the marker advance() maintains directly
+## on the job's own already-round-tripped blockingJobId field, so a restore
+## needs no bootstrap step. This covers the first of the three cases: a save
+## taken after the requester's job that triggered the drop is cancelled (releasing
 ## the reservation needs_drop() reads), compared tick by tick against an
 ## uninterrupted run through to both forage jobs completing.
 func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
@@ -2638,7 +2621,7 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 			break
 	_expect(colonist_0_busy, "colonist_0 must be busy on forage_a within budget")
 
-	# Issue #349/ADR 023 slowed real needs decay to points-per-day: colonist_0
+	# ADR 024 slowed real needs decay to points-per-day: colonist_0
 	# going idle after forage_a completes no longer starves fast enough, on
 	# its own, to earn a second (eat_food) job dispatch before colonist_1's
 	# fetch_tool toil simply walks over and takes the unreserved held pick
@@ -2648,7 +2631,7 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 	# style direct need mutation elsewhere in this suite) to make NeedGiver
 	# assign colonist_0 the eat_food job for the ground berries forage_a just
 	# produced at (1, 0) the instant it goes idle, well before colonist_1
-	# physically arrives. forage_b (below) is deliberately NOT submitted this
+	# physically arrives. forage_b (below) is deliberately not submitted this
 	# early -- see its own comment -- so this cannot reuse that job instead.
 	for i in world._colonists.size():
 		if String(world._colonists[i]["id"]) == "colonist_0":
@@ -2715,30 +2698,29 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 	_expect(direct_completed, "the uninterrupted run must still complete both forage jobs after the cancellation")
 	_expect(restored_completed, "the SaveIO-restored run must also complete both forage jobs, never abandoning or misreading the drop")
 
-## Second of the three round 5 review cases: a save taken INSIDE the window
+## Second of the three marker-restore cases: a save taken inside the window
 ## between a fetch_tool reservation being released (the holder's own
 ## drop_tool leg completing) and the requester's own next advance() re-
-## reserving it, while the requester ALSO physically holds a second,
-## unrelated tool that is itself foreign-reserved -- exactly the state whose
-## restore-time reconstruction (needs_drop() true for the unrelated tool)
-## used to permanently misseed the marker as "dropping" for a genuine fetch
-## leg. With no restore-time reconstruction left at all (the marker is only
+## reserving it, while the requester also physically holds a second,
+## unrelated tool that is itself foreign-reserved -- exactly the state in
+## which a restore-time reconstruction (needs_drop() true for the unrelated
+## tool) would permanently mark a genuine fetch leg as "dropping". With no
+## restore-time reconstruction (the marker is only
 ## ever set by ToolDropToil.advance() actually starting a drop, and the
 ## requester never does here -- it only fetches), there is nothing to
 ## misseed.
 ##
-## Round 6 review: the previous version of this test saved BEFORE the
-## holder's drop even completed, never inside the gap at all -- a save taken
-## that early would restore correctly even under the OLD, now-removed
-## seed_active_drop() heuristic, so it never actually exercised this case.
-## The gap is real but brief: WorldState._advance_colonists() advances every
-## colonist within ONE external tick() call, sorted by id (not append order),
-## so whichever of the two colonists' ids sorts LAST runs its own turn AFTER
+## The save must land inside the gap, not before the holder's drop completes
+## (a save that early would restore correctly even with a reconstruction
+## heuristic, so it would not exercise this case). The gap is real but
+## brief: WorldState._advance_colonists() advances every colonist within one
+## external tick() call, sorted by id (not append order), so whichever of the
+## two colonists' ids sorts last runs its own turn after
 ## the other's within the same tick. Naming the requester "colonist_0" (sorts
 ## first) and the holder "colonist_1" (sorts second) makes the holder's drop
-## -- and the reservation release it causes -- happen strictly AFTER the
+## -- and the reservation release it causes -- happen strictly after the
 ## requester's own turn each tick, so the release is invisible to the
-## requester until ITS next turn, at the START of the following external
+## requester until its next turn, at the start of the following external
 ## tick() call. Saving immediately after the tick() call whose holder turn
 ## performed the drop, before calling tick() again, therefore captures a
 ## real, observable gap: the axe genuinely unreserved, the requester's own
@@ -2751,8 +2733,8 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 	world._colonists.clear()
 	var labour_table_all_but_chop := {"mine": 3, "chop": 0, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 	var labour_table_all_3 := {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
-	# colonist_0 is the REQUESTER (fetches the axe via chop_1) so that its id
-	# sorts, and therefore advances, before colonist_1 the HOLDER every tick --
+	# colonist_0 is the requester (fetches the axe via chop_1) so that its id
+	# sorts, and therefore advances, before colonist_1, the holder, every tick --
 	# see the doc comment above for why this ordering is what makes the
 	# release gap actually observable across a tick() boundary.
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
@@ -2786,13 +2768,13 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 	_expect(_command(world, "forage_0", "forage", {"x": 20, "y": 10, "priority": 1}).get("ok", false),
 		"forage submission must be accepted")
 
-	# Advance until colonist_1's own drop_tool leg has actually COMPLETED (the
+	# Advance until colonist_1's own drop_tool leg has actually completed (the
 	# axe physically leaves its hand and its reservation is genuinely gone) --
 	# not merely started -- while colonist_0's own fetch route is still
 	# present. Because colonist_0 (the requester) advances before colonist_1
 	# (the holder) every tick, the tick whose holder turn performs the drop is
-	# already the gap: colonist_0's own turn that same tick ran BEFORE the
-	# release, so it has not re-scanned yet, and won't until its NEXT turn.
+	# already the gap: colonist_0's own turn that same tick ran before the
+	# release, so it has not re-scanned yet, and won't until its next turn.
 	var in_gap := false
 	for _i in 60:
 		world.tick()
@@ -2843,7 +2825,7 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 	_expect(direct_completed, "chop_1 must still complete in the uninterrupted run")
 	_expect(restored_completed, "chop_1 must still complete in the SaveIO-restored run too, never misread as a drop leg for colonist_1's own leftover pick")
 
-## Third of the three round 5 review cases, and the widest: a save taken
+## Third of the three marker-restore cases, and the widest: a save taken
 ## during an ordinary go_to leg (no fetch_tool, no drop_tool -- forage's own
 ## plain travel) after the colonist's held tool happens to become foreign-
 ## reserved mid-leg. Live behaviour never reclassifies an in-flight leg this
@@ -2909,12 +2891,12 @@ func _check_save_io_round_trip_ordinary_route_after_held_tool_foreign_reserved_m
 		_expect(String(entry.get("toil", "")) != "drop_tool",
 			"the restored run must never misread the already-in-flight ordinary route as a drop leg: %s" % [restored._toils.trace])
 
-## Round 6 review (issue #266): drop_tool runs for ANY active job kind,
+## drop_tool runs for any active job kind,
 ## including haul -- needs_drop() is unconditional on job kind, and a freshly
 ## activated job's colonist.route/work both start null exactly like any other
 ## toil boundary, so a haul job's colonist can be sent to drop_tool before its
 ## own first pick_up toil ever runs. The drop-leg marker must never be written
-## into the job's own itemId field: for a haul job that field already IS the
+## into the job's own itemId field: for a haul job that field already is the
 ## cargo's own item id (attached at submission by HaulGiver, read back by
 ## pick_up's item_id_for hook), and overwriting/clearing it mid-drop would
 ## corrupt which ground item the job is actually carrying. This drives a real
@@ -3037,13 +3019,13 @@ func _check_drop_tool_during_haul_job_preserves_cargo_identity_via_stockpile() -
 	_expect(not (int(final_item.get("x", -1)) == axe_cell.x and int(final_item.get("y", -1)) == axe_cell.y),
 		"item_1's own cell must not be the same cell the axe was dropped on")
 
-## Round 6 review: a save/load taken mid-way through the SAME drop_tool leg
+## A save/load taken mid-way through the same drop_tool leg
 ## as above (an already-resolved path toward the stockpile cell, colonist
 ## still walking) must round-trip the haul job's own cargo identity, its
 ## own item:/cell: reservations, and reach completion identically in both the
 ## direct and the SaveIO-restored run -- proving the blockingJobId-based
 ## marker (not itemId) survives a real file round trip without corrupting
-## haul state, the specific gap the previous review round's fix addressed.
+## haul state.
 func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_completes() -> void:
 	var world := WorldStateType.new(266042)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
@@ -3132,12 +3114,12 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 	_expect(direct_item.get("x") == restored_item.get("x") and direct_item.get("y") == restored_item.get("y"),
 		"item_1 must end up at the same final cell in both runs, got %s vs %s" % [direct_item, restored_item])
 
-## Round 6 review: destroying a tool while its FOREIGN holder is still busy
-## (not yet dropping it) used to leave that holder's own held_tool pointing
-## at the vanished id forever -- tool_item_store.gd's set_held()/set_ground()
+## Destroying a tool while its foreign holder is still busy (not yet
+## dropping it) must not leave that holder's own held_tool pointing at the
+## vanished id forever -- tool_item_store.gd's set_held()/set_ground()
 ## both refuse to touch a colonist's held_tool once the item itself is gone
 ## (there is no location left for their own _clear_holder() to read), so a
-## stale reference was otherwise never cleared and blocked every later pickup
+## stale reference would never be cleared and would block every later pickup
 ## for that colonist. Two real colonists, two real jobs, same shape as
 ## _check_requester_waits_for_real_handover_then_completes(): colonist_0
 ## holds a leftover pick while busy foraging; colonist_1's dig job reserves
@@ -3216,8 +3198,8 @@ func _check_destroyed_foreign_held_tool_while_waiting_reconciles_holder() -> voi
 	_expect(world.set_tool_item_held(axe_id, "colonist_0"),
 		"colonist_0 must be able to hold a genuinely new tool now that its stale held_tool reference is cleared")
 
-## Round 6 review: destroying a foreign-held reserved tool while its holder
-## is actively mid-DROP (already walking toward a stockpile cell for its own
+## Destroying a foreign-held reserved tool while its holder
+## is actively mid-drop (already walking toward a stockpile cell for its own
 ## next dispatched job, is_dropping() true) must not leave a dangling route:
 ## the holder's own drop-leg marker would otherwise still name the vanished
 ## item while held_tool no longer does, and the holder's own next-tick

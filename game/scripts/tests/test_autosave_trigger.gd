@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Scene-free acceptance coverage for AutosaveTrigger (issue #95): the
+## Scene-free coverage for AutosaveTrigger: the
 ## per-tick boundary check fires exactly once per elapsed interval, never at
 ## tick 0, never twice for the same boundary, and is a pure function of the
 ## tick argument (a byte-for-byte replay of the same tick sequence through a
@@ -158,7 +158,7 @@ func _check_platform_notifications_save_immediately() -> void:
 	_expect(good != null and int(good["tick"]) == 5,
 		"NOTIFICATION_WM_CLOSE_REQUEST must save immediately, got %s" % [good])
 
-## Regression for the review-3 finding: a lifecycle notification landing
+## Regression: a lifecycle notification landing
 ## exactly on an interval boundary (e.g. tab-hidden or window-close at tick
 ## 600) must satisfy that boundary itself, so a check() call for the same
 ## tick afterward -- which can happen if a tick signal was already queued
@@ -237,7 +237,7 @@ func _check_failed_save_retries_at_same_boundary() -> void:
 		"once the boundary succeeds, further check() calls at the same boundary must not fire again")
 	_expect(fire_count[0] == 3, "no further saves should occur once the boundary succeeded, got %d fires" % fire_count[0])
 
-## Issue #299 round 1: New Game suspends autosaving until the player's first
+## New Game suspends autosaving until the player's first
 ## explicit Save (boot.gd's _start_new_game()/_on_save_pressed()), so an
 ## unsaved fresh game ticking in the background never silently rotates into
 ## an existing autosave slot. While disabled, neither check() nor a lifecycle

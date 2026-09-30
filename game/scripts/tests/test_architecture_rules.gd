@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Architecture-trace test for issue #242 (AGENTS.md "one work engine"):
+## Architecture-trace test for the "one work engine" rule (AGENTS.md):
 ## 1) every kind content/jobs.json declares is driven to completion purely
 ##    via world.tick(), asserting against ToilExecutor's own execution trace
 ##    (world._toils.trace, populated by toil_executor.gd itself) that each
@@ -12,16 +12,14 @@ extends SceneTree
 ##    those two are checked against the job's own observed status history
 ##    (must pass through "active", must reach "completed") instead;
 ## 2) world_state.gd declares exactly one per-colonist advance function and
-##    none of the kind-specific symbols task #242 requires gone;
+##    none of the removed kind-specific advance/search symbols;
 ## 3) no game/scripts/viewer/*.gd script calls anything on a WorldState
 ##    instance beyond a get_* getter, apply(), get_events() or tick() -- its
 ##    two public mutators (world_state.gd's own "Only mutator alongside ..."
 ##    doc comments) plus the read-only surface. tick() is included alongside
 ##    apply() because it is WorldState's other declared mutator and
-##    scripts/viewer/tick_driver.gd (unowned, unchanged by this task) already
-##    calls it to advance the simulation once per frame; see "## Blocked" in
-##    the handoff for why the literal get_*/apply()/get_events()-only wording
-##    cannot be enforced without editing that out-of-scope file.
+##    scripts/viewer/tick_driver.gd calls it to advance the simulation once
+##    per frame.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
@@ -89,8 +87,8 @@ func _load_jobs_content() -> Dictionary:
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	# issue #300: a freshly generated world can now place berry_bush objects
-	# (docs/decisions/020); this fixture rebuilds tiles/colonists from scratch
+	# A freshly generated world can now place berry_bush objects
+	# (ADR 020); this fixture rebuilds tiles/colonists from scratch
 	# and must clear generator-placed objects the same way, or a stray one
 	# left over from the real (pre-override) terrain could sit on a coordinate
 	# this scenario relies on being free.
@@ -251,7 +249,7 @@ func _check_execution_trace() -> void:
 		world._items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
 		world._next_item_id = 2
 		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
-	# F5 (issue #294): stages a wolf through IncidentScheduler.propose() (the
+	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
 	# -- this test proves only that the "incident" kind itself runs through
 	# the ordinary ToilExecutor dispatch once activated/assigned.
@@ -260,7 +258,7 @@ func _check_execution_trace() -> void:
 		wolf["factionId"] = "wildlife"
 		_expect(not world._incidents.propose(wolf, Vector2i(1, 5), 5).is_empty(),
 			"incident job submission must be accepted"))
-	# issue #359 (ADR 025 t3): walks a hostile actor into a trench through a
+	# ADR 026 (trench escape): walks a hostile actor into a trench through a
 	# real incident job (setup's own ticking, cleared from the trace by
 	# _run_scenario()'s clear_trace() right after setup returns, below), so
 	# only the escape_trench job's own go_to/work toils are traced.
@@ -276,11 +274,11 @@ func _check_execution_trace() -> void:
 				break
 		_expect(world._find_colonist("arch_wolf_trap").get("trapped") != null,
 			"the wolf must be trapped before the escape_trench trace assertions run"))
-	# issue #302: a combat actor at/below its own flee_hp_fraction gets a
+	# A combat actor at/below its own flee_hp_fraction gets a
 	# `flee` job from CombatGiver. The hostile actor sits far enough away
 	# (chebyshev 10) to give the giver a real away-direction without the
 	# combat resolver's own adjacency-only attack rule reaching colonist_0
-	# first (which would kill it at hp 1 before it ever flees). Issue #390:
+	# first (which would kill it at hp 1 before it ever flees). It is
 	# spawned from the "trader" definition (no "combat" component) rather than
 	# "colonist", with its factionId overridden to "raiders" -- CombatGiver's
 	# own flee-target pick only needs a hostile body with health, never a
@@ -294,7 +292,7 @@ func _check_execution_trace() -> void:
 		var threat: Dictionary = ActorTableType.spawn("trader", 10, 0, world._content, "arch_threat")
 		threat["factionId"] = "raiders"
 		world._append_colonist(threat))
-	# issue #360 (ADR 025 t4): traps colonist_0 through a real till job's route
+	# ADR 026 (rescue): traps colonist_0 through a real till job's route
 	# (setup's own ticking, cleared from the trace by _run_scenario()'s
 	# clear_trace() right after setup returns), then spawns the rescuer so only
 	# the rescue job's own go_to/work toils are traced.
@@ -313,7 +311,7 @@ func _check_execution_trace() -> void:
 		rescuer["hands"] = []
 		rescuer["factionId"] = "colony"
 		world._append_colonist(rescuer))
-	# issue #390 (ADR 031): a hostile actor not adjacent to any hostile
+	# ADR 033: a hostile actor not adjacent to any hostile
 	# target, and not owned by CombatGiver (full health, never flees), gets
 	# an `approach` job from ApproachGiver -- this test proves only that the
 	# "approach" kind itself runs through the ordinary ToilExecutor dispatch
@@ -344,18 +342,18 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted"))
 	var world: WorldStateType = result["world"]
 	_verify_trace_against_toils(kind, toils, world, result["statuses"], result["completed"])
-	# place() now always mints a fresh item id (issue #402: hands entries have
-	# no id of their own to preserve across a pick_up/place round trip), so
-	# the delivered item's id may no longer be "item_1" -- only that a wood
-	# item still exists on the ground still holds.
+	# place() always mints a fresh item id (hands entries have no id of their
+	# own to preserve across a pick_up/place round trip), so the delivered
+	# item's id may no longer be "item_1" -- only that a wood item still
+	# exists on the ground is checked.
 	var delivered := false
 	for item in world._items.values():
 		if String(item["kind"]) == "wood":
 			delivered = true
 	_expect(delivered, "the delivered item must still exist on the ground at its stockpile cell")
 
-## Construction (issue #406, docs/decisions/038, supersedes the single-job
-## `build` scenario ADR 027 once exercised here): `build` now creates a
+## Construction (ADR 040, which supersedes the single-job
+## `build` scenario ADR 028 once exercised here): `build` now creates a
 ## persistent site driven by ConstructionGiver's own two job kinds --
 ## site_fetch (haul's own [go_to, pick_up, go_to, ..., release_all] shape,
 ## ending in `deposit` instead of `place`) and site_work ([go_to, work,
@@ -412,7 +410,7 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 ## _advance_need_search function, no _need_jobs/_need_searches/
 ## _need_job_by_colonist field -- and exactly one function whose name both
 ## starts with _advance_ and names "colonist" (_advance_colonists), matching
-## this task's "no kind-specific branch other than reading the toils list".
+## the rule "no kind-specific branch other than reading the toils list".
 func _check_single_advance_path() -> void:
 	var lines := _read_text(WORLD_STATE_PATH).split("\n")
 	var per_colonist_advance: Array[String] = []
@@ -437,13 +435,13 @@ func _check_single_advance_path() -> void:
 		"world_state.gd must declare exactly one per-colonist advance function, _advance_colonists (found %s)"
 			% [per_colonist_advance])
 
-## issue #266: drop_tool is a real toil ToilExecutor implements even though no
+## drop_tool is a real toil ToilExecutor implements even though no
 ## content/jobs.json kind declares it (it is inserted dynamically for a
 ## foreign-reservation handover) -- proves it is not merely a typo that would
 ## otherwise silently no-op, mirroring is_known_toil()'s own contract.
 func _check_drop_tool_in_vocabulary() -> void:
 	_expect(ToilExecutorType.is_known_toil("drop_tool"),
-		"ToilExecutor.VOCABULARY must include drop_tool (issue #266), got %s" % [ToilExecutorType.VOCABULARY])
+		"ToilExecutor.VOCABULARY must include drop_tool, got %s" % [ToilExecutorType.VOCABULARY])
 
 # --- 3) viewer purity ---------------------------------------------------------
 

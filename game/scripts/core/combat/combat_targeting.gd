@@ -1,7 +1,7 @@
 class_name CombatTargeting
 extends RefCounted
 
-## F5/#302 combat targeting: finds the nearest hostile target for the attack
+## F5 combat targeting: finds the nearest hostile target for the attack
 ## rule (adjacent only) and the nearest hostile actor for the flee giver's own
 ## away-direction pick (unbounded). Plain, scene-independent GDScript
 ## (AGENTS.md): every method is static and stateless.
@@ -9,7 +9,7 @@ extends RefCounted
 ## Reads hostility via `relations.relation(a_faction, b_faction)` with each
 ## side's own runtime "factionId" field (camelCase) threaded explicitly,
 ## rather than `Relations.is_hostile(actor_a, actor_b)` -- that helper reads
-## content's "faction_id" key (docs/decisions/015-factions-and-relations.md),
+## content's "faction_id" key (docs/decisions/014-factions-and-relations.md),
 ## never the runtime field every live actor/object actually carries, so
 ## calling it here would silently resolve every pair to the "neutral"
 ## fallback instead of the real relation.
@@ -41,7 +41,7 @@ static func nearest_adjacent_hostile(actor: Dictionary, actors: Array, relations
 	var ax := int(actor["x"])
 	var ay := int(actor["y"])
 	var own_faction := actor_faction(actor)
-	# Array per tile, not a single overwritten entry (round-1 review): movement
+	# Array per tile, not a single overwritten entry: movement
 	# does not enforce exclusive actor occupancy, so a friendly actor appended
 	# after an adjacent enemy must never hide that enemy from targeting.
 	var actors_by_pos: Dictionary = {}

@@ -1,5 +1,7 @@
 # Asset credits
 
+> **In short:** Every image in the game is simple placeholder art drawn by a script in this repository, so it is all original and covered by the same licence as the code.
+
 All art currently shipped in this repository is **original placeholder pixel
 art generated from code** by [`tools/generate_placeholder_art.py`](../../tools/generate_placeholder_art.py).
 No external image packs or AI-image-generator outputs are included.

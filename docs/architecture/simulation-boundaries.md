@@ -1,5 +1,9 @@
 # Simulation boundaries
 
+> **In short:** The game's rules run separately from what is drawn on screen.
+> This page explains that separation and why it makes the game predictable,
+> testable and safe to save and load.
+
 ## Runtime layers
 
 ```text

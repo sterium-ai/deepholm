@@ -1,5 +1,7 @@
 # Save system
 
+> **In short:** How the game saves and loads: several rotating save files, writes that can never leave a half-written file behind, and step-by-step upgrades so saves from older versions still load.
+
 This page documents the implemented persistence contract for the game. Save
 I/O is outside the authoritative simulation; snapshots are versioned,
 validated, and replaced only after a complete candidate has been written.
@@ -59,8 +61,8 @@ starts a new game. Every save/load candidate is ordered by `(epoch, tick)`
 lexicographically -- a higher epoch always outranks any tick from a lower
 one -- so a freshly started, low-tick game's manual save always correctly
 outranks an older game's high-tick autosave, which raw tick comparison
-could not do (round 1 review: an old colony's autosave at tick 1000 would
-otherwise outrank a brand-new game manually saved at tick 10).
+could not do (an old colony's autosave at tick 1000 would otherwise outrank
+a brand-new game manually saved at tick 10).
 
 New Game also suspends `AutosaveTrigger` (`set_enabled(false)`, see
 "Autosave triggers" below) immediately after replacing the world, so a
@@ -98,20 +100,18 @@ codes are:
 ## Schema history and migration
 
 The current persisted schema is version 25 (`StateCodec.SCHEMA_VERSION`).
-The tool presentation increment (#274) adds no persisted fields: version 16
-was the calendar-alert baseline, and tool fetch exclusions were added in
-version 17; later migrations remain in force. Version 1 saves are migrated
+Version 1 saves are migrated
 explicitly to version 2: scheduler continuation fields are initialized to the
-truthful v1 starting values and the RNG state is reconstructed from the saved
+v1 starting values and the RNG state is reconstructed from the saved
 seed. Version 2 saves are migrated explicitly to version 3: `groundItems`
 starts as an empty array, and every entity gains `route: null` and
 `work: null` (a v2 save predates trees, ground wood, and colonist
-routing/work state, so there is truthfully nothing to backfill besides these
-fresh placeholders); any existing `scheduling.assignments` entry that
+routing/work state, so there is nothing to backfill besides these fresh
+placeholders); any existing `scheduling.assignments` entry that
 predates the resolved-path field is backfilled with `path: []`. Version 3
 saves are migrated explicitly to version 4: `objects` starts as an empty
-array (a v3 save predates placeable tile objects, so there is truthfully
-nothing to backfill). Version 4 saves are migrated explicitly to version 5:
+array (a v3 save predates placeable tile objects, so there is nothing to
+backfill). Version 4 saves are migrated explicitly to version 5:
 only the version counter moves, since a route's optional `rerouting` field
 (present only while a re-route search is actually in flight) is omitted
 entirely for the normal case every v4 route was already in, so a v4 route
@@ -122,8 +122,7 @@ and every entity gains `carrying: null` (a v5 save predates pick_up/place, so
 no item could ever have been carried). Version 6 saves are migrated
 explicitly to version 7 (see "Stockpile zones" below): a v6 save predates
 player-drawn zones, so `zones` starts as an empty array and `nextZoneId`
-starts at `1` — there is truthfully nothing to backfill besides these fresh
-placeholders. Version 7 saves are migrated explicitly to version 8 (see
+starts at `1`; there is nothing else to backfill. Version 7 saves are migrated explicitly to version 8 (see
 "Haul job fields" below): a v7 save predates the haul job kind, so every
 existing job gains `itemId: ""`, `cell: null`, `retryAt: 0`, and
 `backoffTicks: 0` — `JobQueue.submit_dig()`'s own harmless defaults for a
@@ -155,10 +154,10 @@ existing scheduler queue entry (`scheduling.waiting`, each pending batch's
 `candidates`/`found`, and the fresh `scheduling.activatedEntries` map itself)
 is backfilled with `restrictTo: ""` — no v13 save ever restricted a job to a
 specific worker or tracked a job's original waiting-queue entry past its own
-activation, so there is truthfully nothing more to recover.
+activation, so there is nothing more to recover.
 
 Version 14 saves are migrated explicitly to version 15 (see F1 in
-`docs/architecture/foundation-for-breadth.md`): a v14 save's shape is otherwise
+[`foundation-for-breadth.md`](foundation-for-breadth.md)): a v14 save's shape is otherwise
 unchanged, so only the version counter moves. What changes at v15 is where
 `contentVersion` comes from and how it is checked on load: `StateCodec.content_version()`
 now reads `ContentRegistry.version()` (`content/manifest.json`'s `version` field) instead
@@ -170,29 +169,28 @@ the save's exact stored `contentVersion`) before it is rejected with
 `content_version_mismatch`. A successful rename re-validates the resolved state before it
 is accepted.
 
-Issue #449 registers this table's first real, non-test-only entry: `content/objects.json`'s
+The first production entry in this table comes from splitting walls into two kinds: `content/objects.json`'s
 `wall` row was replaced by `wooden_wall` (same `build_cost`/`health`/`max_health` shape,
 `build_ticks` lowered from 40 to 20) and a new `stone_wall` row, and `content/manifest.json`'s
 `version` moved from `1.0.0` to `1.1.0` to mark the change. `SaveMigrations._static_init()`
-registers `WALL_RENAME_FROM_CONTENT_VERSION` (`"1.0.0"`, the exact pre-task value, read live
-off the checkout rather than hand-typed) against a remap that renames every persisted
+registers `WALL_RENAME_FROM_CONTENT_VERSION` (`"1.0.0"`, the content version before the split)
+against a remap that renames every persisted
 content-id field naming the retired `wall` id: a completed `objects[].kind == "wall"` entry,
-an in-progress `constructionSites[].kind == "wall"` entry (ADR 038's own persisted site
-record — only its `kind` is a content id; the site's own `requiredMaterials`/`heldMaterials`/
-`progress`/`buildTicks`/`builderIds` are its truthful, already-recorded history and are left
-untouched by the rename), and a still-legacy (pre-#406) `jobs[].buildKind == "wall"` field —
+an in-progress `constructionSites[].kind == "wall"` entry (ADR 040's own persisted site
+record — only its `kind` is a content id; the site's `requiredMaterials`/`heldMaterials`/
+`progress`/`buildTicks`/`builderIds` are already-recorded history and are left untouched by the
+rename), and a still-legacy (pre-construction-site) `jobs[].buildKind == "wall"` field —
 each becomes `"wooden_wall"`. `stone_wall` is a new addition, not a rename target, so no old
-save ever names it. A save written before this task, still carrying a `wall` object, site, or
+save ever names it. A save written before the split, still carrying a `wall` object, site, or
 legacy build job under `contentVersion: "1.0.0"`, is given exactly one chance to resolve
 through this hook on load, same as any other registered rename, and reports `wooden_wall`
 afterward. `register_content_rename()`/`unregister_content_rename()` remain the same
 registration seam a test uses for its own scenarios; unregistering one entry never disturbs
-another, including this file's own production one.
+another, including the production one.
 
 `SaveIO._read_and_verify()` resolves a registered content-rename *before* running
-`SaveMigrations.migrate_legacy_build_jobs()` (issue #406's own compatibility shim for a save
-written before construction sites existed — see "Build job fields" above for its `buildKind`
-field), not after: a legacy job's own retired `buildKind` is itself a content id, and
+`SaveMigrations.migrate_legacy_build_jobs()` (the compatibility shim for a save written before
+construction sites existed — see "Build job fields" below for its `buildKind` field), not after: a legacy job's own retired `buildKind` is itself a content id, and
 `migrate_legacy_build_jobs()` looks that id up against the content bundle actually on disk
 right now to synthesize the new site's `requiredMaterials`/`buildTicks`. Resolving the rename
 first is what lets a queued or active legacy `wall` build job synthesize a real `wooden_wall`
@@ -217,7 +215,7 @@ blindly cast in a way that raises a script error. Either way, the malformed save
 ordinary (non-rename-path) save with the same defect would. `SaveIO._read_and_verify()` mirrors
 this for `contentVersion` itself: it only ever attempts to resolve a rename when the stored
 `contentVersion` is present and already a `String`, never coercing a missing or wrong-typed one
-through `String()` first — that coercion previously misreported a missing/malformed
+through `String()` first — that coercion would misreport a missing or malformed
 `contentVersion` as a `content_version_mismatch` instead of the schema's own "missing required
 field"/"invalid contentVersion" error. `test_save_migration.gd`'s
 `_check_wall_rename_*_rejected_through_save_io()` checks cover a missing `objects`/`jobs`/
@@ -228,23 +226,23 @@ or crashing.
 Version 15 saves are migrated explicitly to version 16 (see "Calendar
 alerts" below): a v15 save predates the sowing-window calendar alert, so no
 window could ever have fired yet, and `calendarAlerts` starts as
-`{fired: []}` — there is truthfully nothing more to backfill.
+`{fired: []}`; there is nothing more to backfill.
 
 Version 16 saves are migrated explicitly to version 17 (see "Tool fetch
 excluded candidates" below): a v16 save predates the `fetch_tool` toil's own
 persisted per-job excluded-candidate set, so no fetch attempt could ever have
-excluded a candidate yet, and `toolFetchExcluded` starts as `[]` — there is
-truthfully nothing more to backfill.
+excluded a candidate yet, and `toolFetchExcluded` starts as `[]`; there is
+nothing more to backfill.
 
 Version 17 saves are migrated explicitly to version 18 (see "Faction
 membership and colonist health" below): a v17 save predates both per-actor
-faction membership and this schema's own persisted health, so no entity
+faction membership and persisted health, so no entity
 could ever have belonged to a faction other than the colony, and no entity's
 `hp`/`maxHp`/`dead` was ever actually restored across a save/load round trip
 (`WorldState._ensure_health()` rebuilt a fresh one after every load instead).
 `SaveMigrations._migrate_v17_to_v18()` backfills every existing entity with
 `factionId: "colony"` and a full-health snapshot `{hp: 100, maxHp: 100,
-dead: false}` — there is truthfully nothing more to recover. A migrated save
+dead: false}`; there is nothing more to recover. A migrated save
 already carries both fields by the time `StateCodec.decode()` hands the
 result to `WorldState.from_save_state()`, so `_ensure_health()`'s own
 backfill (see below) only ever fires for a hand-built fixture or a live
@@ -257,18 +255,17 @@ faction membership, so no object or item could ever have belonged to a
 faction other than the colony — `SaveMigrations._migrate_v18_to_v19()`
 backfills every existing `items.list` entry and every `objects` entry with
 `factionId: "colony"`, mirroring how `_migrate_v17_to_v18()` backfilled the
-same default onto every entity one version earlier — there is truthfully
-nothing more to recover.
+same default onto every entity one version earlier.
 
 Version 19 saves are migrated explicitly to version 20 (see "World
 dimensions and generation" below, ADR 019): a v19 save predates a persisted
 generator-algorithm identifier, so `map.generatorVersion` starts as `1` —
 the only worldgen algorithm that has ever produced a save. `map.width`/
 `map.height` need no migration: the schema already required them at v19 (see
-below), always encoded as 48/48 in practice before this task.
+below), and every v19 save in practice encoded them as 48/48.
 
 Version 20 saves are migrated explicitly to version 21 (see "Incident
-scheduler continuation state" below, ADR 018, issue #294): a v20 save
+scheduler continuation state" below, ADR 017): a v20 save
 predates incidents, so `incidentScheduler.cooldownUntilDay` starts as an
 honestly empty object — no incident could ever have drawn or started a
 cooldown. `lastProcessedDay` is synced to the save's own current calendar
@@ -276,33 +273,40 @@ day (`CalendarService.day_of_tick(tick)`), not `0`, so a restored world does
 not treat every day it never actually lived through as newly due the moment
 incidents are enabled. `rng` is freshly re-seeded the exact same
 deterministic way `IncidentScheduler._init()` derives it from the save's own
-seed (`seed + IncidentScheduler.SEED_SALT`) — there is truthfully nothing
-else to backfill.
+seed (`seed + IncidentScheduler.SEED_SALT`); there is nothing else to
+backfill.
 
 `migrate()` chains these single-version steps, so a version-1 save reaches
-version 21 by passing through every intermediate version first. Migration
-creates a new dictionary at each step and does not mutate the input.
+the current version by passing through every intermediate version first.
+Migration creates a new dictionary at each step and does not mutate the
+input.
 
-Schema version 21 stays current for per-object health (F5/#302, ADR 020): no
+Missing required fields, malformed v1/v2 shapes, and any older version without
+an explicit migration are rejected with `no_migration_available`; they are
+never silently filled from current defaults. A save with a schema newer than
+this build is rejected with `save_from_newer_version` and its state is not
+returned. All rejected saves remain candidates for `load_best()` to report
+while an older valid slot may still be loaded.
+
+Schema version 21 stays current for per-object health (ADR 021): no
 migration step or version bump was needed. Each `objects` entry gains an
 *optional* `health: {hp, maxHp}` field (`StateCodec._encode_objects()`/
 `_decode_objects()`, `SaveIO._valid_object_health()`), present only for an
 object whose kind declares `max_health` (`content/objects.json`, e.g. `wall`/
 `door`) -- mirroring how `route.rerouting` is optional for the same reason
-(present only mid-search). A save written before this task, and any object
-kind with no health at all, simply omits the field; the schema does not
-require it, so an old save validates unchanged. `WorldState._ensure_object_health()`
-backfills a missing entry from the object's own content-declared default the
-next tick, exactly as it already did before this task for every restored
-save (this only changes what a *newly written* save records: a damaged
-wall/door's exact accumulated hp now survives a save/load round trip instead
-of silently resetting to full). `WorldState.state_hash()` includes
+(present only mid-search). A save written before per-object health, and any
+object kind with no health at all, simply omits the field; the schema does
+not require it, so an old save validates unchanged. `WorldState._ensure_object_health()`
+backfills a missing entry from the object's content-declared default on the
+next tick. A save that does record the field preserves a damaged wall's or
+door's exact accumulated hp across a save/load round trip instead of
+resetting it to full. `WorldState.state_hash()` includes
 `_object_health` directly (unlike `_object_factions`, which stays out of the
 hash by its own documented precedent) since a wall's remaining hp changes
 future combat outcomes.
 
 The same version also carries an *optional* top-level `combatBlockedTargets`
-array (F5/#302, ADR 020 rounds 6-7): one `{actorId, tiles}` entry per flee
+array (ADR 021): one `{actorId, tiles}` entry per flee
 episode `CombatGiver` currently owns -- an actor whose work it interrupted
 to flee and whose recovery it therefore still owes -- listing every flee
 destination excluded during that episode (`tiles` is empty for an episode
@@ -316,7 +320,7 @@ since both the episode's existence and its exclusions change the next flee
 decision.
 
 The same version also carries an *optional* top-level `approachJobTargets`
-array (issue #390, ADR 031): one `{jobId, kind, actorId}` (target is an
+array (ADR 033): one `{jobId, kind, actorId}` (target is an
 actor) or `{jobId, kind, tile}` (target is an object) entry per job
 `ApproachGiver` currently tracks -- an object target has no living record to
 re-scan after a load, and an actor target is not safely re-derived from
@@ -328,10 +332,10 @@ restored non-terminal `approach` job is re-adopted for its actor before the
 first tick; an old save simply omits the field. `state_hash()` includes it,
 since the association affects the next commit/adjacency decision.
 
-A prior version of this same feature (issue #390/ADR 031, round-2 review finding 2) also wrote an
+An earlier version of this feature (ADR 033) also wrote an
 *optional* top-level `approachRetiredActors` array: a plain list of `actor_id` strings
 `ApproachGiver` had permanently retired (no job, no further search) after an `approach` job ended
-without ever reaching adjacency. Issue #391 (ADR 031 round-3 revision) removes that permanent
+without ever reaching adjacency. A later revision of ADR 033 removed that permanent
 retirement in favor of retargeting the same tick a tracked job's target dies/is destroyed or goes
 queued+blocked-unreachable, falling back to no approach job (never a latch) when nothing reachable
 remains -- see `docs/architecture/orders-and-movement.md`'s Combat section. `StateCodec.decode()` no
@@ -339,33 +343,32 @@ longer reads `approachRetiredActors` and `encode()` no longer writes it, but the
 by `SaveIO`'s own top-level allow-list and its structural validator (`_valid_approach_retired_actors()`,
 unchanged) purely so a save written before this revision still loads.
 
-Two later version bumps (schemaVersion 22 for a persisted dig-find RNG continuation, ADR 025
-amendment; 23 for a trapped colonist's persisted state, issue #359, ADR 025 t3) predate this
-section's own update and are not separately narrated here. Version 24 saves are migrated
-explicitly to version 25 (issue #402, ADR 035; see "Items and hands" below, which replaces the
-former "Items and carrying" section): each entity's single-slot `carrying` field (`null`, or
+Schema versions 22 (a persisted dig-find RNG continuation) and 23 (a trapped colonist's
+persisted state) are described in
+[ADR 026](../decisions/026-trench-trapped-actor-and-rescue.md). Version 24 saves are migrated
+explicitly to version 25 (ADR 037; see "Items and hands" below): each entity's single-slot `carrying` field (`null`, or
 `{itemId, kind, count}`) becomes `hands`, a list of `{kind, count}` entries -- empty when
 `carrying` was `null`, one entry carrying its own `kind`/`count` when it was populated (a v24
-save predates a colonist ever holding more than one ground item at once, so there is truthfully
-nothing else to backfill). The item id is dropped: a `hands` entry never had one of its own,
+save predates a colonist ever holding more than one ground item at once, so there is nothing
+else to backfill). The item id is dropped: a `hands` entry never had one of its own,
 even freshly after this migration -- only the ground item `place()` later creates for it gets a
 new id.
 
-Schema version 25 stays current for object footprint/rotation (issue #405, ADR 037): no
+Schema version 25 stays current for object footprint/rotation (ADR 039): no
 migration step or version bump was needed. Each `objects` entry gains an *optional*
 `orientation: "" | "horizontal" | "vertical"` field (`StateCodec._encode_objects()`/`_decode_objects()`,
 `SaveIO._valid_object()`), meaningful only for a kind that declares `rotatable: true`
 (`content/objects.json`) and present only when the object was placed with a non-default
-orientation -- absent or an explicit `""` both mean footprint `[1, 1]`/no rotation (review round 1:
-the encoder never writes `""`, but a save that does must still validate and decode identically to
+orientation -- absent or an explicit `""` both mean footprint `[1, 1]`/no rotation (the
+encoder never writes `""`, but a save that does must still validate and decode identically to
 one that omits the field), mirroring how
 `objects[].health` is optional for the same reason (present only for a kind that declares
 `max_health`). A placed object whose kind's `footprint` is larger than `[1, 1]` still persists as
 exactly *one* `objects` entry naming its origin tile, not one entry per occupied tile:
 `WorldState._object_footprint_tiles()` (kind's footprint, swapped `[w, h]` -> `[h, w]` under
 `"vertical"`) re-expands that one entry back out to every occupied tile on `decode()`, restoring
-`_objects`/`_object_factions`/`_object_health` identically at each. A save written before this
-task, and any object whose kind is not `rotatable` (every kind today except the test-only
+`_objects`/`_object_factions`/`_object_health` identically at each. A save written before
+rotation existed, and any object whose kind is not `rotatable` (every kind today except the test-only
 `test_footprint_crate`), simply omits the field; the schema does not require it, so an old save
 validates unchanged.
 
@@ -410,9 +413,7 @@ resource counts a 48x48 map has. See
 equal `width*height`, rejects `map.width`/`map.height` above
 `mapgen.json`'s `max_world_size`, and rejects any entity/item/object/zone/
 tool-item/job/queue-entry/route/groundBerries/workProgress/assignment
-position at or beyond the map's own declared width/height — none of these
-checks existed before this task (only a non-negative lower bound was
-checked, and only for entities/items/objects/zones/tool items). Every
+position at or beyond the map's own declared width/height. Every
 persisted tile coordinate anywhere in the save, including nested route
 `start`/`target`/`frontier`/`visited`/`cameFrom`/`path` fields and job
 `target`/`cell` fields, is bounds-checked the same way — a hand-edited or
@@ -430,7 +431,7 @@ JSON number as a 64-bit float, which cannot exactly represent an integer
 magnitude at or beyond 2^53 — reading a save back through the ordinary parsed
 `Dictionary` would silently round a very large seed to the nearest
 representable float. `SaveIO._read_and_verify()` recovers the exact value for
-all three fields by STRUCTURALLY locating each one in the save's raw wire
+all three fields by *structurally* locating each one in the save's raw wire
 text — `_locate_state_object()` walks the envelope object to find the
 top-level `"state"` member, then walks `state`'s own direct members with
 `_scan_object_members()`, giving `_restore_exact_seed()` and
@@ -442,9 +443,9 @@ This is a minimal hand-written JSON walk (`_scan_object_members()`,
 `_skip_ws()`), not a regex over the whole file: a regex search cannot
 distinguish "the `seed` key that belongs to `state`" from a same-named key
 anywhere else in the envelope, and cannot decode a key spelled with a JSON
-`\uXXXX` escape (e.g. `"seed"` for `"seed"`) — `_parse_json_string()`
+`\uXXXX` escape (e.g. `"\u0073eed"` for `"seed"`) — `_parse_json_string()`
 decodes those while scanning key names, so an escaped key names the same
-field a plain one would (round 3 review). An envelope-level `seed` or `rng`
+field a plain one would. An envelope-level `seed` or `rng`
 field sibling to `state` is never considered, since the walk only ever
 descends from the envelope root into `state`'s own members, never elsewhere.
 If a field the parsed Variant says exists (`state.has("seed")`, etc.) cannot
@@ -455,20 +456,19 @@ float-derived value already sitting in the parsed state.
 
 Once located, `_parse_json_integer_token()` decomposes each field's complete
 raw number token (not a bare digit prefix — a prefix match on `1e3` or `1.5`
-would stop at the leading `1` and silently misread the value, round 2
-review): a token that denotes a mathematically whole number, however it is
+would stop at the leading `1` and silently misread the value): a token that denotes a mathematically whole number, however it is
 spelled (`1000`, `1e3`, and `1.000e3` all mean the same value), restores to
 the identical exact 64-bit integer; a token with a genuine fractional
 remainder, or a magnitude outside the signed 64-bit range, makes
 `SaveIO.read()` reject the save as a typed `schema_error` instead of
 truncating or overflowing it into a plausible-looking wrong value. The
 token's exponent is bounds-checked by its own significant-digit count
-BEFORE it is converted to an int or used to pad the mantissa with zeros: a
+*before* it is converted to an int or used to pad the mantissa with zeros: a
 short token can spell an arbitrarily long exponent (e.g.
 `1e999999999999999999999999`), and both converting that many digits and
 padding a string to that length are bounded to reject immediately — with a
 zero mantissa still resolving to exact `0` for any exponent — rather than
-attempting unbounded arithmetic or allocation (round 3 review).
+attempting unbounded arithmetic or allocation.
 
 ## Tool fetch excluded candidates
 
@@ -483,15 +483,14 @@ with at least one excluded candidate (a job with none is simply omitted); each
 `ToilExecutor.restore_fetch_tool_excluded()` before any further tick, and
 `WorldState.state_hash()` includes it so a save/load round trip that drops or
 corrupts this set is caught the same tick it diverges, not several ticks
-later. Losing this set (as a pre-#271-round-6 save necessarily does) is
+later. Losing this set (as a save written before this field existed necessarily does) is
 self-healing rather than fatal: a restored run simply re-tries an
 already-ruled-out candidate for a few extra ticks before reaching the same
 outcome an uninterrupted run would, since `blocked_no_tool`'s own queued/
 backoff state (`jobs.json`'s `retry_base_ticks`/`retry_cap_ticks`) is fully
 persisted independently of this set.
 
-`StateCodec._restore_reroutes()` also uses this task's fix for a related
-continuity gap: a colonist's in-flight `fetch_tool` travel leg rebuilds its
+`StateCodec._restore_reroutes()` also closes a related continuity gap: a colonist's in-flight `fetch_tool` travel leg rebuilds its
 route search's target-tile passability exception from the search's own
 already-persisted `rerouting.target` (the tool's location at the moment the
 search began), not from the tool's current location — those differ once a
@@ -511,12 +510,11 @@ onto any colonist still missing it at runtime (a hand-built test fixture, or
 a live colonist spawned this session), the same plain-append pattern
 `_ensure_held_tool()` already uses.
 `health` is `{hp, maxHp, dead}`, the F2 health component's own per-instance
-state (`ActorHealth`, `docs/decisions/012-actors-and-components.md`): issue
-#283 already gave every spawned colonist this field on the live `WorldState`
-side, but `StateCodec` never carried it across a save/load round trip until
-now — `WorldState._ensure_health()` silently rebuilt a fresh full-health
-value after every load instead of restoring the one that was actually saved.
-`StateCodec._encode_entities()`/`_decode_entities()` now read and write both
+state (`ActorHealth`, [ADR 012](../decisions/012-actors-and-components.md)).
+Every spawned colonist carries this field on the live `WorldState` side;
+before schemaVersion 18, `StateCodec` did not persist it, and
+`WorldState._ensure_health()` rebuilt a fresh full-health value after every
+load. `StateCodec._encode_entities()`/`_decode_entities()` read and write both
 fields alongside every other entity field, so a colonist's actual hp
 survives a save/load round trip like every other piece of its state.
 
@@ -525,7 +523,7 @@ survives a save/load round trip like every other piece of its state.
 Every persisted object and item entry gains a required `factionId` field
 (a lowercase id string, `^[a-z0-9_-]+$`) at schemaVersion 19 — the persisted
 counterpart of the `faction_id` runtime field `WorldState.get_objects()`/
-`get_items()` already exposed (issue #287). `WorldState` tracks object/item
+`get_items()` already exposed. `WorldState` tracks object/item
 faction ownership in parallel maps keyed the same way as `_objects`/`_items`
 (`_object_factions`, `_item_factions`), not as a nested value inside those
 maps themselves; `StateCodec._encode_objects()`/`_encode_items()` read from
@@ -540,12 +538,12 @@ save this old.
 ## Tile objects
 
 The top-level `objects` array holds at most one *logical* object per
-footprint tile group (ADR 005, revised by ADR 037): each entry is
+footprint tile group (ADR 005, revised by ADR 039): each entry is
 `{target: {x, y}, kind, factionId, orientation?}`, where `target` names the
 object's *origin* tile, `kind` names an entry declared in
 `game/content/objects.json` (for example `chair`, `door`, `wooden_wall`, `table`)
 and `factionId` (added at schemaVersion 19, see "Object and item faction
-ownership" below) names the faction that owns it. A kind whose content-
+ownership" above) names the faction that owns it. A kind whose content-
 declared `footprint` is larger than `[1, 1]` occupies every tile of that
 footprint (swapped under `orientation: "vertical"` when the kind declares
 `rotatable: true`, see "Schema version 25 stays current for object
@@ -563,8 +561,8 @@ adding, removing, or rotating a tile object changes the hash.
 
 The top-level `items` field is `{nextId: int, list: [...]}`. Each entry in
 `list` is a first-class ground item, `{id, x, y, kind, count, factionId}`
-(currently only `kind: "wood"`, plus `"stone"`; `factionId`, added at
-schemaVersion 19, see "Object and item faction ownership" below, names the
+(for example `kind: "wood"` or `"stone"`; `factionId`, added at
+schemaVersion 19, see "Object and item faction ownership" above, names the
 faction that owns it); `nextId` is the next never-yet-used item id counter
 (`WorldState._next_item_id`), persisted alongside the list so a restored
 world never reuses an id an earlier save already handed out. `WorldState`
@@ -575,7 +573,7 @@ tile, kept for existing callers). A chop job's completion effect creates one
 wood item with a fresh id (`WorldState._spawn_wood_item()`) instead of
 incrementing a per-tile counter.
 
-Each entity gains a `hands` field (issue #402, ADR 035; schemaVersion 25,
+Each entity gains a `hands` field (ADR 037; schemaVersion 25,
 replacing the single-slot `carrying` field a v24 save used): an array of at
 most 4 `{kind, count}` entries, one per distinct kind currently held, every
 `count >= 1`, the sum of every entry's `count` never exceeding 4
@@ -632,7 +630,7 @@ never attached to an item or a reserved cell.
 
 ## Build job fields
 
-A `build` job (issue #278/#303) gains two further fields on top of the haul
+A `build` job gains two further fields on top of the haul
 fields above, since it hauls its declared `build_cost` item to a stockpile
 leg (`target`/`itemId`/`cell`, reused unchanged from haul) and then works a
 second, separate site: `site` (the tile `{x, y}` where the object will be
@@ -678,7 +676,7 @@ progress count — is what gets suspended and later resumed or reactivated.
 
 The optional top-level `workProgressOwners` field is an array of
 `{target, jobId}` entries naming, for each `workProgress` key, the exact job
-that owns it (issue #278/#303 round-5 review). Two different job kinds can
+that owns it. Two different job kinds can
 legitimately target the same tile at once — a `dig` submitted at a `build`'s
 own site while the build is still mid-haul, for instance — so on load the
 owner cannot be re-derived by asking "which job currently targets this key",
@@ -689,11 +687,11 @@ just-restored job list (the referenced job must still exist, be
 `queued`/`active`, and be a kind that ticks work) so a hand-edited or stale
 save can never resurrect an owner pointing at a job that is gone.
 
-`workProgressOwners` is absent for a save taken before this field existed
-(issue #278/#303 round-6 review). Leaving every such key without an owner
-was itself a defect: `WorldState._release_owned_work_progress()` only clears
+`workProgressOwners` is absent for a save taken before this field existed.
+Leaving every such key without an owner would be a defect:
+`WorldState._release_owned_work_progress()` only clears
 a key its own job_id owns, so a cancel/fail could never match an ownerless
-key, and a replacement job at the same tile silently inherited the abandoned
+key, and a replacement job at the same tile would silently inherit the abandoned
 timer instead of starting fresh. The decoder instead recovers ownership from
 execution state the wire format has always carried unconditionally, whether
 or not `workProgressOwners` is present: an entity's own `work.jobId` (the job
@@ -712,8 +710,7 @@ play (`WorldState._finish_job()`'s own `incident` branch clears it directly
 instead) — so its key is recognized and excluded from this cleanup rather
 than pruned.
 
-The optional top-level `suspendedWorkProgress` field (round-6 review,
-#278/#303) is an array of `{jobId, ticksRemaining}` entries, keyed by job_id
+The optional top-level `suspendedWorkProgress` field is an array of `{jobId, ticksRemaining}` entries, keyed by job_id
 alone — no tile coordinate, unlike `workProgress`/`workProgressOwners`. A
 still-queued (suspended, not terminated) job's own `work`-toil ticks are
 moved here, out of the shared tile-keyed cache, the instant its colonist's
@@ -762,13 +759,6 @@ urgent-need interrupt (see above) survive a save/load round trip: without
 them, a colonist paused for a need job that was already committed at save
 time would never be found again once its need job resolved.
 
-Missing required fields, malformed v1/v2 shapes, and any older version without
-an explicit migration are rejected with `no_migration_available`; they are
-never silently filled from current defaults. A save with a schema newer than
-this build is rejected with `save_from_newer_version` and its state is not
-returned. All rejected saves remain candidates for `load_best()` to report
-while an older valid slot may still be loaded.
-
 ## Calendar alerts
 
 The top-level `calendarAlerts` field is `{fired: [...]}`, a flat array of
@@ -790,7 +780,7 @@ window's `id`/`label`/`days_until`, through the same `_insert_event()`/
 ## Incident scheduler continuation state
 
 `IncidentScheduler` (`game/scripts/core/incidents/incident_scheduler.gd`, F5
-"Incidents", ADR 018, issue #294) owns three pieces of continuation state,
+"Incidents", ADR 017) owns three pieces of continuation state,
 persisted as the top-level `incidentScheduler` field: `cooldownUntilDay`, a
 map from each `content/incidents.json` id to the day index a fresh draw may
 next consider it eligible again; `lastProcessedDay`, the day index its daily
@@ -804,7 +794,7 @@ of scheduler continuation state: two otherwise-identical worlds whose day
 gates differ (one due to draw on its next tick, one not) must not alias to
 the same hash. `state_hash(include_incidents := false)` hashes the colony-only
 projection instead, byte-identical to the formula `state_hash()` used before
-incidents existed (issue #295): it never includes any of the three fields, so
+incidents existed: it never includes any of the three fields, so
 it stays a stable pre-incident-baseline comparison regardless of future
 incident-shape changes — `test_toils_dig_chop_regression.gd`'s
 `COLONY_EXPECTED_HASH` and `test_world_state_determinism.gd`'s
@@ -837,8 +827,8 @@ of `NOTIFICATION_APPLICATION_PAUSED` (mobile backgrounding),
 also covers the current tick boundary, preventing a duplicate save from a
 queued tick notification.
 
-`set_enabled(false)`/`is_enabled()` (issue #299 round 1, "Game sessions and
-New Game" above) suspend both the tick-boundary and lifecycle triggers
+`set_enabled(false)`/`is_enabled()` (see "Game sessions and New Game"
+above) suspend both the tick-boundary and lifecycle triggers
 entirely: neither `check()` nor a lifecycle notification saves while
 disabled. Re-enabling resyncs the boundary bookkeeping to the current tick
 (like `attach()`), so a game re-enabled mid-interval waits for the next real

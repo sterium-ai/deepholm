@@ -1,39 +1,41 @@
-# ADR 039: A viewer-purity-compliant move_ticks_per_tile getter raises the world_state.gd core budget
+# ADR 041: A read-only move_ticks_per_tile getter for the colonist glide raises the world_state.gd core budget
+
+> **In short:** Colonists used to jump across each tile quickly and then pause, so walking looked jerky. The display now spreads the movement evenly over the whole step, which needed one small, read-only addition to the main world-state file.
 
 - **Status:** accepted
 - **Date:** 2026-09-25
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`.
-- **Implements:** issue #412 ("colonist glide spans the full tile").
 
 ## Decision
 
 `colonist_sprites.gd`'s `advance()` computed its glide fraction `t` as `elapsed /
-seconds_per_tick()` -- one simulation tick's duration -- instead of one full
-tile-crossing's duration (`seconds_per_tick() * move_ticks_per_tile`,
-`content/tiles.json`, 4 today). The sprite finished its glide after 1/4 of a
-tile-crossing and then held at the destination pixel for the remaining 3/4,
-which is the visible per-tile pause.
+seconds_per_tick()`, the duration of one simulation tick, instead of the duration
+of one full tile crossing (`seconds_per_tick() * move_ticks_per_tile`,
+`content/tiles.json`, currently 4). The sprite finished its glide after a quarter
+of a tile crossing and then held at the destination pixel for the remaining
+three quarters, which was the visible per-tile pause ("the colonist glide should
+span the full tile").
 
 The fix needs `move_ticks_per_tile` in the viewer. `test_architecture_rules.gd`'s
 viewer-purity check only allows `game/scripts/viewer/*.gd` to call
-`world.get_*()`/`apply()`/`get_events()`/`tick()` -- never build a second
+`world.get_*()`/`apply()`/`get_events()`/`tick()`, and never to perform a
 `ContentRegistry` read of its own (ADR 010 reserves content loading to
-`WorldState`'s one frozen bundle). `WorldState.get_move_ticks_per_tile()` returns
+`WorldState`'s single frozen bundle). `WorldState.get_move_ticks_per_tile()` returns
 the same value already loaded once in `_init()` (`_content.list("tiles")[0]
 ["move_ticks_per_tile"]`), with no new stored field and no simulation-behaviour
 change.
 
-Cap moves 4760 -> 4765: a blank separator line, a 2-line doc comment, and the
-2-line `get_move_ticks_per_tile()` function (its `func` line plus `return`)
-add exactly 5 lines to the file.
+The cap moves from 4760 to 4765: a blank separator line, a 2-line doc comment,
+and the 2-line `get_move_ticks_per_tile()` function (its `func` line plus
+`return`) add exactly 5 lines to the file.
 
 ## Consequences
 
 - No other core file's budget changes.
 - `colonist_sprites.gd` caches the getter's value once in `set_world()` and uses
-  it in `advance()`; `test_colonist_sprites.gd` covers the corrected glide
-  duration and the constant-velocity, no-pause acceptance across a straight and
-  an L-shaped route.
+  it in `advance()`. `test_colonist_sprites.gd` covers the corrected glide
+  duration and checks constant velocity with no pause across a straight and an
+  L-shaped route.
 
 ## Appendix: measurement evidence
 
@@ -46,10 +48,10 @@ tile-crossing at x3 speed (`seconds_per_tick() = 1/6s`, 10 frames/tick,
 `_process()` does. Every sampled frame across the crossing is listed (none
 skipped); frame 39 is the last stationary frame before the crossing starts.
 
-**Pre-fix** (`advance()` dividing by `seconds_per_tick()` alone, reverted
-temporarily to capture this table, not part of the committed diff): the glide
-reaches the destination pixel after only 10 of the 40 frames (1 of 4 ticks),
-then holds `x=12.0000` for the remaining 30 frames -- the reported pause.
+**Before the fix** (`advance()` dividing by `seconds_per_tick()` alone,
+temporarily restored to capture this table): the glide reaches the destination
+pixel after only 10 of the 40 frames (1 of 4 ticks), then holds `x=12.0000` for
+the remaining 30 frames, which is the visible pause.
 
 ```
 frame,tick,x,y
@@ -96,9 +98,9 @@ frame,tick,x,y
 79,8,12.0000,72.0000
 ```
 
-**Post-fix** (`advance()` dividing by `seconds_per_tick() * move_ticks_per_tile`,
-the committed code): `x` changes by a constant 0.4000px every frame, all 40
-frames, reaching the destination exactly at the last sampled frame -- no hold.
+**After the fix** (`advance()` dividing by `seconds_per_tick() * move_ticks_per_tile`):
+`x` changes by a constant 0.4000px on every one of the 40 frames and reaches the
+destination exactly at the last sampled frame, with no hold.
 
 ```
 frame,tick,x,y

@@ -1,17 +1,17 @@
 extends SceneTree
 
-## Exercises WorldState's per-colonist needs (colonist-ai.md 3.1/3.8, issue
-## #349/ADR 023): content declares food/water/rest with a per-day
+## Exercises WorldState's per-colonist needs (colonist-ai.md 3.1/3.8,
+## ADR 024): content declares food/water/rest with a per-day
 ## (`rate_per_day`) decay rate applied through a deterministic per-colonist,
 ## per-need integer accumulator (never a float) and warn/urgent/critical
 ## thresholds; a freshly spawned colonist starts every need full with its
 ## accumulator at 0; each need decays by its own kind's declared rate,
-## clamped at 0, at the exact tick the task's acceptance criteria name; decay
+## clamped at 0, at the exact tick the needs specification names; decay
 ## is identical across two independently-ticked, identically-seeded worlds
 ## and survives a save/load in the middle of a day; and StateCodec round-trips
 ## a live WorldState's needs and accumulators unchanged. No consumption,
-## replenishment, or decision-layer reaction to a threshold here -- that is a
-## later increment (see the task's Non-goals).
+## replenishment, or decision-layer reaction to a threshold here -- those are
+## covered by test_need_jobs.gd.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
@@ -62,7 +62,7 @@ func _load_need_definitions() -> Dictionary:
 
 ## game/content/needs.json must declare food, water and rest, each with a
 ## numeric rate_per_day and warn/urgent/critical thresholds (docs/architecture/
-## colonist-ai.md 3.1: "Needs have three thresholds in data"; issue #349
+## colonist-ai.md 3.1: "Needs have three thresholds in data"; ADR 024
 ## renamed the per-tick "rate" field to the per-day "rate_per_day").
 func _check_needs_content_file() -> void:
 	if _failed:
@@ -80,7 +80,7 @@ func _check_needs_content_file() -> void:
 
 ## A freshly spawned colonist's needs dictionary has exactly food/water/rest,
 ## each starting at the full value (WorldState.NEED_FULL), with its sibling
-## needsAccumulator starting at 0 for every kind (issue #349).
+## needsAccumulator starting at 0 for every kind.
 func _check_fresh_colonist_needs_start_full() -> void:
 	if _failed:
 		return
@@ -101,7 +101,7 @@ func _check_fresh_colonist_needs_start_full() -> void:
 
 ## After N ticks, each need equals max(0, full - floor(rate_per_day * N /
 ## day_length_ticks)) for its own kind's content-declared rate (colonist-ai.md
-## 3.1, ADR 023): the accumulator adds rate_per_day every tick and subtracts
+## 3.1, ADR 024): the accumulator adds rate_per_day every tick and subtracts
 ## exactly day_length_ticks -- never resetting to 0 -- each time it reaches
 ## that threshold, so the point count after N ticks is exactly an integer
 ## floor division, with no float anywhere.
@@ -131,7 +131,7 @@ func _check_needs_clamp_at_zero() -> void:
 		return
 	var definitions := _load_need_definitions()
 	var world := WorldStateType.new(2002, 10)
-	# issue #300 round 1 revision: the real river-aware generator can place a
+	# The real river-aware generator can place a
 	# colonist close enough to water/food/a bed that a need job actually
 	# completes within this test's own tick window, which used to be
 	# incidentally true for this seed/size under the old generator but was
@@ -157,7 +157,7 @@ func _check_needs_clamp_at_zero() -> void:
 					[colonist["id"], kind, ticks, needs[kind]])
 			_expect(int(needs[kind]) >= 0, "a need must never go negative")
 
-## The task's own acceptance criteria (issue #349): from full, with no
+## Expected decay times (ADR 024): from full, with no
 ## reachable source, food reaches 0 after 2200*100/67 ≈ 3284 ticks, water
 ## after 2200 ticks (its rate_per_day equals `full`), and rest after 2750
 ## ticks -- each ±1 tick for rounding. Computed here as an exact integer
@@ -201,7 +201,7 @@ func _check_needs_reach_zero_at_expected_tick() -> void:
 
 ## Two independently constructed, identically-seeded worlds ticked the same
 ## number of times must decay every need and every accumulator identically
-## (AGENTS.md's determinism rule; ADR 023's integer-only accumulator).
+## (AGENTS.md's determinism rule; ADR 024's integer-only accumulator).
 func _check_needs_decay_deterministic_across_seeded_runs() -> void:
 	if _failed:
 		return
@@ -225,9 +225,9 @@ func _check_needs_decay_deterministic_across_seeded_runs() -> void:
 ## value: saving mid-day (a tick count that is not a multiple of
 ## day_length_ticks, so every accumulator holds a genuine partial carry),
 ## restoring, and continuing to tick both the live and restored copies must
-## decay every need identically to an uninterrupted run (issue #349's own
-## acceptance: "decay is identical ... after a save/load in the middle of a
-## day (accumulator persisted)").
+## decay every need identically to an uninterrupted run (ADR 024: decay is
+## identical after a save/load in the middle of a day, because the
+## accumulator is persisted).
 func _check_needs_decay_survives_save_load_mid_day() -> void:
 	if _failed:
 		return

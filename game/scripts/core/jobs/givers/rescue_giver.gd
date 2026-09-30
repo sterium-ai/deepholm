@@ -1,19 +1,19 @@
 class_name RescueGiver
 extends RefCounted
 
-## Job-giver for `rescue` (issue #360, ADR 025's own t4): decides WHEN a
+## Job-giver for `rescue` (ADR 026): decides when a
 ## rescue job should exist for a trapped colonist. Modelled directly on
 ## need_giver.gd's own committed-job pattern -- constructor-injected
 ## callables, the same submit()/restrict_to entry point, and the same
 ## multi-tick, budgeted search (at most one RerouteType resume() per
 ## candidate colonist per tick, see "Route budget" below) -- but
 ## need_giver.gd's own roles doubly swapped:
-## need_giver holds ONE colonist fixed and ranks many candidate SOURCE TILES
-## by real route length; this instead ranks candidate RESCUER colonists by
+## need_giver holds one colonist fixed and ranks many candidate source tiles
+## by real route length; this instead ranks candidate rescuer colonists by
 ## Manhattan distance to the victim first (cheap pre-sort), then, for
 ## whichever candidate is currently being tried, ranks the victim's own (up to
 ## four) adjacent, passable, non-trench neighbour tiles by real route length
-## FROM that candidate -- exactly need_giver's own single-subject, multi-
+## from that candidate -- exactly need_giver's own single-subject, multi-
 ## target search, just run once per candidate in ranked order until one
 ## candidate reaches at least one target. A single fixed target picked without
 ## regard to the approaching rescuer is not enough: on a corridor-width map the
@@ -21,10 +21,10 @@ extends RefCounted
 ## straight through the trench itself, which is exactly the fall-in this
 ## module exists to prevent.
 ##
-## Route safety (round-2 review round-4 finding 1, replacing the round-3
-## "does the path cross the VICTIM's own tile" scheme): that scheme only
-## protected against the one trench this module already knew about --
-## a candidate whose only real route crossed a DIFFERENT trench entirely
+## Route safety (replaces an earlier "does the path cross the victim's own
+## tile" check): that check only protected against the one trench this module
+## already knew about -- a candidate whose only real route crossed a different
+## trench entirely
 ## (e.g. victim at (5,0), rescuer at (0,0), an unrelated trench at (2,0) on
 ## the only straight route to a target at (4,0)) was still accepted, sending
 ## the rescuer through a trench it was never trying to reach. go_to's real
@@ -34,7 +34,7 @@ extends RefCounted
 ## runs with that same unrestricted, ordinary routable_to callable -- the
 ## identical route go_to will really walk -- and a (candidate, target) pair is
 ## only ever accepted (_advance_target_search() below) when the resulting real
-## path crosses NO trench tile at all, anywhere along its length, not merely
+## path crosses no trench tile at all, anywhere along its length, not merely
 ## the victim's own (_is_trench, constructor-injected so this module never
 ## hardcodes the tile-kind string itself; this subsumes the old victim-tile-
 ## only check, since the victim's own tile is itself trench). A pair whose
@@ -42,7 +42,7 @@ extends RefCounted
 ## assumed detour: if every candidate's real route to every target crosses a
 ## trench, this module reports REASON_NO_RESCUER_AVAILABLE exactly like it
 ## would with no candidate at all, rather than send a rescuer in to fall in
-## itself. This module validates the COMMIT-time route only; everything a
+## itself. This module validates the commit-time route only; everything a
 ## committed rescue does after that (its scheduler activation, a resume after
 ## a need interrupt, a mid-travel re-route around a newly blocked corridor)
 ## is kept trench-safe by world_state.gd at its own existing boundaries --
@@ -56,21 +56,21 @@ extends RefCounted
 ## search to completion synchronously: a resumed rescue re-routes through the
 ## toil executor's own budgeted, multi-tick search like any other job.
 ##
-## Route budget (round-4 review finding 4, ADR 004): every search here shares
+## Route budget (ADR 004): every search here shares
 ## WorldState's own per-colonist, per-tick `_route_budget` ledger (the same
 ## Dictionary GlobalAssignment.tick() clears at its start and the toil
 ## executor's go_to re-route honours) -- _advance_target_search() below skips
-## a candidate's resume() for the rest of the tick once ANY route work
+## a candidate's resume() for the rest of the tick once any route work
 ## (the scheduler's own activation search, a toil re-route, or another
 ## victim's search evaluating that same candidate) has already spent that
 ## colonist's single allowance, and marks the ledger itself after resuming.
 ## An unfinished search is simply retained in `_searching` and picked up next
-## tick, never restarted. advance() therefore runs AFTER GlobalAssignment.tick()
+## tick, never restarted. advance() therefore runs after GlobalAssignment.tick()
 ## (which clears the ledger) and before _advance_colonists() (world_state.gd's
 ## tick()), so all three route consumers see one shared ledger per tick.
 ##
-## Candidate drift (round-3 review finding 2, bounded in round-2 review round-4
-## finding 2): unlike need_giver.gd's own fixed candidate TARGET TILES, a
+## Candidate drift (bounded by MAX_STALE_RETRIES): unlike need_giver.gd's own
+## fixed candidate target tiles, a
 ## rescue candidate is a living, moving colonist that can keep walking its own
 ## ordinary job while this multi-tick search is still in progress.
 ## _advance_search() below re-reads the current cursor candidate's live
@@ -99,33 +99,32 @@ extends RefCounted
 ## considers such a colonist, let alone interrupts one.
 ##
 ## Reservation-table convention (orders-and-movement.md "ReservationTable key
-## domains"), revised in round-2 review (issue #360 finding 2): besides the
+## domains"): besides the
 ## rescue job's own ordinary "tile:x,y" target key, a rescue job needs a
 ## second, new-domain key -- "trapped:<victim_id>" -- so a second search can
-## never also commit to the same victim. That key is now acquired the exact
+## never also commit to the same victim. That key is acquired the exact
 ## same activation-gated way the target key itself is, through JobQueue's
 ## generic set_extra_reservation_keys()/extra_keys_for_job() callback (see
 ## extra_keys_for_job() below) -- never by this module calling acquire()
 ## directly on the shared table outside JobQueue's own activation/
-## reactivation boundary, which round-2 review found violated the "a
-## reservation exists only while its job is actually in progress" invariant
-## suspend()'s own doc comment states, and which reactivate() alone could
-## never restore (it only re-acquires the ordinary target key). Dedup itself
+## reactivation boundary, which would violate the "a reservation exists only
+## while its job is actually in progress" invariant suspend()'s own doc
+## comment states, and which reactivate() alone could never restore (it only
+## re-acquires the ordinary target key). Dedup itself
 ## (advance()'s own claimed_victims check) reads this module's own
 ## _job_victim record instead of the ReservationTable, so it still correctly
 ## excludes a victim whose rescue job is merely queued or suspended right now
-## -- exactly when no "trapped:" key is held at all under this revised scheme.
-## No reservation_table.gd or job_queue.gd call-site change was needed beyond
-## the new generic callback: acquire()/is_reserved() stay exactly as generic
-## as before.
+## -- exactly when no "trapped:" key is held at all. Beyond that generic
+## callback, reservation_table.gd and job_queue.gd need nothing
+## rescue-specific: acquire()/is_reserved() stay fully generic.
 ##
-## Persistence note (round-3 review finding 3, replacing round-2's adjacency
-## reconstruction): target-tile-plus-adjacency does not uniquely identify a
+## Persistence note (why the victim association is saved rather than
+## reconstructed): target-tile-plus-adjacency does not uniquely identify a
 ## victim -- two victims can share a target, or have overlapping candidate
 ## adjacency sets, and a greedy lowest-id match can silently reassign who a
 ## surviving job rescues, or leave a job matched to no victim at all. No
-## per-job field may name "which colonist is being rescued" (this file's own
-## Non-goals), but the giver's OWN save data is not a per-job field: this
+## per-job field may name "which colonist is being rescued" (a deliberate
+## design constraint), but the giver's own save data is not a per-job field: this
 ## module's _job_victim is exposed verbatim by get_job_victims() for
 ## state_codec.gd's encode() to persist alongside the giver's other
 ## continuation state, and restore_victim_assignments() below restores it
@@ -145,8 +144,8 @@ const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 
 const REASON_NO_RESCUER_AVAILABLE := "no_rescuer_available"
 
-## Bounds _advance_search()'s own stale-position discard (round-2 review
-## round-4 finding 2): a candidate whose live position still differs after
+## Bounds _advance_search()'s own stale-position discard: a candidate whose
+## live position still differs after
 ## this many consecutive restarts is skipped for the next-ranked one, rather
 ## than retried forever.
 const MAX_STALE_RETRIES := 3
@@ -166,7 +165,7 @@ var _is_trench: Callable
 ## "Route budget"): colonist_id -> true once that colonist's single route
 ## resume() for the current tick has been spent by anyone.
 var _route_budget: Dictionary
-## colonist_id -> how many RerouteType.resume() calls THIS module made for
+## colonist_id -> how many RerouteType.resume() calls this module made for
 ## that colonist during the most recent advance() (telemetry only, reset
 ## every advance(); exposed by get_route_telemetry() so a test can prove the
 ## shared budget is honoured, ADR 004's "telemetry reports actual resume
@@ -176,8 +175,8 @@ var _tick_route_resumes: Dictionary = {}
 ## advance() for the scheduler's own block reason on a committed rescue.
 var _get_job: Callable
 ## WorldState._retire_rescue_job(job_id) -> void: cancels a committed rescue
-## through the shared finish boundary and calls resolve_job() below (round-4
-## review finding 5) -- the one path an unreachable commitment leaves by.
+## through the shared finish boundary and calls resolve_job() below -- the
+## one path an unreachable commitment leaves by.
 var _retire_job: Callable
 
 ## victim_id -> {victim_tile, targets: Array[Vector2i], candidates:
@@ -196,11 +195,11 @@ var _pending: Dictionary = {}
 ## job_id -> victim_id: this module's own record of which trapped colonist a
 ## rescue job targets -- the source both extra_keys_for_job() (the "trapped:"
 ## key's own activation-gated acquisition) and victim_for_job()
-## (world_state.gd's own completion-effect lookup, round-2 review finding 5)
+## (world_state.gd's own completion-effect lookup)
 ## read. An unreachable or unsafe committed rescue is never resubmitted under
 ## a fresh id (world_state.gd's _retire_rescue_job() cancels it and calls
-## resolve_job() below so the victim's next search may pick ANOTHER rescuer,
-## round-4 review finding 5), so nothing ever carries an association from one
+## resolve_job() below so the victim's next search may pick another
+## rescuer), so nothing ever carries an association from one
 ## job id to another. Rebuilt after a load by restore_victim_assignments()
 ## (see the class doc comment's persistence note), since no per-job field may
 ## persist it.
@@ -224,11 +223,11 @@ var _job_victim: Dictionary = {}
 ## WorldState's _pause_work_job()/_resume_paused_job() wrappers -- the exact
 ## same callables NeedGiver is constructed with. is_trench(tile: Vector2i)
 ## -> bool must be WorldState's own `func(tile): return get_tile(tile.x,
-## tile.y) == TILE_TRENCH` (round-2 review round-4 finding 1): the real-route
-## safety check below rejects a path that crosses ANY trench tile, not merely
+## tile.y) == TILE_TRENCH`: the real-route
+## safety check below rejects a path that crosses any trench tile, not merely
 ## the victim's own. route_budget must be WorldState's own `_route_budget`
 ## Dictionary itself (never a copy), the same instance GlobalAssignment and
-## ToilExecutor already share (round-4 review finding 4).
+## ToilExecutor already share.
 func _init(priority: int, bounds_max: Vector2i, reservation_table, tile_key: Callable,
 		routable_to: Callable, rescue_target_candidates: Callable, submit_job: Callable,
 		set_reason: Callable, interrupt_current_job: Callable, resume_interrupted_job: Callable,
@@ -270,7 +269,7 @@ func colonist_for_job(job_id: String) -> String:
 			return String(rescuer_id)
 	return ""
 
-## Runs once per tick, immediately AFTER the fair scheduler's own tick() and
+## Runs once per tick, immediately after the fair scheduler's own tick() and
 ## before _advance_colonists() (see the class doc comment's "Route budget":
 ## the scheduler clears the shared per-colonist route ledger at its start,
 ## so this must run after it to share that ledger with it and with the toil
@@ -285,7 +284,7 @@ func colonist_for_job(job_id: String) -> String:
 ## _trapped_rescue_victims()).
 func advance(candidates: Array[Dictionary], victims: Array[Dictionary], tick: int) -> void:
 	_tick_route_resumes = {}
-	# Round-4 review finding 5: a committed rescue the scheduler itself has
+	# A committed rescue the scheduler itself has
 	# just proven unreachable (its own region check at activation, after the
 	# map changed under the commit) is retired here, the same tick, rather
 	# than left blocked-but-committed forever with the rescuer pinned to it
@@ -296,7 +295,7 @@ func advance(candidates: Array[Dictionary], victims: Array[Dictionary], tick: in
 		if String(job.get("status", "")) == "queued" \
 				and String(job.get("reason", "")) == JobQueueType.BLOCKED_TARGET_UNREACHABLE:
 			_retire_job.call(job_id)
-	# Round-2 review finding 2: dedup reads this module's own _job_victim
+	# Dedup reads this module's own _job_victim
 	# record, not the ReservationTable -- a queued or suspended rescue job
 	# holds no "trapped:" key at all (see extra_keys_for_job()'s own doc
 	# comment: that key only exists while the job is actually active), so a
@@ -350,16 +349,16 @@ func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int)
 
 ## Processes the candidate pool strictly in ranked order: for the candidate
 ## `cursor` currently points at, ranks every target it can actually reach by a
-## real route that never crosses ANY trench tile, not merely the victim's own
+## real route that never crosses any trench tile, not merely the victim's own
 ## (every route that does is rejected outright, see _advance_target_search()
 ## below) and commits to the shortest such one the instant every target has
 ## been tried.
-## A candidate with no safe route to ANY target is skipped for the
+## A candidate with no safe route to any target is skipped for the
 ## next-ranked one, never retried. Every target in a sweep is searched from
-## the SAME fixed candidate["pos"] (need_giver.gd's own single-subject search
+## the same fixed candidate["pos"] (need_giver.gd's own single-subject search
 ## shape); once every target has been tried, and only then, this re-reads the
-## candidate's own LIVE position from `candidates` (round-3 review finding
-## 2): a rescue candidate is a moving colonist, not a fixed tile, and may have
+## candidate's own live position from `candidates`: a rescue candidate is a
+## moving colonist, not a fixed tile, and may have
 ## kept walking its own ordinary job for the whole (possibly long, STEP_BUDGET
 ## -bounded-per-tick) duration this sweep took. A change means every route
 ## just computed started from a tile the candidate has since left, proving
@@ -428,8 +427,8 @@ func _advance_to_next_candidate(state: Dictionary) -> void:
 ## Searches with the exact same unrestricted routable_to(target) callable
 ## go_to's own real execution uses (world_state.gd's _routable_to(), this
 ## module's own constructor-injected `_routable_to`) -- never a version that
-## treats any trench tile specially -- so the path found here IS the path the
-## rescuer would really walk. Round-2 review round-4 finding 1: only accepts
+## treats any trench tile specially -- so the path found here is the path the
+## rescuer would really walk. Only accepts
 ## it (appends to `found`) when that real path crosses no trench tile at all;
 ## a shorter "found" path that does cross one is rejected outright rather than
 ## assumed to be avoidable by some other, unfollowed detour -- see
@@ -460,7 +459,7 @@ func _advance_target_search(state: Dictionary, candidate: Dictionary, target_cur
 	state["search"] = null
 
 ## True when any step of path (start through target inclusive) is a trench
-## tile (round-2 review round-4 finding 1: checked against EVERY trench, not
+## tile (checked against every trench, not
 ## merely the victim's own -- a route can cross a trench this module never
 ## itself searched for, e.g. an unrelated one between the candidate and the
 ## target). A trench is never impassable to an ordinary routable_to() search
@@ -476,8 +475,8 @@ func _path_crosses_trench(path: Array) -> bool:
 	return false
 
 ## colonist_id -> RerouteType.resume() calls this module made for that
-## colonist during the most recent advance() (round-4 review finding 4, ADR
-## 004 telemetry): never more than 1 per colonist, and 0 for any colonist the
+## colonist during the most recent advance() (ADR 004 telemetry): never
+## more than 1 per colonist, and 0 for any colonist the
 ## scheduler already routed for this tick, since both share `_route_budget`.
 func get_route_telemetry() -> Dictionary:
 	return _tick_route_resumes.duplicate()
@@ -518,8 +517,8 @@ func _commit(victim_id: String, rescuer: Dictionary, target: Vector2i, tick: int
 ## Exposes "no one can help" (world_state.gd's get_colonist_rescue_reason(),
 ## mirroring get_colonist_need_reason()'s pattern) whenever this tick's search
 ## for victim_id found no reachable candidate at all -- including the
-## degenerate case every other colonist is itself trapped, per this task's own
-## acceptance criteria. No interrupt was ever issued for this onset (unlike
+## degenerate case where every other colonist is itself trapped. No
+## interrupt was ever issued for this onset (unlike
 ## NeedGiver's _onset_failed()), so there is nothing to resume.
 func _onset_failed(victim_id: String) -> void:
 	_set_reason.call(victim_id, REASON_NO_RESCUER_AVAILABLE)
@@ -552,21 +551,19 @@ func extra_keys_for_job(job_id: String) -> Array[String]:
 ## none -- world_state.gd's own completion effect (_toil_on_work_complete()'s
 ## "rescue" case) reads this instead of guessing "whichever trapped colonist
 ## happens to be adjacent to the target," which is ambiguous whenever two
-## different victims are each adjacent to the very same target tile (round-2
-## review finding 5).
+## different victims are each adjacent to the very same target tile.
 func victim_for_job(job_id: String) -> String:
 	return String(_job_victim.get(job_id, ""))
 
-## The live job_id -> victim_id association (round-3 review finding 3), for
+## The live job_id -> victim_id association, for
 ## state_codec.gd's own encode() to persist verbatim alongside the giver's
-## other continuation state (its own save data, never a per-job field -- this
-## file's own Non-goals).
+## other continuation state (its own save data, never a per-job field).
 func get_job_victims() -> Dictionary:
 	return _job_victim.duplicate()
 
 ## Restores _job_victim verbatim from state_codec.gd's own persisted
-## job_id -> victim_id association (round-3 review finding 3, replacing round-
-## 2's adjacency reconstruction): target-tile-plus-adjacency does not uniquely
+## job_id -> victim_id association (see the class doc comment's persistence
+## note): target-tile-plus-adjacency does not uniquely
 ## identify a victim -- two victims can share a target, or have overlapping
 ## candidate adjacency sets -- so nothing here may be re-derived by guesswork.
 ## `assignments` is exactly what get_job_victims() returned at save time
@@ -593,8 +590,7 @@ func restore_pending_assignments(pending: Dictionary) -> void:
 
 ## Repoints this module's own ReservationTable reference (used only for the
 ## is_reserved()/owner() peeks in _start_search()/_advance_search() below) at
-## the table JobQueue.restore() just built (issue #360 round-2 review finding
-## 3): JobQueue.restore() replaces its own `_table` with a brand-new instance,
+## the table JobQueue.restore() just built: JobQueue.restore() replaces its own `_table` with a brand-new instance,
 ## so without this call, this module would keep peeking a stale, orphaned
 ## table after every load. Called once, right after queue.restore().
 func set_reservation_table(reservation_table) -> void:

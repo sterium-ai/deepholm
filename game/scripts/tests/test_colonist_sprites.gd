@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #364 acceptance: colonist_sprites.gd's tile-glide interpolation and
+## colonist_sprites.gd's tile-glide interpolation and
 ## feet-anchored, direction-aware animation, driven directly against a
 ## WorldState -- no scene, no running frame loop. Mirrors
 ## test_colonist_panel_toil.gd's pattern of reaching into WorldState's private
@@ -15,18 +15,18 @@ const TickDriverType = preload("res://scripts/viewer/tick_driver.gd")
 const Boot = preload("res://scripts/boot.gd")
 
 const TILE_SIZE := 16.0
-## Issue #409 round-3: read the real constant instead of duplicating its
+## Read the real constant instead of duplicating its
 ## formula, so a colonist-scale correction in colonist_sprites.gd can never
 ## silently drift out of sync with what this test asserts against.
 const SPRITE_POSITION_OFFSET := ColonistSpritesType.SPRITE_POSITION_OFFSET
 const EVIDENCE_DIR := "user://captures"
 
-## Issue #412 route-glide measurement constants: FRAME_DELTA mirrors a 60fps
+## Route-glide measurement constants: FRAME_DELTA mirrors a 60fps
 ## _process() call; MAX_ROUTE_TICKS bounds the drive loop against a genuinely
 ## stuck colonist (environment issue) instead of looping forever;
 ## DISPLACEMENT_EPSILON distinguishes a real sub-pixel glide step from the
-## "frozen" pause the pre-fix bug produced; DISPLACEMENT_TOLERANCE_PX is the
-## acceptance's own "+/-1px of the route's constant pace" bound.
+## "frozen" pause a per-tile stutter would produce; DISPLACEMENT_TOLERANCE_PX
+## is the required "+/-1px of the route's constant pace" bound.
 const FRAME_DELTA := 1.0 / 60.0
 const MAX_ROUTE_TICKS := 300
 const DISPLACEMENT_EPSILON := 0.0001
@@ -86,7 +86,7 @@ func _driver_at(world: WorldStateType, speed: int) -> TickDriverType:
 ## Moves the single colonist by exactly one orthogonal tile and asserts the
 ## interpolated pixel position at t=0, t=0.5 and t=1, plus the resulting
 ## animation name/flip_h -- covering at least one down, one up, and one side
-## (including a flipped-left) case, per the acceptance list.
+## (including a flipped-left) case.
 func _check_glide(dx: int, dy: int, expected_facing: String, expect_flip: bool, label: String) -> void:
 	var world := _build_world(5, 5)
 	var sprites := ColonistSpritesType.new()
@@ -259,8 +259,7 @@ func _build_l_route_world() -> WorldStateType:
 
 ## Drives world.tick() + sprites.advance(FRAME_DELTA) exactly as TickDriver's
 ## own _process()/ColonistSprites' own _process() do in the real frame loop
-## (issue #412 objective: "call colonist_sprites.advance(frame_delta) once per
-## simulated rendered frame... exactly as _process() does"), recording every
+## (advance(frame_delta) once per simulated rendered frame), recording every
 ## frame's (frame index, WorldState tick, sprite pixel position). Stops
 ## move_ticks_per_tile ticks after the colonist's route clears (arrival), so
 ## the final glide segment's one-tile visual lag (see orders-and-movement.md's
@@ -291,8 +290,8 @@ func _drive_and_sample(world: WorldStateType, sprites: ColonistSpritesType, colo
 	return samples
 
 ## Per-frame Euclidean pixel displacement between consecutive samples, plus
-## the index of the first and last frame that actually moved -- the pre-fix
-## bug's signature is a zero-displacement frame strictly between those two
+## the index of the first and last frame that actually moved -- the per-tile
+## stutter bug's signature is a zero-displacement frame strictly between those two
 ## indices (the sprite frozen at the destination pixel for 3 of every 4
 ## ticks), which _run_route_glide_check() below asserts against directly.
 func _analyze_samples(samples: Array) -> Dictionary:
@@ -347,7 +346,7 @@ func _run_route_glide_check(world: WorldStateType, speed: int, speed_label: Stri
 	driver.free()
 	return mean
 
-## Acceptance: a 10-tile straight open-floor route glides at constant visual
+## A 10-tile straight open-floor route glides at constant visual
 ## speed with no per-tile pause at x1, and the same holds at x2/x3 with
 ## per-frame displacement scaled 2x/3x (frames_per_tick halves/thirds while
 ## FRAME_DELTA and the tile's pixel size stay fixed, so the pace scales
@@ -362,7 +361,7 @@ func _check_constant_glide_across_straight_route() -> void:
 	_expect(absf(mean_x3 - mean_x1 * 3.0) <= DISPLACEMENT_TOLERANCE_PX,
 		"straight route: x3's pace (%.4f) must be ~3x x1's (%.4f)" % [mean_x3, mean_x1])
 
-## Acceptance: an L-shaped route (straight leg, 90-degree turn, straight leg)
+## An L-shaped route (straight leg, 90-degree turn, straight leg)
 ## has no zero-displacement frame at or around the corner -- reusing
 ## _run_route_glide_check()'s own "no interior zero frame" assertion, which
 ## already spans the corner since it covers every frame between the first and
@@ -370,10 +369,10 @@ func _check_constant_glide_across_straight_route() -> void:
 func _check_l_shaped_route_has_no_pause_at_corner() -> void:
 	_run_route_glide_check(_build_l_route_world(), TickDriverType.Speed.X1, "L-shaped route x1")
 
-## Issue #412: prints (frame, WorldState tick, pixel x, pixel y) for the
-## straight route's first tile-crossing at x1, run once against the pre-fix
-## code and once against the post-fix code (see the handoff's measurement
-## table) -- never invoked by the normal PASS/FAIL run above.
+## Prints (frame, WorldState tick, pixel x, pixel y) for the
+## straight route's first tile-crossing at x1, for comparing glide timing
+## before and after a change -- never invoked by the normal PASS/FAIL run
+## above.
 ## godot --headless --path game --script res://scripts/tests/test_colonist_sprites.gd -- --measure
 func _print_measurement_table() -> void:
 	var world := _build_straight_route_world()
@@ -385,8 +384,8 @@ func _print_measurement_table() -> void:
 	var samples := _drive_and_sample(world, sprites, "colonist_0")
 	var analysis := _analyze_samples(samples)
 	var first_move: int = analysis["first_move"]
-	# One full tile-crossing plus its leading stationary frame (issue #412
-	# handoff evidence: x3 keeps this table short -- frames_per_tick * 4 rows --
+	# One full tile-crossing plus its leading stationary frame (x3 keeps this
+	# table short -- frames_per_tick * 4 rows --
 	# while still recording every advance() call from the last stationary frame
 	# through the crossing's completion).
 	var window_start := first_move
@@ -402,7 +401,7 @@ func _print_measurement_table() -> void:
 ## Optional, always-PASS-in-headless graphical evidence (test_river_map_capture.gd's
 ## pattern): boots a seed-42 world, positions a colonist mid-glide via a direct
 ## advance() call, and saves PNGs for down/up/side(+flipped) facings to
-## user://captures for a reviewer to inspect.
+## user://captures for manual inspection.
 func _capture_evidence() -> void:
 	if DisplayServer.get_name() == "headless":
 		quit()
@@ -435,7 +434,7 @@ func _capture_evidence() -> void:
 		var path := ProjectSettings.globalize_path(EVIDENCE_DIR)
 		DirAccess.make_dir_recursive_absolute(path)
 		var flip_label := "-flipped" if entry[2] else ""
-		root.get_texture().get_image().save_png(path.path_join("issue-364-mid-glide-%s%s.png" % [facing, flip_label]))
+		root.get_texture().get_image().save_png(path.path_join("colonist-mid-glide-%s%s.png" % [facing, flip_label]))
 
 	boot.queue_free()
 	await process_frame

@@ -1,21 +1,22 @@
 # ADR 007: Stockpile zones and haul persistence, schemaVersion 7-8
 
+> **In short:** Players can mark storage areas on the map, and colonists carry loose items there; both the storage areas and the carrying jobs are kept in save files.
+
 - **Status:** accepted
 - **Date:** 2026-09-18
 - **Scope:** simulation (`WorldState`, `JobQueue`, `ToilExecutor`,
   `ReservationTable`), persistence (save schema and migration)
 - **Implements:** [ADR 003](003-scheduling-explainability-save-integrity-mobile-first.md),
-  principle 3 (save integrity is a named strategy); [ADR 006](006-items-with-ids-and-carrying-schema-v6.md)
-  (this decision is the direct continuation of ADR 006's "no stockpile zone,
-  haul job kind, or viewer change is introduced by this ADR; they are
-  explicitly deferred to tasks t4, t5, and t6"); objective #189.
+  principle 3 (save integrity is a named strategy).
+- **Extends:** [ADR 006](006-items-with-ids-and-carrying-schema-v6.md), which
+  deferred stockpile zones, the haul job kind, and their viewer support.
 
 ## Context
 
 ADR 006 gave ground wood a first-class item identity (`{id, x, y, kind,
 count}`) specifically so a later stockpile zone and haul job kind would have
-something with an id to reserve, but deferred both. Objective #189's t4/t5
-increments built exactly that: player-drawn rectangular stockpile zones
+something with an id to reserve, but deferred both. The follow-up work
+built exactly that: player-drawn rectangular stockpile zones
 (`zone_add`/`zone_remove`) and a `haul` job kind that carries an item to a
 free zone cell through the same generic toil vocabulary dig/chop already
 used, plus a doubling backoff so a permanently-blocked haul job cannot
@@ -26,13 +27,13 @@ relevant contract, schema, example, test, and a short numbered ADR when the
 decision crosses a boundary") this needs a numbered ADR, matching the one
 ADR 005 wrote for schema 4 and ADR 006 wrote for schema 6.
 
-This ADR is written retroactively, alongside the viewer/docs task (#195)
-that renders and documents what t4/t5 already implemented and merged
+This ADR was written retroactively, alongside the viewer and documentation
+changes, after the zone and haul code had already shipped
 (`content/jobs.json`, `WorldState`'s zone/haul code, `save_migrations.gd`'s
-v6->v7 and v7->v8 steps, `game-state.schema.json`'s `schemaVersion: 8`) —
-it records the decision `docs/decisions/` was still missing for that already
--shipped code, the same gap `docs/architecture/source-of-truth.yaml`'s
-"check `docs/decisions/` before proposing architecture" rule exists to catch.
+v6->v7 and v7->v8 steps, `game-state.schema.json`'s `schemaVersion: 8`). It
+records the decision `docs/decisions/` was missing for that code, the gap
+`docs/architecture/source-of-truth.yaml`'s "check `docs/decisions/` before
+proposing architecture" rule exists to catch.
 
 ## Decision
 
@@ -107,22 +108,22 @@ it records the decision `docs/decisions/` was still missing for that already
 - `docs/architecture/contracts/game-state.schema.json`: `schemaVersion`
   const is `8`; `zones`/`nextZoneId` and every job's `itemId`/`cell`/
   `retryAt`/`backoffTicks` are new required shapes (already applied to the
-  schema file by the t4/t5 implementation this ADR documents).
+  schema file by the implementation this ADR documents).
 - `docs/architecture/save-system.md` documents schema version 8 as current,
   the v6->v7 and v7->v8 migrations, and the `zones`/haul-job-field wire
-  shapes (updated by this same change).
+  shapes.
 - `docs/architecture/orders-and-movement.md` gains a "Jobs, toils and
   reservations" section documenting the six-toil vocabulary,
   `content/jobs.json`'s shape, the `ReservationTable`'s key domains, the
-  zone commands, and the backoff constants (updated by this same change).
+  zone commands, and the backoff constants.
 - `game/scripts/core/jobs/reservation_table.gd`, `toil_executor.gd`,
   `job_queue.gd`, and `game/scripts/core/world_state.gd` already carry the
   zone/haul implementation this ADR records; no simulation code changes with
   this ADR itself.
-- `game/scripts/viewer/`: the web viewer's zone-drawing tool, carried-item
-  marker, stockpile-count rendering, and colonist panel toil display (issue
-  #189 acceptance item 7) are the presentation-layer consequence of this
-  decision, delivered alongside this ADR by the same task (#195).
+- `game/scripts/viewer/`: the viewer's zone-drawing tool, carried-item
+  marker, stockpile-count rendering, and colonist panel toil display are the
+  presentation-layer consequence of this decision, delivered alongside this
+  ADR.
 
 ## Acceptance criteria
 

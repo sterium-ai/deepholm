@@ -1,83 +1,77 @@
 extends SceneTree
 
-## Acceptance coverage for issue #406's `build` command (docs/decisions/038,
-## supersedes ADR 027/036): `build` still names/shapes exactly like before
-## ({kind, x, y}, plus t1's optional orientation), but now creates a
-## persistent construction site instead of a single tracked job -- so this
-## file focuses on the command's own contract (payload validation, footprint/
-## enclosure rules, preview/apply parity) and the execution-mechanics
-## regression coverage the superseded ADR 027/036 `build` job's own test file
-## carried (reservation lifecycle across queued/active/suspend/reactivate,
-## cargo conservation across cancel-while-suspended/-while-active and
-## refused-resumption, a critical-need interrupt mid-carry, and route-cost-
-## based source selection), adapted to `site_fetch`/`site_work`'s own toils
-## and #400's hands-filling rules. Site-specific mechanics (immediate
-## creation before any material arrives, incremental delivery into
-## held_materials, exact build_ticks-after-last-delivery completion timing,
-## cancel_site, reservation-invariant proofs, and save/load mid-construction)
-## are covered in test_construction_site.gd, per this task's own acceptance
-## split; this file does not duplicate that coverage.
+## Coverage for the `build` command (ADR 040, which supersedes ADR 028/038).
+## `build` keeps its payload shape ({kind, x, y}, plus an optional
+## orientation) but now creates a persistent construction site instead of a
+## single tracked job. This file covers the command's own contract (payload
+## validation, footprint/enclosure rules, preview/apply parity) and the
+## execution-mechanics regressions the old single-job `build` suite carried
+## (reservation lifecycle across queued/active/suspend/reactivate, cargo
+## conservation across cancel-while-suspended/-while-active and refused
+## resumption, a critical-need interrupt mid-carry, and route-cost-based
+## source selection), adapted to `site_fetch`/`site_work`'s toils and the
+## hands-filling rules. Site-specific mechanics (immediate creation before
+## any material arrives, incremental delivery into held_materials, exact
+## build_ticks-after-last-delivery completion timing, cancel_site,
+## reservation-invariant proofs, and save/load mid-construction) are covered
+## in test_construction_site.gd and not duplicated here.
 ##
-## Round 4 review: restores the origin/main regression suite this file used
-## to carry before this task, minimally adapted. A handful of the superseded
-## suite's own checks are intentionally NOT restored because the contract
-## they guarded genuinely no longer exists under the site model, not because
-## the assertion was inconvenient to port:
-## - A site's own footprint reservation ("tile:x,y" owned by "site:<id>") is
+## A few checks from the old single-job suite are intentionally not carried
+## over, because the contract they guarded no longer exists under the site
+## model:
+## - A site's footprint reservation ("tile:x,y" owned by "site:<id>") is
 ##   acquired once at order time and released only at cancel_site or
 ##   completion -- it is never suspended/reactivated with an individual
-##   job the way the superseded single `build` job's one "tile:" reservation
-##   was. A rival job can therefore never claim a site's own tile while a
-##   colonist working it is merely suspended (the superseded suite's
+##   job the way the old single `build` job's "tile:" reservation was. A
+##   rival job can therefore never claim a site's tile while a colonist
+##   working it is merely suspended (the old
 ##   "_check_blocked_resume_after_rival_claims_site_conserves_cargo"), and no
-##   rival job can ever be queued at a site's own tile at all (its own
+##   rival job can ever be queued at a site's tile at all (the old
 ##   "_check_save_load_preserves_work_progress_owner_with_a_queued_rival_on_the_same_tile"):
-##   both scenarios are now structurally impossible, not merely untested.
-## - A site's own accumulated progress lives directly on the construction
-##   site record (ConstructionSiteTable.add_progress(), see toil_executor's
-##   own "site_work" doc comment) instead of the shared job-id/tile-keyed
+##   both scenarios are now structurally impossible.
+## - A site's accumulated progress lives directly on the construction site
+##   record (ConstructionSiteTable.add_progress(), see toil_executor's
+##   "site_work" doc comment) instead of the shared job-id/tile-keyed
 ##   work-progress cache (world_state.gd's _work_progress/_suspended_work_
-##   progress/"workProgressOwners") dig/till/mine/etc. still share. The
-##   entire class of bugs that cache's own ownership reconciliation guarded
-##   against (a suspended job's progress silently inherited, clobbered, or
-##   lost across save/load, or by a different job kind working the same
-##   tile) cannot occur for a construction site by construction, so the
-##   superseded suite's "_check_suspended_cancel_during_work_clears_progress_
-##   for_replacement", "_check_refused_resumption_during_work_clears_
-##   progress", "_check_legacy_save_missing_work_progress_owners_recovers_
-##   active/suspended_build_ownership" and "_check_build_suspended_then_till_
+##   progress/"workProgressOwners") that dig/till/mine/etc. still share. The
+##   class of bugs that cache's ownership reconciliation guards against (a
+##   suspended job's progress silently inherited, clobbered, or lost across
+##   save/load, or by a different job kind working the same tile) cannot
+##   occur for a construction site, so the old
+##   "_check_suspended_cancel_during_work_clears_progress_for_replacement",
+##   "_check_refused_resumption_during_work_clears_progress",
+##   "_check_legacy_save_missing_work_progress_owners_recovers_active/
+##   suspended_build_ownership" and "_check_build_suspended_then_till_
 ##   activates_preserves_each_jobs_progress" (and its reverse) are replaced
 ##   below by _check_cancel_site_mid_work_clears_progress_for_replacement()
 ##   and _check_site_progress_survives_a_refused_builder_resumption(), which
-##   prove the SITE's own progress (not a job-scoped cache) behaves correctly
-##   across the equivalent boundaries.
-## - ConstructionGiver never re-validates a site's own terrain/occupancy
-##   before submitting its next site_work job, and _finalize_construction_
-##   site() places the declared object unconditionally once progress meets
+##   prove the site's own progress behaves correctly across the equivalent
+##   boundaries.
+## - ConstructionGiver never re-validates a site's terrain/occupancy before
+##   submitting its next site_work job, and _finalize_construction_site()
+##   places the declared object unconditionally once progress meets
 ##   build_ticks, with no re-check that the site is still unoccupied,
-##   un-enclosing, and actor-free (unlike the superseded single `build` job's
-##   own _build_completion_failure()). This task's acceptance criteria do not
-##   require that re-validation, so the superseded suite's "_check_site_
-##   occupied_during_construction_fails_typed_and_returns_cargo",
-##   "_check_actor_on_site_at_completion_is_never_walled_in",
-##   "_check_enclosure_revalidated_at_completion" and "_check_intervening_
-##   dig_invalidates_queued_build_site" are not restored; see this task's
-##   handoff for the honest disclosure.
-## - "_check_orders_before_any_tick_use_distinct_wood_and_reject_duplicate_
-##   site"'s own two live assertions are already covered elsewhere: no job
-##   exists at order time at all any more (ConstructionGiver submits one
-##   later, on its own schedule), so there is no job-level item commitment to
-##   assert on; "a second order on an already-claimed footprint is rejected"
-##   is _check_second_order_on_same_footprint_rejected() below; and its own
-##   "an order with no wood left is rejected blocked_missing_input" assertion
-##   is now flatly wrong under this task's own new contract (no stock check
-##   at submission, see _check_site_created_immediately_with_no_stock()).
-## - "_check_multi_source_fetch_visits_nearest_source_first_then_the_rest"'s
-##   own core claim (a solo colonist can never complete a >HANDS_CAPACITY
-##   order in one hands-load) is superseded by #400's own hands-filling rules,
-##   exercised by _check_site_fetch_prefers_nearest_reachable_source_and_
-##   applies_very_close_rule() below (which proves the corrected, currently
-##   true behavior instead).
+##   un-enclosing, and actor-free (unlike the old single `build` job's
+##   _build_completion_failure()). The site model does not require that
+##   re-validation, so the old "_check_site_occupied_during_construction_
+##   fails_typed_and_returns_cargo", "_check_actor_on_site_at_completion_is_
+##   never_walled_in", "_check_enclosure_revalidated_at_completion" and
+##   "_check_intervening_dig_invalidates_queued_build_site" are not carried
+##   over. This is a known gap.
+## - The two live assertions of the old "_check_orders_before_any_tick_use_
+##   distinct_wood_and_reject_duplicate_site" are covered elsewhere or no
+##   longer apply: no job exists at order time (ConstructionGiver submits one
+##   later), so there is no job-level item commitment to assert on; "a second
+##   order on an already-claimed footprint is rejected" is
+##   _check_second_order_on_same_footprint_rejected() below; and "an order
+##   with no wood left is rejected blocked_missing_input" contradicts the
+##   site contract (no stock check at submission, see
+##   _check_site_created_immediately_with_no_stock()).
+## - The old "_check_multi_source_fetch_visits_nearest_source_first_then_the_
+##   rest" claimed a solo colonist can never complete a >HANDS_CAPACITY order
+##   in one hands-load; the hands-filling rules supersede that, and
+##   _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_
+##   close_rule() below proves the current behavior instead.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
@@ -91,7 +85,7 @@ var _failed := false
 
 func _init() -> void:
 	for kind in BUILDABLE_KINDS:
-		_check_kind_matches_pre_task_cost_duration_and_object(String(kind))
+		_check_kind_matches_legacy_cost_duration_and_object(String(kind))
 	_check_site_created_immediately_with_no_stock()
 	_check_invalid_payload_rejections()
 	_check_invalid_target_rejections()
@@ -167,7 +161,7 @@ func _add_zone(world: WorldStateType, command_id: String, x: int, y: int, width:
 	_command_ok(world, command_id, "zone_add", {"x": x, "y": y, "width": width, "height": height})
 
 ## Supplies exactly enough stockpiled wood for kind's own declared build_cost
-## (every real buildable kind before/after this task costs 1 wood) inside a
+## (every real buildable kind costs 1 wood) inside a
 ## zone, then submits `build`.
 func _seed_stock_and_order(world: WorldStateType, kind: String, site: Vector2i, stock_tile: Vector2i) -> Dictionary:
 	_add_zone(world, "zone", stock_tile.x, stock_tile.y, 1, 1)
@@ -186,7 +180,7 @@ func _tick_until_site_gone(world: WorldStateType, site: Vector2i, budget: int = 
 			return i + 1
 	return -1
 
-## Kind-agnostic ground item placement, explicit id (round 3 review's
+## Kind-agnostic ground item placement with an explicit id (the
 ## reservation-lifecycle/cargo/route-cost checks need deterministic ids to
 ## reason about which source is nearest/lowest-id).
 func _place_item(world: WorldStateType, item_id: String, kind: String, x: int, y: int, count: int = 1) -> void:
@@ -219,7 +213,7 @@ func _ground_kind_total(world: WorldStateType, kind: String) -> int:
 
 ## Every reservation key must belong to an active job or a live construction
 ## site's own footprint owner (find_orphaned_reservations()'s
-## extra_active_owners parameter, issue #406) -- checked after every tick so a
+## extra_active_owners parameter) -- checked after every tick so a
 ## mid-run leak, not just an end-state one, would be caught.
 func _assert_no_orphaned_reservations(world: WorldStateType, context: String) -> void:
 	var extra_owners: Array[String] = []
@@ -255,7 +249,7 @@ func _find_site_fetch_job_id(world: WorldStateType, origin: Vector2i) -> String:
 
 ## Ticks until the colonist carries an item and is strictly mid-walk (route
 ## set, left `away_from`) -- the same "caught between two toils" boundary the
-## superseded `build` job's own regression suite relied on.
+## old single-job `build` suite relied on.
 func _tick_until_carrying_mid_walk(world: WorldStateType, away_from: Vector2i) -> bool:
 	for _i in 60:
 		world.tick()
@@ -267,7 +261,7 @@ func _tick_until_carrying_mid_walk(world: WorldStateType, away_from: Vector2i) -
 	return false
 
 ## Ticks until some colonist's own "work" toil is a site_work job in progress
-## (the superseded suite's own _tick_until_working(), scoped to site_work
+## (the old suite's _tick_until_working(), scoped to site_work
 ## since a colonist may also be doing an unrelated job's own work toil).
 func _tick_until_site_work_active(world: WorldStateType, budget: int = 200) -> bool:
 	for _i in budget:
@@ -280,17 +274,17 @@ func _tick_until_site_work_active(world: WorldStateType, budget: int = 200) -> b
 					return true
 	return false
 
-## Proves wall/door/bed's pre-task outcome is unchanged: same declared
-## build_cost consumed, same declared build_ticks duration, and the same
-## final object appears -- now driven by ConstructionGiver's own site_fetch/
-## site_work jobs instead of a single tracked "build" job. Also restores the
-## superseded suite's own detailed work-phase assertions, adapted to the site
-## model's own mechanics: the builder works from beside the site (never on
-## it) for as long as progress remains, the site's own progress increases by
-## exactly one every tick a site_work job is genuinely in progress (not a
-## single instant jump on delivery), no object exists until progress reaches
+## Proves wall/door/bed's outcome is unchanged from the single-job model: same
+## declared build_cost consumed, same declared build_ticks duration, and the
+## same final object appears -- now driven by ConstructionGiver's own
+## site_fetch/site_work jobs instead of a single tracked "build" job. Also
+## keeps the old single-job suite's detailed work-phase assertions, adapted to
+## the site model's own mechanics: the builder works from beside the site (never
+## on it) for as long as progress remains, the site's own progress increases by
+## exactly one every tick a site_work job is genuinely in progress (not a single
+## instant jump on delivery), no object exists until progress reaches
 ## build_ticks, and the builder is free to take a further job afterward.
-func _check_kind_matches_pre_task_cost_duration_and_object(kind: String) -> void:
+func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
 	var world := _build_world(310000 + BUILDABLE_KINDS.find(kind))
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	var site := Vector2i(10, 10)
@@ -374,8 +368,8 @@ func _check_kind_matches_pre_task_cost_duration_and_object(kind: String) -> void
 			break
 	_expect(dig_terminal == "completed", "(%s) the builder must be able to move and complete a further job after finishing" % kind)
 
-## Acceptance: "ordering a workbench creates a site immediately... before any
-## material arrives" generalizes to every buildable kind -- a `build` command
+## "Ordering a workbench creates a site immediately, before any material
+## arrives" generalizes to every buildable kind -- a `build` command
 ## with zero stockpiled material must still be accepted and create a site.
 func _check_site_created_immediately_with_no_stock() -> void:
 	var world := _build_world(310100)
@@ -421,7 +415,7 @@ func _check_orientation_payload_validated() -> void:
 	_expect(not world.get_construction_site(10, 11).is_empty(),
 		"a vertical [2,1] workbench must reserve/occupy its rotated second footprint tile")
 
-## objects.json declares build_cost on every row (issue #405), including an
+## objects.json declares build_cost on every row, including an
 ## empty list for kinds that were never buildable (chair, table, berry_bush)
 ## and the footprint test fixture (test_footprint_crate, footprint [2,1]
 ## with no cost) -- an empty build_cost must still read as non-buildable for
@@ -482,8 +476,7 @@ func _check_enclosing_wall_rejected_unreachable() -> void:
 
 ## A room with two openings: the first wall order (into one opening) is
 ## accepted, and the second (into the other) must be refused because the
-## first, still pending, already counts as blocking (round-2 review of the
-## superseded suite this restores).
+## first, still pending, already counts as blocking.
 func _check_two_pending_openings_reject_the_second_wall() -> void:
 	var world := _room_with_north_gap(310750)
 	world._set_object(4, 5, "")  # a second opening, south
@@ -495,10 +488,9 @@ func _check_two_pending_openings_reject_the_second_wall() -> void:
 		"the second opening must be refused while the first wall is still pending: %s" % [south])
 
 ## Colonists in two disconnected components: a wall sealing a room only the
-## SECOND colonist can reach must still be refused (the first colonist's
+## second colonist can reach must still be refused (the first colonist's
 ## component does not contain the target), and a first colonist standing on
-## an impassable tile must never hide the enclosure either (round-2 review of
-## the superseded suite this restores).
+## an impassable tile must never hide the enclosure either.
 func _check_enclosure_seen_from_every_colony_component() -> void:
 	var world := _room_with_north_gap(310760)
 	# Split the map: a full wall column at x=20 puts colonist_0 (east) in a
@@ -544,9 +536,8 @@ func _check_preview_matches_apply() -> void:
 		"once applied, the same site must preview as claimed (invalid_target)")
 
 ## A submitted-but-not-yet-active site_fetch job holds no item reservation
-## while queued (issue #278/#303 round-1 review, reapplied to site_fetch's own
-## shape: reservations are only acquired once JobQueue._tick_site_fetch()
-## actually activates the job).
+## while queued: reservations are only acquired once
+## JobQueue._tick_site_fetch() actually activates the job.
 func _check_queued_site_fetch_holds_no_reservation_until_active() -> void:
 	var world := _build_world(320000)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
@@ -566,8 +557,8 @@ func _check_queued_site_fetch_holds_no_reservation_until_active() -> void:
 	_expect(table.is_reserved("item:item_1"), "an active site_fetch job must hold its item reservation")
 	_assert_no_orphaned_reservations(world, "after site_fetch activation")
 
-## Reservation-lifecycle regression (adapted from the superseded `build` job's
-## own suite, ADR 027): a site_fetch job ConstructionGiver submits while its
+## Reservation-lifecycle regression (adapted from the old single-job `build`
+## suite, ADR 028): a site_fetch job ConstructionGiver submits while its
 ## only eligible colonist has build labour disabled must stay queued forever,
 ## holding no item reservation -- and must run to completion the instant
 ## labour is re-enabled.
@@ -606,10 +597,9 @@ func _check_queued_site_fetch_labour_disabled_holds_no_reservation_then_activate
 
 ## Suspending an active site_fetch job (JobQueue.suspend(), the critical-need
 ## interrupt boundary, ADR 009) must release its item reservation, and
-## reactivating it must reacquire it (issue #278/#303's own round-1 review,
-## reapplied to site_fetch's single-reservation shape). The site's OWN
-## footprint reservation is untouched throughout: it belongs to the site, not
-## the job, so it neither drops on suspend nor needs reacquiring on reactivate.
+## reactivating it must reacquire it. The site's own footprint reservation is
+## untouched throughout: it belongs to the site, not the job, so it neither
+## drops on suspend nor needs reacquiring on reactivate.
 func _check_suspend_then_reactivate_site_fetch_reacquires_item_reservation() -> void:
 	var world := _build_world(320200)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
@@ -644,10 +634,10 @@ func _check_suspend_then_reactivate_site_fetch_reacquires_item_reservation() -> 
 	_assert_no_orphaned_reservations(world, "after site_fetch reactivate")
 
 ## Cancelling a site_fetch job mid-fetch (carrying material, still walking to
-## the site, ACTIVE -- not suspended) must drop the item where the colonist
+## the site, active -- not suspended) must drop the item where the colonist
 ## stands, release the item reservation (JobQueue._finish()'s existing
-## release_all(), reused unchanged), and place no object -- restored from the
-## superseded suite's own _check_cancel_mid_haul_leaks_no_reservation().
+## release_all(), reused unchanged), and place no object -- adapted from the
+## old single-job suite's _check_cancel_mid_haul_leaks_no_reservation().
 func _check_cancel_mid_fetch_leaks_no_reservation() -> void:
 	var world := _build_world(320050)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
@@ -680,12 +670,12 @@ func _check_cancel_mid_fetch_leaks_no_reservation() -> void:
 	_expect(table.is_reserved("tile:0,10"), "cancelling one delivery job must never release the site's own footprint reservation -- the site itself still exists")
 	_assert_no_orphaned_reservations(world, "after site_fetch cancel")
 
-## Cancelling a site_fetch that a critical-need interrupt has SUSPENDED after
+## Cancelling a site_fetch that a critical-need interrupt has suspended after
 ## pickup (WorldState._interrupt_current_job(), ADR 009: the job is queued
 ## again and only _paused_jobs remembers who carries its wood) must still find
 ## that carrier and return the cargo to the ground, leaving the colonist's
-## other (need) work state untouched -- adapted from the superseded `build`
-## job's own round-2 review case, now exercising the `["haul", "site_fetch"]`
+## other (need) work state untouched -- adapted from the old single-job
+## `build` suite, now exercising the `["haul", "site_fetch"]`
 ## carrier lookup _trap_actor()/_resolve_refused_reservations()/
 ## _resume_interrupted_job() all share.
 func _check_cancel_while_suspended_returns_cargo() -> void:
@@ -721,9 +711,8 @@ func _check_cancel_while_suspended_returns_cargo() -> void:
 ## A suspended site_fetch whose carrier is switched to a non-orderable faction
 ## while paused is refused on resumption (F3's not_ordered_by_player path,
 ## mirroring test_faction_reservations.gd's haul case) -- the refusal must
-## drop the site_fetch's cargo too (round-2 review of the superseded `build`
-## job), exercising _resolve_refused_reservations()'s own
-## `["haul", "site_fetch"]` carrier lookup restored this round.
+## drop the site_fetch's cargo too, exercising
+## _resolve_refused_reservations()'s `["haul", "site_fetch"]` carrier lookup.
 func _check_refused_resumption_returns_cargo() -> void:
 	var world := _build_world(320400)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
@@ -748,8 +737,7 @@ func _check_refused_resumption_returns_cargo() -> void:
 ## post-pick_up toil boundary (colonist-ai.md 3.6), let sleep run to genuine
 ## completion (its own work toil actually starting and ticking down over more
 ## than one sample, not stalling at arrival on the colonist's leftover
-## is_carrying() flag -- round-6 review of the superseded suite this
-## restores) while the fetched wood stays carried, then resume and complete
+## is_carrying() flag) while the fetched wood stays carried, then resume and complete
 ## the site.
 func _check_rest_interrupt_completes_sleep_while_carrying_site_fetch_material() -> void:
 	var world := _build_world(320500)
@@ -830,7 +818,7 @@ func _check_rest_interrupt_completes_sleep_while_carrying_site_fetch_material() 
 	_expect(site_completed, "the site must resume and complete after the sleep interrupt")
 	_expect(world.get_object(6, 0) == "wooden_wall", "the wall must be placed once the interrupted fetch resumes and completes")
 
-## The stockpile sits ON the wall site (round-2 review's reproduction): leg
+## The stockpile sits on the wall site: leg
 ## one ends with the builder standing on the site, so the ordinary
 ## trim-the-last-tile rule has nothing to drop. The go_to machinery must step
 ## the builder off before its site_work toil starts, and the wall must appear
@@ -862,8 +850,7 @@ func _check_stockpile_on_site_steps_builder_off() -> void:
 
 ## A stockpiled stack larger than the declared cost loses exactly the cost;
 ## the remainder returns to the ground through the ordinary deposit path
-## instead of being destroyed with the rest of the stack (round-2 review of
-## the superseded suite this restores).
+## instead of being destroyed with the rest of the stack.
 func _check_stack_larger_than_cost_keeps_remainder() -> void:
 	var world := _build_world(320950)
 	var quantity := int(world._object_definitions["wooden_wall"]["build_cost"][0]["quantity"])
@@ -936,8 +923,7 @@ func _prime_site_phase(world: WorldStateType, phase: String, site: Vector2i) -> 
 ## and the restored world must hash identically to the source before any
 ## further tick, then drive to an identical completed outcome. The
 ## "searching" phase proves a second-leg search restored mid-flight targets
-## the site with the same passability policy live execution uses (round-2
-## review of the superseded suite this restores).
+## the site with the same passability policy live execution uses.
 func _check_save_load_round_trip_preserves_site_state() -> void:
 	var phase_seeds := {"queued": 321001, "hauling": 321002, "carrying": 321003, "searching": 321005, "working": 321004}
 	for phase in ["queued", "hauling", "carrying", "searching", "working"]:
@@ -983,7 +969,7 @@ func _check_save_load_round_trip_preserves_site_state() -> void:
 ## SaveIO's validator must reject a site_fetch/site_work job whose own "site"
 ## field is missing before it is ever decoded or ticked, while a non-site job
 ## without it (a same-version save written before construction sites existed)
-## still validates (round-2 review of the superseded suite this restores).
+## still validates.
 func _check_save_io_rejects_site_job_missing_site_field() -> void:
 	var world := _build_world(320999)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
@@ -1025,8 +1011,8 @@ func _check_wall_and_bed_orders_hash_differently() -> void:
 	_expect(wall_world.state_hash() != bed_world.state_hash(),
 		"an in-flight wall order and an in-flight bed order at the same tick must hash differently")
 
-## Replaces the superseded suite's own job-scoped/tile-cache "suspended-
-## cancel-during-work" check (see this file's own top-of-file doc comment):
+## Replaces the old single-job suite's job-scoped/tile-cache "suspended-
+## cancel-during-work" check (see the top-of-file doc comment):
 ## a site's own progress lives directly on the construction site record, so
 ## cancelling it mid-work (cancel_site, terminating the in-progress site_work
 ## job through the existing release_all()/terminal-job path) simply removes
@@ -1068,13 +1054,13 @@ func _check_cancel_site_mid_work_clears_progress_for_replacement() -> void:
 			% [replacement_progress, progress_before])
 	_expect(_tick_until_site_gone(world, site) > 0, "the replacement build must complete normally")
 
-## Replaces the superseded suite's own job-scoped/tile-cache "refused-
-## resumption-during-work" check (see this file's own top-of-file doc
-## comment): a site_work job's own refused resumption (F3's
-## not_ordered_by_player path) must not lose the site's own progress -- unlike
-## the superseded single `build` job, the site (not the terminating job) owns
-## progress, so a refused builder's own termination must leave it untouched
-## and available to whichever builder ConstructionGiver next assigns.
+## Replaces the old single-job suite's job-scoped/tile-cache "refused-
+## resumption-during-work" check (see the top-of-file doc comment): a site_work
+## job's own refused resumption (F3's not_ordered_by_player path) must not lose
+## the site's own progress -- unlike the old single `build` job, the site (not
+## the terminating job) owns progress, so a refused builder's own termination
+## must leave it untouched and available to whichever builder ConstructionGiver
+## next assigns.
 func _check_site_progress_survives_a_refused_builder_resumption() -> void:
 	var world := _build_world(321150)
 	var site := Vector2i(0, 10)
@@ -1102,15 +1088,15 @@ func _check_site_progress_survives_a_refused_builder_resumption() -> void:
 		"a refused builder's own termination must never lose the site's own progress")
 	_assert_no_orphaned_reservations(world, "after a refused site_work resumption")
 
-## #400's hands-filling rules (round 3 review): the source ConstructionGiver
+## Hands-filling rules: the source ConstructionGiver
 ## submits a site_fetch job against is only a position-agnostic seed (the
 ## lowest-id eligible item); the real nearest-reachable source is resolved at
 ## activation and re-resolved after every pick_up. Geometry: colonist_0
 ## starts at (0,0); the site (a `test_multi_source_crate`, 3 wood + 2 stone)
 ## sits at (40,0). Wood is a single 3-unit stack right next to the colonist,
 ## so the wood phase is a control (one hop, no ambiguity). For stone, item_2
-## (the LOWER id, so also the position-agnostic submission-time seed) sits far
-## from the site at (46,0); item_3 (the HIGHER id) sits close to the site at
+## (the lower id, so also the position-agnostic submission-time seed) sits far
+## from the site at (46,0); item_3 (the higher id) sits close to the site at
 ## (42,0). Once the colonist finishes delivering wood and stands next to the
 ## site, the stone-phase job must swap onto item_3 (nearer to the colonist
 ## than item_2, regardless of id) -- proving the activation-time correction --
@@ -1152,7 +1138,7 @@ func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_r
 	_expect(_ground_kind_total(world, "wood") == 0 and _ground_kind_total(world, "stone") == 0,
 		"every declared unit of wood and stone must be consumed, none left stranded on the ground")
 
-## #400's hands-filling rules (round 3 review): on an equal route-cost tie
+## Hands-filling rules: on an equal route-cost tie
 ## between two eligible sources, the tie must break by lowest item id alone.
 ## Geometry: colonist_0 starts at (0,0); item_2 (the lower id) sits at (3,0)
 ## and item_3 sits at (0,3) -- symmetric, so any reasonable distance metric
@@ -1190,7 +1176,7 @@ func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
 		"item_2 (the lower id) must be fetched before its route-cost tie item_3 (got %s)" % [order])
 	_expect(world.get_object(site.x, site.y) == "test_multi_source_crate", "the crate must be placed once every unit arrives")
 
-## issue #403 round-2 review (restored from the superseded suite): among two
+## Carried over from the old single-job suite: among two
 ## eligible wood items, one sealed entirely behind a wall ring so nothing
 ## outside can ever reach it, the fetch must select the reachable source and
 ## complete, never retargeting onto the geometrically-closer but sealed-off
@@ -1220,9 +1206,9 @@ func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
 	_expect(world._items.has("item_2"), "item_2, sealed behind the wall ring, must never be visited/consumed")
 	_assert_no_orphaned_reservations(world, "after completing behind the obstacle")
 
-## issue #403 (restored from the superseded suite): cancelling a site_fetch
+## Carried over from the old single-job suite: cancelling a site_fetch
 ## order strictly mid-multi-source-fetch, with hands already holding units
-## from MORE THAN ONE already-visited source (item_1 and item_2, both wood),
+## from more than one already-visited source (item_1 and item_2, both wood),
 ## must deposit everything at the colonist's exact tile in one go (place()'s
 ## existing hands_snapshot()-driven deposit, unchanged), release every
 ## reservation this job holds (the two already-consumed sources' own keys
@@ -1286,19 +1272,18 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 	_expect(not table.is_reserved("item:" + deposited_id), "the freshly deposited item must not be reserved by anything")
 
 	# A different colonist must be able to pick the deposited stack straight
-	# up (no further tick: unlike the superseded suite's own single `build`
-	# job, ConstructionGiver keeps running and could otherwise submit a fresh
-	# site_fetch job for this exact, now-unreserved item before this check
-	# ever gets to it -- the point here is that the deposit itself is
-	# unreserved and available immediately, not that it survives untouched
-	# for a full tick).
+	# up (no further tick: unlike the old single `build` job, ConstructionGiver
+	# keeps running and could otherwise submit a fresh site_fetch job for this
+	# exact, now-unreserved item before this check ever gets to it -- the point
+	# here is that the deposit itself is unreserved and available immediately,
+	# not that it survives untouched for a full tick).
 	world._colonists.append(_colonist("colonist_1", mid_carry_tile.x, mid_carry_tile.y))
 	var colonist_1 := world._find_colonist("colonist_1")
 	var pick_result := world._toils.pick_up(colonist_1, deposited_id)
 	_expect(pick_result.get("ok", false), "a different colonist must be able to pick up the deposited items the next tick: %s" % pick_result)
 	_expect(InventoryType.count_of_kind(colonist_1, "wood") == 2, "the picking-up colonist must receive the full deposited stack")
 
-## issue #403 (restored, adapted): two build orders of the same
+## Adapted from the old single-job suite: two build orders of the same
 ## >HANDS_CAPACITY content kind, submitted concurrently and sharing one
 ## stockpile, must not deadlock or starve each other -- proving the shared
 ## ReservationTable's "skip an item already reserved by a different active
@@ -1306,7 +1291,7 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 ## per-delivery site_fetch jobs rather than one job spanning an order's whole
 ## fetch phase. "Done fetching" is each site's own materials_met() (there is
 ## no longer a single persistent job to read a "cell" field from). Unlike the
-## superseded suite's own version, this does not assert which specific items
+## old single-job suite's version, this does not assert which specific items
 ## each order claimed (that bookkeeping lived on one job id per order, which
 ## no longer exists under the per-delivery-trip job model) -- only that both
 ## orders complete, two colonists finish strictly faster than one serializing
@@ -1334,7 +1319,7 @@ func _check_two_site_orders_disjoint_sources_and_deterministic() -> void:
 ## sharing one 10-item stockpile (6 wood + 4 stone, exactly matching both
 ## orders' combined declared cost) spread x=5..14, y=0. Runs until both
 ## sites' own held_materials fully meet their required_materials ("done
-## fetching", docs/decisions/036) or the tick budget runs out (both_done_tick
+## fetching", ADR 038) or the tick budget runs out (both_done_tick
 ## stays 0, unmet).
 func _run_two_orders_scenario(seed_value: int, two_colonists: bool) -> Dictionary:
 	var world := _build_world(seed_value)
@@ -1354,9 +1339,9 @@ func _run_two_orders_scenario(seed_value: int, two_colonists: bool) -> Dictionar
 	_command_ok(world, "order_b", "build", {"kind": "test_multi_source_crate", "x": site_b.x, "y": site_b.y})
 	var both_done_tick := 0
 	# ConstructionGiver submits one fresh, single-delivery site_fetch job per
-	# hop rather than the superseded suite's own multi-hop-per-job model, so
+	# hop rather than the old multi-hop-per-job model, so
 	# each hop pays its own reserve/activate/deliver/release cycle -- these
-	# budgets are generous multiples of the superseded suite's own 300/1200,
+	# budgets are generous multiples of the old suite's 300/1200,
 	# not a tight bound.
 	var budget := 900 if two_colonists else 3000
 	# Sticky, not a live re-check every tick: once a site's own held_materials

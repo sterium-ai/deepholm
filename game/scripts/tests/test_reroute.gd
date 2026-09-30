@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers issue #180: a colonist re-validates its route's next tile via
+## A colonist re-validates its route's next tile via
 ## passability() every tick (colonist-ai.md 3.5/3.8). Placing a wall mid-walk
 ## exposes reason "rerouting", a new bounded route is found and the job
 ## resumes/completes; enclosing a target with walls instead proves it
@@ -91,7 +91,7 @@ func _find_queued_job_for_target(world: WorldType, target: Vector2i) -> Dictiona
 
 ## True once job_id's fetch_tool attempt has proven at least one candidate
 ## unreachable and excluded it (tool_fetch_toil.gd's _exclude_candidate()),
-## for the round-7 after-exclusion save/load scenario below.
+## for the after-exclusion save/load scenario below.
 func _fetch_tool_has_excluded(world: WorldType, job_id: String) -> bool:
 	return (world._toils.get_fetch_tool_excluded().get(job_id, []) as Array).size() > 0
 
@@ -101,7 +101,7 @@ func _fetch_tool_has_excluded(world: WorldType, job_id: String) -> bool:
 func _build_two_row_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
 	world._tiles.fill(WorldType.TILE_ROCK)
-	# issue #300: clear any generator-placed berry_bush (docs/decisions/020)
+	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on one of this fixture's
 	# own narrow rows and block a route the test expects to be open.
 	world._objects.clear()
@@ -228,7 +228,7 @@ func _check_unreachable_target_releases_job() -> void:
 func _build_racetrack_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
 	world._tiles.fill(WorldType.TILE_ROCK)
-	# issue #300: see _build_two_row_world()'s own doc comment above.
+	# See _build_two_row_world()'s own doc comment above.
 	world._objects.clear()
 	world._object_factions.clear()
 	for x in range(0, 6):
@@ -254,7 +254,7 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 		return true
 	return walled
 
-## Round 5 review finding: state_codec.gd's _restore_reroutes() rebuilt every
+## Regression: state_codec.gd's _restore_reroutes() once rebuilt every
 ## resumed search's cost callable with a target-tile passability exception at
 ## job["target"] -- correct for the job's own go_to leg, but wrong for an
 ## in-flight fetch_tool leg travelling toward a tool at a *different*
@@ -325,14 +325,14 @@ func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
 	_expect(direct.state_hash() == restored.state_hash(),
 		"the mid-fetch-tool-interrupted run must match the uninterrupted run's final state_hash()")
 
-## Round 7 review finding: advance_go_to()'s route==null branch seeded a fresh
+## Regression: advance_go_to()'s route==null branch once seeded a fresh
 ## search with path=[] -- StateCodec.encode()/decode() (the to_save_state()/
 ## from_save_state() pair the check above uses) round-trips that value with no
 ## complaint, but SaveIO._valid_entity_route() rejects it on read ("entity
 ## route path must have at least one tile"), so a real save taken mid-search
 ## could never actually be written during the fetch_tool leg the check above
 ## exercises. Same fixture and save point, but through SaveIO's real file
-## boundary (write_atomic() + read()), and comparing state_hash() after EVERY
+## boundary (write_atomic() + read()), and comparing state_hash() after every
 ## tick once restored -- not merely the final one -- so a divergence on the
 ## exact tick the search resolves cannot hide behind a coincidentally-matching
 ## last hash.
@@ -369,7 +369,7 @@ func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupt
 	var saved_colonist := source.get_colonists()[0]
 	var saved_route = saved_colonist.get("route")
 	_expect(saved_route != null and (saved_route["path"] as Array).size() >= 1,
-		"the saved initial fetch_tool leg must carry at least one path tile (round 7 fix)")
+		"the saved initial fetch_tool leg must carry at least one path tile")
 
 	if FileAccess.file_exists(SAVE_IO_TEST_PATH):
 		DirAccess.remove_absolute(SAVE_IO_TEST_PATH)
@@ -400,13 +400,13 @@ func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupt
 	_expect(direct.state_hash() == restored.state_hash(),
 		"the mid-initial-search-interrupted run must match the uninterrupted run's final state_hash()")
 
-## Round 7 review finding, second exercise: a second axe at (2,2), nearer by
+## Same regression, second exercise: a second axe at (2,2), nearer by
 ## ToolMatching's own raw Manhattan ranking (distance 4 from (0,0)) than the
 ## real one at (5,0) (distance 5) but with no passable neighbor anywhere on
 ## the map (the racetrack loop's interior stays TILE_ROCK, see
 ## _build_racetrack_world()) -- tried first, proven unreachable, and excluded
 ## (tool_fetch_toil.gd's _exclude_candidate()), so the real axe's own search
-## only starts on a SECOND, freshly-created colonist.route (advance_go_to()'s
+## only starts on a second, freshly-created colonist.route (advance_go_to()'s
 ## route==null branch runs again), not the job's very first search.
 func _build_fetch_tool_excluded_candidate_world(seed_value: int) -> WorldType:
 	var world := _build_fetch_tool_racetrack_world(seed_value)
@@ -414,7 +414,7 @@ func _build_fetch_tool_excluded_candidate_world(seed_value: int) -> WorldType:
 	return world
 
 ## Real SaveIO round trip (write_atomic() + read()) taken mid-search for the
-## SECOND fetch_tool candidate, once the nearer, unreachable one has already
+## second fetch_tool candidate, once the nearer, unreachable one has already
 ## been excluded -- distinct from the initial-search case above, since
 ## advance_go_to()'s route==null branch runs a second time here with a
 ## different job history (a non-empty _excluded set) already persisted
@@ -457,7 +457,7 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 	var saved_colonist := source.get_colonists()[0]
 	var saved_route = saved_colonist.get("route")
 	_expect(saved_route != null and (saved_route["path"] as Array).size() >= 1,
-		"the saved post-exclusion fetch_tool leg must carry at least one path tile (round 7 fix)")
+		"the saved post-exclusion fetch_tool leg must carry at least one path tile")
 
 	if FileAccess.file_exists(SAVE_IO_TEST_PATH):
 		DirAccess.remove_absolute(SAVE_IO_TEST_PATH)
@@ -488,14 +488,14 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 	_expect(direct.state_hash() == restored.state_hash(),
 		"the mid-exclusion-interrupted run must match the uninterrupted run's final state_hash()")
 
-## Round 7 review finding, third exercise: the SAME advance_go_to() route==null
+## Same regression, third exercise: the same advance_go_to() route==null
 ## bug applies to the return-to-target leg that starts once fetch_tool itself
 ## completes (colonist.route is null again after tool_fetch_toil.gd's
 ## _arrive(), and this leg has no scheduler-precomputed assignment_path left
 ## to reuse once the colonist has moved away from its own original position to
 ## fetch the tool -- see ToilExecutor._continue_go_to()/_start_current_toil()'s
 ## own is_first/assignment_path[0]==current shortcut) -- distinct from the
-## initial fetch search exercised above, and needing its OWN fixture: the axe
+## initial fetch search exercised above, and needing its own fixture: the axe
 ## sits just two tiles from the colonist's own start (0,2), so the fetch leg
 ## resolves almost immediately (never mid-flight), moving the colonist just
 ## far enough that assignment_path[0] (the scheduler's own precomputed path,
@@ -545,7 +545,7 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 	var saved_colonist := source.get_colonists()[0]
 	var saved_route = saved_colonist.get("route")
 	_expect(saved_route != null and (saved_route["path"] as Array).size() >= 1,
-		"the saved return-leg fetch_tool route must carry at least one path tile (round 7 fix)")
+		"the saved return-leg fetch_tool route must carry at least one path tile")
 
 	if FileAccess.file_exists(SAVE_IO_TEST_PATH):
 		DirAccess.remove_absolute(SAVE_IO_TEST_PATH)
@@ -576,11 +576,11 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 	_expect(direct.state_hash() == restored.state_hash(),
 		"the mid-return-leg-interrupted run must match the uninterrupted run's final state_hash()")
 
-## Round 6 review finding: StateCodec._restore_reroutes() rebuilt a resumed
-## fetch_tool leg's passability exception from the tool's CURRENT (post-
+## Regression: StateCodec._restore_reroutes() once rebuilt a resumed
+## fetch_tool leg's passability exception from the tool's current (post-
 ## restore) location instead of the in-flight search's own already-persisted
 ## rerouting.target -- these differ once a held tool's holder moves after the
-## search begins but before the save. colonist_1 holds an AXE (not a pick --
+## search begins but before the save. colonist_1 holds an axe (not a pick --
 ## _build_racetrack_world() already spawns a pick on colonist_0's own start
 ## tile, which a dig job would grab with no travel at all) on an otherwise-
 ## impassable rock tile (5,0), directly reachable at first via the
@@ -588,10 +588,10 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 ## immediately (SaveIO's own entity-route rule requires a saved route's path
 ## to carry at least one tile; only a colonist already walking a resolved
 ## path, not one still searching from scratch, satisfies that). Walling
-## (2,0) once colonist_0 reaches (1,0) forces a SECOND, genuinely in-flight
+## (2,0) once colonist_0 reaches (1,0) forces a second, genuinely in-flight
 ## re-route for the same final target while the stale-but-non-empty first
-## path stays on the record; colonist_1 relocates the instant THAT second
-## search is caught mid-flight -- a restore that excepts the holder's NEW
+## path stays on the record; colonist_1 relocates the instant that second
+## search is caught mid-flight -- a restore that excepts the holder's new
 ## tile instead of the frozen original would leave the true target tile
 ## impassable and diverge from an uninterrupted run, which keeps its own
 ## frozen, correct exception forever.
@@ -599,13 +599,13 @@ func _build_fetch_tool_racetrack_world_with_moving_holder(seed_value: int) -> Wo
 	var world := _build_racetrack_world(seed_value)
 	# (3,1) sits off every racetrack corridor tile (only reachable via (3,0),
 	# on the top row) so it cannot block the long left/bottom/right-column
-	# detour the SECOND fetch_tool search below needs once (2,0) is walled.
+	# detour the second fetch_tool search below needs once (2,0) is walled.
 	world._tiles[world._tile_index(3, 1)] = WorldType.TILE_TREE
 	world._tiles[world._tile_index(5, 0)] = WorldType.TILE_ROCK
 	# colonist_1 stands on (5,0), itself now impassable rock (only enterable
-	# via the fetch_tool target-tile exception): a RouteSearch starting FROM
+	# via the fetch_tool target-tile exception): a RouteSearch starting from
 	# an impassable tile is invalid by construction (RouteSearch._init()), so
-	# colonist_1's OWN labour is disabled -- it would otherwise still be
+	# colonist_1's own labour is disabled -- it would otherwise still be
 	# proposed for (and, being closer, keep winning over colonist_0) the chop
 	# job's own activation search every tick, which can never resolve from
 	# colonist_1's own invalid start tile, wedging the job forever.
@@ -639,12 +639,12 @@ func _drive_fetch_tool_holder_moves_fixture(world: WorldType, state: Dictionary)
 		return
 	# (10,10) is another impassable rock tile, off every racetrack corridor:
 	# advance_go_to()'s own found-path trim (toil_executor.gd) re-checks
-	# passability against whatever target fetch_tool's NEXT advance() call
+	# passability against whatever target fetch_tool's next advance() call
 	# freshly recomputes (the holder's new position), not the search's own
-	# frozen one -- relocating to a tile that is ALSO impassable keeps that
+	# frozen one -- relocating to a tile that is also impassable keeps that
 	# unrelated trim decision the same either way, isolating this fixture to
 	# the one behavior actually under test (the restored search's passability
-	# EXCEPTION, not this live trim's own separate target staleness).
+	# exception, not this live trim's own separate target staleness).
 	for i in world._colonists.size():
 		if String(world._colonists[i]["id"]) == "colonist_1":
 			world._colonists[i]["x"] = 10
@@ -673,7 +673,7 @@ func _fetch_tool_holder_moved_job_settled(world: WorldType, job_id: String) -> b
 ## holder moves at the same simulated moment. The relocated colonist_1 no
 ## longer stands where colonist_0's search was frozen to look (5,0), so both
 ## runs are expected to settle on blocked_no_tool, not completion -- the
-## point under test is that they settle on the SAME outcome at the SAME tick
+## point under test is that they settle on the same outcome at the same tick
 ## (state_hash() equality), not which outcome that is.
 func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted_run() -> void:
 	var target := Vector2i(3, 1)
@@ -743,16 +743,16 @@ func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted
 	_expect(direct.state_hash() == restored.state_hash(),
 		"a SaveIO round trip taken after the holder moves mid-search must finish with the same state_hash() as an uninterrupted run")
 
-## Round 5 review finding: a colonist owns at most one unfinished RouteSearch
+## Regression: a colonist owns at most one unfinished RouteSearch
 ## and spends its resume() at most once per external tick, ADR 004's shared
 ## "at most 64 frontier expansions across all route work" budget -- but the
 ## scheduler's own activation search and ToilExecutor's go_to/fetch_tool
-## searches were entirely separate accounting, so a worker whose job the
+## searches were once accounted separately, so a worker whose job the
 ## scheduler just activated (spending its own pending-route search that same
 ## tick) could still have fetch_tool immediately start and resume a second,
 ## unrelated search the same tick; and a long fetch-tool-to-return-leg
 ## transition inside a single ToilExecutor.advance() call could resume the
-## SAME search object twice. Reuses the fetch-tool racetrack fixture (a
+## same search object twice. Reuses the fetch-tool racetrack fixture (a
 ## trivial job-target search, an axe fetch needing two resume() batches, and
 ## an equally long return-to-target leg once fetched) to exercise all three
 ## phases across one run: (1) every persisted search object's own resume_calls

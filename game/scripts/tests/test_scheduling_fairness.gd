@@ -37,7 +37,7 @@ func _expect(condition: bool, message: String) -> void:
 func _world() -> WorldType:
 	var world := WorldType.new(47)
 	world._tiles.fill(WorldType.TILE_ROCK)
-	# issue #300: clear any generator-placed berry_bush (docs/decisions/020)
+	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit inside this fixture's own
 	# 20x10 soil pocket.
 	world._objects.clear()
@@ -52,7 +52,7 @@ func _world() -> WorldType:
 	# unrelated to tools, and the fixture completes every active job by
 	# explicit command before the next tick() -- with no pick, dig's own
 	# fetch_tool toil would instead fail every order the instant it activates,
-	# the same tick, before that command ever runs (issue #271).
+	# the same tick, before that command ever runs.
 	for i in 8:
 		world.set_tool_item_held(world.spawn_ground_tool_item("pick", i * 2, 5), "colonist_%d" % i)
 	return world
@@ -88,7 +88,7 @@ func _run_load() -> Dictionary:
 	for i in 200:
 		_submit(world, Vector2i(i % 20, i / 20), i % 3, submitted)
 	for step in range(1, ARRIVAL_TICKS + MAX_WAIT + 1):
-		# Controlled one-tick execution fixture: completion frees t2 reservations.
+		# Controlled one-tick execution fixture: completing each active job frees its reservations.
 		for job in world.get_jobs():
 			if job["status"] == "active":
 				_expect(_command(world, "complete_job", {"job_id": job["id"]})["ok"], "completion failed")
@@ -133,7 +133,7 @@ func _run_load() -> Dictionary:
 	_expect(event_starts == started, "start assertions must match actual queue transition events")
 	return {"hash": world.state_hash(), "events": world.get_events(), "max_wait": max_wait}
 
-## Issue #267: with a mix of labour levels across the 8 colonists (colonist_0's
+## With a mix of labour levels across the 8 colonists (colonist_0's
 ## "mine" fully off, the rest varied 1..4) instead of every colonist left at
 ## its ADR 004 default, the same workload's service bound must still hold for
 ## every colonist whose labour remains enabled -- colonist_0 simply never
@@ -270,7 +270,7 @@ func _check_blocked_prefix() -> void:
 			found = job["status"] == "active"
 	_expect(found, "persistent evaluation cursor must bypass a reserved prefix longer than 32")
 
-## F5 "Regions" (issue #292): a dig target walled off from every colonist by
+## Regions: a dig target walled off from every colonist by
 ## rock on all four sides must never even construct a RouteSearch for it --
 ## the region pre-check proves it unreachable up front, so telemetry records
 ## zero route expansions/resumes across every tick, and the job never activates.

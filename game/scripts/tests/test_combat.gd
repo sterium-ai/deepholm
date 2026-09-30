@@ -1,15 +1,15 @@
 extends SceneTree
 
-## F5/#302 combat resolution (ADR 020): headless, no-scene proof of the
+## F5 combat resolution (ADR 021): headless, no-scene proof of the
 ## generic combat rules using two synthetic fixture actors in opposing
 ## factions (colony vs raiders, both already mutually hostile per
-## content/factions.json) -- never waiting on wolf/trader content, per the
-## task's own instruction. Covers: damage lands every `cooldown` ticks, not
-## every tick; death at hp 0 drops inventory as loose items and removes the
-## actor from scheduling; a wall reduced to hp 0 clears to no object; an
-## actor at/below its own flee_hp_fraction stops fighting and starts a
-## `flee` job that actually moves it; and two fresh runs of the same seed
-## produce identical state hashes (determinism, AGENTS.md's simulation rules).
+## content/factions.json) -- independent of wolf/trader content. Covers: damage
+## lands every `cooldown` ticks, not every tick; death at hp 0 drops inventory
+## as loose items and removes the actor from scheduling; a wall reduced to hp 0
+## clears to no object; an actor at/below its own flee_hp_fraction stops
+## fighting and starts a `flee` job that actually moves it; and two fresh runs
+## of the same seed produce identical state hashes (determinism, AGENTS.md's
+## simulation rules).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -97,7 +97,7 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-## Every reservation key must belong to an active job (issue #391 acceptance):
+## Every reservation key must belong to an active job:
 ## the same invariant test_build.gd/test_haul_stockpile.gd/test_rescue.gd
 ## already check, called after every tick in the new retarget/fallback checks
 ## below so a mid-run leak (not just an end-state one) is caught too.
@@ -108,8 +108,8 @@ func _assert_no_orphaned_reservations(world: WorldStateType, context: String) ->
 
 ## An all-floor, colonist-free world: a controlled arena for fixture actors,
 ## mirroring test_incidents.gd's own _build_arena() helper.
-## issue #300 (merged): a freshly generated world can now place berry_bush
-## objects (docs/decisions/020); a leftover one would silently block a
+## A freshly generated world can place berry_bush
+## objects (ADR 020); a leftover one would silently block a
 ## fixture's own hand-placed walls/doors or flee paths, exactly like
 ## test_incidents.gd's own _build_controlled_world()/_build_pocket_world()
 ## already guard against.
@@ -122,13 +122,13 @@ func _build_arena(seed_value: int) -> WorldStateType:
 	return world
 
 ## A "colonist"-def actor under an arbitrary faction -- reusing the existing
-## colonist definition (this task gives it a `combat` component) rather than
-## adding new species content, per the objective's own Non-goals.
+## colonist definition (which has a `combat` component) rather than
+## adding new species content.
 func _spawn_actor(world: WorldStateType, faction_id: String, actor_id: String, x: int, y: int) -> Dictionary:
 	var actor := ActorTableType.spawn("colonist", x, y, world._content, actor_id)
-	# ActorTable.spawn() (not owned by issue #402) still literally builds the
-	# legacy single-slot "carrying" field; mirror WorldState._spawn_colonists()'s
-	# own post-spawn patch to the hands model instead of touching that file.
+	# ActorTable.spawn() still literally builds the legacy single-slot
+	# "carrying" field; mirror WorldState._spawn_colonists()'s own post-spawn
+	# patch to the hands model.
 	actor.erase("carrying")
 	actor["hands"] = []
 	actor["factionId"] = faction_id
@@ -220,7 +220,7 @@ func _check_flee_below_threshold() -> void:
 	world.tick()
 
 	_expect(world.get_actor_combat_reason("fighter_b") == "", "an actor at/below its own flee_hp_fraction must stop fighting")
-	# round-1 review: the fleeing actor's OWN hp only proves it wasn't hit, not that it withheld its own attack -- assert its opponent's hp instead.
+	# The fleeing actor's own hp only proves it wasn't hit, not that it withheld its own attack -- assert its opponent's hp instead.
 	_expect(int(world._find_colonist("fighter_a")["health"]["hp"]) == hunter_hp_before,
 		"a fleeing actor with a ready cooldown must not land an attack on its opponent while below its flee threshold")
 
@@ -235,7 +235,7 @@ func _check_flee_below_threshold() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("fighter_b")["x"]), int(world._find_colonist("fighter_b")["y"]))
 	_expect(moved_pos != start_pos, "a fleeing actor must actually path away from its starting tile")
 
-## round-1 review: the flee rule is "strictly below", not "at or below" --
+## The flee rule is "strictly below", not "at or below" --
 ## exactly at flee_hp_fraction must still fight; one hp below it must flee.
 func _check_flee_threshold_is_strict() -> void:
 	if _failed: return
@@ -263,7 +263,7 @@ func _check_flee_threshold_is_strict() -> void:
 			has_flee_below_threshold = true
 	_expect(has_flee_below_threshold, "an actor strictly below its own flee_hp_fraction must be given a flee job")
 
-## round-1 review: cooldown must elapse on wall-clock ticks, not only while an
+## Cooldown must elapse on wall-clock ticks, not only while an
 ## adjacent target exists -- an actor that attacks, disengages for longer
 ## than its own cooldown, then re-engages must attack again immediately, not
 ## wait out a stale remaining value frozen from mid-engagement.
@@ -288,7 +288,7 @@ func _check_cooldown_elapses_while_disengaged() -> void:
 	_expect(int(world._find_colonist("fighter_b")["health"]["hp"]) == hp_after_first - 2,
 		"cooldown elapsed during disengagement must let the very next re-engaged tick land a hit immediately, not wait out a stale remaining value")
 
-## round-1 review: fleeing must interrupt whatever the actor is already
+## Fleeing must interrupt whatever the actor is already
 ## doing, not let it run to completion first.
 func _check_flee_interrupts_active_work() -> void:
 	if _failed: return
@@ -318,12 +318,12 @@ func _check_flee_interrupts_active_work() -> void:
 			has_flee_job = true
 	_expect(has_flee_job, "an interrupted actor must be given a flee job in its place")
 
-## Round-3 review: suspend_assignment() (called by _interrupt_current_job())
+## suspend_assignment() (called by _interrupt_current_job())
 ## returns the interrupted till job to GlobalAssignment's own ordinary
 ## candidate pool, where it can outscore a merely-queued, unrestricted-priority
 ## flee job every subsequent tick, forever -- CombatGiver would then see its
 ## own tracked flee job still queued and never re-interrupt (it only acts on a
-## TERMINAL flee job or none at all). Proves the fix (WorldState._committed_jobs()
+## terminal flee job or none at all). Proves the fix (WorldState._committed_jobs()
 ## layering CombatGiver's own commitment over GlobalAssignment.tick()'s
 ## `committed_needs` param) actually lets the flee job win assignment and
 ## movement over several ticks, not merely that it exists in the queue.
@@ -355,12 +355,12 @@ func _check_flee_wins_over_resuming_work_across_ticks() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("worker")["x"]), int(world._find_colonist("worker")["y"]))
 	_expect(moved_pos != start_pos, "a fleeing actor whose own interrupted work re-enters the ordinary pool must still actually move away")
 
-## Round-3 review: an existing NeedGiver commitment (colonist_id -> job_id in
+## An existing NeedGiver commitment (colonist_id -> job_id in
 ## GlobalAssignment.tick()'s `committed_needs` param) forces the scheduler to
-## propose ONLY that job to its worker, so a flee job merely sitting in the
+## propose only that job to its worker, so a flee job merely sitting in the
 ## ordinary queue could never win the same worker's slot at all. Fakes the
-## commitment through the same seam test_faction_reservations.gd's own
-## round-2 check uses (world._need_giver._pending), then proves CombatGiver's
+## commitment through the same seam test_faction_reservations.gd uses
+## (world._need_giver._pending), then proves CombatGiver's
 ## own commitment (layered on top by WorldState._committed_jobs()) wins
 ## instead once the worker drops below its own flee_hp_fraction.
 func _check_flee_wins_over_committed_need_job() -> void:
@@ -388,7 +388,7 @@ func _check_flee_wins_over_committed_need_job() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("worker")["x"]), int(world._find_colonist("worker")["y"]))
 	_expect(moved_pos != start_pos, "a fleeing actor with a committed need job must still actually move away")
 
-## Round-3 review: WorldState._colonists_not_searching_need() excluded every
+## WorldState._colonists_not_searching_need() excluded every
 ## mid-search colonist from GlobalAssignment.tick()'s own worker list
 ## entirely -- a flee job submitted for one could never even be proposed,
 ## let alone assigned. Fakes a genuine NeedGiver mid-search state (the exact
@@ -426,7 +426,7 @@ func _check_flee_wins_while_need_searching() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("worker")["x"]), int(world._find_colonist("worker")["y"]))
 	_expect(moved_pos != start_pos, "an actor mid need-search must still actually flee (move)")
 
-## round-1 review: a single diagonal ray away from the threat must not be the
+## A single diagonal ray away from the threat must not be the
 ## only candidate direction -- when it is blocked, an alternate direction
 ## must still be picked rather than leaving the actor stuck with no target.
 func _check_flee_target_avoids_blocked_direction() -> void:
@@ -437,7 +437,7 @@ func _check_flee_target_avoids_blocked_direction() -> void:
 	# Wall off the entire due-east ray so the single-ray approach has no candidate.
 	for x in range(12, 17):
 		world._set_object(x, 10, "wooden_wall")
-	world.tick() # backfills "combat" (ActorTable's own spawn path predates this task) before this test mutates it
+	world.tick() # backfills "combat" (ActorTable's spawn path does not add it) before this test mutates it
 	var prey := world._find_colonist("prey")
 	prey["health"]["hp"] = 25
 	world._find_colonist("hunter")["combat"]["cooldown_remaining"] = 999
@@ -447,9 +447,9 @@ func _check_flee_target_avoids_blocked_direction() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("prey")["x"]), int(world._find_colonist("prey")["y"]))
 	_expect(moved_pos != start_pos, "a fleeing actor whose direct away-direction is walled off must still pick an alternate reachable direction")
 
-## Round-3 review's own repro: _pick_flee_target() tried every direction at
+## Regression: _pick_flee_target() used to try every direction at
 ## the farthest distance before ever trying a shorter leg, so when every
-## distance-6 endpoint except the one directly TOWARD the threat was blocked,
+## distance-6 endpoint except the one directly toward the threat was blocked,
 ## it picked that one anyway -- moving the prey closer to its own hunter. Wall
 ## off every distance-6 endpoint except due-west (toward the threat, at (0,10))
 ## and every shorter due-east (away-from-threat) leg except distance 1, so the
@@ -478,7 +478,7 @@ func _check_flee_target_requires_separation_improvement() -> void:
 	var moved_distance := absi(moved_pos.x - threat_pos.x) + absi(moved_pos.y - threat_pos.y)
 	_expect(moved_distance > start_distance, "a fleeing actor's own chosen destination must strictly increase its distance from the threat, never decrease it")
 
-## round-1 review: actors_by_pos must not overwrite one occupant with
+## actors_by_pos must not overwrite one occupant with
 ## another -- a friendly actor sharing a hostile actor's tile must never hide
 ## that hostile actor from targeting, in either insertion order.
 func _check_targeting_prefers_hostile_among_multiple_occupants() -> void:
@@ -492,7 +492,7 @@ func _check_targeting_prefers_hostile_among_multiple_occupants() -> void:
 		else:
 			_spawn_actor(world, "colony", "friend", 6, 5)
 			_spawn_actor(world, "raiders", "enemy", 6, 5)
-		world.tick() # backfills "combat" (ActorTable's own spawn path predates this task) before this test mutates it, landing hostile_first's own first hit too
+		world.tick() # backfills "combat" (ActorTable's spawn path does not add it) before this test mutates it, landing hostile_first's own first hit too
 		var watcher := world._find_colonist("watcher")
 		watcher["combat"]["cooldown_remaining"] = 0
 		var enemy_hp_before := int(world._find_colonist("enemy")["health"]["hp"])
@@ -500,12 +500,12 @@ func _check_targeting_prefers_hostile_among_multiple_occupants() -> void:
 		_expect(int(world._find_colonist("enemy")["health"]["hp"]) < enemy_hp_before,
 			"a hostile occupant sharing a tile with a friendly one must still be targeted (insertion order hostile_first=%s)" % hostile_first)
 
-## round-1 review: StateCodec.decode() restores `_objects` directly, bypassing
+## StateCodec.decode() restores `_objects` directly, bypassing
 ## `_set_object()` -- without `_ensure_object_health()`'s own backfill, a
 ## restored wall/door would carry no health entry and read as untargetable.
-## round-3 review: that check alone only proved a health entry EXISTS after
+## A presence check alone only proves a health entry exists after
 ## load, not that its actual accumulated damage survived -- a wall/door
-## silently reset to full health on every load would still have passed it.
+## silently reset to full health on every load would still pass it.
 ## Damages a wall and a door to distinct partial hp values before saving,
 ## proves both exact values (not the object's full/default health) survive
 ## the round trip, then proves combat continues uninterrupted from the
@@ -542,9 +542,9 @@ func _check_object_health_survives_save_load() -> void:
 	_expect(int(loaded._object_health_at(7, 5).get("hp", -1)) == 1,
 		"further damage after load must land relative to the persisted hp, not a reset full hp")
 
-## round-1 review: CombatGiver's own `_fleeing` association is never
+## CombatGiver's own `_fleeing` association is never
 ## serialized and starts empty after a load, even though the `flee` job it
-## submitted before the save is still queued/active in state that DID
+## submitted before the save is still queued/active in state that did
 ## persist -- without adopting it back, a reload mid-flee would submit a
 ## second, duplicate leg every tick.
 func _check_flee_association_survives_save_load() -> void:
@@ -568,13 +568,13 @@ func _check_flee_association_survives_save_load() -> void:
 			flee_jobs_after += 1
 	_expect(flee_jobs_after == 1, "a reload mid-flee must track exactly one nonterminal flee job per actor, never submit a duplicate")
 
-## Round-3 review: GlobalAssignment.restrict_to_for() only reads
+## GlobalAssignment.restrict_to_for() only reads
 ## _activated_entries, "" by its own contract for a job that has never
-## activated -- the check above happens to save an already-ACTIVE flee job, so
-## it never exercised that gap. Submits a flee job directly and saves BEFORE
+## activated -- the check above happens to save an already-active flee job, so
+## it never exercised that gap. Submits a flee job directly and saves before
 ## any scheduler tick ever touches it (still queued, restrict_to known only
 ## from the raw waiting-queue entry) to prove CombatGiver now resolves that
-## restriction too (via WorldState._job_restricted_to(), round-3 review) and
+## restriction too (via WorldState._job_restricted_to()) and
 ## adopts the surviving job instead of submitting a duplicate.
 func _check_flee_association_survives_save_load_before_activation() -> void:
 	if _failed: return
@@ -597,12 +597,12 @@ func _check_flee_association_survives_save_load_before_activation() -> void:
 			flee_jobs_after += 1
 	_expect(flee_jobs_after == 1, "a reload while a flee job was still queued (never activated) must adopt it back, not submit a duplicate leg")
 
-## Round-1 finding, closed round-2: SaveIO._validate_state()'s own job-kind
-## whitelist (separate from StateCodec/game-state.schema.json's) rejected
+## Regression: SaveIO._validate_state()'s own job-kind whitelist (separate
+## from StateCodec/game-state.schema.json's) used to reject
 ## "flee" outright regardless of status, so any save with a flee job in
 ## flight -- queued, active, or even a terminal one still on the wire --
 ## was rejected by SaveIO.write_atomic(). Proves all three lifecycle shapes
-## pass through the REAL entry point, not just the StateCodec round trip
+## pass through the real entry point, not just the StateCodec round trip
 ## _check_flee_association_survives_save_load() above already covers.
 func _check_save_write_accepts_flee_jobs_at_every_status() -> void:
 	if _failed: return
@@ -662,7 +662,7 @@ func _cleanup_dir(dir_path: String) -> void:
 	dir.list_dir_end()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir_path))
 
-## round-1 review: a dead actor's queued (not-yet-activated) job restricted
+## A dead actor's queued (not-yet-activated) job restricted
 ## to it must be cancelled too, and its held tool must be moved to the
 ## ground rather than left pointing at a removed actor.
 func _check_death_releases_queued_job_and_held_tool() -> void:
@@ -728,9 +728,9 @@ func _check_determinism_same_seed() -> void:
 		world_b.tick()
 	_expect(world_a.state_hash() == world_b.state_hash(), "two runs of the same seed must produce identical state hashes")
 
-## Round-5 review: an unrestricted work job's own assignment survived a
+## An unrestricted work job's own assignment survived a
 ## death that occurred while the same actor's active assignment was instead a
-## NEED job (a critical need having already interrupted/paused the work job).
+## need job (a critical need having already interrupted/paused the work job).
 ## _apply_actor_death() cancelled the active need job first, whose
 ## NeedGiver.resolve_job() called _resume_interrupted_job() and reactivated
 ## the paused, unrestricted work job's own assignment for the about-to-be-
@@ -785,7 +785,7 @@ func _check_death_during_need_job_releases_paused_work() -> void:
 	_expect(not (world._paused_jobs as Dictionary).has("worker"), "a dead actor must leave no residual paused-job entry")
 	_expect(world._need_giver.get_pending_job("worker").is_empty(), "a dead actor must leave no residual NeedGiver pending association")
 
-## Round-5 review: _pick_flee_target() only checked eligibility
+## _pick_flee_target() only checked eligibility
 ## (_actor_may_reserve_target()), never whether the candidate tile is a live
 ## target of another job's own reservation right now -- so a flee job could
 ## be submitted straight at a tile already claimed, where it would sit
@@ -828,13 +828,13 @@ func _check_flee_avoids_reserved_destination() -> void:
 	var moved_pos := Vector2i(int(world._find_colonist("prey")["x"]), int(world._find_colonist("prey")["y"]))
 	_expect(moved_pos != start_pos, "a fleeing actor whose own preferred escape tile is reserved by another job must still find and move to an available alternate")
 
-## Round-5 review: RegionMap.reachable() (region_map.gd -- err, regions.gd:
+## RegionMap.reachable() (region_map.gd -- err, regions.gd:
 ## "Physical passability only -- no faction awareness") always evaluates door
 ## passability under the default "colony" faction, so it reports the whole
 ## map one connected region even across a door a hostile faction cannot pass
 ## -- a gap the coarse pre-submission check in _pick_flee_target() cannot see
 ## through. A full-height wall at x=14 (every row except the door itself at
-## y=10) leaves the door as the ONLY crossing between the raider's own west
+## y=10) leaves the door as the only crossing between the raider's own west
 ## side and the entire east side -- not just its single preferred candidate,
 ## since an open arena would otherwise let the real route search simply walk
 ## around a lone door tile, proving nothing about faction blocking. The real
@@ -844,7 +844,7 @@ func _check_flee_avoids_reserved_destination() -> void:
 ## exclude fix keeps trying different candidates (never looping on the same
 ## doomed tile, or a small fixed set of them, forever) until it reaches a
 ## direction that never needed the door at all.
-## Shared fixture (round-6 review, second pass): the raider "prey" can only
+## Shared fixture (second pass): the raider "prey" can only
 ## escape east through a single door its own faction may not pass
 ## (content/factions.json: raiders may_pass_doors=false), full-height walls
 ## on every other row of x=14 forcing every east-pointing candidate past x=14
@@ -882,7 +882,7 @@ func _check_flee_target_excludes_faction_blocked_door() -> void:
 	_expect(max_x < 14,
 		"a fleeing raider actor must never actually cross a door its own faction cannot pass (content/factions.json: raiders may_pass_doors=false), not even briefly mid-chase")
 
-## Round-6 review (second pass): recovery (hp back above flee_hp_fraction)
+## Recovery (hp back above flee_hp_fraction)
 ## must retire the flee job through the shared finish boundary even while it
 ## is still "queued" and mid route-search (GlobalAssignment._pending), not
 ## only once it has gone "active" (see the sibling active-job check below). A
@@ -921,15 +921,14 @@ func _check_flee_recovery_retires_searching_job() -> void:
 	_expect(not world._combat_giver.get_committed_jobs().has("prey"),
 		"a recovered actor must leave no residual CombatGiver association")
 
-## Round-6 review (second pass): the headline finding -- recovery while the
-## flee job is already ACTIVE (assigned, holding its own destination
-## reservation) previously erased the giver's own association and resumed
-## interrupted work WITHOUT retiring the flee job itself, leaving it active
-## (and its reservation held) indefinitely once _resume_interrupted_job()
-## overwrote the worker's assignment out from under it. A cardinal threat
-## direction keeps the top-ranked flee candidate within a small number of
-## RouteSearch budget ticks, so polling a bounded number of ticks reliably
-## reaches "active" before recovering.
+## Regression: recovery while the flee job is already active (assigned, holding
+## its own destination reservation) previously erased the giver's own
+## association and resumed interrupted work without retiring the flee job
+## itself, leaving it active (and its reservation held) indefinitely once
+## _resume_interrupted_job() overwrote the worker's assignment out from under
+## it. A cardinal threat direction keeps the top-ranked flee candidate within a
+## small number of RouteSearch budget ticks, so polling a bounded number of
+## ticks reliably reaches "active" before recovering.
 func _check_flee_recovery_retires_active_job() -> void:
 	if _failed: return
 	var world := _build_arena(45)
@@ -966,7 +965,7 @@ func _check_flee_recovery_retires_active_job() -> void:
 	_expect(String(prey_assignment.get("job_id", "")) != flee_job_id,
 		"a recovered actor's scheduler assignment must not still point at the retired flee job")
 
-## Round-6 review (second pass): `_blocked_targets` is not reconstructible
+## `_blocked_targets` is not reconstructible
 ## from the scheduler's own queued/active jobs after a load (a cancelled
 ## blocked flee job that produced an exclusion is already gone from the
 ## queue by the time it is excluded), so it must round-trip through
@@ -1024,7 +1023,7 @@ func _check_flee_blocked_targets_survive_save_load_and_match_uninterrupted() -> 
 		_expect(uninterrupted_flee_status == loaded_flee_status,
 			"a save made after multiple blocked flee destinations must reproduce identical subsequent flee job transitions to an uninterrupted run (tick %d)" % i)
 
-## Round-6 review (second pass): _drop_inventory_contents() routed a generic
+## Regression: _drop_inventory_contents() used to route a generic
 ## actor's inventory.tool slot and any tool-kind entry inside inventory.items
 ## through _place_ground_item() (the ordinary stackable-pile store), but
 ## every tool-match precondition (ToilExecutor's fetch-tool toil) only ever
@@ -1081,7 +1080,7 @@ func _check_death_drops_generic_inventory_tools_into_tool_store() -> void:
 ## IncidentScheduler.propose(), never a wolf/trader -- this file's own
 ## established convention) under a hostile faction, so it carries the
 ## `combat`/`flee_hp_fraction` component real wolf/trader content does not
-## (Non-goals: flee_hp_fraction is colonist-only, no wolf/trader-specific data).
+## (flee_hp_fraction is colonist-only; there is no wolf/trader-specific data).
 func _make_incident_actor(world: WorldStateType, actor_id: String, x: int, y: int) -> Dictionary:
 	var actor := ActorTableType.spawn("colonist", x, y, world._content, actor_id)
 	actor.erase("carrying")
@@ -1089,7 +1088,7 @@ func _make_incident_actor(world: WorldStateType, actor_id: String, x: int, y: in
 	actor["factionId"] = "raiders"
 	return actor
 
-## Round-5 review: CombatGiver's own flee interrupt suspends an incident
+## CombatGiver's own flee interrupt suspends an incident
 ## actor's active incident job back to "queued" exactly like a critical need
 ## would, but _reconcile_incident_jobs_after_load() used to cancel every
 ## queued incident job unconditionally -- treating "queued" as always meaning
@@ -1150,7 +1149,7 @@ func _check_flee_interrupted_incident_job_survives_save_load() -> void:
 			break
 	_expect(resumed, "the incident actor's own paused incident job must resume and go active again once it stops fleeing, exactly like an uninterrupted incident's lifecycle")
 
-## Round-5 review: SaveIO._valid_object_health() accepted an explicit
+## SaveIO._valid_object_health() accepted an explicit
 ## "health": null the same way as an omitted key, so a malformed save could
 ## slip past validation and then crash StateCodec._decode_objects(), which
 ## assigns item["health"] straight into a typed Dictionary variable the
@@ -1210,7 +1209,7 @@ func _check_object_health_validation() -> void:
 
 	_cleanup_dir(dir_path)
 
-## Round-5 review (repair round): a dead worker's OWN scheduler route-search
+## Regression: a dead worker's own scheduler route-search
 ## state (GlobalAssignment._pending) was never retired, so the unrestricted
 ## job id it was still mid-searching stayed marked "claimed" by tick()'s own
 ## claimed_jobs rebuild (built fresh every tick straight from every _pending
@@ -1223,7 +1222,7 @@ func _check_object_health_validation() -> void:
 ## shared target so their initial proposals tie on score and fall to the
 ## worker-id tie-break, guaranteeing "doomed_worker" (alphabetically first)
 ## wins the single slot -- never "rescue_worker" -- so this reproduces the
-## exact shape the finding named: death strikes the worker ALREADY mid-search
+## exact failure shape: death strikes the worker already mid-search
 ## on the job, not one that was never even proposed it.
 func _check_dead_worker_pending_search_frees_job_for_other_worker() -> void:
 	if _failed: return
@@ -1277,7 +1276,7 @@ func _check_dead_worker_pending_search_frees_job_for_other_worker() -> void:
 			break
 	_expect(rescued, "a surviving worker must actually be able to receive and be assigned the job a dead worker's own retired pending search left behind")
 
-## Round-7 review: recovery cleanup used to hinge on the giver's own transient
+## Recovery cleanup used to hinge on the giver's own transient
 ## `_fleeing` map, which every load starts empty, and adoption of a restored
 ## flee job only ever ran inside the still-fleeing branch -- so a save taken
 ## mid-flee (job queued and mid route-search, queued and blocked, or active)
@@ -1384,7 +1383,7 @@ func _flee_job_of(world: WorldStateType, actor_id: String) -> Dictionary:
 		latest = job
 	return latest
 
-## Round-7 review: a blocked flee leg is cancelled and excluded, and when
+## A blocked flee leg is cancelled and excluded, and when
 ## every remaining candidate is then exhausted no replacement is submitted --
 ## the giver used to erase its only record of the episode (`_fleeing`) at
 ## that point, so a later recovery never cleared the exclusions nor resumed
@@ -1439,7 +1438,7 @@ func _check_flee_recovery_after_destination_exhaustion() -> void:
 	_expect(work_status in ["active", "completed"],
 		"recovery after destination exhaustion must resume the interrupted work, not leave it suspended (got '%s')" % work_status)
 
-## Round-7 review: _drop_inventory_item() spawned exactly one ground tool for
+## _drop_inventory_item() spawned exactly one ground tool for
 ## a tool kind regardless of the entry's count, so {kind: "axe", count: 2}
 ## lost an axe on death; and the earlier regression only poked the store's
 ## setters, never a worker's own job. Proves exact quantity conservation for
@@ -1523,7 +1522,7 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	_expect(world.get_tile(22, 5) != WorldStateType.TILE_TREE and world.get_tile(6, 22) != WorldStateType.TILE_SOIL,
 		"the chop and dig work effects must have been applied with the dropped tools")
 
-## --- Round-8 review: interrupt/resume ownership boundary --------------------
+## --- Interrupt/resume ownership boundary -----------------------------------
 
 ## A real (non-stub) need search still genuinely in flight when a separate
 ## hostile actor drops this same colonist below its own flee_hp_fraction.
@@ -1592,9 +1591,9 @@ func _check_need_search_survives_flee_activation() -> void:
 	_expect(not world._paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
 	_expect(not world._combat_giver.get_committed_jobs().has("worker"), "recovery must leave no residual CombatGiver association")
 
-## A real need onset (urgent/critical) that fires only AFTER CombatGiver
+## A real need onset (urgent/critical) that fires only after CombatGiver
 ## already owns this actor (an open flee episode from an earlier, separate
-## interrupt). Round-8 review: this must never reach NeedGiver's own
+## interrupt). This must never reach NeedGiver's own
 ## interrupt/search machinery at all -- the pre-flee work job's own
 ## _paused_jobs association is the one CombatGiver's own recovery must
 ## resume, never a need job's.
@@ -1665,9 +1664,9 @@ func _check_need_onset_during_existing_flee_episode() -> void:
 			break
 	_expect(handled, "a need still unmet when the flee episode closed must eventually be evaluated by NeedGiver once ownership is released")
 
-## --- Round-8 review: faction-aware routing across save/load ----------------
+## --- Faction-aware routing across save/load --------------------------------
 
-## Round-8 review: GlobalAssignment.restore_scheduling() rebuilt a restored
+## GlobalAssignment.restore_scheduling() rebuilt a restored
 ## pending route search with the colony-default `is_passable` regardless of
 ## whether the underlying candidate was autonomous -- so a raider's own
 ## in-flight flee search, saved before it ever reaches the faction-forbidden
@@ -1725,7 +1724,7 @@ func _build_flee_racetrack_door_world(seed_value: int) -> WorldStateType:
 	world.tick() # backfills "combat" before a caller mutates it
 	return world
 
-## Round-8 review: StateCodec._restore_reroutes() rebuilt a restored in-flight
+## StateCodec._restore_reroutes() rebuilt a restored in-flight
 ## reroute search (a colonist's own route.rerouting snapshot) with the
 ## colony-default `_routable_to()` regardless of the acting actor's own
 ## faction. Walls the raider's own short direct path once it is genuinely
@@ -1774,7 +1773,7 @@ func _check_flee_active_reroute_survives_save_load_faction_aware() -> void:
 			"a save taken mid-reroute must reproduce identical subsequent positions to an uninterrupted run (tick %d)" % i)
 		_expect(loaded_pos != Vector2i(15, 1), "a restored reroute must never cross the raider's own faction-forbidden door (tick %d)" % i)
 
-## Round-8 review: WorldState._advance_go_to_or_resubmit() -- called by
+## WorldState._advance_go_to_or_resubmit() -- called by
 ## _resume_paused_job() when CombatGiver's own recovery resumes an
 ## autonomous actor's own paused work and it is not yet within reach of the
 ## target -- defaulted to colony passability regardless of the acting actor's
@@ -1818,9 +1817,9 @@ func _check_flee_recovery_resume_needs_fresh_route_faction_aware() -> void:
 	_expect(not stood_on_door, "a restored recovery's own fresh route must never cross the raider's own faction-forbidden door")
 	_expect(resumed_active, "the restored recovery must still actually resume and reach the paused job (the long way around), not get permanently stuck")
 
-## --- Round-9 review: need/combat/incident lifecycle gaps -------------------
+## --- Need/combat/incident lifecycle gaps -----------------------------------
 
-## Round-9 review: NeedGiver.advance() is guarded by _colonists_not_combat_owned(),
+## NeedGiver.advance() is guarded by _colonists_not_combat_owned(),
 ## but the resolve_job() callbacks _apply_job_command()'s cancel_job/fail_job/
 ## invalidate_job path fires directly were not. A need that paused ordinary
 ## work and submitted a still-queued (never activated) need job, followed by
@@ -1897,7 +1896,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 	_expect(not world._paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
 	_expect(not world._combat_giver.owns("worker"), "recovery must leave no residual CombatGiver episode")
 
-## Round-9 review: _advance_go_to_or_resubmit() (recovery's own fresh-route
+## _advance_go_to_or_resubmit() (recovery's own fresh-route
 ## path once a paused job resumes) called _resubmit_unreachable_job()
 ## unconditionally on "unreachable" instead of the same kind-aware
 ## _toil_on_unreachable() boundary every other first-leg unreachable case
@@ -1966,7 +1965,7 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	_expect(not world._combat_giver.owns(actor_id), "recovery must leave no residual CombatGiver episode for the despawned actor")
 	_expect(world.get_assignments().get(actor_id) == null, "the despawned actor must hold no scheduler assignment")
 
-## Round-9 review: cancelling an incident job suspended by a flee interrupt
+## Cancelling an incident job suspended by a flee interrupt
 ## calls IncidentScheduler.on_job_finished() -> _remove_colonist_by_id()
 ## directly, bypassing every scheduling/giver cleanup step _apply_actor_death()
 ## used to perform alone -- the actor's own flee job (searching or active),
@@ -2044,12 +2043,12 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 				residual_job = true
 		_expect(not residual_job, "no other job may remain queued or active for the despawned actor (searching=%s)" % searching)
 
-## Round-6 review: an actor that starts fleeing while still carrying cargo
+## An actor that starts fleeing while still carrying cargo
 ## from an unrelated interrupted job (a haul/build leg two, ADR 009's own
 ## need/combat interrupt boundary) must actually complete its flee job, not
 ## stall on arrival. flee's toils ([reserve, go_to, work, release_all]) have
 ## no pick_up of their own, so ToilExecutor's go_to/work selection must be
-## read off FLEE's own declared sequence -- never off the actor's leftover
+## read off flee's own declared sequence -- never off the actor's leftover
 ## is_carrying() flag from the paused haul/build job, which used to make
 ## flee's single go_to look like haul/build's own "leg two" (pick_up already
 ## done) and pick the no-op arrival forever, leaving the actor stuck in
@@ -2090,11 +2089,11 @@ func _check_flee_completes_while_carrying_interrupted_job_cargo() -> void:
 	_expect(moved, "a fleeing actor carrying unrelated cargo must actually path away from its starting tile, not stall at arrival")
 	_expect(flee_completed, "the flee job must reach completed status while the actor carries unrelated cargo, not stall forever")
 
-## Issue #390 (t1 of #389, ADR 031): a full-height wall at x=10 except a
+## ADR 033: a full-height wall at x=10 except a
 ## single colony door at y=24 leaves the door as the wolf's only crossing
 ## toward the villager beyond it -- mirrors _build_faction_blocked_door_world()'s
 ## own "one door, everything else walled" shape. `wolf` (content/actors.json)
-## is reused as a fixture only (Non-goals), spawned directly like every other
+## is reused as a fixture only, spawned directly like every other
 ## fixture actor in this file rather than through IncidentScheduler, so its
 ## own lifetime is not tied to any incident job.
 func _build_wolf_door_world(seed_value: int) -> WorldStateType:
@@ -2169,11 +2168,11 @@ func _check_approach_determinism_and_save_load() -> void:
 	if _failed: return
 	var world_a := _build_wolf_door_world(103)
 	var world_b := _build_wolf_door_world(103)
-	# 100 ticks (round-2 review finding 4): the wolf's own faction relation makes
+	# 100 ticks: the wolf's own faction relation makes
 	# it hostile to every placed colony-faction object with a health entry, not
 	# just the door, so its own search ranks the door against every individual
 	# wall segment too (`_build_wolf_door_world()`'s wall column) -- an
-	# admissible Chebyshev lower bound (the fix for finding 4) cannot prune most
+	# admissible Chebyshev lower bound cannot prune most
 	# of them early, since they tie at the same Chebyshev distance from the
 	# wolf's own start tile, so committing the job takes closer to 64 ticks than
 	# 20 here.
@@ -2218,12 +2217,12 @@ func _approach_job_of(world: WorldStateType, actor_id: String) -> Dictionary:
 		latest = job
 	return latest
 
-## Round-1 review (revision 1): a paused approach job's target association
-## survived removal of the actor it belonged to. `_release_tracking()` (rule
+## Regression: a paused approach job's target association used to survive
+## removal of the actor it belonged to. `_release_tracking()` (rule
 ## 2) deliberately drops `_tracking[actor_id]` while CombatGiver owns the
 ## actor but keeps `_job_targets[job_id]` alive, so a recovered episode can
 ## resume the same job -- `forget()` used to look that association up only
-## THROUGH `_tracking`, so an actor removed while its approach job sat paused
+## through `_tracking`, so an actor removed while its approach job sat paused
 ## (owned by CombatGiver, never reactivated) left its `_job_targets` entry,
 ## and the persisted `approachJobTargets` array, stale forever. Proves the
 ## whole sequence -- submission, flee ownership/release, actor removal --
@@ -2264,9 +2263,9 @@ func _check_approach_forgets_target_after_flee_release_and_removal() -> void:
 		_expect(String((entry as Dictionary).get("jobId", "")) != approach_job_id,
 			"the persisted approachJobTargets array must not carry a removed actor's stale association")
 
-## Issue #391 rule (A), first retarget trigger: a tracked approach job's
+## Retarget rule (A), first trigger: a tracked approach job's
 ## recorded actor target dying is cancelled through the shared finish
-## boundary and its association dropped THE SAME TICK, re-entering rule 4's
+## boundary and its association dropped the same tick, re-entering rule 4's
 ## "no job tracked" branch immediately -- proven by watching the hunter
 ## commit to the nearer of two colony targets, killing it, and confirming the
 ## hunter picks the farther one next, all without leaking a reservation.
@@ -2312,10 +2311,10 @@ func _check_approach_retargets_when_actor_target_dies() -> void:
 	_expect(retargeted, "destroying the current target must cause the hostile to pick the next nearest reachable target within a bounded number of further ticks")
 	_assert_no_orphaned_reservations(world, "end of actor retarget-succeeds scenario")
 
-## Issue #391 rule (A), second retarget trigger: the same cancel-and-retarget
-## behaviour for an object target whose health/objectAt entry clears (round
-## out the actor-death check above with the symmetric object case ADR 031's
-## own target set always included).
+## Retarget rule (A), second trigger: the same cancel-and-retarget
+## behaviour for an object target whose health/objectAt entry clears (the
+## symmetric object case of the actor-death check above; ADR 033's target
+## set always includes objects).
 func _check_approach_retargets_when_object_target_destroyed() -> void:
 	if _failed: return
 	var world := _build_arena(111)
@@ -2358,20 +2357,20 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 	_expect(retargeted, "destroying the current object target must cause the hostile to pick the next nearest reachable target")
 	_assert_no_orphaned_reservations(world, "end of object retarget-succeeds scenario")
 
-## Issue #391 rule (A), round-1 review of this task's own revision 1: a
-## tracked approach job's own recorded target dying must still be cancelled
-## even on a tick the actor also happens to stand adjacent to a DIFFERENT
-## hostile (the existing attack rule's own target, never this stale job's
-## own) -- advance()'s rule 1 (`nearest_adjacent_hostile()` non-empty -> do
-## nothing) used to run BEFORE this cleanup, and its own early `continue`
-## skipped it entirely, leaving a dead target's job (and its reservation)
-## tracked forever whenever another hostile happened to be adjacent the same
-## tick. `adjacent_bait` is re-pinned next to the hunter's own current tile
-## every loop iteration (never a one-shot placement): the hunter's tracked
-## job keeps walking it toward its own now-dead target's tile even after
-## death, since the job's own target is a fixed Vector2i established at
-## commit time, so a one-shot placement could drift out of adjacency before
-## ApproachGiver's own post-movement rule-1 check ever saw it.
+## Retarget rule (A), adjacent-hostile case: a tracked approach job's own
+## recorded target dying must still be cancelled even on a tick the actor also
+## happens to stand adjacent to a different hostile (the existing attack rule's
+## own target, never this stale job's own) -- advance()'s rule 1
+## (`nearest_adjacent_hostile()` non-empty -> do nothing) used to run before
+## this cleanup, and its own early `continue` skipped it entirely, leaving a
+## dead target's job (and its reservation) tracked forever whenever another
+## hostile happened to be adjacent the same tick. `adjacent_bait` is re-pinned
+## next to the hunter's own current tile every loop iteration (never a one-shot
+## placement): the hunter's tracked job keeps walking it toward its own now-dead
+## target's tile even after death, since the job's own target is a fixed
+## Vector2i established at commit time, so a one-shot placement could drift out
+## of adjacency before ApproachGiver's own post-movement rule-1 check ever saw
+## it.
 func _check_approach_cancels_stale_target_while_adjacent_to_different_hostile() -> void:
 	if _failed: return
 	var world := _build_arena(120)
@@ -2400,9 +2399,9 @@ func _check_approach_cancels_stale_target_while_adjacent_to_different_hostile() 
 	var saw_adjacent := false
 	var cancelled := false
 	for i in 20:
-		# Offset by y, not x (round-1 review of this test itself): the hunter's
-		# own route runs due east, so re-pinning the bait one tile NORTH of the
-		# hunter's own pre-tick position stays Chebyshev-adjacent to BOTH of
+		# Offset by y, not x: the hunter's
+		# own route runs due east, so re-pinning the bait one tile north of the
+		# hunter's own pre-tick position stays Chebyshev-adjacent to both of
 		# the hunter's possible post-movement positions this tick (unmoved, or
 		# one step east) -- a west/east offset computed pre-tick would fall out
 		# of adjacency the instant the hunter actually takes a step.
@@ -2422,17 +2421,16 @@ func _check_approach_cancels_stale_target_while_adjacent_to_different_hostile() 
 		"the cancelled job's target association must be dropped, not left stale, regardless of the actor's own adjacency to a different hostile")
 	_assert_no_orphaned_reservations(world, "end of adjacent-stale-target scenario")
 
-## Issue #391 rule (A)'s queued+blocked-unreachable retarget trigger, round-1
-## review of this task's own revision 1: isolates the branch
+## Retarget rule (A)'s queued+blocked-unreachable trigger: isolates the branch
 ## `advance()` itself watches for (`status == "queued" and reason ==
-## BLOCKED_TARGET_UNREACHABLE`) from the SEPARATE active-route-cancelled-by-
+## BLOCKED_TARGET_UNREACHABLE`) from the separate active-route-cancelled-by-
 ## `WorldState._toil_on_unreachable()` path the existing fallback checks
 ## exercise instead -- the tracked job here is proven to go straight from
-## freshly "queued" to cancelled WITHOUT ever passing through "active" at
+## freshly "queued" to cancelled without ever passing through "active" at
 ## all, so only the queued-and-blocked branch could have produced it. The
-## corridor is severed with a FULL, gapless wall column (never touching the
+## corridor is severed with a full, gapless wall column (never touching the
 ## job's own destination tile itself) so the target stays perfectly bare and
-## reservation-eligible throughout -- only the ROUTE is cut -- isolating
+## reservation-eligible throughout -- only the route is cut -- isolating
 ## JobQueue's own reachability check from the separate reservation-
 ## eligibility gate a held/occupied destination tile would instead trip.
 func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> void:
@@ -2458,8 +2456,8 @@ func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> voi
 	_expect(String(world._get_job(approach_job_id).get("status", "")) == "queued",
 		"the freshly committed approach job must still be queued, not yet active, for this check to isolate the queued path")
 
-	# Seals the ONLY corridor between the hunter and its own tracked target,
-	# using the hunter's OWN "raiders" faction so the seal creates no new
+	# Seals the only corridor between the hunter and its own tracked target,
+	# using the hunter's own "raiders" faction so the seal creates no new
 	# hostile target (mirrors _check_approach_falls_back_to_incident_when_fully_walled_off()'s
 	# own trick).
 	for y in WorldStateType.MAP_HEIGHT:
@@ -2493,7 +2491,7 @@ func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> voi
 	_expect(String(_approach_job_of(world, "hunter").get("status", "")) not in ["queued", "active"],
 		"no approach job may be left queued or active once the only route to every reachable target is sealed")
 
-## Issue #391 rule (A)'s fallback branch: once every reachable target is
+## Retarget rule (A)'s fallback branch: once every reachable target is
 ## walled off, cancellation (here via a tracked job going queued+blocked-
 ## unreachable, or cancelled by WorldState._toil_on_unreachable() mid-walk --
 ## whichever fires first) leaves the actor with no approach job at all, rule
@@ -2517,7 +2515,7 @@ func _check_approach_falls_back_to_incident_when_fully_walled_off() -> void:
 
 	# Seals the wolf's own current tile with walls on every neighbor (the map
 	# edge itself seals any side that would fall out of bounds), using the
-	# wolf's OWN "wildlife" faction so the seal creates no new hostile target
+	# wolf's own "wildlife" faction so the seal creates no new hostile target
 	# for it to fight or approach instead -- only the map edge/these walls
 	# stand between it and every target the fixture placed.
 	var wolf := world._find_colonist("wolf_1")
@@ -2550,15 +2548,15 @@ func _check_approach_falls_back_to_incident_when_fully_walled_off() -> void:
 		"no approach job may be left queued or active once every reachable target is walled off")
 	_assert_no_orphaned_reservations(world, "end of fallback scenario")
 
-## Round-1 review of this task's own revision 1: the check above uses a wolf
+## The check above uses a wolf
 ## appended directly to the roster (`_spawn_actor()`), never through
 ## IncidentScheduler, so it cannot prove the fallback rule actually leaves an
-## unrelated INCIDENT job's own walk-then-wait lifecycle untouched. Proves it
+## unrelated incident job's own walk-then-wait lifecycle untouched. Proves it
 ## with a real `_incidents.propose()` actor/job: its own incident job (a walk
-## on the actor's OWN side of a sealed corridor, entirely unrelated to combat)
+## on the actor's own side of a sealed corridor, entirely unrelated to combat)
 ## commits, activates and runs to natural completion -- despawning the actor,
 ## exactly like an uninterrupted incident always does -- the whole time a
-## SEPARATE, already-committed `approach` job for a sealed-off colony target
+## separate, already-committed `approach` job for a sealed-off colony target
 ## sits alongside it. `submit_autonomous()`'s own worker exclusivity (a busy
 ## worker's other queued entries are never re-selected for activation, see
 ## `GlobalAssignment.tick()`) means that approach job can only ever sit
@@ -2574,7 +2572,7 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 	var actor_id := "raider_1"
 	# wait_ticks=5 (short) keeps the incident's own walk-then-wait bounded so
 	# it completes (and despawns the actor) well within this check's own tick
-	# budget below; its target (0, 15) sits on the actor's OWN side of the
+	# budget below; its target (0, 15) sits on the actor's own side of the
 	# corridor sealed further down, so the seal never affects it.
 	var incident_job_id := world._incidents.propose(_make_incident_actor(world, actor_id, 0, 0), Vector2i(0, 15), 5)
 	_expect(not incident_job_id.is_empty(), "the incident proposal must be accepted")
@@ -2596,7 +2594,7 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 	_expect(String(world._get_job(incident_job_id).get("status", "")) == "active",
 		"the incident actor's own job must still be active while its unrelated approach job commits, for this check to be meaningful")
 
-	# Seals the ONLY corridor to the villager using the actor's own "raiders"
+	# Seals the only corridor to the villager using the actor's own "raiders"
 	# faction (mirrors _check_approach_falls_back_to_incident_when_fully_walled_off()'s
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
@@ -2619,22 +2617,22 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 		"the despawned actor must leave no stale approach target association behind")
 	_assert_no_orphaned_reservations(world, "end of incident-fallback-non-interference scenario")
 
-## Round-2 review: the two checks above never prove the SAME actor falling
-## back to and completing ITS OWN IncidentScheduler walk-then-wait after
+## The two checks above never prove the same actor falling
+## back to and completing its own IncidentScheduler walk-then-wait after
 ## approach retargeting fails -- the wolf above has no incident job at all,
 ## and the incident-actor check above never gets its own approach job
 ## active (worker exclusivity means it can only ever sit queued behind an
 ## already-active incident job, per that check's own comment). This proves
 ## the missing causality: the actor's own approach job commits and goes
-## ACTIVE first (chasing a reachable colony target); only then is a real
-## "incident" kind job submitted for the SAME actor, directly through
+## active first (chasing a reachable colony target); only then is a real
+## "incident" kind job submitted for the same actor, directly through
 ## `WorldState._submit_incident_job()`/`IncidentScheduler.adopt()` -- the
 ## same two primitives `IncidentScheduler.propose()`/`activate_pending()`
 ## use internally, minus the edge-tile spawn choreography this already-live
 ## actor does not need -- so it sits queued behind the busy worker, exactly
 ## like "IncidentScheduler's own walk-then-wait already has it doing".
 ## Sealing off the approach target with no replacement then cancels the
-## approach job (rule 5) and frees the worker: the SAME actor's own queued
+## approach job (rule 5) and frees the worker: the same actor's own queued
 ## incident job activates through the ordinary fair-queue path -- no special
 ## hook, no giver interrupts it -- walks to its own destination, waits, and
 ## completes to natural despawn.
@@ -2672,7 +2670,7 @@ func _check_approach_fallback_resumes_same_actors_own_incident_job() -> void:
 		"the actor's own incident job must sit queued behind its already-active approach job, for this check to be meaningful")
 	_assert_no_orphaned_reservations(world, "immediately after queuing the actor's own incident job")
 
-	# Seals the ONLY corridor to the hostile target using the actor's own
+	# Seals the only corridor to the hostile target using the actor's own
 	# "raiders" faction (mirrors _check_approach_falls_back_to_incident_when_fully_walled_off()'s
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
@@ -2704,7 +2702,7 @@ func _check_approach_fallback_resumes_same_actors_own_incident_job() -> void:
 		"the sealed-off approach job must stay terminated, never left queued or active once its own actor is gone")
 	_assert_no_orphaned_reservations(world, "end of same-actor fallback scenario")
 
-## Issue #391 (B): confirms and locks in t1's own owns()-check deference end
+## Retarget rule (B): confirms ApproachGiver's owns()-check deference end
 ## to end -- a hostile actor whose hp fraction drops below its own
 ## flee_hp_fraction while mid-approach is interrupted into CombatGiver's flee
 ## job, its own approach job cleanly paused (never left active, never

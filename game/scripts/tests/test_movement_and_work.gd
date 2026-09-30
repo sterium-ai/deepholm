@@ -1,8 +1,8 @@
 extends SceneTree
 
-## Covers objective #129/issue #133: an active job's colonist walks to it and
-## works it, entirely inside WorldState.tick().
-## Also covers issue #205 (colonist-ai.md 3.6): tile-keyed work_progress and
+## Covers an active job's colonist walking to it and working it, entirely
+## inside WorldState.tick().
+## Also covers colonist-ai.md 3.6: tile-keyed work_progress and
 ## the critical-need interrupt of an in-progress `work` toil.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
@@ -38,11 +38,11 @@ func _expect(condition: bool, message: String) -> void:
 
 ## A single row corridor: colonist starts at (0,0); (0,0)-(3,0) are soil,
 ## (4,0) is a tree. Everything else is rock, so the router has exactly one
-## path to each target, keeping the position trace below unambiguous. Issue
-## #359: the axe spawns at (3,0), past the dig target (2,0), not at (0,0) --
+## path to each target, keeping the position trace below unambiguous.
+## The axe spawns at (3,0), past the dig target (2,0), not at (0,0) --
 ## dig always completes first (nearer), turning (2,0) into trench, so a
 ## same-side axe would send the colonist's own fetch_tool leg back through
-## it to reach (0,0), tripping the new trap-on-entry rule (route search
+## it to reach (0,0), tripping the trap-on-entry rule (route search
 ## still treats trench as ordinary passable terrain; only arrival traps).
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
@@ -85,12 +85,12 @@ func _jobs_done(world: WorldType) -> bool:
 ## target: a colonist works a tree from the adjacent tile it stopped on, and
 ## must never occupy the tree tile itself (see global_assignment.gd's path
 ## trim in its "chosen" loop). TILE_TRENCH is included since a colonist digs
-## soil while standing on it (ADR 025): the tile flips to trench under the
+## soil while standing on it (ADR 026): the tile flips to trench under the
 ## colonist's own feet on dig's completing tick.
 func _tile_ok(world: WorldType, pos: Vector2i) -> bool:
 	return world.get_tile(pos.x, pos.y) in [WorldType.TILE_FLOOR, WorldType.TILE_SOIL, WorldType.TILE_TRENCH]
 
-## ADR 025: dig always spawns a sand item on the nearest adjacent passable,
+## ADR 026: dig always spawns a sand item on the nearest adjacent passable,
 ## non-trench tile to its target (or the target itself when no such neighbour
 ## exists).
 func _has_sand_near(world: WorldType, target: Vector2i) -> bool:
@@ -211,7 +211,7 @@ func _build_interrupt_world(seed_value: int) -> WorldType:
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
-## Acceptance (issue #205, revised by #241/ADR 009): a colonist with a critical
+## A colonist with a critical
 ## hunger need has its in-progress `work` toil (dig) interrupted immediately,
 ## mid-tick-count, not at the next toil boundary; the paused job goes back to
 ## "queued" (never cancelled/resubmitted to a new id) and releases its
@@ -253,7 +253,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 	_expect(world._paused_jobs.get("colonist_0", "") == dig_job_id,
 		"the interrupt must record the paused job for colonist_0")
 
-	# Round-6 review (#278/#303): a suspended job's own progress moves OUT of
+	# A suspended job's own progress moves OUT of
 	# the shared tile cache into job-id-keyed storage the instant colonist.work
 	# is cleared for it (world_state.gd's own _suspend_work_progress()), so a
 	# different job that later works the same tile can never inherit it.
@@ -295,7 +295,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 	_expect(_has_sand_near(world, Vector2i(3, 0)), "the dig target must leave a sand item on or adjacent to the trench")
 	_expect(not world._work_progress.has("3_0"), "work_progress for a finished tile must be cleared")
 
-## Acceptance (issue #205): the same critical need does not interrupt a
+## The same critical need does not interrupt a
 ## `pick_up` toil (or the `go_to` leg leading to it) mid-way -- a haul
 ## colonist still walking to its item keeps walking and successfully picks it
 ## up despite a critical need, unlike dig/chop's `work` toil above.
@@ -336,16 +336,16 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 	_expect(picked_up, "a critical need must not prevent pick_up from eventually succeeding")
 	_expect(not world._items.has("item_1"), "the picked-up item must leave the ground map")
 
-## Acceptance (issue #205): the two new persisted fields (WorldState._work_progress/
-## _paused_jobs) round-trip through to_save_state()/from_save_state() exactly,
-## checked directly rather than via state_hash(): an in-flight need job/search
-## is deliberately out of this task's persistence scope (colonist-ai.md 3.1's
-## own non-goal, unchanged here -- WorldState.get_jobs() merges in a live
-## _need_jobs entry that to_save_state() never writes at all), so a save taken
-## while the eat_food job is still active would make state_hash() itself
-## diverge after restore for a reason this task does not touch. Saving at the
-## paused instant -- after _pause_work_job() but before the need job's own
-## unrelated persistence gap can matter -- isolates exactly what #205 added.
+## The persisted fields WorldState._work_progress/_paused_jobs round-trip
+## through to_save_state()/from_save_state() exactly, checked directly rather
+## than via state_hash(): an in-flight need job/search is deliberately not
+## persisted (colonist-ai.md 3.1's own non-goal -- WorldState.get_jobs()
+## merges in a live _need_jobs entry that to_save_state() never writes at
+## all), so a save taken while the eat_food job is still active would make
+## state_hash() itself diverge after restore for an unrelated reason. Saving
+## at the paused instant -- after _pause_work_job() but before the need job's
+## own unrelated persistence gap can matter -- isolates exactly the
+## work-progress persistence.
 func _check_paused_job_and_work_progress_round_trip() -> void:
 	var world := _build_interrupt_world(555004)
 	var dig_result := _command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 1})
@@ -363,7 +363,7 @@ func _check_paused_job_and_work_progress_round_trip() -> void:
 	_set_food(world, "colonist_0", 5)
 	world.tick()
 	_expect(not world._paused_jobs.is_empty(), "the colonist's job must be paused at the save point")
-	# Round-6 review (#278/#303): a suspended job's own progress now lives in
+	# A suspended job's own progress now lives in
 	# job-id-keyed _suspended_work_progress, not the shared tile-keyed
 	# _work_progress cache (world_state.gd's own _suspend_work_progress()).
 	_expect(world._work_progress.is_empty(), "the paused tile's own tile-cache entry must have moved out")
@@ -378,12 +378,12 @@ func _check_paused_job_and_work_progress_round_trip() -> void:
 	_expect(restored._suspended_work_progress == world._suspended_work_progress,
 		"suspendedWorkProgress must round-trip through to_save_state()/from_save_state() unchanged")
 
-## Acceptance (issue #205): saving after a critical-need interrupt has already
+## Saving after a critical-need interrupt has already
 ## resumed the same job -- mid-work again, work_progress non-empty, but the
 ## need job long since finished and released -- and loading, then continuing,
 ## reaches the same state_hash() as continuing the live run to the same tick.
-## This is the "mid-interrupt" scenario that stays entirely within #205's own
-## persistence surface (see _check_paused_job_and_work_progress_round_trip()'s
+## This is the "mid-interrupt" scenario that stays entirely within the
+## work-progress persistence surface (see _check_paused_job_and_work_progress_round_trip()'s
 ## comment for why saving during the need job itself is excluded -- this test
 ## drives _pause_work_job()/_resume_paused_job() directly (as _isolate_need()-
 ## style tests elsewhere in this suite already reach into WorldState's
@@ -445,7 +445,7 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 	_expect(_has_sand_near(live, Vector2i(3, 0)) and _has_sand_near(restored, Vector2i(3, 0)),
 		"both the source and its post-interrupt restore must leave a sand item on or adjacent to the trench")
 
-## Round-3 review (#358): two dig orders queued for the SAME soil tile, with a single colonist
+## Two dig orders queued for the same soil tile, with a single colonist
 ## and a single pick forcing them to run sequentially, must not both spawn a sand item or both
 ## consume a find roll. _toil_on_work_complete()'s "dig" branch now revalidates TILE_SOIL before
 ## flooring/spawning (mirroring mine's own stale-duplicate-order guard, test_mine_job.gd's
@@ -505,7 +505,7 @@ func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 		world._scheduler.queue.get_reservation_table(), world.get_jobs())
 	_expect(orphans.is_empty(), "the stale dig order must not leave any orphaned reservation, got %s" % [orphans])
 
-## Round-3 review (#358): a dig job paused mid-work (critical-need interrupt, ADR 009 -- see
+## A dig job paused mid-work (critical-need interrupt, ADR 009 -- see
 ## _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() above) releases its
 ## tile reservation for the duration of the interrupt. If another job changes that same tile while
 ## this one is paused -- here simulated directly, the same way _build_world()/_build_interrupt_world()

@@ -1,7 +1,7 @@
 class_name WorldGenerator
 extends RefCounted
 
-## Pure terrain generation (issue #299/#300), extracted from WorldState to respect
+## Pure terrain generation, extracted from WorldState to respect
 ## its core-budgets.json cap: no scenes, nodes, content-registry instances, or
 ## wall-clock/global randomness -- every draw comes from the RandomNumberGenerator
 ## the caller injects, consumed in a fixed order, so a given seed reproduces the
@@ -14,9 +14,9 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 ## mapgen.json's tunable values change); persisted per save (see
 ## state_codec.gd's "map.generatorVersion") so a save records which algorithm
 ## actually produced its stored terrain, for reproducibility diagnostics.
-## Bumped to 2 for issue #300: the main-river/correlated-vegetation/
-## river-aware spawn algorithm replaces #299's independent per-tile scatter.
-## Bumped to 3 for issue #351/#347: grown (not scattered) compact rock
+## Bumped to 2 when the main-river/correlated-vegetation/river-aware spawn
+## algorithm replaced the original independent per-tile scatter.
+## Bumped to 3 when grown (not scattered) compact rock
 ## outcrops are a new terrain-shaping pass, and place_spawn()'s anchor
 ## scoring now requires outcrop reachability too -- both change the tiles a
 ## given seed produces.
@@ -35,9 +35,9 @@ const DEFAULT_REFERENCE_SIZE := 48
 const DEFAULT_MIN_WORLD_SIZE := 16
 const DEFAULT_MAX_WORLD_SIZE := 512
 
-## River width contract (issue #300 Goal: "a channel roughly 6-12 tiles
+## River width contract (design goal: "a channel roughly 6-12 tiles
 ## wide"): the hard floor below which a transversal corridor is considered a
-## "neck" the task's acceptance forbids. river_min_width/max_width
+## forbidden "neck". river_min_width/max_width
 ## (mapgen.json, default 6/12) are themselves always >= NECK_FLOOR, so a
 ## generated river's measured width -- see _carve_river()'s own doc comment for
 ## the exact width metric -- never approaches this floor in practice; it exists
@@ -52,7 +52,7 @@ const DEFAULT_RIVER_MAX_DELTA := 6
 const DEFAULT_TREE_GROVE_COUNT := 6
 const DEFAULT_TREE_GROVE_RADIUS := 5
 
-## Compact rock outcrops (issue #351/#347), complementing rock_vein_count's
+## Compact rock outcrops, complementing rock_vein_count's
 ## thin (10-22 tile) veins rather than replacing them: outcrop_count scales
 ## with map area like rock_vein_count; min/max size and compactness are
 ## spatial and never scaled, like tree_grove_radius.
@@ -67,7 +67,7 @@ const DEFAULT_BERRY_BUSH_PLACEMENT_ATTEMPTS := 120
 const DEFAULT_BERRY_BUSH_GROVE_COUNT := 5
 const DEFAULT_BERRY_BUSH_GROVE_RADIUS := 4
 
-## Spawn-clearing search (issue #300 Goal: "a deterministic attempt limit and
+## Spawn-clearing search (design goal: "a deterministic attempt limit and
 ## a documented fallback"). Distances are measured in real 4-connected route
 ## hops over passable (soil) tiles -- see place_spawn()'s own doc comment --
 ## never Chebyshev/Euclidean distance.
@@ -76,15 +76,15 @@ const DEFAULT_SPAWN_WATER_STEP_LIMIT := 40
 const DEFAULT_SPAWN_FOOD_STEP_LIMIT := 40
 const DEFAULT_SPAWN_TREE_STEP_LIMIT := 50
 
-## Concrete starting-food requirement (issue #300 round 5 review). Forage
+## Concrete starting-food requirement. Forage
 ## fully consumes its berry_bush in one interaction -- world_state.gd's
 ## _toil_on_work_complete()/_apply_need_effect() clear the bush and leave
 ## exactly one ground-berries pile, a single full-restore meal, no regrowth --
 ## so a single reachable bush can feed only one of the three colonists' first
-## meals, however short its route distance. Distance-to-NEAREST-bush alone
-## (the pre-round-5 check) lets the exact same bush satisfy all three
+## meals, however short its route distance. Distance-to-nearest-bush alone
+## (an earlier version of this check) lets the exact same bush satisfy all three
 ## colonists' own nearest-distance test while actually feeding only one of
-## them. Requiring `colonist_count * FOOD_SOURCES_PER_COLONIST` DISTINCT
+## them. Requiring `colonist_count * FOOD_SOURCES_PER_COLONIST` distinct
 ## reachable bushes -- not merely a short route to the closest one -- is the
 ## concrete quantity "enough resources for the initial needs"
 ## resolves to, derived directly from real forage yield (1) and colonist_count (3).
@@ -104,7 +104,7 @@ static func resolve_size(requested_width: int, requested_height: int, mapgen: Di
 		clampi(requested_height, min_size, max_size)
 	)
 
-## The "normal UI" new-game size (issue #299 acceptance: 256x256), read from
+## The "normal UI" new-game size (256x256), read from
 ## content rather than hardcoded here so a single source of truth governs it.
 static func default_new_game_size(mapgen: Dictionary) -> Vector2i:
 	return Vector2i(
@@ -120,7 +120,7 @@ static func default_new_game_size(mapgen: Dictionary) -> Vector2i:
 ## whole count/attempt rather than flooring, so a small requested map never
 ## rounds a positive base count down to zero purely from scaling. Spatial
 ## extents (river width, grove radius) are never scaled by this -- only
-## counts/attempts are (issue #300: a river stays 6-12 tiles wide regardless
+## counts/attempts are (a river stays 6-12 tiles wide regardless
 ## of map size, it does not get proportionally wider on a larger map).
 static func _density_scale(width: int, height: int, mapgen: Dictionary) -> float:
 	var reference_width := int(mapgen.get("reference_width", DEFAULT_REFERENCE_SIZE))
@@ -155,10 +155,10 @@ static func generate(random: RandomNumberGenerator, width: int, height: int, map
 ## Draw order (each pass consumes `random` in this fixed sequence, so a given
 ## seed reproduces the same terrain every time -- see this function's own
 ## top-of-file doc comment): rock veins, hazards, tree groves, rock outcrops,
-## then the river LAST among terrain-shaping passes (issue #300 Goal: "later
+## then the river last among terrain-shaping passes (design goal: "later
 ## placement order must not break the channel") so nothing placed
 ## before it can leave a rock/hazard/tree/outcrop plug inside its band; every
-## pass placed AFTER it (berry bush groves, the spawn clearing) only ever
+## pass placed after it (berry bush groves, the spawn clearing) only ever
 ## writes onto TILE_SOIL, so none of them can touch water either. Rock
 ## outcrops are the one exception to "consumes `random`": they draw from their
 ## own private, seed-derived substream (see OUTCROP_SEED_SALT/
@@ -212,7 +212,7 @@ static func _scatter_hazards(random: RandomNumberGenerator, map: Array[String], 
 			map[index] = TILE_HAZARD
 			placed += 1
 
-## Correlated tree placement (issue #300 Goal: "groups of trees ... through
+## Correlated tree placement (design goal: "groups of trees ... through
 ## correlated zones instead of scattering each element
 ## independently"): tree_count/tree_placement_attempts (area-scaled, as
 ## before) are split evenly across tree_grove_count groves (not area-scaled --
@@ -255,7 +255,7 @@ static func _scatter_tree_groves(random: RandomNumberGenerator, map: Array[Strin
 ## `random` stream every other pass in generate_with_decorations() consumes
 ## from -- so inserting this new pass never shifts the random draws every
 ## other pass (river control points, berry bush groups) already consumed
-## before issue #351/#347, which would otherwise change the map (and every
+## before outcrops were added, which would otherwise change the map (and every
 ## downstream seed-dependent expectation outside this module, e.g. a hand-built
 ## test world carved from a real WorldState.new(seed) call) for a huge range
 ## of pre-existing seeds that never asked for an outcrop-shaped difference.
@@ -264,7 +264,7 @@ static func _scatter_tree_groves(random: RandomNumberGenerator, map: Array[Strin
 ## collides with either.
 const OUTCROP_SEED_SALT := 100_003
 
-## Compact rock outcrops (issue #351/#347 Goal: grow, not scatter, so a blob
+## Compact rock outcrops (design goal: grow, not scatter, so a blob
 ## is guaranteed 4-connected -- unlike _scatter_tree_groves()'s independent
 ## circular-offset scatter above, which does not guarantee 4-connectivity and
 ## would produce scattered pebbles, not a blob). Each of outcrop_count blobs
@@ -351,10 +351,10 @@ static func _random_soil_neighbor(random: RandomNumberGenerator, map: Array[Stri
 		return -1
 	return candidates[random.randi_range(0, candidates.size() - 1)]
 
-## Correlated berry-bush placement, the "comida" (food) resource this task
-## adds to real terrain generation (previously only the debug scenario placed
+## Correlated berry-bush placement, the food resource in real terrain
+## generation (previously only the debug scenario placed
 ## a single berry_bush object, unconditionally, via _place_scenario_objects()
-## -- a fresh "New Game" world had none at all, see docs/decisions/020). Never
+## -- a fresh "New Game" world had none at all, see ADR 020). Never
 ## mutates `map`: berry_bush is an object, not a tile kind, so this only
 ## returns the tile positions chosen (deduplicated); WorldState writes the
 ## actual object entries. Bushes place onto TILE_SOIL only, same as trees, so
@@ -395,23 +395,23 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 	return positions
 
 ## Carves the main river: a single band around a continuous centerline from
-## one edge to the opposite edge (issue #300 Goal: "one main winding river
+## one edge to the opposite edge (design goal: "one main winding river
 ## from edge to edge"), never a scatter of independent points or a diagonal
 ## chain. Picks a dominant axis (horizontal: west->east, or vertical:
 ## north->south) and walks every integer position along it from edge 0 to the
 ## far edge; the centerline's transversal offset and the band's width are
 ## each linearly interpolated between randomly-drawn control points spaced
 ## river_control_point_spacing tiles apart (control offsets differ by at most
-## river_max_transversal_delta, so the curve turns gently -- "variar trazado y
-## anchura suavemente"), then the full transversal cross-section at that width
-## is stamped as water, overwriting whatever was there before (issue #300:
-## the river is carved after every other terrain feature specifically so nothing
+## river_max_transversal_delta, so both course and width vary smoothly),
+## then the full transversal cross-section at that width
+## is stamped as water, overwriting whatever was there before (the river
+## is carved after every other terrain feature specifically so nothing
 ## already placed can plug or narrow it).
 ##
-## Width contract (issue #300 Goal: "define how width is measured"): because
+## Width contract (design goal: "define how width is measured"): because
 ## the centerline's transversal offset is a single-valued function of the
 ## dominant-axis coordinate, every transversal cross-section intersects the
-## river in exactly one contiguous run of tiles -- this run's length IS the
+## river in exactly one contiguous run of tiles -- this run's length is the
 ## river's width at that position, well-defined and directly measurable off
 ## the generated tile array (see test_river_generation.gd's width/curve
 ## checks). Because the function is single-valued (never loops back on the
@@ -486,7 +486,7 @@ static func _carve_river(random: RandomNumberGenerator, map: Array[String], widt
 
 	return water_tiles
 
-## Multi-source BFS over 4-connected TILE_SOIL tiles (issue #300 Goal: "do not
+## Multi-source BFS over 4-connected TILE_SOIL tiles (design goal: "do not
 ## confuse geometric distance with route distance" -- this is a real hop-count over
 ## passable tiles, never Chebyshev/Euclidean distance). Sources are every
 ## TILE_SOIL tile adjacent to a tile `is_target` accepts, seeded at distance 1
@@ -538,13 +538,13 @@ static func _distance_field(map: Array[String], width: int, height: int, is_targ
 	return dist
 
 ## Every TILE_ROCK tile belonging to a 4-connected component of at least
-## min_size tiles (issue #351/#347 revision: place_spawn()'s own outcrop
-## reachability must apply the SAME qualification test_river_generation.gd's
+## min_size tiles (place_spawn()'s own outcrop
+## reachability must apply the same qualification test_river_generation.gd's
 ## _rock_components() enforces, so an isolated rock -- or an undersized
 ## rock_vein_count stub, which is never grown by _scatter_rock_outcrops() and
 ## must not accidentally satisfy this either -- can never stand in for a real,
 ## big-enough outcrop). Independent of _scatter_rock_outcrops()'s own blob
-## bookkeeping: this rescans the FINAL map array, exactly like the test does,
+## bookkeeping: this rescans the final map array, exactly like the test does,
 ## so it also honors any rock painted by an earlier pass. Returns a lookup of
 ## qualifying tile indices only; every other TILE_ROCK tile is excluded from
 ## outcrop_dist below the same way an off-map tile is.
@@ -586,18 +586,18 @@ static func _rect_tiles(anchor_x: int, anchor_y: int, clearing_width: int, clear
 			tiles.append(Vector2i(x, y))
 	return tiles
 
-## Counts DISTINCT berry-bush tiles reachable from EVERY tile of `footprint`
+## Counts distinct berry-bush tiles reachable from every tile of `footprint`
 ## (a candidate clearing's own soil tiles, evaluated before it is ever painted
 ## to floor) within `limit` hops -- not merely from the footprint's own
 ## nearest tile. The later Fisher-Yates shuffle (place_spawn()'s own
-## _shuffle_positions() call) can assign a colonist to ANY tile the footprint
-## reserves, so a bush counted only because the footprint's CLOSEST tile can
+## _shuffle_positions() call) can assign a colonist to any tile the footprint
+## reserves, so a bush counted only because the footprint's closest tile can
 ## reach it would not actually be guaranteed for a colonist landing on the
-## footprint's FARTHEST tile instead -- this is the worst-case, not the
+## footprint's farthest tile instead -- this is the worst-case, not the
 ## best-case, over the whole footprint.
 ##
 ## Two bounded passes, no full-grid scan: (1) a cheap multi-source BFS from
-## every footprint tile at once finds every bush whose NEAREST footprint tile
+## every footprint tile at once finds every bush whose nearest footprint tile
 ## is in budget -- a superset of the true answer, cheaply ruling out anything
 ## too far from the footprint entirely; (2) for each of that small candidate
 ## set, one bounded BFS from the bush itself (_reaches_every_tile()) confirms
@@ -653,10 +653,10 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 	return confirmed
 
 ## True when a bounded BFS outward from `bush` (over TILE_SOIL, never entering
-## the bush's own tile, nor any OTHER bush-occupied tile in `bush_lookup` --
+## the bush's own tile, nor any other bush-occupied tile in `bush_lookup` --
 ## a bush occupies its tile the same way an impassable object would, so a
 ## route cannot cut through one bush to certify reachability of another;
-## round 6 review: without this exclusion the search could walk straight
+## Without this exclusion the search could walk straight
 ## through a wall of blocking bushes and falsely certify a farther footprint
 ## tile that a real, bush-respecting route could never reach within budget)
 ## reaches every index in `targets` within `limit` hops. The worst-case
@@ -706,24 +706,24 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 			queue.append(Vector2i(nx, ny))
 	return remaining <= 0
 
-## Bounded deterministic search for the colonists' starting clearing (issue
-## #300 Goal: "search for a spawn with a deterministic attempt limit and a
+## Bounded deterministic search for the colonists' starting clearing (design
+## goal: "search for a spawn with a deterministic attempt limit and a
 ## documented fallback; no loops until it randomly succeeds"). Four
 ## deterministic, bounded tiers, each only run once the previous one produced
 ## nothing, and each always preferring a fully budget-compliant candidate over
-## a relaxed one before ever relaxing further (round 2 review: a soft
+## a relaxed one before ever relaxing further (a soft
 ## over-budget "best" from an earlier tier must never suppress a later,
 ## better-searching tier from running at all):
 ##
 ## 1. Random search (`_evaluate_clearing`), up to spawn_search_attempts tries,
-##    biased near a random river tile. Accepts ONLY a fully-compliant
+##    biased near a random river tile. Accepts only a fully-compliant
 ##    candidate (all-soil, bush-free, every tile's water/food/tree/outcrop
 ##    route distance within mapgen.json's own step limits -- outcrop_dist
 ##    reuses spawn_tree_step_limit, threaded through exactly parallel to
-##    tree_dist, issue #351/#347 -- AND at least
-##    `colonist_count * FOOD_SOURCES_PER_COLONIST` DISTINCT reachable bushes
-##    within the food step limit -- round 5 review: a short route to the
-##    NEAREST bush is not "sufficient" when that same single-use bush is the
+##    tree_dist -- and at least
+##    `colonist_count * FOOD_SOURCES_PER_COLONIST` distinct reachable bushes
+##    within the food step limit -- a short route to the
+##    nearest bush is not "sufficient" when that same single-use bush is the
 ##    nearest one for all three colonists) -- an over-budget or
 ##    insufficient-food candidate is discarded outright here, never kept as a
 ##    blocking "best", so tier 2 always gets to run when tier 1 does not find
@@ -732,10 +732,10 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 ##    same full-compliance bar as tier 1 (including the distinct-food-source
 ##    floor) but guaranteed to find any compliant anchor tier 1's random
 ##    sampling missed. Falls back, only within this same scan, to the
-##    least-over-budget still-REACHABLE anchor (no -1 distance anywhere in its
+##    least-over-budget still-reachable anchor (no -1 distance anywhere in its
 ##    footprint, scored including any food-source shortfall) if no
-##    fully-compliant one exists -- "recursos garantizados no cuentan si son
-##    inaccesibles" is enforced here structurally: an anchor with any
+##    fully-compliant one exists -- "guaranteed resources do not count if
+##    they are unreachable" is enforced here structurally: an anchor with any
 ##    unreachable resource is never chosen by this tier at all, only relaxed
 ##    on the step-limit/food-source-count budget.
 ## 3. Deterministic repair/construct (_repair_land_clearing): only reached
@@ -745,13 +745,13 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 ##    picks whichever one, big enough to hold colonist_count colonists plus
 ##    room for starting tools/beds, is fully compliant, else least-over-budget
 ##    reachable, else (last resort within this tier) simply the first
-##    big-enough component -- honestly reporting -1 for any dimension that
+##    big-enough component -- reporting -1 for any dimension that
 ##    truly has no reachable source, rather than silently accepting it as
 ##    good. Never touches water or an existing berry bush (the component
 ##    search excludes both by construction), so the river and existing
 ##    decoration are never bulldozed.
 ## 4. Absolute last resort (_expanding_soil_search from mapgen.json's own
-##    spawn_area_x/y): only reached when the ENTIRE map has no connected land
+##    spawn_area_x/y): only reached when the entire map has no connected land
 ##    component with even colonist_count soil tiles (never observed for any
 ##    real generated map). Expands outward in bounded rings collecting plain
 ##    soil tiles, painting only what it actually finds -- it may legitimately
@@ -760,7 +760,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 ##
 ## Because every tier's distance fields only ever expand across TILE_SOIL, a
 ## candidate can only succeed using resources reachable without crossing the
-## (impassable) river, which is exactly "misma orilla" (same shore) without
+## (impassable) river, which guarantees the same shore without
 ## any separate bank-side bookkeeping. Every fallback path (any tier past the
 ## first) is reported via the returned "fallback" flag so a caller (or a
 ## test) can assert it was never actually taken for the real seed suite.
@@ -780,13 +780,13 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 	var water_dist := _distance_field(map, width, height, func(x, y): return map[_index(x, y, width)] == TILE_WATER, bush_lookup)
 	var tree_dist := _distance_field(map, width, height, func(x, y): return map[_index(x, y, width)] == TILE_TREE, bush_lookup)
 	var food_dist := _distance_field(map, width, height, func(x, y): return bush_lookup.has(_index(x, y, width)), bush_lookup)
-	# outcrop_dist is bounded by the SAME spawn_tree_step_limit already read
-	# for trees (tree_limit) -- issue #351/#347 Goal: no separate mapgen field
+	# outcrop_dist is bounded by the same spawn_tree_step_limit already read
+	# for trees (tree_limit) -- by design there is no separate mapgen field
 	# for this bound -- so a spawn clearing gets the same structural
 	# reachability guarantee for a rock outcrop that it already gets for trees.
 	# Qualified against outcrop_min_size (see _qualifying_outcrop_tiles() above)
 	# so a nearby isolated rock or an undersized rock_vein_count stub can never
-	# satisfy full acceptance or distort relaxed-candidate scoring in place of
+	# pass the full compliance check or distort relaxed-candidate scoring in place of
 	# a real, big-enough outcrop.
 	var outcrop_min_size := maxi(1, int(mapgen.get("outcrop_min_size", DEFAULT_OUTCROP_MIN_SIZE)))
 	var qualifying_outcrop_tiles := _qualifying_outcrop_tiles(map, width, height, outcrop_min_size)
@@ -811,7 +811,7 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 		if int(candidate["water"]) > water_limit or int(candidate["food"]) > food_limit or int(candidate["tree"]) > tree_limit or int(candidate["outcrop"]) > outcrop_limit:
 			continue
 		# Cheap distance checks passed -- only now pay for the bounded
-		# distinct-bush BFS (round 5 review): the same single reachable bush
+		# distinct-bush BFS: the same single reachable bush
 		# that satisfies the cheap "nearest" check above must not be accepted
 		# as "sufficient" for all three colonists.
 		var food_sources := _count_reachable_food_sources(map, width, height, _rect_tiles(anchor_x, anchor_y, clearing_width, clearing_height), bush_lookup, food_limit)
@@ -924,7 +924,7 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 	# (never water, never a retained bush) tile for boot.gd/debug_scenario.gd
 	# to place starting tools/beds on, instead of computing a raw
 	# `clearing_x + i % clearing_width` offset that a fallback tier's
-	# rectangle could leave pointing at a still-water cell (round 2 review).
+	# rectangle could leave pointing at a still-water cell.
 	var tool_tiles: Array[Vector2i] = land_tiles.slice(colonist_positions.size())
 
 	return {
@@ -945,15 +945,14 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 ## fully-compliant anchor that exists elsewhere on the map. Reuses
 ## _evaluate_clearing(require_reachable=true) so it can never accept a
 ## footprint touching water, a berry-bush tile, or any tile with an
-## unreachable (-1) resource distance -- "recursos garantizados no cuentan si
-## son inaccesibles" holds for this tier's own relaxed branch too, which only
-## ever relaxes the step-limit BUDGET, never reachability itself. Returns a
+## unreachable (-1) resource distance -- "guaranteed resources do not count
+## if they are unreachable" holds for this tier's own relaxed branch too, which only
+## ever relaxes the step-limit budget, never reachability itself. Returns a
 ## fully budget-compliant anchor the instant one is found (never relaxes
 ## unnecessarily); otherwise the least-over-budget reachable anchor seen,
 ## scored by summed overage across all four limits (water/food/tree/outcrop --
-## outcrop_dist is threaded through exactly parallel to tree_dist/tree_limit,
-## issue #351/#347) plus any distinct-food-source deficit (round 5 review:
-## distance to the nearest bush alone is not "sufficient" -- see
+## outcrop_dist is threaded through exactly parallel to tree_dist/tree_limit)
+## plus any distinct-food-source deficit (distance to the nearest bush alone is not "sufficient" -- see
 ## FOOD_SOURCES_PER_COLONIST); {} only when no all-soil, bush-free,
 ## fully-reachable footprint of this size exists anywhere on the map.
 static func _scan_for_clearing(map: Array[String], width: int, height: int, clearing_width: int, clearing_height: int,
@@ -998,7 +997,7 @@ const REPAIR_RESERVE_CELLS := 8
 ## even resource-reachable, the first component simply big enough to hold
 ## colonist_count colonists) -- so a fully-compliant or
 ## reachable-but-relaxed connected clearing is always preferred over one
-## reporting a dishonest/unreachable resource. {} only when no connected land
+## reporting an unreachable resource. {} only when no connected land
 ## component anywhere has even colonist_count cells.
 static func _repair_land_clearing(map: Array[String], width: int, height: int, colonist_count: int, bush_lookup: Dictionary,
 		water_dist: PackedInt32Array, tree_dist: PackedInt32Array, food_dist: PackedInt32Array, outcrop_dist: PackedInt32Array,
@@ -1135,12 +1134,11 @@ static func _expanding_soil_search(map: Array[String], width: int, height: int, 
 ## Returns {} when the footprint runs off the map, contains any non-soil
 ## tile, contains a berry-bush tile, or (when require_reachable) contains a
 ## tile any of the four distance fields never reached; otherwise
-## {"x","y","water","food","tree","outcrop"}, each distance the WORST (max)
+## {"x","y","water","food","tree","outcrop"}, each distance the worst (max)
 ## over the footprint -- so passing the check means every tile in the
 ## clearing, not just its closest corner, is within bounds. outcrop_dist is
-## threaded through exactly parallel to tree_dist (issue #351/#347), not a
-## separate post-hoc check. bush_lookup is checked explicitly (round 1 review
-## finding 3), not only inferred from an unreached distance field, so a
+## threaded through exactly parallel to tree_dist, not a
+## separate post-hoc check. bush_lookup is checked explicitly, not only inferred from an unreached distance field, so a
 ## caller with require_reachable false still excludes bush tiles.
 static func _evaluate_clearing(map: Array[String], anchor_x: int, anchor_y: int, clearing_width: int, clearing_height: int,
 		width: int, water_dist: PackedInt32Array, tree_dist: PackedInt32Array, food_dist: PackedInt32Array, outcrop_dist: PackedInt32Array,
@@ -1169,7 +1167,7 @@ static func _evaluate_clearing(map: Array[String], anchor_x: int, anchor_y: int,
 			worst_outcrop = maxi(worst_outcrop, od)
 	return {"x": anchor_x, "y": anchor_y, "water": worst_water, "food": worst_food, "tree": worst_tree, "outcrop": worst_outcrop}
 
-## Fisher-Yates, shared by place_spawn() above (issue #300; moved from
+## Fisher-Yates, shared by place_spawn() above (moved from
 ## WorldState._shuffle_positions(), which had no other caller left once
 ## colonist placement moved into this module).
 static func _shuffle_positions(random: RandomNumberGenerator, positions: Array[Vector2i]) -> void:

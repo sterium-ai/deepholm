@@ -79,8 +79,8 @@ func _check_default_is_empty() -> void:
 		return
 	var world := WorldStateType.new(1, 10)
 	_expect(world.get_object(0, 0) == "", "get_object() must default to \"\" for an empty tile")
-	# issue #300: a freshly generated world now places berry_bush objects (the
-	# food need's only source, docs/decisions/020) as part of terrain
+	# A freshly generated world places berry_bush objects (the
+	# food need's only source, ADR 020) as part of terrain
 	# generation, so "freshly generated" no longer means zero objects -- it
 	# means no object kind the generator itself never places.
 	for entry in world.get_objects():
@@ -107,8 +107,8 @@ func _check_add_and_query_per_tile() -> void:
 func _check_get_objects_snapshot() -> void:
 	if _failed:
 		return
-	# issue #300: a freshly generated world can already carry generator-placed
-	# berry_bush objects (docs/decisions/020), so this checks the two placed
+	# A freshly generated world can already carry generator-placed
+	# berry_bush objects (ADR 020), so this checks the two placed
 	# entries are present and correct rather than assuming get_objects()'s
 	# total count is exactly these two.
 	var world := WorldStateType.new(3, 10)
@@ -150,7 +150,7 @@ func _check_state_hash_changes_on_add() -> void:
 	var after := world.state_hash()
 	_expect(before != after, "state_hash() must change when an object is added")
 
-## Issue #405: content/objects.json's "test_footprint_crate" declares
+## Content/objects.json's "test_footprint_crate" declares
 ## footprint [2, 1] and rotatable true. Placed "horizontal" at an origin
 ## tile, it must occupy both that tile and its +x neighbour identically
 ## (same kind), each independently impassable, and both entries must show up
@@ -183,7 +183,7 @@ func _check_footprint_object_rotates_with_orientation() -> void:
 	_expect(world.get_object(25, 26) == "test_footprint_crate", "vertical orientation must occupy the +y neighbour")
 	_expect(world.get_object(26, 25) == "", "vertical orientation must not occupy the +x neighbour")
 
-## Clearing at ANY footprint tile -- not only the origin -- must clear the
+## Clearing at any footprint tile -- not only the origin -- must clear the
 ## whole logical object, since a remove_object command may target either one.
 func _check_clearing_any_footprint_tile_clears_the_whole_object() -> void:
 	if _failed:
@@ -194,7 +194,7 @@ func _check_clearing_any_footprint_tile_clears_the_whole_object() -> void:
 	_expect(world.get_object(30, 30) == "", "clearing via a non-origin footprint tile must clear the origin tile too")
 	_expect(world.get_object(31, 30) == "", "clearing via a non-origin footprint tile must clear that tile")
 
-## Issue #405 round-6 review: a multi-tile object is one *logical* object, so
+## A multi-tile object is one *logical* object, so
 ## every footprint tile must share one canonical health pool, not carry an
 ## independent copy. test_footprint_crate declares max_health 20; damage
 ## applied through its non-origin tile must be visible from every footprint

@@ -1,6 +1,6 @@
 extends Control
 
-## Work-priority table (issue #270, colonist-ai.md 3.2/3.7/3.8):
+## Work-priority table (colonist-ai.md 3.2/3.7/3.8):
 ## one row per colonist (world.get_colonists()), one column per labour kind
 ## (WorldState.LABOUR_KINDS -- referenced, not copied, so this table always
 ## matches the core vocabulary), each cell showing that colonist's current
@@ -24,9 +24,8 @@ extends Control
 ## recent one. WorldState exposes no public getter for a calendar window's
 ## own "to" day or the current day number (get_active_calendar_boost() only
 ## answers "is a boost active right now", never "when does this window
-## close"), so day-based auto-expiry is out of reach without a core change
-## and stays deliberately out of scope here (task #270's own text: "day-based
-## auto-expiry is deferred to a prerequisite core change"). This file never
+## close"), so day-based auto-expiry is deferred until a core change exposes
+## that information. This file never
 ## builds its own CalendarService or reads content/calendar.json -- ADR 010
 ## reserves content loading to ContentRegistry's frozen bundle, already
 ## injected into WorldState's own calendar service; a second, panel-local
@@ -34,7 +33,7 @@ extends Control
 ## calendar-shaped fact read here is get_active_calendar_boost() plus
 ## whatever world.get_events() already replayed.
 ##
-## Refresh performance (round-1 review finding): boot.gd calls refresh() on
+## Refresh performance: boot.gd calls refresh() on
 ## every simulation tick. Queueing every cell button for deletion and
 ## creating replacements on every such call would let a real press-then-
 ## release spanning a tick lose its button mid-press (the default
@@ -50,7 +49,7 @@ const TextTableType = preload("res://scripts/viewer/text_table.gd")
 
 const LABOUR_KINDS = WorldStateType.LABOUR_KINDS
 
-## Cells sized for touch (issue #270 "cells sized for touch"): comfortably
+## Cells sized for touch: comfortably
 ## above the ~44-48px minimum touch-target guidance most mobile platforms
 ## document.
 const CELL_MIN_SIZE := Vector2(64, 64)
@@ -133,8 +132,7 @@ func _colonist_ids(colonists: Array[Dictionary]) -> Array[String]:
 ## Builds the header row and one row per colonist from scratch. Only called
 ## from refresh() when the colonist id set has actually changed (a colonist
 ## added or removed) -- never on an ordinary tick-driven refresh, so a
-## button the player is mid-press on is never torn down underneath them
-## (round-1 review finding).
+## button the player is mid-press on is never torn down underneath them.
 func _rebuild_grid(colonists: Array[Dictionary]) -> void:
 	for child in _grid.get_children():
 		child.queue_free()
@@ -241,7 +239,7 @@ func _alert_key(event: Dictionary) -> String:
 ## Shows the most recent calendar_alert event's text until the player
 ## dismisses it (_dismiss_banner()) or a different calendar_alert event
 ## becomes the most recent one -- whichever comes first. Day-based expiry is
-## explicitly out of scope (see file doc comment); a newly-arrived alert (a
+## not implemented yet (see file doc comment); a newly-arrived alert (a
 ## different dedupe key than the one currently tracked) always resets
 ## acknowledgement, so a later window's alert is never suppressed by an
 ## earlier one's dismissal, whether that earlier one was acknowledged yet or

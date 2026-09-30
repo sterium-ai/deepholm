@@ -5,7 +5,7 @@ extends RefCounted
 ## (WorldState.passability(x, y)["passable"]), assigning each a stable
 ## integer id (1.., 0 = impassable/no region) that never changes for an
 ## unrelated map edit. Physical passability only -- no faction awareness and
-## no rooms (t2); see docs/architecture/foundation-for-breadth.md's non-goals.
+## no rooms (see rooms.gd); see docs/architecture/foundation-for-breadth.md's non-goals.
 ##
 ## on_passability_changed(x, y) recomputes only the tile(s) actually affected
 ## by a change at (x, y): a local flood-fill from that tile's own

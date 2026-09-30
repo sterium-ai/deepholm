@@ -1,17 +1,16 @@
 extends SceneTree
 
-## Issue #304: content-only extension point, proving content/factions.json's
+## Content-only extension point, proving content/factions.json's
 ## "predators" row, content/actors.json's "wolf" flee_hp_fraction tunable and
 ## content/incidents.json's "wolf_attack" row (including its own spawn.lingers
-## flag, ADR 032/#396) combine through the generic systems alone
-## (IncidentScheduler F5/#294, ApproachGiver #389/ADR 031, CombatResolver/
-## CombatGiver F5/#302/ADR 020) to spawn a wolf that reaches a colony door,
+## flag, ADR 034) combine through the generic systems alone
+## (IncidentScheduler, ApproachGiver/ADR 033, CombatResolver/
+## CombatGiver/ADR 021) to spawn a wolf that reaches a colony door,
 ## fights it, and flees -- no wolf-specific code anywhere. No check in this
 ## file ever sets the wolf's own destination or target: the incident's own
 ## spawn choreography and the generic approach/attack/flee systems are what
-## place and drive it. Mirrors the reference arena from commit 164a29de
-## (branch owner/ref-304-spawn-lingers) and test_incidents.gd's own
-## _build_lingering_arena()/_draw_lingering_incident() (issue #398/ADR 032).
+## place and drive it. Mirrors the reference arena of test_incidents.gd's
+## _build_lingering_arena()/_draw_lingering_incident() (ADR 034).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -21,15 +20,15 @@ const SEED := 5304
 const MIN_DAY := 6
 ## content/incidents.json's wolf_attack row spawns on the "south" edge
 ## (y = MAP_HEIGHT - 1) -- deliberately different from the pre-existing
-## test-only "raider_incursion" incident's own "north" edge (ADR 032/#398,
+## test-only "raider_incursion" incident's own "north" edge (ADR 034,
 ## test_incidents.gd's own lingering-hand-off arena), so this file's daily
 ## budget draw (day 6 onward) can never compete with that arena's own
 ## north-edge spawn tile for the same candidate.
 const SPAWN_TILE := Vector2i(24, 47)
-## Bare floor tiles between the spawn and the door, all genuinely NOT
+## Bare floor tiles between the spawn and the door, all genuinely not
 ## adjacent to it (Chebyshev distance >= 2): with NEAR_DOOR_TILE sealed off
 ## (see _draw_wolf_attack_naturally_away_from_door()) these are IncidentScheduler's own
-## _pick_reachable_target()'s ONLY candidates, so whichever one its seeded RNG
+## _pick_reachable_target()'s only candidates, so whichever one its seeded RNG
 ## picks, the wolf's own incident-assigned destination is guaranteed
 ## non-adjacent to the door -- proving the generic ApproachGiver hand-off
 ## (not a coincidental incident target) is what closes the gap.
@@ -172,8 +171,8 @@ func _incident_started_events(world: WorldStateType, incident_id: String) -> Arr
 			matches.append(event)
 	return matches
 
-## content/incidents.json's declarative shape (issue #278 Result item 1):
-## faction predators, min_day 6, spawn.lingers set (ADR 032/#396).
+## content/incidents.json's declarative shape:
+## faction predators, min_day 6, spawn.lingers set (ADR 034).
 func _check_wolf_attack_content_row() -> void:
 	if _failed: return
 	var world := _build_wolf_attack_world(SEED)
@@ -184,9 +183,9 @@ func _check_wolf_attack_content_row() -> void:
 	_expect(String(entry.get("faction", "")) == "predators", "wolf_attack's faction must be 'predators', got %s" % entry.get("faction"))
 	var spawn_def: Dictionary = entry.get("spawn", {})
 	_expect(String(spawn_def.get("actor_def", "")) == "wolf", "wolf_attack must spawn the 'wolf' actor def")
-	_expect(bool(spawn_def.get("lingers", false)), "wolf_attack's spawn block must set the lingers flag (ADR 032/#396)")
+	_expect(bool(spawn_def.get("lingers", false)), "wolf_attack's spawn block must set the lingers flag (ADR 034)")
 
-## Proves the REAL, budget-gated daily draw fires wolf_attack on its own once
+## Proves the real, budget-gated daily draw fires wolf_attack on its own once
 ## the calendar reaches its content-declared min_day, on a real generated
 ## world (never the tiny controlled arena below) -- mirrors test_incidents.gd's
 ## own natural-draw checks. The checks below reuse the very same day-6 draw
@@ -212,21 +211,21 @@ func _check_wolf_attack_natural_draw_at_day6() -> void:
 	_expect(String(wolf.get("kind", "")) == "wolf", "the naturally-drawn actor must be a 'wolf'")
 	_expect(String(wolf.get("factionId", "")) == "predators", "the naturally-drawn actor must carry the 'predators' faction")
 
-## End-to-end, in the controlled arena, through the REAL day-6 budgeted
+## End-to-end, in the controlled arena, through the real day-6 budgeted
 ## incident draw (IncidentScheduler.advance(), reached only by ticking world
-## forward -- never spawn_incident/force_spawn, per review round 1): edge/
+## forward, never spawn_incident/force_spawn): edge/
 ## target selection, activation, movement, the lingering hand-off, combat and
 ## flee all run through the real, unmodified generic systems, fired by the
 ## same daily draw that would occur in an ordinary game on day 6. This test
 ## supplies no destination or target for the wolf at any point.
 ##
 ## _draw_wolf_attack_naturally_away_from_door() guarantees the incident's own
-## spawn destination is NOT adjacent to the door: NEAR_DOOR_TILE is sealed off
+## spawn destination is not adjacent to the door: NEAR_DOOR_TILE is sealed off
 ## for the one synchronous world.tick() call that picks the incident's own
 ## target, so that pick can only ever land on a FAR_CORRIDOR_* tile, every one
 ## genuinely non-adjacent to the door. Content's own "lingers" flag on
 ## wolf_attack's spawn row (incident_scheduler.gd's on_job_finished(), ADR
-## 032) is what makes the hand-off possible at all: once the wolf's own short
+## 034) is what makes the hand-off possible at all: once the wolf's own short
 ## walk-then-wait job ends, it stays in the world instead of despawning,
 ## freeing its one scheduler assignment for the `approach` job ApproachGiver
 ## already has queued for it -- which then walks it the rest of the way to
@@ -257,20 +256,20 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 
 	# The incident's own arrival job (walk then wait at its non-adjacent
 	# target) must run to completion, and the wolf must survive that
-	# completion (spawn.lingers, ADR 032) instead of despawning.
+	# completion (spawn.lingers, ADR 034) instead of despawning.
 	var incident_job_id := _assignment_job_id(world, wolf_id)
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return String(_find_job(w, incident_job_id).get("status", "")) == "completed", ARRIVAL_TICK_BUDGET) >= 0,
 		"the wolf's own incident arrival job (walk then wait) must run to completion")
 	_expect(not world._find_colonist(wolf_id).is_empty(), "the wolf must survive its own incident arrival job's completion instead of despawning (spawn.lingers)")
 
 	# Never set by this test: the incident's own spawn choreography, the
-	# lingering hand-off (ADR 032) and the generic approach/attack systems
+	# lingering hand-off (ADR 034) and the generic approach/attack systems
 	# are what put it here.
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return _actor_pos(w, wolf_id) == NEAR_DOOR_TILE, ARRIVAL_TICK_BUDGET) >= 0,
 		"the wolf must walk itself adjacent to the door with no destination supplied by this test")
 
-	# get_actor_combat_reason() is a transient per-tick reason (ADR 020, never
-	# an event), so it must be sampled WHILE the wolf is actively engaged --
+	# get_actor_combat_reason() is a transient per-tick reason (ADR 021, never
+	# an event), so it must be sampled while the wolf is actively engaged --
 	# the door only has 40 hp against the wolf's own 8 damage, so it may be
 	# destroyed (and the reason revert to "") partway through this window.
 	var observed_fighting := false
@@ -298,7 +297,7 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 	# Force the wolf below its own content-declared flee_hp_fraction (0.3 of
 	# 40 maxHp = 12) the same way test_combat.gd's own flee checks do (a
 	# direct hp mutation, not a fabricated attacker) -- proving the generic
-	# flee mechanic honours THIS actor def's own tunable, not that a live
+	# flee mechanic honours this actor def's own tunable, not that a live
 	# opponent can out-damage a door in this arena.
 	world._find_colonist(wolf_id)["health"]["hp"] = 5
 	var fled := false

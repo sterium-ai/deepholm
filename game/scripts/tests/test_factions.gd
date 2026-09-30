@@ -1,10 +1,10 @@
 extends SceneTree
 
-## Covers issue #286 (F3 factions and relations,
-## docs/architecture/foundation-for-breadth.md section F3,
-## docs/decisions/015-factions-and-relations.md): 1) the real
+## Covers F3 factions and relations
+## (docs/architecture/foundation-for-breadth.md section F3,
+## docs/decisions/014-factions-and-relations.md): 1) the real
 ## game/content/factions.json bundle loads through ContentRegistry with
-## exactly the six declared factions (issue #304 added "predators"), only
+## exactly the six declared factions (including "predators"), only
 ## colony's rules.may_be_ordered is true, and Relations.relation() correctly
 ## reads an asymmetric row without assuming symmetry; 2) a small fixture
 ## bundle written to a user:// temp directory (following
@@ -49,8 +49,8 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-## The real content bundle must declare exactly the six factions (issue #304
-## added "predators"), and only "colony" may be given player orders.
+## The real content bundle must declare exactly the six factions (including
+## "predators"), and only "colony" may be given player orders.
 func _check_real_bundle_has_six_factions_and_ordering_rule() -> void:
 	var registry := ContentRegistryType.new()
 	_expect(registry.is_valid(), "the real content bundle must load validly: %s" % registry.get_error())
@@ -104,9 +104,9 @@ func _check_relation_is_not_assumed_symmetric() -> void:
 ## factions.json -- must fail construction with a typed dangling_reference
 ## error, never a silently-applied default. The fixture uses its own schema
 ## directory (a copy of the real schemas, with actors.schema.json swapped for
-## a variant that additionally permits the optional faction_id field this
-## task's registry check reads) so the real, out-of-scope
-## content/schemas/actors.schema.json is never touched.
+## a variant that additionally permits the optional faction_id field the
+## registry check reads) so the real content/schemas/actors.schema.json is
+## never touched.
 func _check_fixture_with_unknown_actor_faction_id_fails_construction() -> void:
 	_write_fixture_bundle()
 	var registry := ContentRegistryType.new(FIXTURE_CONTENT_DIR, FIXTURE_SCHEMA_DIR)
@@ -221,9 +221,8 @@ func _write_fixture_schemas() -> void:
 
 ## A copy of the real actors.schema.json's shape, extended with an optional
 ## "faction_id" string property -- the field content/schemas/actors.schema.json
-## itself does not declare yet (adding it there for every real actor
-## definition is a later task's scope; see docs/decisions/
-## 015-factions-and-relations.md). Kept minimal (no per-component tunables
+## itself does not declare (see docs/decisions/
+## 014-factions-and-relations.md). Kept minimal (no per-component tunables
 ## shape) since this fixture's only job is to exercise the faction_id
 ## dangling-reference check, not re-prove actors.schema.json's own rules.
 func _write_actors_schema_with_optional_faction_id(path: String) -> void:

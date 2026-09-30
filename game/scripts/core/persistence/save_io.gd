@@ -12,7 +12,7 @@ const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Entity kind -> the component fields that kind must carry on the wire
-## (F5, issue #294; game-state.schema.json's per-kind if/then). Mirrors what
+## (game-state.schema.json's per-kind if/then). Mirrors what
 ## ActorTable.spawn() builds from content/actors.json: a colonist's legacy
 ## worker/needs shape, a wolf's needs/combat/wild, a trader's inventory/visitor.
 const ENTITY_COMPONENT_FIELDS := {
@@ -24,7 +24,7 @@ const ENTITY_COMPONENT_FIELDS := {
 ## Full JSON number grammar (RFC 8259), used to capture the complete numeric
 ## token for the seed/rng fields rather than a bare `-?\d+` prefix -- a
 ## prefix match on "1e3" or "1.5" would stop at the leading digit and silently
-## misread the value (round 2 review).
+## misread the value.
 const _JSON_NUMBER_PATTERN := "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
 const _INT64_MAX_DIGITS := "9223372036854775807"
 const _INT64_MIN_MAGNITUDE_DIGITS := "9223372036854775808"
@@ -70,7 +70,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		var failing_error := close_error if close_error != OK else flush_error
 		return _error("write_failed", "could not write temporary save (error %s)" % failing_error, path)
 
-	# Test-only seam: lets acceptance tests simulate a crash that leaves the
+	# Test-only seam: lets tests simulate a crash that leaves the
 	# candidate for this exact target truncated/corrupted on disk, right where
 	# the read-back verification below must catch it before target is touched.
 	if after_temp_write.is_valid():
@@ -138,7 +138,7 @@ static func _read_and_verify(path: String) -> Dictionary:
 	# match its own integrity hash: a fractional or out-of-int64-range
 	# seed/rng token is a schema violation, not a newer-version or
 	# tampered-file signal, and must never be silently truncated into a
-	# plausible-looking (but wrong) integer (round 2 review).
+	# plausible-looking (but wrong) integer.
 	if not rng_restore["ok"]:
 		return {"ok": false, "code": "schema_error", "message": rng_restore["message"], "file": path}
 	if not seed_restore["ok"]:
@@ -165,19 +165,19 @@ static func _read_and_verify(path: String) -> Dictionary:
 	# breadth.md F1). A save written under a since-renamed content bundle gets
 	# one chance to be repaired by a registered content-rename entry
 	# (save_migrations.gd) before it is rejected -- never silently accepted
-	# with a stale id. Resolved BEFORE migrate_legacy_build_jobs() below
-	# (round 2 review, issue #449): a legacy job's own retired "buildKind"
-	# field is itself a content id (e.g. "wall"), and migrate_legacy_build_jobs()
-	# looks that id up against the CURRENT content bundle to synthesize a
-	# site's requiredMaterials/buildTicks -- resolving the rename first is
-	# what lets that lookup ever find the renamed entry, instead of silently
+	# with a stale id. This runs before migrate_legacy_build_jobs() below:
+	# a legacy job's retired "buildKind" field is itself a content id
+	# (e.g. "wall"), and migrate_legacy_build_jobs() looks that id up
+	# against the current content bundle to synthesize a
+	# site's requiredMaterials/buildTicks -- resolving the rename first
+	# lets that lookup find the renamed entry, instead of silently
 	# falling back to an empty-cost, one-tick site for a content id the
 	# current bundle no longer has.
 	# A missing or wrong-typed "contentVersion" is left completely alone here
 	# -- never coerced through String() first -- so it reaches
 	# _validate_state() below exactly as malformed as it arrived and gets its
 	# own "missing required field"/"invalid contentVersion" error, rather than
-	# a misleading content_version_mismatch (round 2 review).
+	# a misleading content_version_mismatch.
 	var current_content_version := StateCodecType.content_version()
 	var content_version_value = state.get("contentVersion")
 	if content_version_value is String and String(content_version_value) != current_content_version:
@@ -187,9 +187,9 @@ static func _read_and_verify(path: String) -> Dictionary:
 				"message": "save content version '%s' does not match current content version '%s'" % [content_version_value, current_content_version],
 				"file": path}
 		state = resolved["state"]
-	# Issue #406 round-4 review: applied unconditionally (not only inside the
-	# schemaVersion-migration branch above), since a legacy "build" job could
-	# have been written at ANY prior schemaVersion, including the current one
+	# Applied unconditionally (not only inside the schemaVersion-migration
+	# branch above), since a legacy "build" job could have been written at
+	# any prior schemaVersion, including the current one
 	# -- construction sites were added without bumping SCHEMA_VERSION (see
 	# SaveMigrations.migrate_legacy_build_jobs()'s own doc comment). Runs
 	# after the content-rename resolution above and before validation, which
@@ -211,13 +211,13 @@ static func _coerce_ints(state: Dictionary) -> void:
 
 ## JSON.parse_string always converts numbers to float, which cannot hold a
 ## 64-bit RandomNumberGenerator seed/state exactly. Recover the precise value
-## by locating the STRUCTURAL position of "rng"."seed"/"state" inside the
+## by locating the structural position of "rng"."seed"/"state" inside the
 ## already-located "state" object (`located_state`, built once by
 ## _locate_state_object()) and reading the complete raw JSON number token at
 ## that exact span -- not by text-searching the whole file, which cannot
 ## distinguish an object boundary from a same-named key elsewhere in the
-## envelope, and cannot decode a key written with a JSON \uXXXX escape
-## (round 3 review). Returns {"ok": false} -- never a silent fall back to the
+## envelope, and cannot decode a key written with a JSON \uXXXX escape.
+## Returns {"ok": false} -- never a silent fall back to the
 ## lossy float-derived value already sitting in `state` -- when a token is
 ## fractional, exceeds the signed 64-bit range, or cannot be structurally
 ## located at all despite the parsed Variant claiming the field exists.
@@ -250,8 +250,8 @@ static func _restore_exact_rng(state: Dictionary, located_state: Dictionary) -> 
 		rng[key] = parsed["value"]
 	return {"ok": true}
 
-## Mirrors _restore_exact_rng() for "incidentScheduler"."rng"."seed"/"state"
-## (#295): IncidentScheduler's own independent RandomNumberGenerator snapshot
+## Mirrors _restore_exact_rng() for "incidentScheduler"."rng"."seed"/"state":
+## IncidentScheduler's own independent RandomNumberGenerator snapshot
 ## is exactly as vulnerable to JSON's lossy float round trip as world's own
 ## "rng" is -- its .state is an engine-internal 64-bit counter that can
 ## easily exceed 2^53 regardless of how small the seed is. One extra
@@ -298,7 +298,7 @@ static func _restore_exact_incident_rng(state: Dictionary, located_state: Dictio
 	return {"ok": true}
 
 ## Mirrors _restore_exact_rng() for the top-level "digFindRng"."seed"/"state"
-## (ADR 025 round 2 review): world._dig_find_random's own continuation is
+## (ADR 026): world._dig_find_random's own continuation is
 ## exactly as vulnerable to JSON's lossy float round trip as "rng" is. Same
 ## nesting depth as _restore_exact_rng() (state -> digFindRng), just a
 ## different top-level key; optional throughout since this field itself is
@@ -332,8 +332,7 @@ static func _restore_exact_dig_find_rng(state: Dictionary, located_state: Dictio
 		rng[key] = parsed["value"]
 	return {"ok": true}
 
-## Mirrors _restore_exact_rng() for the top-level "seed" field (round 1
-## review): a seed near or beyond 2^53 loses precision through the ordinary
+## Mirrors _restore_exact_rng() for the top-level "seed" field: a seed near or beyond 2^53 loses precision through the ordinary
 ## float round trip JSON.parse_string() performs, same as rng.seed/state did.
 ## Reads the *direct* "seed" member of the "state" object located by
 ## _locate_state_object() -- `_scan_object_members()` only ever descends one
@@ -343,7 +342,7 @@ static func _restore_exact_dig_find_rng(state: Dictionary, located_state: Dictio
 ## on the envelope itself (outside "state" entirely, never scanned here).
 ## Returns {"ok": false} -- never a silent fall back to the lossy
 ## float-derived value -- for a fractional or out-of-64-bit-range token, or
-## when the field cannot be structurally located at all (round 2/3 review).
+## when the field cannot be structurally located at all.
 static func _restore_exact_seed(state: Dictionary, located_state: Dictionary) -> Dictionary:
 	if not state.has("seed"):
 		return {"ok": true}
@@ -364,8 +363,7 @@ static func _restore_exact_seed(state: Dictionary, located_state: Dictionary) ->
 ## on-disk spelling of a specific field's number token without ever treating
 ## a substring match anywhere else in the file as if it were that field.
 ## Decodes JSON string escapes (including \uXXXX) while scanning key names,
-## so an escaped key spells the same field a plain one would (round 3
-## review). Returns {"ok": false} if the envelope or "state" is malformed --
+## so an escaped key spells the same field a plain one would. Returns {"ok": false} if the envelope or "state" is malformed --
 ## this should never happen for text that already parsed successfully via
 ## JSON.parse_string, but a caller must fail closed rather than silently
 ## falling back to a lossy value if it somehow does.
@@ -392,7 +390,7 @@ static func _locate_state_object(text: String) -> Dictionary:
 ## token text; an object/array/string's span covers its own delimiters).
 ## Never recurses into a nested object/array's own members -- a caller that
 ## needs those calls this again with that value's own span. A duplicate key
-## keeps the LAST occurrence, matching JSON.parse_string's own dictionary
+## keeps the last occurrence, matching JSON.parse_string's own dictionary
 ## build (repeated key overwrites). The returned Dictionary's "__end__" entry
 ## (never a valid JSON key, so it cannot collide with a real member) holds
 ## the position right after the object's closing `}`; its absence means the
@@ -564,7 +562,7 @@ static func _skip_json_array(text: String, pos: int) -> int:
 ## resolving backslash escapes -- including `\uXXXX` -- so an escaped key
 ## (e.g. "seed") decodes to the identical string a plain one would
 ## ("seed"), matching what JSON.parse_string() itself already does when it
-## builds the parsed Dictionary's keys (round 3 review). Returns
+## builds the parsed Dictionary's keys. Returns
 ## {"ok": false} for an unterminated or malformed literal.
 static func _parse_json_string(text: String, pos: int) -> Dictionary:
 	if pos >= text.length() or text[pos] != "\"":
@@ -625,7 +623,7 @@ static func _skip_ws(text: String, pos: int) -> int:
 ## restore to the same exact int. Returns {"ok": false} for a token with a
 ## genuine (non-zero) fractional remainder, or one whose magnitude exceeds
 ## int64, rather than truncating or overflowing it into a plausible-looking
-## wrong value (round 2 review).
+## wrong value.
 static func _parse_json_integer_token(token: String) -> Dictionary:
 	var pattern := RegEx.new()
 	pattern.compile("^(-)?(0|[1-9][0-9]*)(?:\\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$")
@@ -644,7 +642,7 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 	# exponent's magnitude or sign -- "0", "-0", "0.0e21" and "0e999999999999"
 	# all denote the same integer 0. Deciding this before any exponent
 	# magnitude/padding logic keeps a zero mantissa from ever being rejected
-	# by the padding-length guard below (round 4 review).
+	# by the padding-length guard below.
 	if mantissa_is_zero:
 		return {"ok": true, "value": 0}
 
@@ -653,7 +651,7 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 	# to_int() can itself overflow/wrap before the value is ever used, and no
 	# legitimate in-range int64 needs an exponent whose significant digit
 	# count exceeds a handful of digits -- so a longer one is decided here,
-	# without ever computing its exact numeric value (round 3 review).
+	# without ever computing its exact numeric value.
 	var exponent := 0
 	if not exp_group.is_empty():
 		var exp_negative := exp_group.begins_with("-")
@@ -679,7 +677,7 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 		# Any padded length beyond int64's own maximum digit count is
 		# unconditionally out of range; reject before ever allocating the
 		# padded string, so a short token can never request unbounded work
-		# here either (round 3 review).
+		# here either.
 		if pad > _INT64_MAX_DIGITS.length():
 			return {"ok": false}
 		digits += "0".repeat(pad)
@@ -724,14 +722,14 @@ static func _coerce_floats_to_ints(value) -> void:
 ## never schema_error -- only wrong type/range/enum/unexpected-field violations do.
 static func _validate_state(state: Dictionary) -> Dictionary:
 	var top_level := ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
-	# combatBlockedTargets (round-6 review, F5/#302) is optional at this
-	# top level, like "health" is on an individual objects entry
-	# (_valid_object() below): its absence is allowed for any save written
-	# before this task (CombatGiver had no exclusion state to persist yet),
+	# combatBlockedTargets is optional at this top level, like "health" is
+	# on an individual objects entry (_valid_object() below): its absence is
+	# allowed for any save written before CombatGiver had exclusion state to
+	# persist,
 	# so adding it never breaks an existing schemaVersion 21 save the way
 	# adding it to `top_level`'s required set would.
 	#
-	# ADR 025 round 2 review: "digFindRng" (world._dig_find_random's own
+	# "digFindRng" (ADR 026; world._dig_find_random's own
 	# continuation, StateCodec._encode()) is allowed but deliberately not in
 	# top_level's required-fields loop below -- every real save from this
 	# build's encode() always carries it, but it stays optional on the wire so
@@ -739,25 +737,22 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 	# validation predates this field) still validates; StateCodec.decode()
 	# leaves world._dig_find_random at its own fresh constructor seed when absent.
 	#
-	# rescueVictimAssignments (issue #360 round-3 review finding 1) is optional
-	# at this top level for the same reason combatBlockedTargets is: absence is
+	# rescueVictimAssignments is optional at this top level for the same reason combatBlockedTargets is: absence is
 	# allowed for any save written before rescue existed, so adding it never
 	# breaks an existing save the way adding it to top_level's required set
 	# would.
 	#
-	# workProgressOwners (round-5 review, #278/#303): the job_id that owns each
-	# workProgress key (StateCodec._encode_work_progress_owners()), optional on
+	# workProgressOwners: the job_id that owns each workProgress key (StateCodec._encode_work_progress_owners()), optional on
 	# the wire for the same reason "digFindRng" is -- an older fixture/save
 	# predating this field still validates, and WorldState restores with no
 	# owners at all in that case (world_state.gd's own
 	# _restore_work_progress_owners() doc comment) rather than guess one.
-	# approachRetiredActors: legacy field from issue #390/ADR 031 (superseded by
-	# issue #391 -- ApproachGiver no longer retires an actor permanently, see
+	# approachRetiredActors: legacy field from ADR 033's first design
+	# (ApproachGiver no longer retires an actor permanently, see
 	# approach_giver.gd's own class doc comment). Kept accepted here, and its
 	# own structural validator below kept, purely so a save written before
-	# this change still loads; state_codec.gd's decode() no longer reads it.
-	# constructionSites (issue #406): optional for the same reason
-	# combatBlockedTargets is -- absence is allowed for any save written
+	# that change still loads; state_codec.gd's decode() no longer reads it.
+	# constructionSites: optional for the same reason combatBlockedTargets is -- absence is allowed for any save written
 	# before construction sites existed.
 	var optional_top_level := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "approachRetiredActors", "constructionSites"]
 	if not _keys_allowed(state, top_level + optional_top_level):
@@ -787,8 +782,8 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 	if not _is_int_min(map.get("width"), 1) or not _is_int_min(map.get("height"), 1):
 		return _fail("invalid map dimensions")
 	# Restoration preserves a saved map's exact dimensions (state_codec.gd's
-	# decode() no longer re-clamps through WorldGenerator.resolve_size(),
-	# round 1 review), so a small fixture below the 16-tile new-game minimum
+	# decode() does not re-clamp through WorldGenerator.resolve_size()),
+	# so a small fixture below the 16-tile new-game minimum
 	# is still valid here -- only an upper bound applies, matching the largest
 	# size WorldGenerator/WorldState can ever produce or operate on.
 	var max_world_size := int(ContentRegistryType.new().document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE))
@@ -803,10 +798,9 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 			return _fail("invalid map tile")
 	var map_width := int(map["width"])
 	var map_height := int(map["height"])
-	# issue #299: dimensions/tile-count consistency was never checked before
-	# this task -- a save whose "tiles" length does not match width*height
-	# (a truncated write, a hand-edited file) is now rejected here rather
-	# than accepted and later indexed out of bounds.
+	# Dimensions/tile-count consistency: a save whose "tiles" length does
+	# not match width*height (a truncated write, a hand-edited file) is
+	# rejected here rather than accepted and later indexed out of bounds.
 	if (map["tiles"] as Array).size() != map_width * map_height:
 		return _fail("map tiles length does not match width*height")
 
@@ -909,7 +903,7 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 			return _fail_missing("missing entity field")
 		if not _matches_id_pattern(entity["id"]) or not ENTITY_COMPONENT_FIELDS.has(entity["kind"]):
 			return _fail("invalid entity id or kind")
-		# F5 (issue #294): each kind requires exactly its own declared component
+		# Each kind requires exactly its own declared component
 		# fields (content/actors.json via ActorTable.spawn()), mirroring
 		# game-state.schema.json's per-kind if/then -- a wolf/trader never
 		# carries a colonist-only default, and a colonist never lacks its own.
@@ -988,17 +982,16 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 		return _fail("invalid jobs type")
 	var job_required := ["id", "kind", "status", "priority", "target", "reason", "remedy", "blockingJobId",
 		"itemId", "cell", "retryAt", "backoffTicks"]
-	# "site" (issue #278/#303, generalized by #406) is deliberately NOT in
-	# job_required: every save_schema_v1..v10 fixture predates it, and
-	# introducing a real schema migration for one harmless-default field is
-	# out of scope here. _keys_allowed() below explicitly permits it alongside
+	# "site" is deliberately not in job_required: every
+	# save_schema_v1..v10 fixture predates it, and one harmless-default
+	# field does not justify a real schema migration. _keys_allowed() below explicitly permits it alongside
 	# job_required, so an old fixture missing it still loads
 	# (StateCodec._decode_jobs() already defaults an absent site to null --
 	# the same harmless default any non-site-job job carries) and a fresh
 	# save -- which always encodes it, unconditionally, via
 	# StateCodec._encode_jobs() -- still validates its shape when present.
-	# "buildKind" (issue #278/#303) no longer exists as of issue #406: the
-	# object kind to place lives on the construction site record itself, not
+	# "buildKind" no longer exists since construction sites were
+	# introduced: the object kind to place lives on the construction site record itself, not
 	# duplicated onto every job working that site.
 	var job_optional := ["site"]
 	for job in state["jobs"]:
@@ -1034,9 +1027,8 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 			var site_check := _valid_tile(job["site"], map_width, map_height)
 			if not site_check["ok"]:
 				return site_check
-		# A site_fetch/site_work job's own site is mandatory, not optional
-		# (issue #278/#303 round-2 review, generalized by #406): activation
-		# and completion both assume a tile, so a save missing it is rejected
+		# A site_fetch/site_work job's own site is mandatory, not optional:
+		# activation and completion both assume a tile, so a save missing it is rejected
 		# here rather than decoded and ticked.
 		if String(job["kind"]) in ["site_fetch", "site_work"] and job.get("site") == null:
 			return _fail("site job missing site")
@@ -1129,7 +1121,7 @@ static func _fail_missing(message: String) -> Dictionary:
 
 ## Shared shape check for every nested object in the tree: an unexpected key
 ## is a schema_error (the producer wrote something this schema never
-## declared), but ANY absent required key -- at any nesting depth -- is a
+## declared), but any absent required key -- at any nesting depth -- is a
 ## missing-field migration error, never schema_error. Centralizing this here
 ## is what keeps that rule uniform across every nested validator below,
 ## instead of re-deciding it per call site.
@@ -1179,8 +1171,7 @@ static func _matches_optional_id_pattern(value) -> bool:
 		return true
 	return _matches_id_pattern(text)
 
-## issue #299 round 1: every persisted tile coordinate is bounds-checked
-## against the map's own declared width/height, not just non-negative -- a
+## Every persisted tile coordinate is bounds-checked against the map's own declared width/height, not just non-negative -- a
 ## job target/cell, route/search tile, or scheduling entry naming a
 ## coordinate outside the live map can never be smuggled in through a
 ## hand-edited or corrupted save (docs/architecture/save-system.md).
@@ -1205,7 +1196,7 @@ static func _valid_tile_array(value, map_width: int, map_height: int) -> Diction
 			return check
 	return {"ok": true}
 
-## "autonomous" (ADR 015 Amendment, issue #294) is optional on the wire, like
+## "autonomous" (ADR 014 Amendment) is optional on the wire, like
 ## "heldTool" on an entity: an older v19 save taken before this field existed
 ## never had one and defaults to false on decode (StateCodec._decode_entry()),
 ## so no migration step is needed for a same-schema-version addition.
@@ -1362,10 +1353,10 @@ static func _valid_items(value, map_width: int, map_height: int) -> Dictionary:
 		seen_ids[item_id] = true
 	return {"ok": true}
 
-## issue #299: map_width/map_height bound every position field below, on top
-## of the pre-existing non-negative check -- an entity/item/object/zone at or
+## map_width/map_height bound every position field below, in addition
+## to the non-negative check -- an entity/item/object/zone at or
 ## beyond the map's own declared width/height is rejected the same way a
-## negative one always was.
+## negative one is.
 static func _valid_item(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid item type")
@@ -1545,8 +1536,7 @@ static func _valid_work_progress(value, map_width: int, map_height: int) -> Dict
 			return entry_check
 	return {"ok": true}
 
-## "ownerJobId" (round-2 review round-4 finding 4) is optional on the wire,
-## like "autonomous" on a queue entry: present only when the tile's
+## "ownerJobId" is optional on the wire, like "autonomous" on a queue entry: present only when the tile's
 ## reservation was owned by a job when the entry was encoded, absent for the
 ## plain tile-keyed case every older save already used, so no migration step
 ## is needed for this same-schema-version addition.
@@ -1570,8 +1560,8 @@ static func _valid_work_progress_entry(value, map_width: int, map_height: int) -
 	return {"ok": true}
 
 ## world._work_progress_owner's wire shape is an array of {target, jobId}
-## entries (StateCodec._encode_work_progress_owners()), round-5 review
-## (#278/#303): the exact job that owns a workProgress key, so decode() never
+## entries (StateCodec._encode_work_progress_owners()): the exact job that
+## owns a workProgress key, so decode() never
 ## has to guess it from whichever job happens to target that key. At most one
 ## job owns a given tile's progress, so duplicate targets are rejected the
 ## same way duplicate colonistId/actorId are for pausedJobs/combatBlockedTargets.
@@ -1605,9 +1595,8 @@ static func _valid_work_progress_owner_entry(value, map_width: int, map_height: 
 	return {"ok": true}
 
 ## world._suspended_work_progress's wire shape is an array of {jobId,
-## ticksRemaining} entries (StateCodec._encode_suspended_work_progress()),
-## round-6 review (#278/#303): a suspended job's own work-toil ticks, keyed
-## by job_id alone (no tile coordinate -- unlike workProgress/
+## ticksRemaining} entries (StateCodec._encode_suspended_work_progress()):
+## a suspended job's own work-toil ticks, keyed by job_id alone (no tile coordinate -- unlike workProgress/
 ## workProgressOwners, at most one entry per job_id, never per tile, since a
 ## suspended job's snapshot has already left the shared tile cache). Optional
 ## on the wire like workProgressOwners.
@@ -1701,8 +1690,7 @@ static func _valid_need_job_assignment_entry(value) -> Dictionary:
 		return _fail("invalid needJobAssignments entry jobId")
 	return {"ok": true}
 
-## RescueGiver's own job_id -> victim_id association's wire shape (issue #360
-## round-3 review finding 1) is an array of {jobId, victimId} entries -- keyed
+## RescueGiver's own job_id -> victim_id association's wire shape is an array of {jobId, victimId} entries -- keyed
 ## by job id, not colonist id, since a rescue job's own id is what's actually
 ## unique here (see StateCodec._encode_rescue_victim_assignments()). Optional
 ## at the top level (SaveIO._validate_state()): absent for any save written
@@ -1734,8 +1722,7 @@ static func _valid_rescue_victim_assignment_entry(value) -> Dictionary:
 		return _fail("invalid rescueVictimAssignments entry victimId")
 	return {"ok": true}
 
-## CombatGiver's own per-actor flee-destination exclusion set (round-6
-## review): the wire shape is an array of {actorId, tiles} entries, each
+## CombatGiver's own per-actor flee-destination exclusion set: the wire shape is an array of {actorId, tiles} entries, each
 ## `tiles` an array of #/$defs/tile -- see
 ## StateCodec._encode_combat_blocked_targets().
 static func _valid_combat_blocked_targets(value, map_width: int, map_height: int) -> Dictionary:
@@ -1766,7 +1753,7 @@ static func _valid_combat_blocked_targets_entry(value, map_width: int, map_heigh
 		return tiles_check
 	return {"ok": true}
 
-## ApproachGiver's own job_id -> target association (issue #390, ADR 031): the
+## ApproachGiver's own job_id -> target association (ADR 033): the
 ## wire shape is an array of {jobId, kind, actorId} or {jobId, kind, tile}
 ## entries -- see StateCodec._encode_approach_job_targets().
 static func _valid_approach_job_targets(value, map_width: int, map_height: int) -> Dictionary:
@@ -1801,8 +1788,8 @@ static func _valid_approach_job_target_entry(value, map_width: int, map_height: 
 		return {"ok": true}
 	return _valid_tile(entry["tile"], map_width, map_height)
 
-## Legacy structural check for a save written before issue #391 (ApproachGiver
-## no longer retires an actor permanently): the wire shape is a plain array of
+## Legacy structural check for a save written before ApproachGiver stopped
+## retiring actors permanently: the wire shape is a plain array of
 ## actor_id strings. state_codec.gd's decode() no longer reads this field, but
 ## an old save that still carries it must not be rejected outright.
 static func _valid_approach_retired_actors(value) -> Dictionary:
@@ -1843,8 +1830,7 @@ static func _valid_calendar_alerts(value) -> Dictionary:
 		seen_ids[window_id] = true
 	return {"ok": true}
 
-## _tool_fetch's per-job excluded-candidate set (issue #271 round 6/ADR 012,
-## schemaVersion 17) is an array of {jobId, toolIds} entries (StateCodec.
+## _tool_fetch's per-job excluded-candidate set (ADR 013, schemaVersion 17) is an array of {jobId, toolIds} entries (StateCodec.
 ## _encode_tool_fetch_excluded()), one per job with at least one candidate
 ## already proven unreachable this fetch attempt. Every toolId must reference
 ## a currently-declared tool item, mirroring toolReservations' own cross-check
@@ -1913,7 +1899,7 @@ static func _valid_incident_scheduler(value) -> Dictionary:
 		return _fail("invalid incidentScheduler.rng fields")
 	return {"ok": true}
 
-## world._dig_find_random's own continuation (ADR 025 round 2 review,
+## world._dig_find_random's own continuation (ADR 026,
 ## StateCodec._encode()'s "digFindRng"): the same {seed, state} shape as
 ## top-level "rng", but only checked when the caller already confirmed the
 ## key is present -- see _validate_state()'s own comment on why this field is
@@ -1931,17 +1917,17 @@ static func _valid_dig_find_rng(value) -> Dictionary:
 	return {"ok": true}
 
 ## The optional "health" key is present only for an object whose kind
-## declares "max_health" (F5/#302), mirroring how "rerouting" is optional on
+## declares "max_health", mirroring how "rerouting" is optional on
 ## an entity's route (_valid_entity_route() below) -- allowed via the
 ## required+optional union passed to _keys_allowed(), not through
 ## _require_fields() (whose single "required" array doubles as the exhaustive
 ## allowed set, which would reject "health" outright as unexpected). The
-## optional "orientation" key (issue #405) is this same union's other member:
+## optional "orientation" key is this same union's other member:
 ## "horizontal", "vertical", "" or absent, with "" and absent both meaning
-## "no rotation" (review round 1: the schema and codec must accept an
-## explicit "" identically to the key's absence, since either represents the
-## default orientation for every footprint-[1,1] kind and every save written
-## before this task).
+## "no rotation" (the schema and codec must accept an explicit ""
+## identically to the key's absence, since either represents the default
+## orientation for every footprint-[1,1] kind and every save written before
+## orientation existed).
 static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid objects entry type")
@@ -1966,14 +1952,14 @@ static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
 		return {"ok": true}
 	return _valid_object_health(object_entry["health"])
 
-## F5/#302: mirrors the schema's "object.health" $def. Optional at the
+## Mirrors the schema's "object.health" $def. Optional at the
 ## objects-entry level -- the key's absence is allowed (checked by the caller
 ## above) for a bare/non-damageable object and for any save written before
-## this task, exactly like route.rerouting (_valid_entity_route() above);
+## object health existed, exactly like route.rerouting (_valid_entity_route() above);
 ## present only for an object whose kind declares "max_health"
-## (content/objects.json), same as world._object_health. Once the key IS
+## (content/objects.json), same as world._object_health. Once the key is
 ## present, though, its value must be a valid Dictionary: an explicit
-## `"health": null` is rejected here (round-5 review), not waved through as
+## `"health": null` is rejected here, not waved through as
 ## "absent" -- the schema's object $def has no null variant, and
 ## StateCodec._decode_objects() assigns item["health"] straight into a typed
 ## Dictionary variable the instant item.has("health") is true, which errors
@@ -1991,7 +1977,7 @@ static func _valid_object_health(value) -> Dictionary:
 		return _fail("invalid objects entry health maxHp")
 	return {"ok": true}
 
-## issue #406: mirrors the schema's "constructionSite" $def -- one record per
+## Mirrors the schema's "constructionSite" $def -- one record per
 ## active construction site, structurally independent of any job.
 static func _valid_construction_site(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
@@ -2095,7 +2081,7 @@ static func _valid_labour_table(value) -> Dictionary:
 			return _fail("invalid entity labourTable level '%s'" % kind)
 	return {"ok": true}
 
-## Mirrors the schema's "trapped" $def (issue #359): unlike carrying/work
+## Mirrors the schema's "trapped" $def: unlike carrying/work
 ## (present only for kinds whose own component shape adds them), any actor
 ## kind may fall into a trench, so this is validated unconditionally, like
 ## route/health, never gated by entity.has().
@@ -2131,7 +2117,7 @@ static func _valid_entity_work(value) -> Dictionary:
 		return _fail("invalid entity work fields")
 	return {"ok": true}
 
-## Mirrors the schema's "health" $def: the F2 health component snapshot
+## Mirrors the schema's "health" $def: the health component snapshot
 ## (StateCodec._encode_health()/_decode_health()), always present -- unlike
 ## route/work/carrying it is never null.
 static func _valid_entity_health(value) -> Dictionary:
@@ -2149,7 +2135,7 @@ static func _valid_entity_health(value) -> Dictionary:
 		return _fail("invalid entity health dead")
 	return {"ok": true}
 
-## Mirrors the schema's "combat" $def (ActorCombat.build(), F2/issue #294).
+## Mirrors the schema's "combat" $def (ActorCombat.build()).
 static func _valid_entity_combat(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity combat type")
@@ -2161,8 +2147,8 @@ static func _valid_entity_combat(value) -> Dictionary:
 		return _fail("invalid entity combat fields")
 	return {"ok": true}
 
-## Mirrors the schema's "inventoryComponent" $def (ActorInventory.build(),
-## F2/issue #294): items array, tool slot id (or ""), capacity >= 1.
+## Mirrors the schema's "inventoryComponent" $def (ActorInventory.build()):
+## items array, tool slot id (or ""), capacity >= 1.
 static func _valid_entity_inventory(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity inventory type")
@@ -2175,7 +2161,7 @@ static func _valid_entity_inventory(value) -> Dictionary:
 		return _fail("invalid entity inventory capacity")
 	return {"ok": true}
 
-## Issue #402: a colonist's "hands" list, at most one entry per distinct kind
+## A colonist's "hands" list, at most one entry per distinct kind
 ## (no item id, no ground position -- see StateCodec._encode_hands_field()),
 ## every entry's count >= 1, and the sum of every entry's count never
 ## exceeding ActorInventory.HANDS_CAPACITY.

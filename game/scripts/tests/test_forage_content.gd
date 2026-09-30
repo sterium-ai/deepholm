@@ -1,9 +1,9 @@
 extends SceneTree
 
-## Covers issue #202: content/objects.json declares berry_bush and bed;
+## Covers foraging content: content/objects.json declares berry_bush and bed;
 ## WorldState generates TILE_WATER deterministically; a forage order against a
-## berry_bush object completes like chop against a tree (colonist-ai.md 3
-## result bullet 2), turning the tile to floor and leaving one ground berry.
+## berry_bush object completes like chop against a tree (colonist-ai.md
+## section 3), turning the tile to floor and leaving one ground berry.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")

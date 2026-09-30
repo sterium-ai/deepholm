@@ -1,5 +1,9 @@
 # Vision and principles
 
+> **In short:** Deepholm is a game about building an underground colony. This
+> page explains what the game should feel like and the engineering rules that
+> keep it reliable and easy to extend.
+
 ## Product vision
 
 Deepholm is a calm-but-consequential underground colony simulation. The

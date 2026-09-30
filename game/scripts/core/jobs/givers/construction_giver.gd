@@ -1,22 +1,22 @@
 class_name ConstructionGiver
 extends RefCounted
 
-## Job-giver for construction sites (issue #406, docs/decisions/038): decides
-## WHEN a site's next fetch or work job should exist. A `build` command
+## Job-giver for construction sites (ADR 040): decides
+## when a site's next fetch or work job should exist. A `build` command
 ## creates the site record and reserves its footprint immediately
 ## (WorldState); this module tops up `site_fetch` jobs while materials are
 ## still short, and tops up `site_work` jobs once every required material is
-## fully held, both up to the site's own max_builders (issue #401: a site
+## fully held, both up to the site's own max_builders (a site
 ## with max_builders 2 may hold up to two colonists fetching, working, or one
 ## of each, at once -- never a third) -- both through the shared job_queue.gd
 ## entry point any order-driven job uses
 ## (AGENTS.md "one work engine"). Deliberately simpler than the superseded
-## `build` job's own per-job multi-source fetch plan (docs/decisions/036): a
+## `build` job's own per-job multi-source fetch plan (ADR 038): a
 ## site_fetch job always carries exactly one kind, sized to what the site
 ## still needs of it (up to hands capacity); the giver resubmits a fresh one
 ## whenever the previous one terminates and material is still short, rather
 ## than one job hopping between several sources itself. See
-## docs/decisions/038's own "Alternatives considered" for why.
+## ADR 040's own "Alternatives considered" for why.
 
 var _get_sites: Callable
 var _get_jobs: Callable
@@ -57,7 +57,7 @@ func _site_key(origin) -> String:
 	var tile: Vector2i = origin
 	return "%d,%d" % [tile.x, tile.y]
 
-## #400's hands-filling rules (round 3 review): the source this giver submits
+## Hands-filling rules: the source this giver submits
 ## a site_fetch job against is only a position-agnostic seed for
 ## GlobalAssignment to route/score an idle colonist toward -- no colonist is
 ## chosen yet at submission time, so "nearest to the builder" cannot be
@@ -72,9 +72,9 @@ func _site_key(origin) -> String:
 ##
 ## Runs once per tick (WorldState.tick(), alongside HaulGiver's own advance()):
 ## for every site still short of materials, tops its own fetch+work job count
-## up to max_builders with fresh site_fetch jobs (issue #401: two builders on
-## a max_builders-2 site may now fetch concurrently, each getting its own
-## nearest-unclaimed source via #400's per-builder rule, resolved once a real
+## up to max_builders with fresh site_fetch jobs (two builders on a
+## max_builders-2 site may fetch concurrently, each getting its own
+## nearest-unclaimed source via the per-builder rule, resolved once a real
 ## colonist activates it -- see _next_site_fetch_source()); for every site
 ## with every material fully held, tops its active/queued site_work count up
 ## to the same max_builders cap.
@@ -123,9 +123,9 @@ func advance(tick: int) -> void:
 				work_counts[key] = int(work_counts.get(key, 0)) + 1
 
 ## Lowest-id, position-agnostic seed (no colonist is chosen yet at
-## submission, docs/decisions/036's own precedent for the superseded `build`
+## submission, ADR 038's own precedent for the superseded `build`
 ## job's seed -- WorldState corrects it to the true nearest-reachable source
-## the instant a colonist actually activates the job, #400's hands-filling
+## the instant a colonist actually activates the job, per the hands-filling
 ## rules) ground item covering some still-needed required material,
 ## stockpiled, unreserved, and not already committed to another in-flight
 ## site_fetch job. Required materials are tried in the site's own declared

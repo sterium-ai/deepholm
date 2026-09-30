@@ -16,6 +16,9 @@ func _init(path: String = "res://data/text/en.json") -> void:
 	else:
 		push_error("ViewerTextTable: '%s' did not contain a JSON object" % path)
 
+func has_string(key: String) -> bool:
+	return _strings.has(key)
+
 func get_string(key: String) -> String:
 	if _strings.has(key):
 		return String(_strings[key])

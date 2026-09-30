@@ -1,16 +1,20 @@
-# ADR 021: Visual target — flat top-down 16 px pixel art
+# ADR 022: Visual target — flat top-down 16 px pixel art
 
-- Status: accepted
-- Date: 2026-09-22
-- Deciders: project integrator (issue #301)
+> **In short:** The map is drawn as simple, flat, top-down pixel art at 16 pixels per tile, where
+> every kind of ground and object has its own picture and riverbanks look different from open
+> water. The current art is generated placeholder art that can be swapped later.
+
+- **Status:** accepted
+- **Date:** 2026-09-22
+- **Scope:** map presentation only: `game/scripts/viewer/`, the terrain tileset and generated art
+  under `game/assets/generated/`, and the art-generation tools.
 
 ## Context
 
 The first map renderer's default "art" view reused whichever atlas cell was
 closest at hand for a given tile or object kind: water and trees shared
-furniture cells, papered over with a flat-colour overlay
-(`game/scripts/viewer/terrain_overlay.gd`) so the shapes at least read as
-"not furniture". No two tile kinds were guaranteed visually distinct art,
+furniture cells, papered over with a flat-colour overlay script (since
+removed) so the shapes at least read as "not furniture". No two tile kinds were guaranteed visually distinct art,
 there was no shoreline, and the base ground read as a diagnostic colour
 rather than a legible biome.
 
@@ -85,7 +89,7 @@ size fixed by `docs/art/style.md` and ADR 018 (pc-map-presentation).
 
 ## Consequences
 
-- `game/scripts/viewer/terrain_overlay.gd` is deleted.
+- The flat-colour overlay script is deleted.
 - `tile_atlas_map.gd`'s `ATLAS_CELL_STRIDE` is 16: generated sheets have no
   separation between cells.
 - `map_view.gd`'s incremental refresh re-resolves a dirty cell's 8

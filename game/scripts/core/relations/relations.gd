@@ -2,7 +2,7 @@ class_name Relations
 extends RefCounted
 
 ## F3 relations module (docs/architecture/foundation-for-breadth.md section F3,
-## docs/decisions/015-factions-and-relations.md): reads content/factions.json
+## docs/decisions/014-factions-and-relations.md): reads content/factions.json
 ## through a frozen ContentRegistry to answer "how does faction A feel about
 ## faction B" and "are these two actors hostile". Plain, scene-independent
 ## GDScript (AGENTS.md): constructed from a ContentRegistry exactly like
@@ -13,9 +13,8 @@ extends RefCounted
 ## way it already reuses ActorTable.is_known_component() and
 ## ToilExecutor.is_known_toil().
 ##
-## Unused by combat or job-giver code today (this task's Non-goals): the
-## documented seam the objective's later passability/reservation/order and
-## combat/incident work wires up.
+## Not consulted by combat or job-giver code: it is the documented seam
+## for later passability, reservation, order and combat/incident work.
 
 const RELATION_VALUES: Array[String] = ["hostile", "neutral", "friendly"]
 const DEFAULT_RELATION := "neutral"
@@ -45,8 +44,7 @@ func relation(a_faction_id: String, b_faction_id: String) -> String:
 
 ## Whether actor_a's faction considers actor_b's faction hostile, reading
 ## each actor Dictionary's own "faction_id" field. Not consulted by combat or
-## any job-giver yet (Non-goals) -- the seam this objective's later F5
-## combat/incident work wires up.
+## any job-giver yet; it is the seam for later F5 combat/incident work.
 func is_hostile(actor_a: Dictionary, actor_b: Dictionary) -> bool:
 	var a_faction_id := String(actor_a.get("faction_id", ""))
 	var b_faction_id := String(actor_b.get("faction_id", ""))

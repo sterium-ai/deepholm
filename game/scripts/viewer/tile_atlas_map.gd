@@ -111,18 +111,17 @@ const ATLAS_CELL_STRIDE := 16
 ## must reveal underneath) -- factored out so the two can never disagree
 ## about which single foreign side/corner a cell's blob shape represents
 ## (otherwise the base layer and the overlay could pick their
-## directions independently, so the overlay's alpha never lined up with an
-## actual foreign-material cell underneath).
+## directions independently, and the overlay's alpha would not line up with
+## an actual foreign-material cell underneath).
 ##
 ## Returns {} when no neighbour is foreign (fully interior: the base layer's
 ## own full-fill grass cell already covers it, no overlay/backing needed).
 ## Otherwise returns {"shape": "edge"|"corner"|"concave", "dir": one of
 ## "N"/"S"/"E"/"W"/"NE"/"NW"/"SE"/"SW"}.
 ##
-## Documented approximation (the art
-## ships exactly this 13-cell blob -- 4 edges, 4 convex corners, 4 concave
-## corners, full -- not a full 47-tile Wang set, so there is no dedicated art
-## for two opposite exposed sides (a channel), three exposed sides (a cap) or
+## Documented approximation: the art ships exactly this 13-cell blob (4
+## edges, 4 convex corners, 4 concave corners, full), not a full 47-tile
+## Wang set, so there is no dedicated art for two opposite exposed sides (a channel), three exposed sides (a cap) or
 ## all four (an isolated tile). Each of those approximates to the *nearest*
 ## already-real cell instead of being synthesized: a channel (2 opposite
 ## sides foreign) shows the edge of whichever side wins compass priority

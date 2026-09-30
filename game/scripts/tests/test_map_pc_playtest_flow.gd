@@ -1,16 +1,16 @@
 extends SceneTree
 
-## Issue #344 acceptance: the task's own 5-minute PC playtest
+## A 5-minute PC playtest
 ## walkthrough -- new seed, pan, zoom, center colonists, designate a valid job,
 ## complete it, save, load, continue -- driven through the real Boot scene's
 ## own button handlers and real pointer path (never a hand-built fixture),
 ## exactly mirroring test_map_experience_seed42_flow.gd's real-UI pattern.
 ## Unlike that test, this one also completes the designated job, asserts the
-## HUD panel/toolbar stay visible across every camera gesture (the task's
-## "no lost HUD"), and keeps playing one more order after Load to prove
+## HUD panel/toolbar stay visible across every camera gesture (no lost HUD),
+## and keeps playing one more order after Load to prove
 ## "continue" actually works rather than only that state round-trips.
 ##
-## Round 1 review: the walkthrough must actually span >=300 real seconds,
+## The walkthrough must actually span >=300 real seconds,
 ## with gameplay distributed through that interval, not a burst of
 ## step_once() calls plus doc claims of a session that never ran. So this is
 ## two modes in one script:
@@ -132,9 +132,9 @@ func _run() -> void:
 	# advance_ticks=false: keep the world frozen here so the colonist's needs
 	# do not age past this fresh designation -- the completion budget right
 	# below is sized for a just-designated job, not one that already sat
-	# queued through a real 33s dwell (needs are core/scheduler behaviour
-	# this task's Non-goals forbid tuning, so the fix is to not manufacture
-	# aging here, not to widen the budget).
+	# queued through a real 33s dwell (need tuning is core/scheduler
+	# behaviour this test must not depend on, so it avoids manufacturing
+	# aging here rather than widening the budget).
 	await _dwell("designate a valid job", step_start, false)
 
 	# 6. Complete it: step real ticks (through tick_driver.step_once(), the
@@ -176,8 +176,7 @@ func _run() -> void:
 	# ticks, proving the session is still fully playable -- not asserting
 	# this second job's exact completion tick, which depends on unrelated
 	# need-priority scheduling (drink/sleep may outrank a fresh low-priority
-	# till) that is core/scheduler behavior this task's Non-goals forbid
-	# tuning for.
+	# till), which is core/scheduler behavior outside this test's scope.
 	step_start = Time.get_ticks_usec()
 	var second_target := _nearest_soil_tile(boot.world, target)
 	_expect(second_target != Vector2i(-1, -1), "a second, different soil tile target must exist to designate after Load")
@@ -240,9 +239,9 @@ func _expect_hud_visible(when: String) -> void:
 ## first job (steps 1-5): letting the world tick for ~33s per step before
 ## that job even exists would age the colonists' needs (hunger/thirst/sleep)
 ## past what the deterministic completion budget right after is sized for --
-## an artifact of this test's own pacing, not a real scheduling concern, and
-## tuning need/scheduler priorities to compensate is out of this task's
-## Non-goals. The default headless regression run records elapsed time
+## an artifact of this test's own pacing, not a real scheduling concern, so
+## need/scheduler priorities are not tuned to compensate. The default
+## headless regression run records elapsed time
 ## (near-instant) without waiting either way, so it stays fast.
 func _dwell(step_name: String, step_start_usec: int, advance_ticks: bool = true) -> void:
 	var elapsed := (Time.get_ticks_usec() - step_start_usec) / 1000000.0

@@ -65,12 +65,12 @@ var world: WorldStateType
 ## separate single-tile path.
 signal rectangle_committed(tiles: Array[Vector2i])
 
-## Emitted after a zone-tool drag applies its single zone_add command (issue
-## #189 acceptance item 7), carrying world.apply()'s own result so a caller
+## Emitted after a zone-tool drag applies its single zone_add command,
+## carrying world.apply()'s own result so a caller
 ## (or a test) can inspect ok/rejection without polling get_zones() itself.
 signal zone_add_committed(result: Dictionary)
 
-## Emitted after the build tool's own click-to-place path (issue #278/#303)
+## Emitted after the build tool's own click-to-place path
 ## applies its single `build` command, carrying world.apply()'s own result --
 ## mirrors zone_add_committed above.
 signal build_committed(result: Dictionary)
@@ -86,7 +86,7 @@ var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
 var _drag_current: Vector2i = Vector2i.ZERO
 ## The (tool_enabled, hover/drag rectangle, tick) key _preview_tiles/_preview_valid were last
-## computed from (issue #346), so refresh()'s own once-per-tick _update_preview() call can skip
+## computed from, so refresh()'s own once-per-tick _update_preview() call can skip
 ## preview_validity.call() when nothing that could change the outcome actually changed. Starts
 ## as a key no real state can produce (7 elements never match the empty Array) so the very first
 ## _update_preview() call always computes.
@@ -103,7 +103,7 @@ var _preview_cache_key: Array = []
 var _zone_tool_enabled: bool = false
 var _next_zone_command_id: int = 0
 
-## Build tool state (issue #278/#303), mirroring the zone tool's own pair of
+## Build tool state, mirroring the zone tool's own pair of
 ## fields above: boot.gd toggles _build_tool_enabled alongside its other tool
 ## buttons and sets _build_kind to whichever object kind that button builds.
 ## Unlike the zone tool this is a plain click, not a drag rectangle -- one
@@ -114,8 +114,8 @@ var _build_orientation: String = "horizontal"
 var _build_rotatable: bool = false
 var _next_build_command_id: int = 0
 
-## Toggle between the TileMapLayer art renderer (default, issue #299 round 1:
-## this is the production presentation path -- its incremental refresh is
+## Toggle between the TileMapLayer art renderer (default; this is the
+## production presentation path -- its incremental refresh is
 ## what keeps a large map from rebuilding all width*height cells every tick,
 ## see _refresh_tile_map() below) and the flat-colour draw_rect renderer
 ## (kept fully working as a fallback for machines/tests with no art assets,
@@ -152,9 +152,9 @@ func _init() -> void:
 	# everything the parent draws so the markers stay visible in art mode.
 	_tile_map_layer.show_behind_parent = true
 	add_child(_tile_map_layer)
-	# Grass blob overlay (issue #301 round 3): drawn only over TILE_SOIL
+	# Grass blob overlay: drawn only over TILE_SOIL
 	# cells, on top of the base layer, so a soil tile next to water/rock
-	# shows Floors_Tiles.png's own jagged grass edge over the neighbour's
+	# shows the terrain sheet's own jagged grass edge over the neighbour's
 	# plain opaque base cell -- water and rock never carry directional art
 	# of their own (see tile_atlas_map.gd's grass_overlay_coords()).
 	_grass_overlay_layer = TileMapLayer.new()
@@ -190,7 +190,7 @@ func _init() -> void:
 ## would track a sequence cursor).
 var _dirty_cells_consumed: int = 0
 
-## Hands the shared TickDriver to the colonist sprite layer (issue #364), so
+## Hands the shared TickDriver to the colonist sprite layer, so
 ## its advance() can read seconds_per_tick() for glide timing. boot.gd calls
 ## this once both are constructed; no other map_view.gd behaviour changes.
 func set_tick_driver(driver) -> void:
@@ -209,7 +209,7 @@ func set_world(world_ref: WorldStateType) -> void:
 	_refresh_tile_map(true)
 	queue_redraw()
 
-## Sizes this Control to the attached world's own dimensions (issue #299): a
+## Sizes this Control to the attached world's own dimensions: a
 ## loaded/newly generated world need not be the 48x48 fixture default, and
 ## map_viewport.gd's pan/zoom bounds (_constrain()) read this Control's own
 ## `size`, so it must reflect whichever world is actually live.
@@ -458,11 +458,11 @@ func _commit_zone(start: Vector2i, end: Vector2i) -> void:
 	zone_add_committed.emit(result)
 	refresh()
 
-## Build tool's own click-to-place path (issue #278/#303), mirroring
+## Build tool's own click-to-place path, mirroring
 ## _commit_zone() above but for a single tile and a `build` command instead of
 ## a drag rectangle and `zone_add`. A no-op when world is unset.
 ##
-## Round-2 review: _current_preview_key() includes world.get_tick(), which a
+## _current_preview_key() includes world.get_tick(), which a
 ## successful build command does not advance -- while paused, the hovered
 ## tile's key is otherwise unchanged before and after this call, so
 ## refresh()'s _update_preview() would skip the recompute and keep showing
@@ -485,7 +485,7 @@ func _commit_build(tile: Vector2i) -> void:
 	refresh()
 
 ## Number of TileMapLayer cells actually touched by the most recent
-## _refresh_tile_map() call (issue #299 instrumentation): a full rebuild
+## _refresh_tile_map() call (instrumentation): a full rebuild
 ## touches every cell, an incremental refresh touches only the cells newly
 ## appended to world.get_dirty_cells() since the last call.
 ## test_map_view_incremental.gd asserts this stays far below width*height on
@@ -500,7 +500,7 @@ var last_tile_map_cells_touched: int = 0
 ## toggle); otherwise only the newly-appended tail of world.get_dirty_cells()
 ## (see _dirty_cells_consumed above) is touched, so a tick with no dig/chop/
 ## forage/till/sow/place_object/remove_object never reconstructs the whole
-## map (issue #299: "no reconstruye 65536 celdas" on a 256x256 world).
+## map (65536 cells on a 256x256 world).
 func _refresh_tile_map(force_full: bool) -> void:
 	if not _art_enabled or world == null:
 		return
@@ -534,7 +534,7 @@ func _refresh_tile_map(force_full: bool) -> void:
 		_set_tile_map_cell(cell.x, cell.y, kind)
 		_set_decor_or_object_cell(cell.x, cell.y, kind, world.get_object(cell.x, cell.y))
 		# A dirty cell can flip a neighbouring TILE_SOIL cell's shore
-		# selection -- both its overlay blob shape AND its base-layer backing
+		# selection -- both its overlay blob shape and its base-layer backing
 		# material -- without that neighbour itself being marked dirty (e.g. a
 		# dig turns a rock tile into floor, exposing a straight prairie edge
 		# next to it where a corner used to be); re-resolve the full layered
@@ -557,8 +557,8 @@ func _refresh_tile_map(force_full: bool) -> void:
 ## for a boundary TILE_SOIL cell (one with a water/rock neighbour), which
 ## instead gets that neighbour's own plain water/rock cell as its *backing*
 ## -- see _set_soil_cell() below for why. Water and rock tiles themselves
-## never carry directional art of their own (issue #301 round 3/4 -- see
-## tile_atlas_map.gd's module comment). Also resolves the grass overlay.
+## never carry directional art of their own (see tile_atlas_map.gd's module
+## comment). Also resolves the grass overlay.
 func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 	if kind == WorldStateType.TILE_SOIL:
 		_set_soil_cell(x, y)
@@ -571,21 +571,20 @@ func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 		_tile_map_layer.set_cell(coords_pos, int(atlas["source_id"]), atlas["coords"])
 	_grass_overlay_layer.erase_cell(coords_pos)
 
-## A TILE_SOIL cell's neighbour-driven layered composition (issue #301
-## round 4 fix). tile_atlas_map.gd's grass_shore_selection() resolves this
+## A TILE_SOIL cell's neighbour-driven layered composition.
+## tile_atlas_map.gd's grass_shore_selection() resolves this
 ## cell's 8 neighbours to at most one shape ("edge"/"corner"/"concave") and
 ## direction, shared by two lookups that must always agree:
-##   - the OVERLAY cell (grass_overlay_coords()): Floors_Tiles.png's own
+##   - the overlay cell (grass_overlay_coords()): the terrain sheet's own
 ##     transparent-bordered grass blob shape for that direction, drawn on
 ##     _grass_overlay_layer, on top;
-##   - the BASE cell (_grass_backing_kind() below, via
+##   - the base cell (_grass_backing_kind() below, via
 ##     grass_shore_backing_offsets()): the single actual water/rock
 ##     neighbour that shape's alpha is supposed to expose, drawn as that
 ##     material's own plain opaque cell on _tile_map_layer, underneath.
-## Previously the base layer always painted an opaque grass fill under every
-## soil cell regardless of the overlay, so the blob's transparent pixels only
-## ever revealed more grass -- never the neighbouring water/rock (round-4
-## blocking finding). A fully interior cell (no foreign neighbour) has no
+## An opaque grass fill under every soil cell would instead make the blob's
+## transparent pixels reveal only more grass, never the neighbouring
+## water/rock. A fully interior cell (no foreign neighbour) has no
 ## selection, so it keeps a plain hash-selected grass fill with no overlay.
 func _set_soil_cell(x: int, y: int) -> void:
 	var coords_pos := Vector2i(x, y)
@@ -633,8 +632,8 @@ func _is_shore_neighbor(x: int, y: int) -> bool:
 	var kind := world.get_tile(x, y)
 	return kind == WorldStateType.TILE_WATER or kind == WorldStateType.TILE_ROCK
 
-## Discrete prairie variant (issue #301 Goal: "grass variants chosen
-## by hash(seed, x, y), never by frame") -- a pure function of the
+## Discrete prairie variant, chosen by hash(seed, x, y), never by frame --
+## a pure function of the
 ## world's seed and the cell's own coordinates, so it is stable across pan,
 ## zoom, save and load, and never changes on its own between redraws.
 func _grass_variant_coords(x: int, y: int) -> Vector2i:
@@ -649,8 +648,8 @@ func _grass_variant_coords(x: int, y: int) -> Vector2i:
 ## a tile kind with its own decorative sprite (tree canopy, hazard cluster,
 ## planted sprout -- see tile_atlas_map.gd's TILE_DECOR_MAP) draws one;
 ## otherwise the cell is cleared. `object_kind == ""` means no placed object
-## (issue #299 incremental refresh: remove_object, or a forage clearing its
-## berry_bush) so this falls through to the tile's own decor, if any.
+## (e.g. during an incremental refresh after remove_object, or a forage
+## clearing its berry_bush) so this falls through to the tile's own decor, if any.
 func _set_decor_or_object_cell(x: int, y: int, tile_kind: String, object_kind: String) -> void:
 	var coords := Vector2i(x, y)
 	if not object_kind.is_empty():
@@ -675,10 +674,9 @@ func _draw() -> void:
 				var kind: String = tiles[y * width + x]
 				var color: Color = TILE_COLORS.get(kind, UNKNOWN_TILE_COLOR)
 				draw_rect(Rect2(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE), color, true)
-		# Drawn once for the whole map, never inside the row loop above (round 1
-		# review): world.get_objects() is O(objects), and iterating it once per
-		# row made this O(height * objects) instead, explicitly prohibited by
-		# the goal's "do not walk all objects inside each row".
+		# Drawn once for the whole map, never inside the row loop above:
+		# world.get_objects() is O(objects), and iterating it once per row
+		# would make this O(height * objects).
 		var object_inset := TILE_SIZE * 0.1
 		for object_entry in world.get_objects():
 			var object_color: Color = OBJECT_COLORS.get(String(object_entry["kind"]), UNKNOWN_OBJECT_COLOR)
@@ -697,7 +695,7 @@ func _draw() -> void:
 				TILE_SIZE - inset * 2.0,
 				TILE_SIZE - inset * 2.0
 			), COLONIST_COLOR, true)
-			# Colour-mode carried-item marker (issue #189 acceptance item 7).
+			# Colour-mode carried-item marker.
 			# The art-mode equivalent lives in colonist_sprites.gd, layered
 			# onto the colonist's own AnimatedSprite2D so it renders on top
 			# of the sprite in art mode instead of underneath it.
@@ -728,10 +726,10 @@ func _draw_construction_sites() -> void:
 		var kind := String(site["kind"])
 		var size := Vector2i(2, 1) if kind == "workbench" and orientation != "vertical" else Vector2i(1, 2) if kind == "workbench" else Vector2i.ONE
 		var footprint_rect := Rect2(Vector2(origin) * TILE_SIZE, Vector2(size) * TILE_SIZE)
-		# Issue #409: a vertical-orientation kind with its own dedicated atlas
+		# A vertical-orientation kind with its own dedicated atlas
 		# entry (e.g. "workbench_vertical") draws that real art directly, at
 		# its own real size/grounding -- no synthetic 90-degree rotation of
-		# the horizontal crop (round-1 review finding). Falls back to the
+		# the horizontal crop. Falls back to the
 		# plain kind key when no dedicated vertical entry is registered yet.
 		var vertical_key := kind + "_vertical"
 		var atlas_key := vertical_key if orientation == "vertical" and TileAtlasMapType.OBJECT_ATLAS_MAP.has(vertical_key) else kind

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Scene-free acceptance coverage for validate-before-replace persistence.
+## Scene-free coverage for validate-before-replace persistence.
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const DebugScenarioType = preload("res://scripts/viewer/debug_scenario.gd")

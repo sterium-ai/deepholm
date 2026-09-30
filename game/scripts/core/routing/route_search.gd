@@ -49,8 +49,7 @@ var _came_from: Dictionary = {}
 var _path: Array[Vector2i] = []
 ## Best known accumulated path cost per tile, keyed like _visited. Not part of
 ## snapshot()/restore(): it is rebuilt from _came_from on restore() instead,
-## so the persisted shape (and StateCodec/save_io.gd, which are out of this
-## task's scope) stay exactly as before.
+## so the persisted shape (and StateCodec/save_io.gd) stay unchanged.
 var _cost: Dictionary = {}
 
 func _init(start: Vector2i, target: Vector2i, cost_fn: Callable,

@@ -1,9 +1,12 @@
-# Dig job queue contract (#45)
+# Dig job queue contract
+
+> **In short:** The job queue holds the work the player has ordered, decides which job may start, and explains in plain terms why a job is waiting.
 
 `JobQueue` is a plain `RefCounted` module implementing ADR 003 principles 1
 and 2 and the explainability section of `simulation-boundaries.md`.
-It is not yet wired into WorldState. The application/owning simulation must
-dispatch validated commands to it and call `tick()` once per simulation tick.
+`WorldState` reaches it through the scheduler (`GlobalAssignment.queue`),
+which dispatches validated commands to it and drives it once per simulation
+tick.
 
 ## Inputs and transitions
 
@@ -59,8 +62,8 @@ retried each tick, including blocked jobs: a released tile or changed callable
 result needs no resubmission or notification API. Unchanged blocks emit no
 duplicate events; changed causes/owners emit updated `job_blocked` events.
 Activation clears all blocking fields and emits `job_unblocked` when applicable.
-Active jobs are not polled for reachability; the owner explicitly invalidates
-obsolete work. Reasons reflect the last evaluation, refreshed on the next tick.
+Active jobs are not polled for reachability; the owning simulation explicitly
+invalidates obsolete work. Reasons reflect the last evaluation, refreshed on the next tick.
 
 Events contain `type`, `tick`, `system_priority: 50`, `entity_id` (job ID, or
 empty for rejected submissions), monotonic `sequence`, and `data`. Events are
@@ -77,7 +80,7 @@ per key `release_all()` actually freed). Rejections return
 Rejection codes are `invalid_priority`, `invalid_target`, `unknown_job`,
 `job_already_terminal`, and `job_not_active`.
 
-## Example and acceptance
+## Example and tests
 
 ```gdscript
 var rng := RandomNumberGenerator.new()
@@ -93,14 +96,13 @@ queue.tick() # second active without resubmission
 `test_job_queue.gd` covers competing targets, bypassing blocked jobs,
 reachability recovery and reason changes, all terminal releases, rejection
 integrity, exactly three priorities, detached reads, and seeded replay/events.
-Run the issue's import, headless test, and forbidden-core-API scan commands.
 
-This is an in-memory module contract, not a save format. The canonical save
-schema rejects extra job fields; persisting this read model directly is invalid.
-Save integration needs a versioned schema/migration in its owning future task.
-No existing persistence shape or cross-layer boundary is changed here.
+This is an in-memory module contract, not a save format: persisting this read
+model directly is invalid. Persisted job fields and their migrations are
+documented in
+[`docs/architecture/save-system.md`](../../../../docs/architecture/save-system.md).
 
-## Haul (#189/#194)
+## Haul
 
 `haul` jobs carry four extra job fields, always present with harmless
 defaults (`""`, `null`, `0`, `0`) on every kind: `item_id` (the ground item to
@@ -122,8 +124,9 @@ retries on a backoff (base ticks, doubling to a cap; both injected via
 `set_haul_backoff()` from `WorldState.HAUL_RETRY_BASE_TICKS`/
 `HAUL_RETRY_CAP_TICKS`, mirroring how `MOVE_TICKS_PER_TILE`/`WORK_TICKS` are
 injected into `ToilExecutor`) instead of every tick like dig/chop's blocks.
-Backing off must not let unbounded ADR-004 aging (`004-global-assignment-fairness-policy.md`)
-let one permanently-blocked job monopolize a worker's scoring competition
+Backing off must not let unbounded ADR 004 aging
+([`004-global-assignment-fairness-policy.md`](../../../../docs/decisions/004-global-assignment-fairness-policy.md))
+let one permanently blocked job monopolize a worker's scoring competition
 forever: `get_reservations()` reports a backed-off haul job's own target as
 "reserved" for as long as `_tick < retry_at`, routing it through
 `global_assignment.gd`'s existing pre-scoring exclusion (the same one a

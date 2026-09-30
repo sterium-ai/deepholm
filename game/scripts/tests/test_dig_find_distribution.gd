@@ -1,6 +1,6 @@
 extends SceneTree
 
-## ADR 025 (docs/decisions/025-trench-trapped-actor-and-rescue.md): dig's
+## ADR 026 (docs/decisions/026-trench-trapped-actor-and-rescue.md): dig's
 ## completion effect rolls content/jobs.json's dig "find_table" against a
 ## dedicated seeded RandomNumberGenerator (WorldState._dig_find_random,
 ## salted with DIG_FIND_SEED_SALT). Drives 1000 real, seeded dig completions
@@ -70,7 +70,7 @@ func _build_world(seed_value: int) -> WorldType:
 
 ## The find item kind a completed dig at (1, 0) left behind ("" for no
 ## find): sand is always spawned first (WorldState._toil_on_work_complete()'s
-## "dig" case spawns it immediately; ADR 025's find roll resolves later the
+## "dig" case spawns it immediately; ADR 026's find roll resolves later the
 ## same tick, in _resolve_dig_finds()), so among the tile's items the one
 ## that is not "sand" is the find, if any.
 func _find_kind(world: WorldType) -> String:
@@ -114,7 +114,7 @@ func _check_find_distribution() -> void:
 			"'%s' must land within +/-%.0f percentage points of %.0f%% over %d digs (got %.2f%%, %d/%d)"
 				% [kind, TOLERANCE_PERCENT, expected_percent, DIG_COUNT, actual_percent, counts[kind], DIG_COUNT])
 
-## Pure placement-ordering coverage (ADR 025's row-major rule): calls
+## Pure placement-ordering coverage (ADR 026's row-major rule): calls
 ## WorldState._dig_item_placement() directly, isolated from job scheduling,
 ## so each exclusion reason (an impassable tile, a passable-but-excluded
 ## trench tile) and the full-block fallback are pinned to an exact
@@ -200,7 +200,7 @@ func _kind_for_roll(find_table: Array, roll: int) -> String:
 			return String(item) if item != null else ""
 	return ""
 
-## ADR 025: simultaneous dig completions resolve in ascending job-id order,
+## ADR 026: simultaneous dig completions resolve in ascending job-id order,
 ## never colonist-iteration/append order, and each consumes exactly one
 ## _dig_find_random draw. Stages _pending_dig_finds directly with the higher
 ## job id appended first -- the order a colonist array iterated out of

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Issue #299 acceptance: "the same seed with the same generator/content
+## "the same seed with the same generator/content
 ## reproduces terrain and spawn" for the large (256x256) map, across a fixed
 ## set of seeds, with at least two producing distinct maps -- and the 48x48
 ## reference size still reproduces the historical fixture output unchanged

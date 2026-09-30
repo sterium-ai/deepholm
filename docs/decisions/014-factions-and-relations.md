@@ -1,4 +1,6 @@
-# ADR 015: Factions and relations — a fifth content collection, a read-only accessor
+# ADR 014: Factions and relations — a new content collection and a read-only accessor
+
+> **In short:** Every creature belongs to a group (the colony, wildlife, raiders, traders or allies), a data file says how each group treats the others, and those rules decide who may open doors, take colony items or receive player orders.
 
 - **Status:** accepted
 - **Date:** 2026-09-20
@@ -6,8 +8,7 @@
   `game/content/schemas/factions.schema.json`), content loading
   (`game/scripts/core/content/content_registry.gd`), a new core module
   (`game/scripts/core/relations/relations.gd`)
-- **Implements:** F3 in `docs/architecture/foundation-for-breadth.md`; issue #286 (task t1 of
-  #276).
+- **Implements:** F3 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 
@@ -70,8 +71,8 @@ exposes exactly two functions:
 - `is_hostile(actor_a, actor_b) -> bool`: reads each actor Dictionary's own `"faction_id"` field
   and calls `relation()`.
 
-Neither function is called by any production code yet (Non-goals). They are the documented seam
-for three consultation points a later task (t2-t5 of #276) wires up:
+As first introduced, neither function was called by production code (see Non-goals). They are
+the documented seam for three consultation points, wired up by the amendments below:
 
 - **Passability** (`content/objects.json`'s door objects): a door's `passable` check gains a
   `rules.may_pass_doors` consultation for the moving actor's faction, so a colony door is
@@ -84,20 +85,20 @@ for three consultation points a later task (t2-t5 of #276) wires up:
   given player orders (a tame animal, per F3's own payoff example, would be `colony` faction
   gaining that eligibility for free).
 
-## Non-goals (this task)
+## Non-goals
 
 - Does not add `faction_id` to any placed object, item, debug command, or `content/actors.json`
   entry. `game/content/actors.json` and `game/content/schemas/actors.schema.json` are
-  untouched — they are not in this task's owned paths, and no real actor definition needs a
-  `faction_id` yet since nothing consults one. The dangling-reference check above is written to
-  activate the moment a later task adds the field, without a second registry change.
+  untouched — no real actor definition needs a `faction_id` yet since nothing consults one. The
+  dangling-reference check above is written to activate the moment the field is added, without
+  a second registry change.
 - Does not touch `passability()`, reservations, or order/job-giver validation. Those are the
-  three consultation points named above, explicitly deferred to t2-t5.
+  three consultation points named above, deferred to the amendments below.
 - Does not confuse content's `faction_id` (snake_case, a definition-level default a future actor
   kind could declare) with the pre-existing, unrelated runtime/save field `factionId` (camelCase,
-  added by issue #284 to every live colonist Dictionary and `game-state.schema.json`, currently
-  always `"colony"` since only one faction has ever been assignable). The two are deliberately
-  named differently; this task does not touch the runtime field, its migration, or its schema.
+  present on every live colonist Dictionary and in `game-state.schema.json`, at the time always
+  `"colony"` since only one faction had ever been assignable). The two are deliberately named
+  differently; this decision does not touch the runtime field, its migration, or its schema.
 
 ## Consequences
 
@@ -105,11 +106,10 @@ for three consultation points a later task (t2-t5 of #276) wires up:
   custom fixture directories; since `factions` is now required, both files' shared fixture
   writers (`_write_required_tiles_and_mapgen()`, `_write_minimal_bundle()`) gained a minimal
   two-faction `factions.json` so their existing, unrelated assertions keep exercising the error
-  they were written to prove rather than an incidental `missing_file` for `factions`.
-  `test_actor_table.gd` is outside this task's listed owned paths, but leaving its fixtures
-  broken would regress nine previously-passing sub-tests to a different failure than the one
-  each asserts on; the fix is a single fixture-data addition, no assertion or production logic
-  touched.
+  they were written to prove rather than an incidental `missing_file` for `factions`. Without
+  it, nine previously-passing sub-tests in `test_actor_table.gd` would fail on a different error
+  than the one each asserts on; the change is fixture data only, with no assertion or production
+  logic touched.
 - `test_factions.gd` proves: the real bundle declares exactly the five faction ids with only
   `colony`'s `may_be_ordered` true; `Relations.relation()` reads the asymmetric
   `colony`/`wildlife` pair correctly in both directions and returns `"friendly"` for a
@@ -120,10 +120,10 @@ for three consultation points a later task (t2-t5 of #276) wires up:
   rather than crashing.
 - Adding a sixth faction, or changing a relation/rule, is a content-only change — no core code to
   hand-edit, matching every other `ContentRegistry` collection kind's payoff.
-- `combat`/`wild`/`visitor` actor components and every job-giver are entirely unaffected: nothing
-  reads `Relations` yet, and `state_hash()`/the save format are untouched.
+- `combat`/`wild`/`visitor` actor components and every job-giver are unaffected by the original
+  decision: nothing reads `Relations` yet, and `state_hash()`/the save format are untouched.
 
-## Amendment (issue #287)
+## Amendment 1: faction ids on placed objects and items
 
 `game/scripts/core/world_state.gd`'s `docs/architecture/core-budgets.json` cap rose from 1627
 to 1689: `place_object`/chop/forage now default a `faction_id` on every placed object and
@@ -133,7 +133,7 @@ rather than a nested value inside `_objects`/`_ground_berries`/`_items`, since `
 and a new `set_faction` debug command mutates an actor's existing `factionId` field via this
 ADR's `factions` registry lookup.
 
-## Amendment (issue #289)
+## Amendment 2: faction-aware door passability
 
 `game/scripts/core/world_state.gd`'s `docs/architecture/core-budgets.json` cap rose from 1689
 to 1707: `passability(x, y, faction_id: String = "colony")` gained the parameter, plus a
@@ -141,10 +141,10 @@ to 1707: `passability(x, y, faction_id: String = "colony")` gained the parameter
 per F3's "Passability" consultation point named above. Every pre-existing single-argument call
 site is unchanged.
 
-## Amendment (issue #290)
+## Amendment 3: player-order eligibility and reservation gates
 
 `game/scripts/core/world_state.gd`'s `docs/architecture/core-budgets.json` cap rose from 1707
-to 1774, then (round 1 revision) to 1802; `game/scripts/core/scheduling/global_assignment.gd`'s
+to 1774, then to 1802; `game/scripts/core/scheduling/global_assignment.gd`'s
 cap rose from 511 to 586. An optional `assignee` on `dig`/`chop`/`forage` commands (carried
 through `GlobalAssignment.submit()`'s existing `restrict_to`) is rejected `not_ordered_by_player`
 when the named actor's faction's `may_be_ordered` is not true (`WorldState._apply_job_command()`).
@@ -177,10 +177,10 @@ erased — without it, the restriction was silently dropped the instant a target
 unreachable, since `need_giver.gd`'s own `colonist_for_job()` (the only prior source) is empty for
 a plain player order.
 
-## Amendment (issue #290, round 2)
+## Amendment 4: refusal-handling fixes
 
 `game/scripts/core/world_state.gd`'s `docs/architecture/core-budgets.json` cap rose from 1802
-to 1819 (`global_assignment.gd`'s own 586 cap is unchanged). Three review findings closed:
+to 1819 (`global_assignment.gd`'s own 586 cap is unchanged) to fix three defects:
 
 - A refused *resumption* of a suspended `haul` job could strand its colonist's carried item
   forever: `_resolve_refused_reservations()` now looks the colonist up by the `worker` id
@@ -198,7 +198,7 @@ to 1819 (`global_assignment.gd`'s own 586 cap is unchanged). Three review findin
   could previously reach activation on a since-revoked `may_be_ordered` as long as
   `may_reserve_colony_items` still passed, since the two rules are independent.
 
-## Amendment (issue #290, round 3)
+## Amendment 5: forced drop of a stranded carried item
 
 `game/scripts/core/world_state.gd`'s `docs/architecture/core-budgets.json` cap rose from 1819
 to 1842: `_drop_carried_item_from()` now checks `ToilExecutor.place()`'s result and falls back to
@@ -208,29 +208,28 @@ a new `_force_drop_carried_item()` (an unconditional `_place_ground_item()` writ
 the exact tick a refusal terminates its haul, so the carried item is never stranded in
 `carrying` instead of returned to the ground.
 
-## Amendment (issue #294)
+## Amendment 6: autonomous activation for incident actors
 
 F5 "Incidents" needs a non-colony actor (a spawned wolf/trader) to run its own walk-then-wait job
 through the shared job/toil engine, submitted by `IncidentScheduler`/`WorldState` itself, never by
 a player order. `_may_be_ordered` exists specifically to stop a *player order*
 (`WorldState._apply_job_command()`'s assignee check) from naming a non-colony assignee; it was
-never meant to veto that same actor's own autonomous submission of its own job, but today it also
-blocks `GlobalAssignment.tick()`'s ordinary per-worker proposal scan from ever selecting a
-non-colony actor for *any* job, which is what made the pre-amendment implementation force-activate
-outside `tick()` and break the reservation gate and the queue clock in the process (see this ADR's
-`docs/architecture/core-budgets.json` cap change below).
+never meant to veto that same actor's own autonomous submission of its own job, but it also
+blocked `GlobalAssignment.tick()`'s ordinary per-worker proposal scan from ever selecting a
+non-colony actor for *any* job. An earlier implementation worked around this by force-activating
+outside `tick()`, which broke the reservation gate and the queue clock.
 
 `global_assignment.gd` gains a narrow, additive activation path instead:
 
 - `submit()` gains an `autonomous: bool = false` parameter. When true, `"autonomous": true` is
   stored on the waiting entry (and on the wire, `queueEntry.autonomous`); when false the key is
-  absent, so every ordinary entry, snapshot and save keeps its exact pre-#294 shape (the
+  absent, so every ordinary entry, snapshot and save keeps its exact pre-incident shape (the
   incidents-disabled hash baseline is unchanged). `submit_autonomous(target, priority,
   tick_number, kind, worker)` is a thin wrapper that also sets `restrict_to = worker`, so an
   autonomous entry can only ever activate for the one worker that submitted it.
 - The "ready" selection loop's authoritative gate (the one point every proposal reaches right
-  before `advance_selection()` ever acquires a reservation, "both gates are revalidated here" per
-  the issue #290 round 2 amendment above) skips **only** `_worker_may_be_ordered()` for an entry
+  before `advance_selection()` ever acquires a reservation, where both gates are revalidated per
+  Amendment 4) skips only `_worker_may_be_ordered()` for an entry
   flagged `autonomous`. The reservation gate is never skipped; it is consulted in a target-aware
   form instead. `set_autonomous_reservation_gate(Callable(worker_id, target) -> bool)` wires the
   gate an autonomous entry is checked against (falling back to `_may_reserve` itself when unset,
@@ -265,17 +264,16 @@ outside `tick()` and break the reservation gate and the queue clock in the proce
   per tick, so submitting several autonomous jobs inside one `WorldState` tick (a multi-actor
   incident, or a debug command) cannot tick `JobQueue`'s or `GlobalAssignment`'s clock more than
   once. A proposed actor is *staged* until that activation: it is offered to `tick()` as a worker
-  but enters the world only once its job is active (see ADR 018 and
+  but enters the world only once its job is active (see ADR 017 and
   `docs/architecture/orders-and-movement.md`, "Incident jobs").
 
 `docs/architecture/core-budgets.json`'s cap for `game/scripts/core/scheduling/global_assignment.gd`
-rises accordingly (ADR 018 records the exact number); `job_queue.gd` is untouched, per the
-task's own scope.
+rises accordingly (ADR 017 records the exact number); `job_queue.gd` is untouched.
 
 ## Alternatives considered
 
 - **Require every faction's relation matrix to be symmetric, storing only the upper triangle.**
-  Rejected: the objective and F3's own text explicitly call for asymmetric relations (a predator
+  Rejected: F3's own text explicitly calls for asymmetric relations (a predator
   is hostile to prey without the reverse necessarily holding); storing a full, explicit row per
   faction keeps `relation()` a simple lookup with no "which half is canonical" ambiguity.
 - **Give `Relations` a fallback of `"hostile"` (fail closed) instead of `"neutral"` for a faction
@@ -284,7 +282,7 @@ task's own scope.
   fail-closed behavior for an impossible case would silently mask a real bug (a caller passing a
   bogus id) as ordinary game behavior instead of surfacing it.
 - **Enforce the `faction_id`-on-actors check by requiring the field on every actor definition
-  now.** Rejected: `content/actors.json`/`content/schemas/actors.schema.json` are out of this
-  task's owned paths, and no consumer reads an actor definition's faction membership yet; making
-  the field optional keeps the real bundle valid today while the check is already correct and
-  tested (via a fixture with its own schema copy) for when a later task adds it for real.
+  now.** Rejected: no consumer reads an actor definition's faction membership yet, so changing
+  `content/actors.json`/`content/schemas/actors.schema.json` is unnecessary; making the field
+  optional keeps the real bundle valid today while the check is already correct and tested (via a
+  fixture with its own schema copy) for when the field is added for real.

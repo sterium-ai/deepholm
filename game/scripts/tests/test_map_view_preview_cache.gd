@@ -1,10 +1,10 @@
 extends SceneTree
 
-## Issue #346: map_view.gd's refresh() must not re-run preview_validity (the expensive per-tile
+## map_view.gd's refresh() must not re-run preview_validity (the expensive per-tile
 ## dry run injected by boot.gd) every tick when the hover/drag rectangle and the world's tick
 ## both stayed the same -- refresh() is called once per tick unconditionally
 ## (boot.gd::_refresh()), and calling preview_validity from it on every one of those ticks is
-## what froze pan/zoom while a tool was selected during Play (#345), even after preview() itself
+## what froze pan/zoom while a tool was selected during Play, even after preview() itself
 ## stopped round-tripping through StateCodec. Proves _update_preview()'s own cache: a hover that
 ## does not move across 20 refresh() calls at the same tick invokes preview_validity exactly
 ## once, and again only once the tick advances or the hover moves.
@@ -50,7 +50,7 @@ func _init() -> void:
 	_expect(_preview_validity_calls == 3,
 		"refresh() must invoke preview_validity again once the hover moves, got %d" % _preview_validity_calls)
 
-	# Round-2 review (issue #278/#303): _current_preview_key() includes
+	# _current_preview_key() includes
 	# world.get_tick(), which a successful build command does not advance --
 	# while paused, the hovered site's key is otherwise unchanged across the
 	# click, so without _commit_build() clearing the cache key itself,

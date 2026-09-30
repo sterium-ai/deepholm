@@ -1,12 +1,14 @@
 # ADR 012: Actors and components — an accessor layer, not a new colonist shape
 
+> **In short:** Colonists, wolves and traders are all described as "actors" built from shared parts (movement, health, needs and so on), defined in a data file, without changing how existing colonists are stored.
+
 - **Status:** accepted
 - **Date:** 2026-09-20
 - **Scope:** content (`game/content/actors.json`, `game/content/schemas/actors.schema.json`),
   content loading (`game/scripts/core/content/content_registry.gd`), the actor table
   (`game/scripts/core/actors/actor_table.gd`, `game/scripts/core/actors/components/`),
   colonist spawning (`game/scripts/core/world_state.gd`)
-- **Implements:** F2 in `docs/architecture/foundation-for-breadth.md`; issue #281 (task t1 of #266).
+- **Implements:** F2 in [`foundation-for-breadth.md`](../architecture/foundation-for-breadth.md).
 
 ## Decision
 
@@ -46,13 +48,13 @@ the content bundle; `validate_component(name, tunables)` dispatches to the named
 (`components/{mover,worker,needs,health,inventory,combat,wild,visitor}.gd`) is a small class
 with a `validate(tunables)` method; only `needs` has `apply_tick()` for its per-tick behaviour
 (need decay), not yet wired into `WorldState`'s own tick loop, which still drives need decay
-itself. `mover`, like `combat`/`wild`/`visitor`, is data plus `validate()` only in this task:
+itself. `mover`, like `combat`/`wild`/`visitor`, is data plus `validate()` only:
 real movement stays owned by `ToilExecutor`/`GlobalAssignment` against the actual route shape
 (`job_id`/`path`/`step`/`move_ticks_remaining`), and `mover` must not add a second, incompatible
 movement algorithm against an invented `{x, y}` target shape.
 
 **Components are an accessor layer over existing fields, not a literal nested key.** This is
-the scope-limiting decision the task set: `ActorTable.spawn("colonist", ...)` must produce
+the scope-limiting decision: `ActorTable.spawn("colonist", ...)` must produce
 exactly the same `Array[Dictionary]` shape `WorldState._spawn_colonists()` has always produced
 — `id, kind, x, y, needs, labourTable, route, work, carrying, held_tool` — because
 `state_hash()` hashes `JSON.stringify(_colonists)`, which is sensitive to key presence and
@@ -65,7 +67,7 @@ shared `"route"` field the same way. Every other component (`needs`, `health`, `
 `combat`, `wild`, `visitor`) reads its own like-named key — real for a freshly spawned wolf or
 trader (which have no legacy shape to preserve), inert for a colonist today (whose dict carries
 no `"health"`/`"inventory"` key yet; `get_component` simply returns `null` for those on a live
-colonist until a later task gives them real per-instance state).
+colonist until later work gives them real per-instance state).
 
 `world_state.gd`'s `_spawn_colonists()` now calls `ActorTable.spawn("colonist", x, y, _content,
 id)` instead of building the Dictionary from local literals, reading the labour table and full
@@ -73,8 +75,8 @@ needs from `_content` (via `ActorWorker.default_labour_table()` / `ActorNeeds.bu
 rather than `_default_labour_table()`/`_full_needs()` (both still present, since
 `test_save_migration.gd`/`test_labour_table.gd`/etc. call them directly on a `WorldState`
 instance). `get_colonists()` is now a filter — every actor in `_colonists` with a `worker`
-component — rather than an unconditional copy; since `_colonists` holds only colonists today
-(see Non-goals), its output is unchanged.
+component — rather than an unconditional copy; since `_colonists` holds only colonists today,
+its output is unchanged.
 
 ## Consequences
 
@@ -88,15 +90,15 @@ component — rather than an unconditional copy; since `_colonists` holds only c
   side each fails construction with the correctly typed error; and that the schema's
   `components` enum matches `ActorTable.COMPONENT_NAMES`.
 - No live colonist gained a new field, and no save/wire shape changed: `state_hash()` and every
-  existing headless test's fixture-construction code are unaffected by this task.
-- A future task (t3) can give `health`/`inventory`/`combat` real per-instance state and behaviour
+  existing headless test's fixture-construction code are unaffected by this change.
+- Later work can give `health`/`inventory`/`combat` real per-instance state and behaviour
   by extending `_spawn_generic_actor()`'s branch and each component's `apply_tick()`, without
   touching the colonist accessor path this ADR fixes in place.
 
 ## Alternatives considered
 
 - **Add `worker`/`health`/`inventory` as new nested keys on every colonist, migrating the save
-  format now.** Rejected: out of scope for this task (task t4) and unnecessary — no consumer
+  format now.** Rejected: out of scope here and unnecessary — no consumer
   needs a live colonist's health or inventory yet, and forcing the migration early would touch
   `state_hash()`, `StateCodec`, and every save-round-trip test for no immediate payoff.
 - **Give `ActorTable` instance state (construct it once with a `ContentRegistry`, drop the
@@ -106,7 +108,7 @@ component — rather than an unconditional copy; since `_colonists` holds only c
   class is simplest to construct and test from a headless script with no setup, and keeps
   `ActorTable` scene-independent by construction rather than by discipline.
 - **Enforce the closed component vocabulary only through `_check_references()`, with no `enum`
-  in the schema at all.** Rejected on review: the schema is also the contract a standard,
+  in the schema at all.** Rejected: the schema is also the contract a standard,
   spec-conformant JSON Schema tool reads, and without an `enum` such a tool would accept any
   non-empty string as a component name. The `enum` is now declared for that reason, but stays
   inert in the registry's own minimal validator (`_validate_node` does not implement `enum`),
@@ -122,7 +124,7 @@ component — rather than an unconditional copy; since `_colonists` holds only c
   fails construction instead, matching how a missing required field already fails the schema
   check rather than defaulting.
 
-## Amendment (issue #283): health, needs, inventory and worker gain real per-instance behaviour
+## Amendment: health, needs, inventory and worker gain real per-instance behaviour
 
 `health`, `needs`, `inventory` and `worker` stop being data-plus-`validate()`-only components
 (the "not yet wired" state the Decision section above describes) and become the single place
@@ -139,7 +141,7 @@ longer duplicate a component's field CRUD inline.
   `ActorHealth.clamp_bounds()` keeps `hp` in `[0, maxHp]` and `maxHp` floored at 1 under any
   sequence of edits, and once `dead` becomes true (hp reaches 0) it stays true even if
   something later sets `hp` positive again — death is permanent. `ActorHealth.apply_tick()`
-  re-clamps every tick; no code path deals damage yet (this task's own Non-goals), so a
+  re-clamps every tick; no code path deals damage yet (out of scope for this amendment), so a
   colonist's `hp` starts at `maxHp` and stays there today, but the invariant holds for whenever
   combat/hazard damage is added later without touching this component again.
 - **Component ownership.** `ActorNeeds.apply_tick()` (need decay, called from `world_state.gd`'s
@@ -160,8 +162,9 @@ longer duplicate a component's field CRUD inline.
   `health`, so a colonist's `hp`/`dead` divergence is caught by every existing relative hash
   comparison (two seeded runs, save/load round-trips). This is deliberately a runtime-only
   change: the save/wire format and `docs/architecture/contracts/game-state.schema.json` are
-  untouched here — task t4 (#274's schema/migration follow-up) owns adding `health` to the
-  persisted colonist shape. Until t4 lands, a restored save's colonist is missing `"health"`,
-  which `_ensure_health()`'s backfill (mirroring `_ensure_held_tool()`'s existing pattern for
-  a pre-task-#213 save) fills with `ActorHealth.build_full()`'s default rather than treating it
-  as invalid.
+  untouched here — a follow-up schema/migration change (schemaVersion 18, see
+  [`save-system.md`](../architecture/save-system.md)) adds `health` to the persisted colonist
+  shape. Before that change, a restored save's colonist is missing `"health"`, which
+  `_ensure_health()`'s backfill (mirroring `_ensure_held_tool()`'s existing pattern for a save
+  that predates held tools) fills with `ActorHealth.build_full()`'s default rather than treating
+  it as invalid.

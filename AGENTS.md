@@ -1,5 +1,10 @@
 # How AI agents contribute to this repo
 
+> **In short:** The rules every contributor, human or AI, follows here: keep the
+> game rules separate from the display, write the design down before the code,
+> have a different agent review each change, and let the automated tests decide
+> whether a change is ready.
+
 Deepholm is built by AI coding agents (for example Claude Code, Codex and
 GitHub Copilot) under the direction of a human integrator. This file is the
 repository-wide set of operating rules for every agent and human

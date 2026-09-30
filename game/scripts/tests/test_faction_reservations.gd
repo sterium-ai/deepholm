@@ -1,6 +1,6 @@
 extends SceneTree
 
-## F3 (issue #290): before any job's reserve step acquires a tile:/item:/cell:
+## F3: before any job's reserve step acquires a tile:/item:/cell:
 ## key on behalf of an assigned actor for a colony-owned target,
 ## WorldState._enforce_faction_reservations() consults the assignee's
 ## faction's rules.may_reserve_colony_items and refuses the reservation,
@@ -9,8 +9,8 @@ extends SceneTree
 ## Exercised by submitting directly through WorldState._scheduler.submit()'s
 ## restrict_to, bypassing _apply_job_command's own may_be_ordered gate at the
 ## command layer entirely (test_order_input.gd already covers that gate) --
-## the Non-goals-mandated "directly constructing or set_faction-ing a test
-## actor" route, never a live-scenario non-colony actor.
+## a directly constructed or set_faction-ed test actor, never a
+## live-scenario non-colony actor.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
@@ -59,8 +59,8 @@ func _set_faction(world: WorldStateType, command_id: String, target: String, fac
 		"type": "set_faction", "payload": {"target": target, "faction_id": faction_id},
 	})
 
-## Searches in expanding Chebyshev rings from colonist_0's own tile (issue
-## #300: the spawn clearing is chosen dynamically -- docs/decisions/020 -- so
+## Searches in expanding Chebyshev rings from colonist_0's own tile (the
+## spawn clearing is chosen dynamically -- ADR 020 -- so
 ## a tile found scanning from the map origin could be genuinely unreachable,
 ## across the river from wherever this seed's colonists actually spawned,
 ## failing the job "blocked_target_unreachable" instead of the
@@ -107,9 +107,9 @@ func _check_invariants(world: WorldStateType, label: String) -> void:
 		"%s: ReservationInvariants.check() must report no orphaned_reservations after a refused attempt" % label)
 
 ## Every reservation_acquired event ever recorded for job_id -- proves the
-## reserve-step gate refuses BEFORE acquisition (never a transient acquire
+## reserve-step gate refuses before acquisition (never a transient acquire
 ## followed by a release): a refused job must show zero of these, and a job
-## resumed after a disallowed faction change must show no MORE than its
+## resumed after a disallowed faction change must show no more than its
 ## original activation's own single event.
 func _reservation_acquired_events(world: WorldStateType, job_id: String) -> Array:
 	var matches: Array = []
@@ -154,7 +154,7 @@ func _check_allies_follow_their_own_rule() -> void:
 		"an allies-faction actor's job must never acquire a reservation, not even transiently")
 	_check_invariants(world, "allies")
 
-## F3 (issue #290): a haul job's own item:/cell: reservation pair is gated by
+## F3: a haul job's own item:/cell: reservation pair is gated by
 ## the exact same may_reserve_colony_items check as dig/chop/forage's tile:
 ## key -- HaulGiver itself never assigns an actor (see haul_giver.gd), so this
 ## submits directly through restrict_to + attach_item, the same seam
@@ -190,7 +190,7 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 		"a refused haul job must never acquire its item: or cell: reservation, not even transiently")
 	_check_invariants(world, "haul_item_cell")
 
-## F3 (issue #290, round 1 revision): resume_assignment()'s own pre-reactivate
+## F3: resume_assignment()'s own pre-reactivate
 ## check -- not just tick()'s pre-activation one -- must refuse a job whose
 ## actor's faction changed while it was suspended (colonist-ai.md 3.6's
 ## critical-need interrupt). Drives suspend_assignment()/resume_assignment()
@@ -234,7 +234,7 @@ func _check_resume_after_faction_change_refuses_reacquisition() -> void:
 		"resume_assignment must never reacquire a reservation for a now-disallowed faction (only the original activation's own event may exist)")
 	_check_invariants(world, "resume_after_faction_change")
 
-## F3 (issue #290, round 1 revision): fixes the gap the reviewer named for
+## F3: closes the order-eligibility gap for
 ## haul specifically -- HaulGiver has no actor pool to filter, so an
 ## order-ineligible worker's own scan must never even propose its ambient
 ## (unrestricted) haul job, leaving it available to an eligible colonist
@@ -252,7 +252,7 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_elig", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	# Issue #390 (ADR 031): "traders" rather than "raiders" -- both share the
+	# ADR 033: "traders" rather than "raiders" -- both share the
 	# same may_be_ordered=false/may_reserve_colony_items=false rules this check
 	# actually exercises, but traders' own relation to colony is "neutral"
 	# (both directions), never "hostile", so colonist_1 is never itself given
@@ -367,7 +367,7 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 			"the assignee must take and complete the replacement job within the declared tick bound (%d)" % ASSIGNEE_PRESERVED_TICK_BOUND)
 	_check_invariants(world, "assignee_preserved")
 
-## F3 (issue #290, round 2): a colonist mid-carry (picked up, not yet placed)
+## F3: a colonist mid-carry (picked up, not yet placed)
 ## whose haul job is interrupted by a critical need, then refused on resume
 ## after a faction change, must not strand its cargo: WorldState._resolve_
 ## refused_reservations() must return the carried item to the ground the same
@@ -419,7 +419,7 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	_expect(ground_count == 1, "the carried item must return to the ground exactly once")
 	_check_invariants(world, "refused_resumption_carried_item")
 
-## F3 (issue #290, round 3): the check above only ever exercises the always-
+## F3: the check above only ever exercises the always-
 ## free case for the carrier's own tile; this one occupies that exact tile
 ## with a second colonist right before the refused resumption, forcing
 ## ToilExecutor.place()'s ordinary re-validation to refuse so
@@ -476,10 +476,10 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	_expect(ground_count == 1, "the carried item must be conserved (returned to the ground exactly once) even when the drop tile is blocked")
 	_check_invariants(world, "refused_resumption_carried_item_blocked")
 
-## F3 (issue #290, round 3): mirrors _check_order_eligibility_revalidated_
+## F3: mirrors _check_order_eligibility_revalidated_
 ## independent_of_reservation_gate() below but swapped -- may_be_ordered true,
 ## may_reserve_colony_items alone false -- covering the three reserve-step
-## call sites the round 3 review named as unexercised: initial tile
+## call sites that gate must protect: initial tile
 ## reservation (here), haul item/cell reservation, and suspended resumption
 ## (the two functions below). Without _worker_may_reserve() actually gating
 ## activation, each of these three would activate and eventually complete
@@ -581,7 +581,7 @@ func _check_reservation_gate_refuses_suspended_resumption() -> void:
 		"resume_assignment must never reacquire a reservation for a now reservation-ineligible actor (only the original activation's own event may exist)")
 	_check_invariants(world, "reservation_gate_independent_of_order_resume")
 
-## F3 (issue #290, round 2): a refusal produced entirely OUTSIDE tick() -- here,
+## F3: a refusal produced entirely outside tick() -- here,
 ## a cancel_job command resolving a need whose resume_interrupted_job() call
 ## gets refused -- must already be terminally resolved by the time apply()
 ## itself returns, not left for the next tick() to discover. No manual
@@ -633,13 +633,13 @@ func _check_command_boundary_drains_refusal_without_manual_call() -> void:
 	_expect(restored.state_hash() == world.state_hash(),
 		"a refusal already resolved before the command returned must leave no divergence across a save/restore round trip")
 
-## F3 (issue #290, round 2): may_be_ordered and may_reserve_colony_items are
+## F3: may_be_ordered and may_reserve_colony_items are
 ## independent rules -- content/factions.json has no faction combining
 ## may_be_ordered=false with may_reserve_colony_items=true today, so this
 ## drives GlobalAssignment's two gates directly through set_order_eligibility()/
-## set_reservation_gate() (never editing factions.json, which this task does
-## not own) to prove a restrict_to'd order and a resume_assignment() call are
-## each refused on may_be_ordered ALONE, closing the bypass the reviewer named:
+## set_reservation_gate() (never editing factions.json) to prove a
+## restrict_to'd order and a resume_assignment() call are each refused on
+## may_be_ordered alone, closing a bypass:
 ## an early scan-time filter is not the same as revalidating at the reserve step.
 func _check_order_eligibility_revalidated_independent_of_reservation_gate() -> void:
 	if _failed:

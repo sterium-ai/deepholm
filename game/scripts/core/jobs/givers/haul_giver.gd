@@ -1,7 +1,7 @@
 class_name HaulGiver
 extends RefCounted
 
-## Job-giver for haul (colonist-ai.md 3.3/3.4, issue #189): decides WHEN a
+## Job-giver for haul (colonist-ai.md 3.3/3.4): decides when a
 ## haul job should exist -- one per unreserved loose item, every tick, no
 ## player command needed -- and where its stockpile destination is. Haul
 ## itself runs entirely through the toil executor once submitted (AGENTS.md

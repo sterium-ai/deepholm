@@ -23,6 +23,12 @@
   "controls.tool_mine": "Mine",
   "controls.toggle_art": "Toggle Art",
 
+  "incident.wildlife_wander": "Wildlife wanders in",
+  "incident.trader_visit": "Trader visit",
+  "incident.migrant_joins": "Migrant arrives",
+  "incident.raider_incursion": "Raider attack",
+  "incident.wolf_attack": "Wolf attack",
+
   "work_table.colonist_header": "Colonist",
   "work_table.labour.mine": "Mine",
   "work_table.labour.chop": "Chop",

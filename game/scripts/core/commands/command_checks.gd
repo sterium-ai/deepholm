@@ -2,7 +2,7 @@ class_name CommandChecks
 extends RefCounted
 
 ## Read-only pre-mutation rule set for WorldState.apply()'s job/place-object/remove-object/
-## zone command handlers, extracted (issue #346) so WorldState.preview() can run the exact
+## zone command handlers, extracted so WorldState.preview() can run the exact
 ## same rules a hover/drag preview or Play-mode cursor needs without mutating state or
 ## round-tripping the whole world through StateCodec.encode()/decode() (~390ms on a 256x256
 ## map). Every check function below mirrors its WorldState._apply_*_command() counterpart's
@@ -13,8 +13,8 @@ extends RefCounted
 ## game/scripts/core/jobs/job_queue.gd) rather than re-implementing them, so the rule stays in
 ## exactly one place (AGENTS.md "one work engine" applies here too): check_job_submission() is
 ## consulted by preview()'s check() dispatcher only -- WorldState._apply_job_command() always
-## calls through to JobQueue.submit_dig() itself for a target-valid job command, exactly as it
-## did before this task, so an unsupported priority still produces JobQueue's own job_rejected
+## calls through to JobQueue.submit_dig() itself for a target-valid job command, so an
+## unsupported priority still produces JobQueue's own job_rejected
 ## event and advances its sequence counter instead of being silently absorbed by an early
 ## WorldState-level rejection.
 ##
@@ -93,7 +93,7 @@ static func check_target_job_command(world: WorldState, command: Dictionary) -> 
 		if (world.get_tile(target.x, target.y) != expected_tile
 				or (type == "dig" and not bool(world.passability(target.x, target.y)["passable"]))):
 			return {"reason": "invalid_target", "message": target_message}
-	# assignee (F3, issue #290), dig/chop/forage/mine only.
+	# assignee (F3), dig/chop/forage/mine only.
 	if type in ["dig", "chop", "forage", "mine"]:
 		var assignee := String(payload.get("assignee", ""))
 		if not assignee.is_empty():
@@ -106,7 +106,7 @@ static func check_target_job_command(world: WorldState, command: Dictionary) -> 
 	return {}
 
 ## Predicts JobQueue.submit_dig()'s own priority/target rejection, for preview()'s check()
-## dispatcher only (issue #346 round 2) -- see this file's module doc comment for why apply()
+## dispatcher only -- see this file's module doc comment for why apply()
 ## deliberately does not consult this. check_target_job_command() above already proved the
 ## target/tile-kind/assignee rules pass by the time the dispatcher calls this.
 static func check_job_submission(command: Dictionary) -> Dictionary:
@@ -123,8 +123,8 @@ static func check_job_submission(command: Dictionary) -> Dictionary:
 ## same pure predicate _finish() itself consults, so the rule lives in exactly one place. Never
 ## JobQueue._reject() itself, which mutates (appends a job_rejected event and advances JobQueue's
 ## own sequence counter) as a side effect preview() must never cause.
-## WorldState._apply_job_command()'s own terminal branch does NOT call this: it keeps its
-## pre-#346 shape (payload check only, then _finish_job()) so a rejected terminal command still
+## WorldState._apply_job_command()'s own terminal branch does not call this: it keeps its
+## original shape (payload check only, then _finish_job()) so a rejected terminal command still
 ## produces the exact job_rejected + command_rejected event pair apply() has always emitted,
 ## through JobQueue._finish()'s own check_terminal() + _reject() call, not this one.
 static func check_terminal_job_command(world: WorldState, command: Dictionary) -> Dictionary:
@@ -137,16 +137,15 @@ static func check_terminal_job_command(world: WorldState, command: Dictionary) -
 		return {}
 	return {"reason": terminal_check["reason"], "message": terminal_check["remedy"]}
 
-## place_object target rule (issue #405 round 3): delegates to
+## place_object target rule: delegates to
 ## WorldState._check_place_object_command(), the one footprint/orientation-aware
 ## implementation _apply_place_object_command() and preview() both already run
-## (world_state.gd, around _check_place_object_command()'s own doc comment) --
-## this module's own module doc comment already promises "the rule stays in
-## exactly one place"; duplicating a second, single-tile-only copy here would
-## have broken that promise and silently gone stale the moment footprint/
-## orientation were added, exactly as round-2 review found. check() above still
-## dispatches "place_object" here so a direct CommandChecks.check() caller gets
-## the real, current rule too, not the pre-#405 single-tile shape.
+## (world_state.gd, around _check_place_object_command()'s own doc comment),
+## so the rule stays in exactly one place, as the module doc comment
+## promises. A second, single-tile-only copy here would silently go stale
+## whenever footprint/orientation rules change. check() above still
+## dispatches "place_object" here so a direct CommandChecks.check() caller
+## gets the real, current rule too, not an older single-tile shape.
 static func check_place_object_command(world: WorldState, command: Dictionary) -> Dictionary:
 	return world._check_place_object_command(command["payload"])
 

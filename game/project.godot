@@ -1,4 +1,4 @@
-; Minimal Godot 4 project for the Deepholm.
+; Godot 4 project for Deepholm.
 config_version=5
 
 [application]

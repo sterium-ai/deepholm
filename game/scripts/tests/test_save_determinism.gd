@@ -57,7 +57,7 @@ func _expect(condition: bool, message: String) -> void:
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
 	world._tiles.fill(WorldStateType.TILE_ROCK)
-	# issue #300: clear any generator-placed berry_bush (docs/decisions/020)
+	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on this fixture's own
 	# single-tile-wide corridor.
 	world._objects.clear()
@@ -175,8 +175,8 @@ func _assert_pre_save_state(world: WorldStateType, ids: Dictionary, seed_value: 
 
 ## Structural checks matching docs/architecture/contracts/game-state.schema.json
 ## (schemaVersion 15): required top-level keys, the content-declared "needs"
-## object (issue #201), the honestly-empty inventory, and the honestly-empty
-## groundBerries array (issue #202). Not a full JSON Schema validator; the
+## object, the empty inventory, and the empty
+## groundBerries array. Not a full JSON Schema validator; the
 ## GDScript producer/consumer pair (StateCodec) is the thing under test.
 func _assert_matches_schema(state: Dictionary, seed_value: int) -> void:
 	_expect(state.get("schemaVersion") == StateCodecType.SCHEMA_VERSION,
@@ -263,7 +263,7 @@ func _check_seed(seed_value: int) -> void:
 func _chop_save_load_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
 	world._tiles.fill(WorldStateType.TILE_ROCK)
-	# issue #300: see _fresh_world()'s own doc comment above.
+	# See _fresh_world()'s own doc comment above.
 	world._objects.clear()
 	world._object_factions.clear()
 	for x in WorldStateType.MAP_WIDTH:
@@ -277,7 +277,7 @@ func _chop_save_load_world(seed_value: int) -> WorldStateType:
 	world.set_tool_item_held(world.spawn_ground_tool_item("axe", 0, 0), "colonist_0")
 	return world
 
-## Regression for the round 1 review finding: saving mid-evaluation of a chop
+## Regression: saving mid-evaluation of a chop
 ## candidate must not lose information GlobalAssignment needs to resume
 ## identically. Submitting NEAR and FAR together gives colonist_0's single
 ## pending batch both shapes at once by SAVE_TICK: NEAR's route resolves into
@@ -376,7 +376,7 @@ func _check_pending_chop_save_load() -> void:
 		"advancing the source and its pending-chop restore identically must keep matching state_hash()")
 
 ## Proves a world holding at least one player-drawn stockpile zone
-## (issue #189) round-trips through to_save_state()/from_save_state() like
+## round-trips through to_save_state()/from_save_state() like
 ## every other piece of state: state_hash() must match immediately after
 ## restore, and the restored zone list/cell reservation lookup must match too.
 func _check_zone_save_load() -> void:
@@ -400,7 +400,7 @@ func _check_zone_save_load() -> void:
 	_expect(not restored.get_zone(zone_id).is_empty(),
 		"a restored world must be able to look the saved zone up by id")
 
-	# Regression for the round 1 review finding: state_hash() must cover
+	# Regression: state_hash() must cover
 	# _next_zone_id, not just the zone dictionary, so a restored world keeps
 	# generating the same future zone ids as an uninterrupted run would.
 	var source_next: Dictionary = world.apply({
@@ -429,7 +429,7 @@ func _haul_colonist(world: WorldStateType) -> Dictionary:
 	return world.get_colonists()[0]
 
 ## Proves a haul job's save/load round trip matches an uninterrupted run at
-## two distinct in-flight moments (issue #189/#194): mid-walk to the item
+## two distinct in-flight moments: mid-walk to the item
 ## (leg one, not yet carrying) and mid-carry (leg two, carrying, walking
 ## toward the reserved cell) -- both exercised the same way every other
 ## in-flight state is here, by comparing state_hash() immediately after
@@ -507,7 +507,7 @@ func _job_status(world: WorldStateType, job_id: String) -> String:
 			return String(job["status"])
 	return ""
 
-## Regression for the round 1 review finding (#353): a save/load round trip
+## Regression: a save/load round trip
 ## with an active "mine" job and an existing ground "stone" item present must
 ## match the source's hash immediately after restore, then keep matching
 ## while both copies are driven identically through mine job completion (rock

@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Closing proof for #278: construct a bedroom through the player-facing build
+## End-to-end bedroom proof: construct a bedroom through the player-facing build
 ## command and shared haul/work toils, then compare sleep with an open bed.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -109,11 +109,11 @@ func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 			world._need_definitions[kind]["rate_per_day"] = 0
 	return _run_sleep(world)
 
-## issue #406: `build` no longer names a single job to track through
+## `build` no longer names a single job to track through
 ## "completed" -- it creates a persistent construction site instead
 ## (ConstructionGiver submits its own fetch/work jobs on its own schedule).
-## Completion is instead observed the same way get_construction_sites()'s own
-## acceptance criteria do: the site record disappears and the declared object
+## Completion is instead observed through get_construction_sites(): the
+## site record disappears and the declared object
 ## occupies the tile.
 func _complete_build(world: WorldStateType, kind: String, site: Vector2i) -> bool:
 	var result := _command(world, "build_%s_%d_%d" % [kind, site.x, site.y], "build",

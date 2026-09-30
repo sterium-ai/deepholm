@@ -1,5 +1,9 @@
 # Agent ownership rules
 
+> **In short:** Several people and coding agents work on the project at once.
+> These rules say who is responsible for which part and how disagreements are
+> settled.
+
 These rules apply to human contributors and coding agents working in parallel.
 
 ## Ownership map

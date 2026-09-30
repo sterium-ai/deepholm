@@ -1,6 +1,6 @@
 extends SceneTree
 
-## WorldState.preview() (issue #345/#346): a read-only dry run of apply()'s own rules, backed by
+## WorldState.preview(): a read-only dry run of apply()'s own rules, backed by
 ## game/scripts/core/commands/command_checks.gd's CommandChecks -- the same check apply()'s
 ## own handlers consult before mutating, so preview() can never disagree with apply(). Proves,
 ## per command type (dig/chop/forage/till/sow, place_object, remove_object, zone_add/
@@ -65,8 +65,8 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 	return world
 
 ## Core assertion shared by every case below: preview() must not move state_hash() or append any
-## event/advance _event_sequence -- even repeated (round-1 review, #346: a rejected preview must
-## never mutate the live event log) -- and calling apply() immediately afterward (nothing else
+## event/advance _event_sequence -- even repeated (a rejected preview must never mutate the
+## live event log) -- and calling apply() immediately afterward (nothing else
 ## touched the world in between, so this is exactly "a fresh copy") must agree with preview()'s
 ## own ok/reason.
 func _check_preview_matches_apply(world: WorldStateType, command: Dictionary, description: String) -> void:
@@ -162,8 +162,8 @@ func _check_sow_accepted_and_missing_seed_rejected() -> void:
 	_check_preview_matches_apply(missing_seed, _job_command(missing_seed, "sow_missing_seed", "sow", {"x": 2, "y": 0, "priority": 1}),
 		"sow with no seed anywhere")
 
-## Round-1 review (#352): mine's own target/assignee validation moved into
-## CommandChecks.check_target_job_command()/check() (issue #347 revision), so preview() must
+## Mine's own target/assignee validation moved into
+## CommandChecks.check_target_job_command()/check(), so preview() must
 ## agree with apply() the same way dig/chop/forage/till/sow already do -- a valid rock target,
 ## a non-rock target, an unknown assignee and a refused (non-colony faction) assignee.
 func _check_mine_accepted_and_rejected() -> void:
@@ -262,7 +262,7 @@ func _check_cancel_job_accepted_and_unknown_rejected() -> void:
 		{"actor": "player", "command_id": "cancel_unknown", "tick": unknown.get_tick(), "type": "cancel_job", "payload": {"job_id": "job_999999"}},
 		"cancel_job of an unknown job")
 
-## Round-1 review (#346): two more terminal-command rejections check_terminal_job_command()
+## Two more terminal-command rejections check_terminal_job_command()
 ## must predict correctly -- an already-terminal job (cancelled twice) and complete_job on a
 ## job that is still queued (never activated by a tick).
 func _check_terminal_job_already_terminal_and_not_active() -> void:
@@ -287,12 +287,11 @@ func _check_terminal_job_already_terminal_and_not_active() -> void:
 		{"actor": "player", "command_id": "not_active_complete", "tick": queued_world.get_tick(), "type": "complete_job", "payload": {"job_id": String(queued_setup["job_id"])}},
 		"complete_job of a still-queued (not active) job")
 
-## Round-1 review (#346): apply()'s terminal branch must keep going through JobQueue._finish()
-## itself for a rejected terminal command (unknown job here), unchanged from before this task --
-## it must still emit BOTH the queue's own job_rejected event (JobQueue._reject()) and
-## WorldState's command_rejected event, exactly as it always has. check_terminal_job_command()
-## exists to answer preview() without either side effect; it must never replace apply()'s own
-## event-producing path.
+## apply()'s terminal branch must keep going through JobQueue._finish()
+## itself for a rejected terminal command (unknown job here) -- it must still emit both the
+## queue's own job_rejected event (JobQueue._reject()) and WorldState's command_rejected event.
+## check_terminal_job_command() exists to answer preview() without either side effect; it must never
+## replace apply()'s own event-producing path.
 func _check_apply_terminal_rejection_still_emits_queue_and_command_events() -> void:
 	var world := _single_colonist_world(346170)
 	var events_before: int = world.get_events().size()
@@ -307,17 +306,17 @@ func _check_apply_terminal_rejection_still_emits_queue_and_command_events() -> v
 	_expect(new_types.has("job_rejected") and new_types.has("command_rejected"),
 		"apply()'s rejected terminal command must emit both job_rejected and command_rejected, got %s" % [new_types])
 
-## Round-1 review (#346): check_target_job_command() must reject a priority outside
+## check_target_job_command() must reject a priority outside
 ## JobQueue.Priority's range even when the target itself is otherwise valid, for every job type
 ## -- previously only priority 1 (NORMAL) was ever exercised, so an out-of-range priority
 ## silently previewed ok while apply() went on to reject it via JobQueue.submit_dig().
 ##
-## Round-2 review: an unsupported priority on an otherwise-valid target must still reach
-## JobQueue.submit_dig() through WorldState._apply_job_command()'s ordinary submit() call --
-## exactly as it did before this task -- so it still produces JobQueue's own job_rejected event
-## and advances JobQueue's sequence counter, not just an early WorldState-level rejection that
-## happens to carry the same reason. CommandChecks.check_job_submission() (preview()'s check()
-## dispatcher only) predicts this outcome without ever causing it.
+## An unsupported priority on an otherwise-valid target must still reach
+## JobQueue.submit_dig() through WorldState._apply_job_command()'s ordinary submit() call, so
+## it still produces JobQueue's own job_rejected event and advances JobQueue's sequence counter, not
+## just an early WorldState-level rejection that happens to carry the same reason.
+## CommandChecks.check_job_submission() (preview()'s check() dispatcher only) predicts this outcome
+## without ever causing it.
 func _check_job_priority_range_rejected() -> void:
 	var base_seed := 346180
 	for job_type in ["dig", "chop", "forage", "till", "sow", "mine"]:
@@ -355,7 +354,7 @@ func _check_job_priority_range_rejected() -> void:
 func _set_labour_command(world: WorldStateType, command_id: String, colonist, kind, level) -> Dictionary:
 	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "set_labour", "payload": {"colonist": colonist, "kind": kind, "level": level}}
 
-## Round-1 review (#346): set_labour previously had no check_*() function at all, so
+## set_labour previously had no check_*() function at all, so
 ## CommandChecks.check()'s dispatch fallback silently approved it in preview() regardless of
 ## apply()'s own validation.
 func _check_set_labour_accepted_and_rejected() -> void:
@@ -370,7 +369,7 @@ func _check_set_labour_accepted_and_rejected() -> void:
 func _set_faction_command(world: WorldStateType, command_id: String, target, faction_id) -> Dictionary:
 	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "set_faction", "payload": {"target": target, "faction_id": faction_id}}
 
-## Round-1 review (#346): same gap as set_labour -- set_faction had no check_*() function.
+## Same gap as set_labour -- set_faction had no check_*() function.
 func _check_set_faction_accepted_and_rejected() -> void:
 	var world := _single_colonist_world(346200)
 	_check_preview_matches_apply(world, _set_faction_command(world, "faction_accepted", "colonist_0", "wildlife"),
@@ -383,7 +382,7 @@ func _check_set_faction_accepted_and_rejected() -> void:
 func _spawn_incident_command(world: WorldStateType, command_id: String, id: String) -> Dictionary:
 	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "spawn_incident", "payload": {"id": id}}
 
-## Round-1 review (#346): same gap as set_labour/set_faction -- spawn_incident had no
+## Same gap as set_labour/set_faction -- spawn_incident had no
 ## check_*() function, so preview() never predicted the "incidents disabled" rejection.
 func _check_spawn_incident_accepted_and_rejected() -> void:
 	var enabled := WorldStateType.new(346210, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
@@ -394,8 +393,8 @@ func _check_spawn_incident_accepted_and_rejected() -> void:
 	_check_preview_matches_apply(disabled, _spawn_incident_command(disabled, "incident_disabled", "wildlife_wander"),
 		"spawn_incident with incidents disabled")
 
-## Round-1 review (#346): CommandChecks.check()'s dispatch fallback used to return {} (ok) for
-## ANY unmatched type, so a bogus command type previewed as accepted while apply() rejects it
+## CommandChecks.check()'s dispatch fallback used to return {} (ok) for
+## any unmatched type, so a bogus command type previewed as accepted while apply() rejects it
 ## unknown_command_type.
 func _check_unknown_command_type_rejected() -> void:
 	var world := _single_colonist_world(346220)
@@ -403,7 +402,7 @@ func _check_unknown_command_type_rejected() -> void:
 		{"actor": "player", "command_id": "bogus_type", "tick": world.get_tick(), "type": "bogus", "payload": {}},
 		"an unrecognized command type")
 
-## Round-1 review (#346): a malformed envelope (missing command_id/tick/type/payload, or an
+## A malformed envelope (missing command_id/tick/type/payload, or an
 ## invalid payload value type, or a tick mismatch) on an otherwise-valid actor is exactly the
 ## case that used to leak a command_rejected event and advance _event_sequence through
 ## _validate_command()'s own _rejection() calls; _check_preview_matches_apply() now asserts
@@ -439,7 +438,7 @@ func _check_malformed_envelope_with_valid_actor_purity() -> void:
 		{"actor": "player", "command_id": "c1", "tick": tick_mismatch.get_tick() + 1, "type": "dig", "payload": {"x": 2, "y": 0, "priority": 1}},
 		"tick mismatch, valid actor")
 
-## Goal (#345/#346): previewing a 12x12 hover rectangle (144 commands) on a 256x256 world must
+## Goal: previewing a 12x12 hover rectangle (144 commands) on a 256x256 world must
 ## take under 5ms headless -- the old StateCodec.encode()/decode() round trip measured ~390ms
 ## per single-tile hover on the host.
 const PREVIEW_BUDGET_USEC := 5000

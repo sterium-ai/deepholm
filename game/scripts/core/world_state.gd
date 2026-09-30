@@ -50,13 +50,13 @@ const TILE_TREE := ContentRegistryType.TILE_TREE
 const TILE_WATER := ContentRegistryType.TILE_WATER
 const TILE_TRENCH := ContentRegistryType.TILE_TRENCH
 const COLONIST_COUNT := ContentRegistryType.COLONIST_COUNT
-const DEFAULT_TRENCH_CLIMB_TICKS := 40 ## content/actors.json tunables.wild.trench_climb_ticks default (#359)
+const DEFAULT_TRENCH_CLIMB_TICKS := 40 ## content/actors.json tunables.wild.trench_climb_ticks default
 ## Salts for _generate_map()/_spawn_colonists()'s own local RNGs, distinct
 ## from each other and from incident_scheduler.gd's SEED_SALT (914_827) so no
 ## two of this world's independent streams ever share a draw sequence.
 const GEOGRAPHY_SEED_SALT := 402_653
 const PLACEMENT_SEED_SALT := 219_961
-## ADR 025: dig's find_table roll gets its own salted stream, distinct from
+## ADR 026: dig's find_table roll gets its own salted stream, distinct from
 ## every salt above and from world_generator.gd's OUTCROP_SEED_SALT (100_003).
 const DIG_FIND_SEED_SALT := 738_419
 
@@ -64,23 +64,23 @@ const PRIORITY_COMMAND := 0
 const PRIORITY_TICK := 100
 
 ## Static, not const (a const can't read needs.json at runtime); set in
-## _init(). Kept only for colonist_panel.gd's out-of-scope NEED_FULL read.
+## _init(). Kept only for colonist_panel.gd's NEED_FULL read.
 static var NEED_FULL: int = 0
 
 const REASON_NEED_UNMET_PREFIX := "need_unmet:"
 const REASON_BLOCKED_SOURCE_RESERVED := "blocked_source_reserved"
 const REASON_BLOCKED_SOURCE_UNREACHABLE := "blocked_source_unreachable"
-## F3 (issue #290): shared by _apply_job_command()'s assignee check and
+## F3: shared by _apply_job_command()'s assignee check and
 ## _resolve_refused_reservations()'s typed termination of a job
 ## GlobalAssignment's reservation gate refused (see set_reservation_gate()
 ## in _init() below).
 const REASON_NOT_ORDERED_BY_PLAYER := "not_ordered_by_player"
-## F5/#302 (docs/architecture/orders-and-movement.md's typed reason vocabulary,
-## extended per the objective): exposed by get_actor_combat_reason() while an
+## F5 combat (docs/architecture/orders-and-movement.md's typed reason
+## vocabulary): exposed by get_actor_combat_reason() while an
 ## actor has an adjacent hostile target this tick, mirroring
 ## get_colonist_need_reason()'s "need_unmet:"/"rerouting" pattern.
 const REASON_FIGHTING := "fighting"
-## Issue #360 (docs/architecture/colonist-ai.md 3.6): exposed by
+## Trapped-actor rescue (docs/architecture/colonist-ai.md 3.6): exposed by
 ## get_colonist_rescue_reason() for a trapped colonist while RescueGiver's own
 ## search finds no reachable candidate rescuer at all -- including the
 ## degenerate case every other colonist is itself trapped.
@@ -119,13 +119,13 @@ var _clock: SeededClock
 ## never perturb this stream's continuation -- see
 ## test_river_generation.gd's _check_generation_does_not_perturb_simulation_stream().
 var _random: RandomNumberGenerator
-## ADR 025 (docs/decisions/025-trench-trapped-actor-and-rescue.md): dig's own
+## ADR 026 (docs/decisions/026-trench-trapped-actor-and-rescue.md): dig's own
 ## find_table stream, salted off the world seed like incident_scheduler.gd's
 ## _random so it never perturbs or is perturbed by _random's own sequence.
 ## Reseeded fresh by _init() on every construction, including
 ## StateCodec.decode()'s own WorldState.new() call; state_codec.gd then
-## overwrites this fresh value with the save's own persisted continuation
-## (round 2 review), the same way it already restores _random/_incidents._random,
+## overwrites this fresh value with the save's own persisted continuation,
+## the same way it already restores _random/_incidents._random,
 ## so a dig's find sequence keeps going from where the saved run left off
 ## instead of restarting -- see state_hash()'s own "dig_find_rng" entry, which
 ## is why this stream's continuation is part of the diagnostic hash too.
@@ -144,7 +144,7 @@ var _spawn_clearing: Dictionary = {}
 var _colonists: Array[Dictionary] = []
 var _items: Dictionary = {}
 var _next_item_id: int = 1
-## ADR 025: dig completions staged this tick by _toil_on_work_complete(),
+## ADR 026: dig completions staged this tick by _toil_on_work_complete(),
 ## drained by _resolve_dig_finds() (called once from tick(), right after
 ## _advance_colonists()) in ascending job-id order so the find roll sequence
 ## never depends on _advance_colonists()'s own colonist-id iteration order.
@@ -156,7 +156,7 @@ var _item_definitions: Dictionary = {}
 ## Ground berries left by a completed forage job, keyed like _objects ("%d_%d").
 var _ground_berries: Dictionary = {}
 var _objects: Dictionary = {}
-## faction_id (F3, issue #287) per placed object/ground-berries cell/item id,
+## faction_id (F3) per placed object/ground-berries cell/item id,
 ## keyed like _objects/_ground_berries/_items respectively. Parallel maps, not
 ## a nested value inside _objects/_ground_berries/_items: state_codec.gd's
 ## _encode_objects()/_encode_items() each assume a fixed value shape (a plain
@@ -165,21 +165,21 @@ var _objects: Dictionary = {}
 ## or silently drop on the next save/load round trip -- either way diverging
 ## state_hash() before vs. after a save/load that changed nothing else, so
 ## these maps are deliberately left out of state_hash()'s own snapshot too
-## (t3 owns state_codec.gd; persisting faction_id is future work).
+## (persisting faction_id is future work).
 var _object_factions: Dictionary = {}
 var _ground_berries_factions: Dictionary = {}
 var _item_factions: Dictionary = {}
-## F5/#302: per-instance {"hp","maxHp"} for a placed object whose kind
+## Per-instance {"hp","maxHp"} for a placed object whose kind
 ## declares "max_health" (content/objects.json), keyed like _objects/
 ## _object_factions. A parallel map, not a nested value inside _objects (the
 ## same reason _object_factions is one, per its own comment above). Unlike
-## _object_factions, this IS included in state_hash()'s own snapshot (a
+## _object_factions, this is included in state_hash()'s own snapshot (a
 ## wall's accumulated damage changes future combat outcomes, so two saves
 ## that otherwise match but differ in a wall's remaining hp must not hash
 ## equal) and is persisted by state_codec.gd's _encode_objects()/
 ## _decode_objects() as each entry's optional "health" field.
 var _object_health: Dictionary = {}
-## issue #405: for a footprint tile other than a placed object's own origin
+## For a footprint tile other than a placed object's own origin
 ## tile, the origin's Vector2i -- lets _set_object() find and clear every
 ## footprint tile of a multi-tile object from any one of them (e.g. a
 ## remove_object command aimed at the object's second tile). Absent for a
@@ -188,9 +188,9 @@ var _object_health: Dictionary = {}
 ## _object_factions/_object_origin's own "absent means the default" idiom.
 ## Not persisted or hashed: state_codec.gd re-derives it from the persisted
 ## origin record on decode() (_object_footprint_tiles()), the same way
-## _object_health is rebuilt from content on a pre-#302 save.
+## _object_health is rebuilt from content on a save that predates it.
 var _object_origin: Dictionary = {}
-## issue #405: origin_key -> "horizontal"/"vertical" for a placed object whose
+## origin_key -> "horizontal"/"vertical" for a placed object whose
 ## kind declares rotatable true and was placed with a non-default orientation;
 ## absent (never "") means no rotation, matching game-state.schema.json's
 ## optional "orientation" field. Keyed by origin tile only, like
@@ -207,10 +207,10 @@ var _need_full: int = 0 # see _load_need_config()
 var _mapgen: Dictionary = {}
 var _zones: Dictionary = {}
 var _next_zone_id: int = 1
-## trader_id -> {"give_item", "want_item"} (issue #305): a trader's own
+## trader_id -> {"give_item", "want_item"}: a trader's own
 ## trade_offer, posted partway through its generic incident wait (see
 ## _maybe_post_trade_offer()). Not persisted, like IncidentScheduler's own
-## _staged/_actor_by_job (t4): an offer in flight across a save/load is
+## _staged/_actor_by_job: an offer in flight across a save/load is
 ## simply lost, and the trader still leaves on schedule either way.
 var _pending_trade_offers: Dictionary = {}
 ## F5 "Regions": connected-walkable partition, updated incrementally by the
@@ -222,8 +222,8 @@ var _regions: RegionMapType
 var _rooms: RoomMapType
 ## Lazily built list of every TILE_WATER cell, same reasoning as _regions:
 ## built on first use so a save/load's direct _tiles overwrite is never
-## stale. Safe for the WorldState instance's whole lifetime because nothing
-## ever converts a tile to or from TILE_WATER after generation.
+## stale. Kept in sync afterwards by _update_water_tile_cache() whenever a
+## tile's water membership changes.
 var _water_tile_cache: Array[Vector2i] = []
 var _water_tile_cache_built := false
 ## Append-only log of every cell whose tile kind or object changed, never
@@ -247,28 +247,25 @@ var _reroutes: Dictionary = {}
 var _paused_jobs: Dictionary = {}
 ## "%d_%d" -> ticks remaining on a `work` toil's timer, so pausing never loses progress.
 var _work_progress: Dictionary = {}
-## "%d_%d" -> the job_id that last wrote _work_progress at that key (round-3
-## review): a job suspended mid-work (status reverts to "queued",
-## _pause_work_job()) still legitimately owns its stored progress until it
-## resumes or is terminated, so job "status" alone cannot distinguish that
-## from a genuinely abandoned key. Persisted as "workProgressOwners" (round-5
-## review): a second job (e.g. a dig) can legitimately be queued targeting a
-## tile a build already owns mid-haul -- the submission-time duplicate-target
-## rejection only guards a single job kind's own target, not one kind against
-## another -- so guessing the owner from "whichever job targets this tile" on
-## load (the previous WorldState._rebuild_work_progress_owners() behaviour)
+## "%d_%d" -> the job_id that last wrote _work_progress at that key. A job
+## suspended mid-work (status reverts to "queued", _pause_work_job()) still
+## owns its stored progress until it resumes or is terminated, so job
+## "status" alone cannot distinguish that from an abandoned key. Persisted as
+## "workProgressOwners": a second job (e.g. a dig) can legitimately be queued
+## targeting a tile a build already owns mid-haul -- the submission-time
+## duplicate-target rejection only guards a single job kind's own target --
+## so guessing the owner on load from "whichever job targets this tile"
 ## could hand a build's progress to that unrelated dig, or vice versa.
-## StateCodec.decode() now restores the exact persisted job_id instead (see
-## _restore_work_progress_owners() below); absent only for a save taken
-## before this field existed, which restores with no owners at all rather
-## than guess one.
+## StateCodec.decode() restores the exact persisted job_id instead (see
+## _restore_work_progress_owners() below); a save taken before this field
+## existed restores with no owners at all rather than guess one.
 var _work_progress_owner: Dictionary = {}
 ## job_id -> ticks remaining on a `work` toil's timer, for a job suspended
 ## (status "queued", not terminated) while its own work-progress tile is
 ## still keyed live to it -- moved here at the moment colonist.work is
-## cleared for any non-terminal reason (round-6 review: JobQueue's own
+## cleared for any non-terminal reason (JobQueue's own
 ## activation/reactivation lifecycle can hand a suspended job's released
-## site/tile to a DIFFERENT job's own `work` toil, which would otherwise
+## site/tile to a different job's own `work` toil, which would otherwise
 ## read/overwrite the same "%d_%d" slot in _work_progress -- inheriting the
 ## suspended job's stale ticks on start, then clobbering them tick by tick,
 ## then erasing them at its own completion). _resume_work_progress() below is
@@ -276,35 +273,35 @@ var _work_progress_owner: Dictionary = {}
 ## _release_owned_work_progress() is the only place that drops an entry whose
 ## job terminates while still suspended. Persisted as "suspendedWorkProgress".
 var _suspended_work_progress: Dictionary = {}
-## job kind -> its needs_tool item kind (issue #271), from content/jobs.json.
+## job kind -> its needs_tool item kind, from content/jobs.json.
 var _needs_tool_by_kind: Dictionary = {}
 ## job kind -> {"kind","retry_base_ticks","retry_cap_ticks"} for JobQueue's
-## own tool-availability activation gate (issue #271 round 5).
+## own tool-availability activation gate.
 var _tool_requirements_by_kind: Dictionary = {}
-## colonist_id -> true once its per-tick routing allowance is spent (issue
-## #271 round 5), shared by reference with ToilExecutor/GlobalAssignment.
+## colonist_id -> true once its per-tick routing allowance is spent,
+## shared by reference with ToilExecutor/GlobalAssignment.
 var _route_budget: Dictionary = {}
 ## colonist_id -> last exposed need reason ("" when none, colonist-ai.md 3.8).
 var _need_status: Dictionary = {}
 ## Decides when eat_food/drink_water/sleep jobs exist.
 var _need_giver: NeedGiverType
-## Decides when a rescue job exists for a trapped colonist (issue #360).
+## Decides when a rescue job exists for a trapped colonist.
 var _rescue_giver: RescueGiverType
 ## colonist_id -> last exposed rescue reason ("" when none, colonist-ai.md 3.8), get_colonist_rescue_reason()'s backing store.
 var _rescue_status: Dictionary = {}
-## Decides when a haul job exists (issue #189) and where it delivers to.
+## Decides when a haul job exists and where it delivers to.
 var _haul_giver: HaulGiverType
 ## The "calendar boost" term in the effective-priority formula (ADR 008).
 var _calendar: CalendarServiceType
 var _calendar_alert_giver: CalendarAlertGiverType
 var _calendar_alerts_fired: Dictionary = {}
 var _event_sequence: int = 0
-## Incident draws (ADR 018): owns its own seeded RNG, distinct from _random, so it never perturbs the shared stream. Its cooldowns/last-drawn-day/RNG state are read/written directly by state_codec.gd/state_hash() (ADR 004), since incident_scheduler.gd has no accessor for them (#295's owned paths do not include that file).
+## Incident draws (ADR 017): owns its own seeded RNG, distinct from _random, so it never perturbs the shared stream. Its cooldowns/last-drawn-day/RNG state are read/written directly by state_codec.gd/state_hash() (ADR 004), since incident_scheduler.gd has no accessor for them.
 var _incidents: IncidentSchedulerType
-## F5/#302 combat (ADR 020): the faction-relation reader (F3, docs/decisions/
-## 015-factions-and-relations.md) combat targeting reads for hostility, and
+## F5 combat (ADR 021): the faction-relation reader (F3, docs/decisions/
+## 014-factions-and-relations.md) combat targeting reads for hostility, and
 ## the job-giver deciding when a `flee` job should exist (rule 4). Also the
-## ADR 015 hostility check for trapped-actor auto-submission (#359).
+## ADR 014 hostility check for trapped-actor auto-submission.
 var _relations: RelationsType
 var _combat_giver: CombatGiverType
 ## actor_id -> REASON_FIGHTING while it has an adjacent hostile target this
@@ -312,7 +309,7 @@ var _combat_giver: CombatGiverType
 ## fresh every tick by _apply_combat(), mirroring _need_status.
 var _combat_status: Dictionary = {}
 ## Decides when an `approach` job should exist for a hostile actor not yet
-## adjacent to a hostile target (issue #390, ADR 031).
+## adjacent to a hostile target (ADR 033).
 var _approach_giver: ApproachGiverType
 ## The advancing colonist's tile at the start of its _toils.advance() call:
 ## scratch for _toil_on_work_complete()'s trap pre-check. Never saved.
@@ -321,20 +318,20 @@ var _trap_tile_before: Vector2i = Vector2i.ZERO
 ## retargeted away from GlobalAssignment's own precomputed assignment_path
 ## destination -- either by _resolve_freshly_activated_site_fetch_sources()'s
 ## own seed-swap or by an ordinary on-demand hop (_toil_on_pick_up_success()),
-## both #400's hands-filling rules (round 3 review). Consulted by
+## both part of the hands-filling rules. Consulted by
 ## _toil_go_to_skip_assignment_path(): once true, assignment_path is
-## PERMANENTLY stale for the rest of this job's life (it only ever led to the
+## permanently stale for the rest of this job's life (it only ever led to the
 ## submission-time seed's own tile, never any later hop's), so every further
 ## leg -- not only the tick of the retarget itself -- must run a fresh bounded
 ## search instead of blindly walking that now-irrelevant precomputed path.
 ## Erased on job termination (_finish_job()) so this never grows unbounded;
 ## never saved (a reloaded job's own item_id already reflects its real current
 ## source, and _toil_is_first_leg()'s "cell == null" already tells a resumed
-## job it is still fetching -- this dict only decides which go_to MECHANISM to
+## job it is still fetching -- this dict only decides which go_to mechanism to
 ## use, never job behaviour).
 var _site_fetch_source_retargeted: Dictionary = {}
 ## job_id -> the item kind _toil_pick_up_count_for() resolved right before
-## this job's most recent pick_up toil (issue #406 round-4 review): a source
+## this job's most recent pick_up toil: a source
 ## item whose entire remaining count a pick_up exactly exhausts is removed
 ## from _items by that same pick_up (ToilExecutor.pick_up()'s own
 ## _remove_item call), so _toil_on_pick_up_success() -- which fires
@@ -351,9 +348,9 @@ var _site_fetch_source_retargeted: Dictionary = {}
 ## by _toil_on_pick_up_success(); overwritten on every further hop the same
 ## way job["item_id"] itself is (retarget_site_fetch_source()).
 var _site_fetch_picked_kind: Dictionary = {}
-## One record per active construction site (issue #406, docs/decisions/038):
+## One record per active construction site (ADR 040):
 ## replaces the single-worker `build` job's own submission-time item
-## resolution. WorldState is the only mutator; ConstructionGiver decides WHEN
+## resolution. WorldState is the only mutator; ConstructionGiver decides when
 ## a site's next fetch/work job should exist, through the same job_queue.gd
 ## entry point any order-driven job uses.
 var _sites := ConstructionSiteTableType.new()
@@ -386,24 +383,24 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_ensure_combat()
 	_tool_store = ToolItemStoreType.new(_find_colonist)
 	_scheduler = AssignmentType.new(_random, _content)
-	# F3 (issue #290): wires GlobalAssignment's two faction gates through this
+	# F3: wires GlobalAssignment's two faction gates through this
 	# WorldState's own colonist/registry lookups, never a hardcoded "colony"
 	# string -- see _colonist_may_be_ordered()/_colonist_may_reserve_colony_items().
 	_scheduler.set_order_eligibility(_colonist_may_be_ordered)
 	_scheduler.set_reservation_gate(_colonist_may_reserve_colony_items)
-	# F5 (issue #294, ADR 015 Amendment): an autonomous (incident) entry's own
+	# F5 (ADR 014 Amendment): an autonomous (incident) entry's own
 	# target-aware reservation gate and faction-aware route passability.
 	_scheduler.set_autonomous_reservation_gate(_actor_may_reserve_target)
 	_scheduler.set_autonomous_passability(_passable_for_worker)
-	# F5/#302: a flee job (rule 4) submits autonomously too, the same reason
+	# A flee job (rule 4) submits autonomously too, the same reason
 	# an incident actor's own job does -- a non-colony actor's own job must
-	# skip the ordinary may_be_ordered gate (ADR 015 Amendment). Wired through
+	# skip the ordinary may_be_ordered gate (ADR 014 Amendment). Wired through
 	# the same interrupt/resume boundary NeedGiver uses (ADR 009) and the same
 	# reservation-eligibility/faction-passability/region-reachability checks
 	# submit_autonomous()'s own reserve step consults, so a candidate this
 	# giver picks is never refused there for a reason it could have checked
-	# itself (round-1 review).
-	# round-3 review: GlobalAssignment.restrict_to_for() only reads
+	# itself.
+	# GlobalAssignment.restrict_to_for() only reads
 	# _activated_entries, "" by its own contract for a job that has never
 	# activated (still queued or mid its own initial route search) -- exactly
 	# the state a freshly submitted flee job is in for at least one tick.
@@ -454,7 +451,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		"on_work_complete": _toil_on_work_complete,
 		"on_consume_success": _toil_on_consume_success,
 		"on_no_tool_found": _toil_on_no_tool_found,
-		# issue #406: site_fetch's own deposit-toil destination and success
+		# site_fetch's own deposit-toil destination and success
 		# hook; pick_up_count_for clamps a site_fetch pick_up to what the
 		# site still needs of that source's own kind. Every other kind's
 		# hooks ignore these (unset, "site_fetch"-only checks inside each).
@@ -462,7 +459,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		"site_id_for": _toil_site_id_for,
 		"on_deposit_success": _toil_on_deposit_success,
 		"go_to_skip_assignment_path": _toil_go_to_skip_assignment_path,
-		# #400's hands-filling rules (round 3 review): a site_fetch job's own
+		# Hands-filling rules: a site_fetch job's own
 		# "still fetching vs. now delivering" state (_toil_is_first_leg()) and
 		# its per-hop nearest-source/partial-load decision
 		# (_toil_on_pick_up_success()). Every other kind's hooks ignore these.
@@ -479,8 +476,8 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_calendar_alert_giver = CalendarAlertGiverType.new(get_colonists, func() -> Array[String]: return _tiles, _has_item_of_kind, _insert_event, _next_sequence, PRIORITY_TICK)
 	_build_dimension_services(incidents_enabled)
 
-## Builds NeedGiver and IncidentScheduler from this WorldState's CURRENT
-## _width/_height (round 5 review finding 3): factored out of _init() so
+## Builds NeedGiver and IncidentScheduler from this WorldState's current
+## _width/_height: factored out of _init() so
 ## StateCodec.decode() can call it again after overwriting the constructor's
 ## resolve_size()-clamped _width/_height with a saved map's own exact
 ## dimensions. Without a rebuild, a saved map smaller than
@@ -501,13 +498,13 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	_rescue_giver = RescueGiverType.new(RESCUE_JOB_PRIORITY, bounds_max, _scheduler.queue.get_reservation_table(),
 		_tile_key, _routable_to, _rescue_target_candidates, _scheduler.submit, _set_rescue_reason,
 		_interrupt_current_job, _resume_interrupted_job, _is_trench_tile, _route_budget, _get_job, _retire_rescue_job)
-	# Round-2 review finding 2: the "trapped:<victim_id>" key now moves through
+	# The "trapped:<victim_id>" key now moves through
 	# JobQueue's own activation/reactivation boundary like any other job's
 	# reservation, instead of RescueGiver acquiring it directly -- see
 	# rescue_giver.gd's own class doc comment and job_queue.gd's
 	# set_extra_reservation_keys().
 	_scheduler.queue.set_extra_reservation_keys(_rescue_giver.extra_keys_for_job)
-	# Issue #390/ADR 031: shares CombatGiver's own faction-aware passability/
+	# Shares CombatGiver's own faction-aware passability/
 	# reservation-eligibility/region-reachability/target-reservation wrappers
 	# and the same _route_budget ledger RescueGiver/CombatGiver already share.
 	_approach_giver = ApproachGiverType.new(_scheduler.submit_autonomous, _get_job, _scheduler.queue.get_jobs,
@@ -520,26 +517,26 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_get_job, _finish_job.bind("cancel_job"), _set_work_progress,
 		_calendar.day_of_tick, _insert_event, _next_sequence, PRIORITY_TICK, incidents_enabled)
 
-## Read-only dry run of apply()'s own rules (issue #346): validates the envelope, then runs the
+## Read-only dry run of apply()'s own rules: validates the envelope, then runs the
 ## exact same pre-mutation check apply()'s own handler consults (CommandChecksType.check(), see
 ## game/scripts/core/commands/command_checks.gd) without touching state, so a hover/drag
 ## preview or Play-mode cursor can ask "would apply() accept this?" per tile without
 ## StateCodec.encode()/decode()'s whole-world round trip. Never mutates _tiles, _colonists,
 ## _jobs, _events or any other field -- state_hash() is unchanged before and after a call, and
 ## unlike apply() a rejected preview() never appends a command_rejected event or advances
-## _event_sequence (round-1 review, #346): _validate_command(command, false) and
+## _event_sequence: _validate_command(command, false) and
 ## _pure_rejection() below build the same rejection Dictionary apply() would return without
 ## either side effect.
 func preview(command) -> Dictionary:
 	var validation := _validate_command(command, false)
 	if not validation["ok"]:
 		return validation
-	# build (issue #406) keeps its read-only rules in _check_construction_command()
+	# build keeps its read-only rules in _check_construction_command()
 	# below -- the exact same function _apply_construction_submission() runs --
 	# so a hover preview and apply() always agree; cancel_site mirrors it via
 	# _check_cancel_site_command(). place_object calls _check_place_object_command()
 	# directly for the same reason; CommandChecks.check_place_object_command()
-	# (issue #405 round 3) delegates to this same function, so either path runs
+	# delegates to this same function, so either path runs
 	# identical, current rules.
 	if command["type"] == "build_line":
 		var classification := _classify_build_line_command(command["payload"])
@@ -611,14 +608,14 @@ func tick() -> void:
 	_scheduler.tick(_clock.tick, _scheduler_workers(), _is_passable, Vector2i.ZERO,
 		Vector2i(_width - 1, _height - 1), _toils.get_labour, _calendar.active_boost, _colonists,
 		_committed_jobs(), _get_regions().reachable)
-	# #400's hands-filling rules: a site_fetch job's own submission-time seed
+	# Hands-filling rules: a site_fetch job's own submission-time seed
 	# is a position-agnostic placeholder (no colonist is chosen yet at
 	# submission); the instant one really (re)activates with a colonist
 	# known, swap it for the true nearest-to-builder source before
 	# _advance_colonists() ever drives it -- see
 	# _resolve_freshly_activated_site_fetch_sources() below.
 	_resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
-	# Issue #360 round-4 review finding 4: RescueGiver's own route searches
+	# RescueGiver's own route searches
 	# share _route_budget (the per-colonist, per-tick ledger ADR 004 bounds)
 	# with the scheduler's activation searches above and the toil executor's
 	# re-routes below, so it runs between them -- after tick() clears that
@@ -626,19 +623,19 @@ func tick() -> void:
 	# the scheduler's committed-proposal path next tick (rescue_giver.gd).
 	_rescue_giver.advance(_rescue_candidates(), _trapped_rescue_victims(), _clock.tick)
 	# F5: staged incident actors whose job just activated enter the world now,
-	# before _advance_colonists() drives their first toil (ADR 015 Amendment).
+	# before _advance_colonists() drives their first toil (ADR 014 Amendment).
 	_incidents.activate_pending()
-	# Same activation-gated timing as the incident line above (ADR 025 t3).
+	# Same activation-gated timing as the incident line above (ADR 026).
 	_activate_pending_escapes()
 	_advance_colonists()
-	# Issue #390/ADR 031: runs AFTER _advance_colonists(), not alongside
+	# Runs after _advance_colonists(), not alongside
 	# CombatGiver/RescueGiver above: its own "already adjacent" check (rule 1)
-	# must see this tick's POST-movement positions, the exact ones
+	# must see this tick's post-movement positions, the exact ones
 	# CombatResolver.resolve_tick() will check first thing next tick (nothing
-	# moves in between) -- checking PRE-movement positions here would submit a
+	# moves in between) -- checking pre-movement positions here would submit a
 	# redundant approach job for an actor that just walked into range this
 	# same tick. Running after _advance_colonists() also means an actor that
-	# falls into a trench (and is submitted an escape_trench job) THIS tick is
+	# falls into a trench (and is submitted an escape_trench job) this tick is
 	# already `trapped` by the time this giver ever looks at it, so it can
 	# never win a same-tick race for that actor's own scheduler slot against
 	# escape_trench (both submit at the same priority; the queue only tries
@@ -649,11 +646,11 @@ func tick() -> void:
 	# calls (like the toil executor's re-routes just before it in this same
 	# tick) draw from that same freshly-cleared budget.
 	_approach_giver.advance(_colonists, _clock.tick)
-	# ADR 025: every dig completion this tick is staged, never rolled inline,
+	# ADR 026: every dig completion this tick is staged, never rolled inline,
 	# so this drains in ascending job-id order regardless of the colonist-id
 	# order _advance_colonists() just processed them in.
 	_resolve_dig_finds()
-	# F3 (issue #290, round 2): drained AFTER _advance_colonists() -- a need
+	# F3: drained after _advance_colonists() -- a need
 	# resolving there can itself trigger a second refusal via
 	# resume_interrupted_job(), which must drain too before this returns.
 	_resolve_refused_reservations()
@@ -670,14 +667,14 @@ func tick() -> void:
 	})
 
 ## Every colonist not currently mid-search for a need source (colonist-ai.md
-## 3.1), except one CombatGiver already tracks as fleeing (round-3 review).
+## 3.1), except one CombatGiver already tracks as fleeing.
 ## Passed to GlobalAssignment.tick() in place of the full colonist list so it
 ## can never propose/activate a work job for a colonist NeedGiver has not yet
 ## finished deciding about. A colonist already pursuing a committed need job
-## is deliberately NOT excluded either: its scheduler assignment already
+## is deliberately not excluded either: its scheduler assignment already
 ## reflects that job, so GlobalAssignment.tick()'s own `_assignments.has()`
 ## check already skips it.
-## Round-8 review: excludes colonists CombatGiver.owns() (an open flee
+## Excludes colonists CombatGiver.owns() (an open flee
 ## episode) from NeedGiver.advance(), so a search or onset never touches the
 ## shared _paused_jobs entry CombatGiver owns until the episode closes.
 func _colonists_not_combat_owned() -> Array[Dictionary]:
@@ -694,7 +691,7 @@ func _colonists_not_searching_need() -> Array[Dictionary]:
 	var filtered: Array[Dictionary] = []
 	for colonist in _colonists:
 		var colonist_id: String = String(colonist["id"])
-		# round-3 review: an actor mid need-search must still be proposed the
+		# An actor mid need-search must still be proposed the
 		# scheduler tick it is fleeing in -- otherwise CombatGiver's own flee
 		# commitment (_committed_jobs() below) never even reaches GlobalAssignment.tick()
 		# for it, and the flee job it just submitted sits forever unassigned.
@@ -703,7 +700,7 @@ func _colonists_not_searching_need() -> Array[Dictionary]:
 		filtered.append(colonist)
 	return filtered
 
-## rescue_giver.gd's own candidate pool (issue #360): every colonist ("worker"
+## rescue_giver.gd's own candidate pool: every colonist ("worker"
 ## component actor, never a wolf/trader) eligible to be proposed a rescue job
 ## this tick. Excludes a trapped colonist (obviously cannot rescue anyone),
 ## one mid need-search or already committed to a need job (rescue must never
@@ -711,7 +708,7 @@ func _colonists_not_searching_need() -> Array[Dictionary]:
 ## CombatGiver owns (an open flee episode) -- the same exclusions
 ## _colonists_not_combat_owned()/_colonists_not_searching_need() already apply
 ## for the analogous need-giver roster, reused here rather than a bespoke
-## filter. A colonist already committed to (or mid-search for) a DIFFERENT
+## filter. A colonist already committed to (or mid-search for) a different
 ## rescue is not excluded here: rescue_giver.gd's own `_pending` map already
 ## refuses to pick a rescuer twice (see its _start_search()).
 func _rescue_candidates() -> Array[Dictionary]:
@@ -724,18 +721,18 @@ func _rescue_candidates() -> Array[Dictionary]:
 		if searching.has(colonist_id) or need_committed.has(colonist_id): continue
 		if _combat_giver.owns(colonist_id): continue
 		if not ActorTableType.has_component(colonist, "worker", _content): continue
-		# F3 (issue #290)'s own gate, the same one need_giver.gd's _may_be_ordered()
+		# F3's own gate, the same one need_giver.gd's _may_be_ordered()
 		# and GlobalAssignment's order-eligibility check consult: a "colonist"-def
-		# actor under a hostile/neutral faction (a raider, ADR 015) still has a
+		# actor under a hostile/neutral faction (a raider, ADR 014) still has a
 		# worker component but must never be offered to rescue a colony colonist.
 		if not _colonist_may_be_ordered(colonist_id): continue
 		filtered.append(colonist)
 	return filtered
 
-## rescue_giver.gd's own victim pool (issue #360): every currently-trapped
-## colonist eligible for rescue. A trapped HOSTILE actor's own trapped dict
+## rescue_giver.gd's own victim pool: every currently-trapped
+## colonist eligible for rescue. A trapped hostile actor's own trapped dict
 ## always carries ticksRemaining/fromTile (_trap_actor()'s hostile branch) and
-## already auto-escapes via escape_trench (ADR 025 t3) -- only the bare
+## already auto-escapes via escape_trench (ADR 026) -- only the bare
 ## {"tile"} shape _trap_actor() gives a non-hostile (colonist) actor ever
 ## needs a rescuer.
 func _trapped_rescue_victims() -> Array[Dictionary]:
@@ -746,10 +743,10 @@ func _trapped_rescue_victims() -> Array[Dictionary]:
 		victims.append(colonist)
 	return victims
 
-## GlobalAssignment.tick()'s `committed_needs` param (the name predates this
-## task): a worker id -> job id map that skips the ordinary scored candidate
-## scan entirely and proposes ONLY that job, so it always wins regardless of
-## priority scoring. CombatGiver's own flee commitments (round-3 review) are
+## GlobalAssignment.tick()'s `committed_needs` param (a historical name: it
+## now carries more than needs): a worker id -> job id map that skips the ordinary scored candidate
+## scan entirely and proposes only that job, so it always wins regardless of
+## priority scoring. CombatGiver's own flee commitments are
 ## layered on top of NeedGiver's, and win any collision for the same worker --
 ## rule 4 pre-empts a critical need exactly like it pre-empts ordinary work,
 ## and without this a fleeing actor's interrupted work (suspend_assignment()
@@ -757,10 +754,10 @@ func _trapped_rescue_victims() -> Array[Dictionary]:
 ## still outscore/out-rank a merely-queued flee job every tick, so the actor
 ## never actually flees.
 func _committed_jobs() -> Dictionary:
-	# Round-2 review finding 1: rescue's commitments are merged FIRST, need's
-	# SECOND, so a need overwrites a rescue for the same actor rather than the
+	# Rescue's commitments are merged first, need's
+	# second, so a need overwrites a rescue for the same actor rather than the
 	# reverse. _rescue_candidates() only excludes a need-committed colonist at
-	# the MOMENT a rescue is first proposed -- it says nothing about a colonist
+	# the moment a rescue is first proposed -- it says nothing about a colonist
 	# already mid-rescue who later develops a critical need of its own (NeedGiver
 	# still considers it, since _colonists_not_combat_owned() does not exclude
 	# a rescuer): once that happens, both givers name an entry for the same
@@ -777,7 +774,7 @@ func _committed_jobs() -> Dictionary:
 	return committed
 
 ## GlobalAssignment.tick()'s worker list: the roster above plus every staged
-## incident actor (F5, issue #294) -- proposed and routed by the shared
+## incident actor (F5) -- proposed and routed by the shared
 ## scheduler like any worker, but in the world only once its job activates.
 func _scheduler_workers() -> Array[Dictionary]:
 	var workers := _colonists_not_searching_need()
@@ -834,30 +831,30 @@ func state_hash(include_incidents: bool = true) -> int:
 		"scheduling": _scheduler.snapshot(),
 		"calendar_alerts_fired": _calendar_alerts_fired,
 		"tool_fetch_excluded": _toils.get_fetch_tool_excluded(),
-		# F5/#302 (round-6 review): CombatGiver's own excluded-flee-destination
+		# CombatGiver's own excluded-flee-destination
 		# set affects the very next _pick_flee_target() call, so two runs (or a
 		# save/load round trip) that differ only in it must not hash equal.
 		# JSON-safe-encoded the same way state_codec.gd persists it (Vector2i
 		# cannot be a JSON.stringify() dictionary key directly).
 		"combat_blocked_targets": StateCodec._encode_combat_blocked_targets(_combat_giver.get_blocked_targets()),
 		"dig_find_rng": {"seed": _dig_find_random.seed, "state": _dig_find_random.state},
-		# Round-2 review round-4 finding 5: two suspended-rescue states naming
-		# different victims for the same job id must not hash equal. Round-4
-		# review finding 3: hashed in the SAME sorted-by-job-id encoding
+		# Two suspended-rescue states naming
+		# different victims for the same job id must not hash equal. Hashed
+		# in the same sorted-by-job-id encoding
 		# state_codec.gd persists (never raw insertion order), so a save/load
 		# that restores identical associations in a different Dictionary
 		# order (job_9 inserted before job_10 live, sorted after it on disk)
 		# hashes identically.
 		"rescue_victim_assignments": StateCodec._encode_rescue_victim_assignments(_rescue_giver.get_job_victims()),
-		# Issue #390/ADR 031: this giver's own job_id -> target association
+		# This giver's own job_id -> target association
 		# affects the next commit/adjacency decision, so two states that
 		# differ only here must not hash equal.
 		"approach_job_targets": StateCodec._encode_approach_job_targets(_approach_giver.get_job_targets()),
-		# Round-6 review (#278/#303): a suspended job's own work-toil ticks
+		# A suspended job's own work-toil ticks
 		# affect what happens the moment it resumes, so two states that differ
 		# only here must not hash equal.
 		"suspended_work_progress": StateCodec._encode_suspended_work_progress(_suspended_work_progress),
-		# issue #406: a site's own held_materials/progress/builder_ids affect
+		# A site's own held_materials/progress/builder_ids affect
 		# what happens next (a fetch/work job the giver submits, or what
 		# cancel_site drops), so two states differing only here must not hash
 		# equal. list() is already sorted by site id for determinism.
@@ -884,7 +881,7 @@ func get_seed() -> int:
 func get_tick() -> int:
 	return _clock.tick
 
-## This live world's actual dimensions (issue #299), for a presentation layer
+## This live world's actual dimensions, for a presentation layer
 ## that must size/clip itself to whatever map is currently loaded rather than
 ## assume the 48x48 fixture default (WorldState.MAP_WIDTH/MAP_HEIGHT).
 func get_map_width() -> int:
@@ -894,11 +891,11 @@ func get_map_height() -> int:
 	return _height
 
 ## The generator algorithm version that actually produced this world's stored
-## terrain (issue #299 reproducibility): _generator_version, above.
+## terrain (for reproducibility): _generator_version, above.
 func get_generator_version() -> int:
 	return _generator_version
 
-## Issue #412: the already-loaded content/tiles.json value colonist_sprites.gd's
+## The already-loaded content/tiles.json value colonist_sprites.gd's
 ## advance() needs for a full tile-crossing's real tick duration.
 func get_move_ticks_per_tile() -> int:
 	return int(_content.list("tiles")[0]["move_ticks_per_tile"])
@@ -975,11 +972,11 @@ func get_tool_reservation_table() -> ReservationTableType:
 ## reservation job_id owns, but only once the scheduler confirms the
 ## terminal transition actually took -- a rejected complete/cancel/fail
 ## against a parked order must leave its reservations intact.
-## An incident job's own lifecycle cleanup (F5, issue #294) lives here too: every terminal transition drops its staged/spawned actor and clears its stamped wait key.
+## An incident job's own lifecycle cleanup (F5) lives here too: every terminal transition drops its staged/spawned actor and clears its stamped wait key.
 func _finish_job(job_id: String, status: String) -> Dictionary:
 	var job := _scheduler.queue.get_job(job_id)
-	# Captured before _scheduler.finish() below clears the assignment (issue
-	# #305 round 2): the one place every incident actor's own departure
+	# Captured before _scheduler.finish() below clears the assignment. This is
+	# the one place every incident actor's own departure
 	# converges, accepted trade or not, so a still-pending trade_offer never
 	# outlives the trader that posted it (get_pending_trade_offers() would
 	# otherwise keep exposing an Accept prompt for a trader already gone).
@@ -995,7 +992,7 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 				_pending_trade_offers.erase(String(incident_actor["id"]))
 			# Unlike every other work-ticked kind below, an incident's stamped
 			# wait is written by IncidentSchedulerType.activate_pending()
-			# (incident_scheduler.gd, out of this task's owned paths) through
+			# (incident_scheduler.gd) through
 			# the same injected set_work_progress callable but with no job_id
 			# (a 2-arg call; job_id defaults to "" and is never recorded as an
 			# owner) -- so it cannot participate in the job-id ownership
@@ -1012,7 +1009,7 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 ## refused reservation resolution) converges, so this is the one place a
 ## terminating job's own stored work-toil progress is cleared -- ownership
 ## tracked by job_id (_work_progress_owner), not by the job's "status" at
-## termination time (round-3 review): a build/dig/etc. job interrupted mid-
+## termination time: a build/dig/etc. job interrupted mid-
 ## work by a critical need is suspended (status reverts to "queued",
 ## _pause_work_job()) without losing its progress, by design, so it can
 ## resume from where it left off; but if it is instead cancelled/failed while
@@ -1027,7 +1024,7 @@ func _release_owned_work_progress(job_id: String, job: Dictionary) -> void:
 		return
 	# A job cancelled/failed while still suspended (_suspend_work_progress()
 	# already moved its ticks out of the live tile cache) must not leak that
-	# snapshot forever (round-6 review).
+	# snapshot forever.
 	_suspended_work_progress.erase(job_id)
 	var target: Vector2i = _work_target_for(job)
 	var key := _work_progress_key(target.x, target.y)
@@ -1050,7 +1047,7 @@ func get_object_faction_id(x: int, y: int) -> String:
 
 ## The one authoritative movement rule for a tile and its object: an
 ## impassable object blocks the tile; a passable one supplies its move cost.
-## `faction_id` (F3, issue #289) defaults to "colony" so every pre-existing
+## `faction_id` (F3) defaults to "colony" so every pre-existing
 ## single-arg call site (route search, movement stepping, dig/chop/forage
 ## target validation, reachability checks -- all colony-only until F5) keeps
 ## its old behaviour unchanged. It is only consulted for a door object: a
@@ -1077,7 +1074,7 @@ func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
 	var tile_passable := bool(tile_definition.get("passable", false))
 	return {"passable": tile_passable, "cost": int(tile_definition.get("move_cost", 0)) if tile_passable else 0, "is_door": false}
 
-## rules.may_pass_doors consultation (ADR 015, F3) for a door object's
+## rules.may_pass_doors consultation (ADR 014, F3) for a door object's
 ## passability. Defaults true for a faction_id absent from the factions
 ## registry (get_entry() returns {} for an unknown id) so a caller that never
 ## passes faction_id -- resolving to "colony", always declared -- and any
@@ -1088,7 +1085,7 @@ func _faction_may_pass_doors(faction_id: String) -> bool:
 		return true
 	return bool(faction.get("rules", {}).get("may_pass_doors", true))
 
-## rules.may_be_ordered consultation (F3, issue #290): whether faction_id may
+## rules.may_be_ordered consultation (F3): whether faction_id may
 ## be named as a dig/chop/forage command's assignee, read through the
 ## registry rather than a hardcoded "colony" string. Fails open like
 ## _faction_may_pass_doors() above.
@@ -1098,7 +1095,7 @@ func _faction_may_be_ordered(faction_id: String) -> bool:
 		return true
 	return bool(faction.get("rules", {}).get("may_be_ordered", true))
 
-## rules.may_reserve_colony_items consultation (F3, issue #290): the single
+## rules.may_reserve_colony_items consultation (F3): the single
 ## reusable check _enforce_faction_reservations() below consults for the
 ## assigned actor's faction before a job's reserve step is allowed to stand.
 func _faction_may_reserve_colony_items(faction_id: String) -> bool:
@@ -1107,13 +1104,13 @@ func _faction_may_reserve_colony_items(faction_id: String) -> bool:
 		return true
 	return bool(faction.get("rules", {}).get("may_reserve_colony_items", true))
 
-## may_be_ordered callable for GlobalAssignment.set_order_eligibility() (F3, issue #290): consulted for every worker before it may even be proposed for any job -- the gate that reaches haul, which has no actor pool of its own to filter (see haul_giver.gd). Also resolves a staged incident actor (F5, issue #294); an unknown id fails open, matching _faction_may_be_ordered().
+## may_be_ordered callable for GlobalAssignment.set_order_eligibility() (F3): consulted for every worker before it may even be proposed for any job -- the gate that reaches haul, which has no actor pool of its own to filter (see haul_giver.gd). Also resolves a staged incident actor (F5); an unknown id fails open, matching _faction_may_be_ordered().
 func _colonist_may_be_ordered(colonist_id: String) -> bool:
 	if _find_colonist(colonist_id).get("trapped") != null: return false
 	return _faction_may_be_ordered(_actor_faction(colonist_id))
 
-## may_reserve callable for GlobalAssignment.set_reservation_gate() (F3,
-## issue #290): consulted immediately before a chosen job's reserve step, or
+## may_reserve callable for GlobalAssignment.set_reservation_gate() (F3):
+## consulted immediately before a chosen job's reserve step, or
 ## a suspended job's reactivate() on resume -- never after -- so a refused
 ## actor's reservation is never even transiently acquired.
 func _colonist_may_reserve_colony_items(colonist_id: String) -> bool:
@@ -1159,12 +1156,10 @@ func get_colonists() -> Array[Dictionary]:
 			copy.append(entry)
 	return copy
 
-## Issue #402 (ADR 035): a presentation-only mirror of the pre-hands-model
-## single-slot "carrying" shape, derived from "hands" so the unowned viewer
-## layer (colonist_sprites.gd/colonist_panel.gd/map_view.gd -- presentation
-## is t3's own task, out of this task's Non-goals and Owned paths) keeps
-## rendering the carried item without this task editing those files. "hands"
-## on the actor dict itself remains the only field simulation code reads or
+## ADR 037: a presentation-only mirror of the pre-hands-model single-slot
+## "carrying" shape, derived from "hands" so the viewer layer
+## (colonist_sprites.gd/colonist_panel.gd/map_view.gd) keeps rendering the
+## carried item unchanged. "hands" on the actor dict itself remains the only field simulation code reads or
 ## writes (via InventoryType); this key exists solely on get_colonists()'s
 ## own detached copies and is never part of the persisted or hashed state.
 func _carrying_view(actor: Dictionary) -> Variant:
@@ -1173,12 +1168,12 @@ func _carrying_view(actor: Dictionary) -> Variant:
 	var first: Dictionary = InventoryType.hands_snapshot(actor)[0]
 	return {"kind": first["kind"], "count": first["count"]}
 
-## F5/#302: every actor with a `health` component, worker or not -- unlike
+## Every actor with a `health` component, worker or not -- unlike
 ## get_colonists() above, this is not filtered to worker actors, so a
 ## presentation layer can render a health bar for any combat-eligible actor
-## (a wolf, a trader) even before it has its own dedicated sprite (round-1
-## review: get_colonists()'s own worker-only filter silently hid every
-## non-worker actor from colonist_sprites.gd's health bars).
+## (a wolf, a trader) even before it has its own dedicated sprite
+## (get_colonists()'s worker-only filter would hide every non-worker actor
+## from colonist_sprites.gd's health bars).
 func get_actors_with_health() -> Array[Dictionary]:
 	var copy: Array[Dictionary] = []
 	for actor in _colonists:
@@ -1186,7 +1181,7 @@ func get_actors_with_health() -> Array[Dictionary]:
 			copy.append(actor.duplicate(true))
 	return copy
 
-## Every trader's own outstanding trade_offer (issue #305), state only, for
+## Every trader's own outstanding trade_offer, state only, for
 ## the presentation layer (colonist_panel.gd) to render and wire to accept_trade.
 func get_pending_trade_offers() -> Array[Dictionary]:
 	var offers: Array[Dictionary] = []
@@ -1195,7 +1190,7 @@ func get_pending_trade_offers() -> Array[Dictionary]:
 		offers.append({"trader_id": trader_id, "give_item": String(offer["give_item"]), "want_item": String(offer["want_item"])})
 	return offers
 
-## The handover overlay (issue #266) only mutates this call's own detached duplicates, never JobQueue's state.
+## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state.
 func get_jobs() -> Array[Dictionary]:
 	var jobs := _scheduler.queue.get_jobs()
 	var assignments := _scheduler.get_assignments()
@@ -1218,11 +1213,11 @@ func get_colonist_need_reason(colonist_id: String) -> String:
 func get_active_need_job_id(colonist_id: String) -> String:
 	return _need_giver.get_pending_job(colonist_id)
 
-## Issue #360, mirroring get_colonist_need_reason()'s own pattern: "" when a
+## Mirroring get_colonist_need_reason()'s own pattern: "" when a
 ## trapped colonist has no exposed rescue reason (a rescuer is already
 ## committed, or the search has not run yet), REASON_NO_RESCUER_AVAILABLE once
 ## a tick's search finds no reachable candidate at all -- the colonist panel's
-## "trapped in a trench, no one can help" (task t5's own wiring).
+## "trapped in a trench, no one can help" message.
 func get_colonist_rescue_reason(colonist_id: String) -> String:
 	return String(_rescue_status.get(colonist_id, ""))
 
@@ -1242,33 +1237,33 @@ func get_assignments() -> Dictionary:
 func _is_passable(tile: Vector2i) -> float:
 	return float(passability(tile.x, tile.y)["cost"])
 
-## Faction-aware cost callable for IncidentScheduler's spawn-tile/target selection (F5, issue #294): the colony-only _is_passable() above would let a wildlife actor spawn on/target a tile only reachable through a colony door.
+## Faction-aware cost callable for IncidentScheduler's spawn-tile/target selection (F5): the colony-only _is_passable() above would let a wildlife actor spawn on/target a tile only reachable through a colony door.
 func _passable_for_faction(tile: Vector2i, faction_id: String) -> float:
 	return float(passability(tile.x, tile.y, faction_id)["cost"])
 
-## GlobalAssignment's autonomous passability (F5, issue #294): an incident
+## GlobalAssignment's autonomous passability (F5): an incident
 ## actor's initial bounded route search runs under its own faction.
 func _passable_for_worker(actor_id: String, tile: Vector2i) -> float:
 	return _passable_for_faction(tile, _actor_faction(actor_id))
 
 ## CombatGiver's own faction-aware passability(x,y)->Dictionary check for a
-## flee candidate tile (F5/#302): a hostile actor's own faction, not
+## flee candidate tile: a hostile actor's own faction, not
 ## "colony", decides whether a door blocks it, mirroring
 ## _passable_for_worker() above but returning the full passability()
 ## Dictionary a flee candidate check needs rather than just its cost.
 func _passable_for_flee(actor_id: String, x: int, y: int) -> Dictionary:
 	return passability(x, y, _actor_faction(actor_id))
 
-## CombatGiver's own region-reachability check for a flee candidate tile
-## (F5/#302): a single-tile passability check alone would let it pick a
+## CombatGiver's own region-reachability check for a flee candidate tile.
+## A single-tile passability check alone would let it pick a
 ## candidate that is passable but disconnected from the fleeing actor's own
 ## region (an isolated pocket), leaving the actor permanently stuck pursuing
 ## an unreachable target.
 func _region_reachable(from: Vector2i, target: Vector2i) -> bool:
 	return _get_regions().reachable(from, target)
 
-## CombatGiver's own destination-reservation check for a flee candidate tile
-## (round-5 review): true when (x, y) is already the "tile:" target of
+## CombatGiver's own destination-reservation check for a flee candidate tile:
+## true when (x, y) is already the "tile:" target of
 ## another active (or backed-off) job, the same shared ReservationTable
 ## NeedGiver's own _start_search() already consults for a need source
 ## candidate (_tile_key() namespaces it identically) -- without this, a
@@ -1278,7 +1273,7 @@ func _region_reachable(from: Vector2i, target: Vector2i) -> bool:
 func _flee_target_reserved(x: int, y: int) -> bool:
 	return _scheduler.queue.get_reservation_table().is_reserved(_tile_key(x, y))
 
-## CombatGiver's own shared-finish-boundary cancel (round-5 review): lets it
+## CombatGiver's own shared-finish-boundary cancel: lets it
 ## retire a `flee` job stuck "queued" and blocked (its own preferred
 ## destination reserved by another job the instant this actor tried to
 ## commit to it, or genuinely unreachable through a faction-forbidden door
@@ -1295,18 +1290,18 @@ func _actor_faction(actor_id: String) -> String:
 		actor = _incidents.staged_actor(actor_id)
 	return String(actor.get("factionId", "colony"))
 
-## GlobalAssignment's autonomous reservation gate (ADR 015 Amendment, issue #294): a faction that may reserve colony items may reserve any target; one that may not (wildlife, traders) may still reserve a BARE tile, never one holding an object, ground item, berries, tool item or stockpile cell.
-## Narrow exception (task-body patch): an autonomous actor may always reserve
-## its OWN current tile, whatever it holds -- escape_trench always targets the
+## GlobalAssignment's autonomous reservation gate (ADR 014 Amendment): a faction that may reserve colony items may reserve any target; one that may not (wildlife, traders) may still reserve a bare tile, never one holding an object, ground item, berries, tool item or stockpile cell.
+## Narrow exception: an autonomous actor may always reserve
+## its own current tile, whatever it holds -- escape_trench always targets the
 ## trapped actor's own already-occupied tile. Every other autonomous target is
 ## unaffected; _find_colonist() returns {} for a still-staged incident actor.
 ##
-## round-4 review: a TRAPPED actor is checked first and exclusively, before
+## A trapped actor is checked first and exclusively, before
 ## the faction check -- this is the same activation/reactivation boundary
 ## GlobalAssignment consults both when a "ready" entry first activates and
 ## when resume_assignment() reactivates a suspended one (never anywhere
 ## else), so a trapped actor can never reserve any target except its own
-## tile through EITHER path. This is what stops CombatGiver's own `flee` job
+## tile through either path. This is what stops CombatGiver's own `flee` job
 ## (submitted autonomously so a non-colony or low-health actor can flee its
 ## own job, see combat_giver.gd) from ever landing a reservation for a
 ## trapped actor: every flee candidate _pick_flee_target() considers is a
@@ -1315,7 +1310,7 @@ func _actor_faction(actor_id: String) -> String:
 ## _pick_flee_target() returns null forever -- CombatGiver never calls
 ## _interrupt()/submits a replacement job, and escape_trench (the one
 ## autonomous job ever allowed to target a trapped actor's own tile) is
-## unaffected. Applies without regard to faction, so a trapped COLONIST
+## unaffected. Applies without regard to faction, so a trapped colonist
 ## (still eligible to reserve colony items) is covered exactly like a
 ## trapped hostile.
 func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
@@ -1346,26 +1341,26 @@ func _is_bare_tile(tile: Vector2i) -> bool:
 func _get_job(job_id: String) -> Dictionary:
 	return _scheduler.queue.get_job(job_id)
 
-## submit_job callable for IncidentScheduler (F5, issue #294; ADR 015 Amendment): the actor's job goes through GlobalAssignment.submit_autonomous(), restricted to actor_id and flagged autonomous, activated only inside tick()'s own _scheduler.tick() pass so N submissions in one tick never tick the queue clock twice.
+## submit_job callable for IncidentScheduler (F5; ADR 014 Amendment): the actor's job goes through GlobalAssignment.submit_autonomous(), restricted to actor_id and flagged autonomous, activated only inside tick()'s own _scheduler.tick() pass so N submissions in one tick never tick the queue clock twice.
 ## "" when the queue rejected the target.
 func _submit_incident_job(actor_id: String, target: Vector2i) -> String:
 	var result := _scheduler.submit_autonomous(target, 1, _clock.tick, "incident", actor_id)
 	return String(result["job_id"]) if result.get("ok", false) else ""
 
-## After a load (StateCodec.decode()): IncidentScheduler persists nothing
-## (t4), so an active incident job is re-associated with its restored actor
+## After a load (StateCodec.decode()): IncidentScheduler persists nothing,
+## so an active incident job is re-associated with its restored actor
 ## (despawn still works) and one whose actor is absent -- never activated, or
 ## its actor gone -- is retired through the shared finish boundary.
 ##
-## A "queued" incident job is not automatically a never-activated proposal
-## (round-5 review): CombatGiver's own flee interrupt suspends an incident
+## A "queued" incident job is not automatically a never-activated proposal:
+## CombatGiver's own flee interrupt suspends an incident
 ## actor's active incident job back to "queued" via _pause_work_job()/
 ## suspend_assignment() exactly like a critical need would, so saving mid-flee
 ## persists a previously activated, now-paused incident job in "queued"
 ## status. GlobalAssignment.restrict_to_for() reads _activated_entries, which
 ## a job only ever enters the instant it is first activated and which
 ## suspend() never clears -- so a queued job with a non-empty restrict_to_for()
-## was activated at least once (this task's own paused-by-combat case); one
+## was activated at least once (the paused-by-combat case); one
 ## with an empty restrict_to_for() was never activated at all (an ordinary,
 ## still-waiting proposal). Only the latter -- or either shape whose actor is
 ## now gone -- is retired; the former is re-associated exactly like an active
@@ -1383,7 +1378,7 @@ func _reconcile_incident_jobs_after_load() -> void:
 		else:
 			_finish_job(job_id, "cancel_job")
 
-## Re-applies the live/debug viewer's own incident configuration to a world reconstructed by StateCodec.decode() (recovery review round 3, issue #294), since decode() always builds incidents_enabled=false; boot.gd calls this once after every restore (startup autosave and manual Load).
+## Re-applies the live/debug viewer's own incident configuration to a world reconstructed by StateCodec.decode(), since decode() always builds incidents_enabled=false; boot.gd calls this once after every restore (startup autosave and manual Load).
 ## Also reserves incident actor ordinals past the restored roster so a freshly spawned actor can never collide with one still alive from before the save.
 func enable_incidents() -> void:
 	_incidents.set_enabled(true)
@@ -1402,7 +1397,7 @@ func _remove_ground_item(item_id: String) -> void:
 	_items.erase(item_id)
 	_item_factions.erase(item_id)
 
-## remove_item callable for _toils's pick_up (issue #402): decrements the
+## remove_item callable for _toils's pick_up: decrements the
 ## ground item's own count by count, removing it entirely at 0 -- exactly as
 ## pick_up already did for a whole stack before hands capped a pick_up below
 ## the ground item's own count.
@@ -1417,15 +1412,15 @@ func _remove_ground_item_units(item_id: String, count: int) -> void:
 		_remove_ground_item(item_id)
 
 ## place_item callable for _toils's place: preserves id stability across a
-## pick_up/place round trip. faction_id is always "colony": nothing in this
-## slice's scope (set_faction never targets an item; hands has no faction
+## pick_up/place round trip. faction_id is always "colony": nothing today
+## (set_faction never targets an item; hands has no faction
 ## field) can ever produce an item of any other faction, so there is no
 ## carried-faction to plumb through the toil executor's hands shape.
 func _place_ground_item(item_id: String, kind: String, count: int, x: int, y: int) -> void:
 	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
 	_item_factions[item_id] = "colony"
 
-## place_item callable for _toils's place (issue #402): place() now deposits
+## place_item callable for _toils's place: place() now deposits
 ## one fresh ground item per distinct hands kind rather than reusing a single
 ## carried item's own id (hands entries have no id of their own -- a pick_up
 ## may have merged several ground items' units into one entry), so this mints
@@ -1453,7 +1448,7 @@ func _spawn_wood_item(x: int, y: int) -> void:
 	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
 	_item_factions[item_id] = "colony"
 
-## Generic ground-item spawn (ADR 025): the same shape _spawn_wood_item()
+## Generic ground-item spawn (ADR 026): the same shape _spawn_wood_item()
 ## above uses, generalized to an arbitrary content/items.json kind. Used by
 ## dig's guaranteed sand and any rolled find item.
 func _spawn_item(kind: String, x: int, y: int) -> void:
@@ -1462,7 +1457,7 @@ func _spawn_item(kind: String, x: int, y: int) -> void:
 	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": 1}
 	_item_factions[item_id] = "colony"
 
-## ADR 025's item placement rule: the nearest adjacent passable, non-trench
+## ADR 026's item placement rule: the nearest adjacent passable, non-trench
 ## tile to (x, y), checked in row-major order (north, west, east, south --
 ## already row-major since these four orthogonal neighbours never tie in y),
 ## first qualifying tile wins. Falls back to (x, y) itself -- the trench tile
@@ -1473,9 +1468,9 @@ func _dig_item_placement(x: int, y: int) -> Vector2i:
 			return neighbor
 	return Vector2i(x, y)
 
-## rescue_giver.gd's target-tile candidates (issue #360): every passable,
+## rescue_giver.gd's target-tile candidates: every passable,
 ## non-trench tile adjacent to a trapped colonist's own tile, in the same
-## row-major neighbour order _dig_item_placement() already uses (ADR 025's own
+## row-major neighbour order _dig_item_placement() already uses (ADR 026's own
 ## "item placement" convention) -- but, unlike that helper, a rescue target
 ## must never be the trench tile itself: a rescue job must never target the
 ## trench a rescuer could then fall into. rescue_giver.gd ranks these by real
@@ -1493,7 +1488,7 @@ func _rescue_target_candidates(victim_tile: Vector2i) -> Array[Vector2i]:
 	return candidates
 
 ## escape_trench's exit rule: prefers from_tile (where the actor fell from)
-## when passable for the actor's OWN faction, else _dig_item_placement()'s
+## when passable for the actor's own faction, else _dig_item_placement()'s
 ## row-major order. Vector2i(-1, -1) means no exit (caller retries).
 func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) -> Vector2i:
 	if from_tile != tile and bool(passability(from_tile.x, from_tile.y, faction_id)["passable"]) \
@@ -1504,7 +1499,7 @@ func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) 
 			return neighbor
 	return Vector2i(-1, -1)
 
-## Draws dig's find_table (ADR 025, content/jobs.json's "dig" entry) against
+## Draws dig's find_table (ADR 026, content/jobs.json's "dig" entry) against
 ## _dig_find_random: the rolled item id, or "" for "no find" (a find_table
 ## row's item: null). Always consumes exactly one randi_range() draw, so the
 ## roll count stays reproducible from the world seed regardless of outcome.
@@ -1519,7 +1514,7 @@ func _roll_dig_find() -> String:
 			return String(item) if item != null else ""
 	return ""
 
-## Drains _pending_dig_finds (ADR 025) in ascending job-id order -- called
+## Drains _pending_dig_finds (ADR 026) in ascending job-id order -- called
 ## once per tick, after _advance_colonists() -- so replaying the same seed
 ## against the same command stream always produces the same find sequence no
 ## matter which colonist's dig happened to finish first this tick.
@@ -1641,15 +1636,15 @@ func _ground_berries_key(x: int, y: int) -> String:
 	return "%d_%d" % [x, y]
 
 ## The _work_progress key a specific job's progress lives under: scoped by
-## job id ONLY when that job is a "rescue" (round-2 review round-4 finding 4):
-## a tile-only key let two DIFFERENT rescue jobs sharing one target (two
+## job id only when that job is a "rescue":
+## a tile-only key would let two different rescue jobs sharing one target (two
 ## victims can share a target) read and clear each other's progress across a
 ## suspend/resume. Every other kind keeps the plain tile key every existing
 ## test/save already assumes, since an ordinary job's target changes kind (or
 ## is no longer valid) once it completes, so a same-kind job can never really
 ## reuse that exact tile. Takes the job's own explicit identity, never the
-## tile's current reservation owner (round-4 review finding 2): every
-## terminal boundary below clears progress AFTER _finish_job() has already
+## tile's current reservation owner: every
+## terminal boundary below clears progress after _finish_job() has already
 ## released that reservation, when an owner lookup would name nobody.
 func _work_progress_key_for_job(job_id: String, job: Dictionary) -> String:
 	var target: Vector2i = job["target"]
@@ -1658,13 +1653,13 @@ func _work_progress_key_for_job(job_id: String, job: Dictionary) -> String:
 	return "%s:%d_%d" % [job_id, target.x, target.y]
 
 ## The tile-addressed variant ToilExecutor's own get/set/clear hooks use mid-
-## work, when the tile's reservation owner IS the job being worked: resolves
+## work, when the tile's reservation owner is the job being worked: resolves
 ## that owner and delegates to _work_progress_key_for_job() above.
 func _work_progress_key(x: int, y: int) -> String:
 	var owning_job_id: String = _scheduler.queue.get_reservation_table().owner(_tile_key(x, y))
 	if owning_job_id.is_empty():
 		return "%d_%d" % [x, y]
-	# issue #406: a construction site's own footprint reservation is owned by
+	# A construction site's own footprint reservation is owned by
 	# "site:<id>", never a job id (ConstructionSiteTable.owner_key()) -- fall
 	# back to the plain tile key exactly like the unreserved case above rather
 	# than resolving a nonexistent job, which get_job() reports as {}.
@@ -1674,13 +1669,13 @@ func _work_progress_key(x: int, y: int) -> String:
 	return _work_progress_key_for_job(owning_job_id, owning_job)
 
 ## Progress cleanup for a job that just took a terminal transition, by its
-## own explicit identity (round-4 review finding 2). A rescue job's progress
-## key names that job alone, so it is dropped on EVERY terminal transition --
+## own explicit identity. A rescue job's progress
+## key names that job alone, so it is dropped on every terminal transition --
 ## active or merely queued/suspended -- since no other job can ever own it;
 ## an ordinary job's plain tile key is shared with any paused job on the same
 ## tile, so it is dropped only when the terminating job was the active owner
 ## (a queued competitor or a repeated terminal command must never erase
-## another job's paused progress, recovery review round 3).
+## another job's paused progress).
 func _clear_terminated_job_progress(job_id: String, job: Dictionary, was_active: bool) -> void:
 	if not job.has("target"):
 		return
@@ -1699,8 +1694,8 @@ func _get_work_progress(target: Vector2i):
 		return null
 	return int(_work_progress[key])
 
-## start_work()'s own resume/start lookup, job-id scoped (round-6 review):
-## unlike _get_work_progress() above, a DIFFERENT job's stale value at the
+## start_work()'s own resume/start lookup, job-id scoped:
+## unlike _get_work_progress() above, a different job's stale value at the
 ## same tile (a still-suspended job's own entry, or simply nothing) must never
 ## be handed to job_id as its own starting point. Checks _suspended_work_progress
 ## first (a suspended job's own snapshot, moved there by _suspend_work_progress()
@@ -1711,7 +1706,7 @@ func _get_work_progress(target: Vector2i):
 ## null (use the job kind's own declared duration) for every other case,
 ## including a different job's still-live entry at the same tile.
 func _resume_work_progress(target: Vector2i, job_id: String):
-	# issue #406: a site_work job's own duration is never a fixed
+	# A site_work job's own duration is never a fixed
 	# content/jobs.json constant (every object kind declares its own
 	# build_ticks) nor a per-job private counter -- it is always exactly
 	# "how many ticks does the site's own progress still need", re-derived
@@ -1719,7 +1714,7 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 	# resumption after a critical-need interrupt look identical here, since
 	# ConstructionSiteTable.progress -- not this job-id-scoped cache -- is the
 	# one persisted, authoritative counter). Bypasses _suspended_work_progress
-	# entirely: that cache exists to stop a DIFFERENT job inheriting a stale
+	# entirely: that cache exists to stop a different job inheriting a stale
 	# tile-keyed value, a problem this kind cannot have since its own value is
 	# always computed from the site record, never cached here at all.
 	var job := _get_job(job_id)
@@ -1740,7 +1735,7 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 	# _work_progress_owner's doc comment and _finish_job()'s "incident"
 	# branch) -- IncidentSchedulerType.activate_pending() pre-stamps its wait
 	# before the actor's own `work` toil ever starts, precisely so start_work()
-	# picks it up here; only a NON-empty owner naming a different job must be
+	# picks it up here; only a non-empty owner naming a different job must be
 	# refused.
 	var owner := String(_work_progress_owner.get(key, ""))
 	if not owner.is_empty() and owner != job_id:
@@ -1750,7 +1745,7 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 ## Moves a still-queued (suspended, not terminated) job's in-progress `work`
 ## timer out of the shared per-tile cache into _suspended_work_progress before
 ## its colonist.work is cleared for any reason other than that job's own
-## completion (round-6 review): JobQueue's own activation/reactivation
+## completion: JobQueue's own activation/reactivation
 ## lifecycle can hand the tile this job's site/target reservation just
 ## released to a completely different job's own `work` toil, which must never
 ## read, overwrite, or erase this job's own saved ticks at that same "%d_%d"
@@ -1761,7 +1756,7 @@ func _suspend_work_progress(work) -> void:
 		return
 	var job_id := String(work.get("job_id", ""))
 	var job := _scheduler.queue.get_job(job_id)
-	# "active" as well as "queued": _pause_work_job() calls this BEFORE
+	# "active" as well as "queued": _pause_work_job() calls this before
 	# suspend_assignment() actually flips the job's own status to "queued",
 	# so at that call site the job is still nominally "active" even though
 	# colonist.work is about to be cleared for it right here. A genuinely
@@ -1786,12 +1781,12 @@ func _suspend_work_progress(work) -> void:
 
 ## Called every tick for every work-toil job kind. For an active
 ## escape_trench job, also mirrors trapped.ticksRemaining from this same
-## real work timer -- never a countdown of its own. job_id (round-3 review),
+## real work timer -- never a countdown of its own. job_id,
 ## when non-empty, records this key's owner in _work_progress_owner so
 ## _release_owned_work_progress() can later tell a genuinely abandoned key
 ## from one merely paused.
 func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
-	# issue #406/#401: a site_work job never writes into the shared tile-keyed
+	# A site_work job never writes into the shared tile-keyed
 	# cache below at all -- ConstructionSiteTable.progress is the one
 	# persisted, authoritative counter (summed across every active builder).
 	# Checked here too, not only in _toil_on_work_complete()'s final-tick
@@ -1815,10 +1810,10 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 	var escaping := _escaping_actor_at(target)
 	if not escaping.is_empty() and escaping.get("trapped") != null:
 		(escaping["trapped"] as Dictionary)["ticksRemaining"] = ticks_remaining
-	# issue #305: posted on the trader's own FIRST work-toil tick (this same
+	# Posted on the trader's own first work-toil tick (this same
 	# call, on arrival), not at the wait's end, so accept_trade has a window
 	# before the trader's unchanged despawn (test_incidents.gd's own
-	# exact-wait-timing checks, out of this task's owned paths, still hold).
+	# exact-wait-timing checks still hold).
 	if not job_id.is_empty() and String(_scheduler.queue.get_job(job_id).get("kind", "")) == "incident":
 		_maybe_post_trade_offer(job_id)
 
@@ -1834,7 +1829,7 @@ func _maybe_post_trade_offer(job_id: String) -> void:
 		return
 	_post_trade_offer(actor)
 
-## Posts actor's own trade_offer (issue #278/#305): two distinct
+## Posts actor's own trade_offer: two distinct
 ## content/items.json kinds, deterministic from actor's own id (never
 ## global randomness, AGENTS.md; no new persisted RNG stream needed, since a
 ## lost offer across a save/load is simply never posted again). give_item is
@@ -1870,7 +1865,7 @@ func _pick_trade_items(trader_id: String) -> Array:
 		base += kinds.size()
 	return [kinds[base], kinds[(base + 1) % kinds.size()]]
 
-## accept_trade {trader_id} (issue #278/#305), modelled on
+## accept_trade {trader_id}, modelled on
 ## _apply_set_faction_command()'s validate-then-mutate shape
 ## (orders-and-movement.md's typed-rejection pattern). Performs the full
 ## two-way swap: one want_item unit moves out of an eligible stockpiled item
@@ -1922,10 +1917,10 @@ func _apply_accept_trade_command(command: Dictionary) -> Dictionary:
 ## sitting inside a stockpile zone, and not reserved by any job on the shared
 ## ReservationTable -- or "" when none qualifies. Deterministic id order, like
 ## _remove_one_item_of_kind(). Used by accept_trade's own stockpile draw; the
-## superseded single-worker `build` job (issue #278/#303-#403) once shared
+## superseded single-worker `build` job once shared
 ## this exact search (as `_find_available_build_item()`) for its own seed
-## item, before issue #406 replaced that job with a persistent construction
-## site that never resolves an item synchronously at all.
+## item, before it was replaced by a persistent construction site that
+## never resolves an item synchronously at all.
 func _find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
 	var table := _scheduler.queue.get_reservation_table()
 	var ids := _items.keys()
@@ -1980,7 +1975,7 @@ func _remove_trader_offered_item(trader: Dictionary, kind: String) -> void:
 			items.remove_at(i)
 			return
 
-## The colonist with an ACTIVE escape_trench job targeting `target`, via the
+## The colonist with an active escape_trench job targeting `target`, via the
 ## scheduler's own assignments (never trapped.tile alone, so two actors
 ## trapped on the same tile at different times are never confused).
 func _escaping_actor_at(target: Vector2i) -> Dictionary:
@@ -2001,8 +1996,8 @@ func _clear_work_progress(target: Vector2i) -> void:
 ## StateCodec.decode()'s own post-load restore of _work_progress_owner from
 ## the persisted "workProgressOwners" job_id (see its declaration above),
 ## rather than guessing an owner from whichever job currently targets a key
-## (round-5 review: a dig queued at a build's site made that guess pick the
-## wrong job). Cross-checked against the just-restored job list -- exactly
+## (a dig queued at a build's site would make that guess pick the wrong
+## job). Cross-checked against the just-restored job list -- exactly
 ## the same non-terminal/kind-has-work_ticks filter the old guess used -- so
 ## a hand-edited or corrupted save can never resurrect an owner pointing at a
 ## job that no longer exists, has gone terminal, or never ticks work.
@@ -2025,7 +2020,7 @@ func _restore_work_progress_owners(persisted: Dictionary) -> void:
 			continue
 		if _work_progress.has(key):
 			_work_progress_owner[key] = job_id
-	# round-6 review (#278/#303): "workProgressOwners" is optional on the wire
+	# "workProgressOwners" is optional on the wire
 	# (see StateCodec.encode()'s own comment), so a save taken before this
 	# field existed decodes `persisted` as {} here even though _work_progress
 	# itself (unconditional on the wire, restored above this call) may still
@@ -2036,7 +2031,7 @@ func _restore_work_progress_owners(persisted: Dictionary) -> void:
 	# job could never match and a replacement job at the same tile silently
 	# inherited the abandoned timer. Recover ownership from execution state
 	# the save format has always carried -- never by guessing from which job
-	# merely targets the key (round-5's own mistake) -- then drop whatever
+	# merely targets the key -- then drop whatever
 	# still has no recovered owner so it cannot leak forward either.
 	var reconstructed := _reconstruct_work_progress_owners()
 	for key in reconstructed:
@@ -2061,11 +2056,11 @@ func _restore_work_progress_owners(persisted: Dictionary) -> void:
 ## save format has always carried, unconditionally, so it is as trustworthy
 ## as a persisted job_id -- never a guess from which job happens to target a
 ## tile:
-##  - a colonist's own "work" field: the job_id its currently-ACTIVE `work`
+##  - a colonist's own "work" field: the job_id its currently-active `work`
 ##    toil belongs to (state_codec.gd's entity "work"/"jobId").
 ##  - _paused_jobs: the job_id a need interrupt suspended mid-work, restored
 ##    from "pausedJobs" before this runs (see decode()'s own ordering
-##    comment) -- exactly the round-3-review case where "status" alone can't
+##    comment) -- exactly the case where "status" alone can't
 ##    tell a merely-paused owner from an abandoned one.
 ## Two different candidates never legitimately name the same key: each only
 ## exists for a job that has genuinely started its own `work` toil (the only
@@ -2129,7 +2124,7 @@ func _is_in_any_zone(x: int, y: int) -> bool:
 			return true
 	return false
 
-## F3 (issue #290): terminally resolves every job GlobalAssignment's
+## F3: terminally resolves every job GlobalAssignment's
 ## may_be_ordered/may_reserve_colony_items gates refused, with the same typed
 ## fail() path zone_remove's blocked_destination_gone already uses -- nothing
 ## was ever acquired, so this only owns termination, returning a suspended
@@ -2192,9 +2187,9 @@ func _advance_colonists() -> void:
 			colonist["route"] = null
 			colonist["work"] = null
 			_reroutes.erase(colonist["id"])
-		# Issue #360 round-4 review finding 5: a rescue's commit-time route
+		# A rescue's commit-time route
 		# safety (rescue_giver.gd) says nothing about the map at activation
-		# time. Before the FIRST drive of a fresh rescue activation (no route,
+		# time. Before the first drive of a fresh rescue activation (no route,
 		# no work yet) re-check the scheduler's own already-computed path and
 		# target, and retire the commitment -- so the victim's next search may
 		# pick another rescuer -- rather than walk a now-unsafe path.
@@ -2212,7 +2207,7 @@ func _advance_colonists() -> void:
 ## commit would otherwise make the scheduler's route-trim start rescue work
 ## one tile off-target) and, when the scheduler's path starts where the
 ## rescuer stands (the only case ToilExecutor walks it verbatim; any other
-## path is re-routed under _rescue_routable_to() anyway), that path ends ON
+## path is re-routed under _rescue_routable_to() anyway), that path ends on
 ## the target and crosses no trench tile anywhere along it.
 func _rescue_activation_safe(colonist: Dictionary, job: Dictionary, path: Array) -> bool:
 	var target: Vector2i = job["target"]
@@ -2227,14 +2222,14 @@ func _rescue_activation_safe(colonist: Dictionary, job: Dictionary, path: Array)
 			return false
 	return true
 
-## Retires a committed rescue whose travel can no longer be completed safely
-## (round-4 review finding 5): an unreachable or newly unsafe target, a route
-## that would now cross a trench, or a target no longer passable. Cancelled
-## through the shared finish boundary (never resubmitted under the SAME
-## rescuer like _resubmit_unreachable_job() does for an ordinary order), its
-## own progress key dropped (finding 2), and RescueGiver told so the rescuer
-## resumes its own interrupted work and the victim's next search is free to
-## choose ANY available rescuer, not this one indefinitely.
+## Retires a committed rescue whose travel can no longer be completed safely:
+## an unreachable or newly unsafe target, a route that would now cross a
+## trench, or a target no longer passable. Cancelled through the shared
+## finish boundary (never resubmitted under the same rescuer like
+## _resubmit_unreachable_job() does for an ordinary order), its own progress
+## key dropped, and RescueGiver told so the rescuer resumes its own
+## interrupted work and the victim's next search is free to choose any
+## available rescuer, not this one indefinitely.
 func _retire_rescue_job(job_id: String, job: Dictionary = {}) -> void:
 	if job.is_empty():
 		job = _scheduler.queue.get_job(job_id)
@@ -2243,7 +2238,7 @@ func _retire_rescue_job(job_id: String, job: Dictionary = {}) -> void:
 		_clear_terminated_job_progress(job_id, job, was_active)
 	_rescue_giver.resolve_job(job_id)
 
-## ADR 025 t3: traps an actor whose route step lands it on trench (the
+## ADR 026: traps an actor whose route step lands it on trench (the
 ## "still routing" case; _toil_on_work_complete()'s own pre-check covers
 ## arrival+completion in the same tick, via the same _trap_actor()).
 func _check_trench_arrival(colonist: Dictionary, job_id: String, tile_before: Vector2i) -> void:
@@ -2253,9 +2248,9 @@ func _check_trench_arrival(colonist: Dictionary, job_id: String, tile_before: Ve
 	if not _actor_traps_on_trench(colonist): return
 	_trap_actor(colonist, job_id, tile_before)
 
-## Non-goals: trap-on-entry/hostile climb-out applies only to a colonist (has
+## Scope: trap-on-entry/hostile climb-out applies only to a colonist (has
 ## a worker component, ActorTable/ADR 012) or an actor hostile to the colony
-## (ADR 015 Relations.is_hostile) -- a non-hostile, non-colonist actor (a
+## (ADR 014 Relations.is_hostile) -- a non-hostile, non-colonist actor (a
 ## trader) crosses a trench unaffected, exactly like it always could.
 func _actor_traps_on_trench(actor: Dictionary) -> bool:
 	if ActorTableType.has_component(actor, "worker", _content):
@@ -2264,7 +2259,7 @@ func _actor_traps_on_trench(actor: Dictionary) -> bool:
 
 ## Releases job_id exactly like cancel_job (reservations freed, owned
 ## work-progress cleared, NeedGiver resolved -- _apply_job_command()'s own
-## path). Records `trapped`, and when hostile (ADR 015) submits escape_trench.
+## path). Records `trapped`, and when hostile (ADR 014) submits escape_trench.
 func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> void:
 	var tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
 	var hostile: bool = _relations.is_hostile({"faction_id": String(colonist.get("factionId", "colony"))}, {"faction_id": "colony"})
@@ -2311,7 +2306,7 @@ func _trench_climb_ticks(colonist: Dictionary) -> int: # content/actors.json tun
 
 ## Steps the go_to toil toward target; on "unreachable", routes through the
 ## same kind-aware _toil_on_unreachable() boundary every other first-leg
-## unreachable case uses (round-6 review, third pass) rather than
+## unreachable case uses rather than
 ## unconditionally resubmitting -- an incident or flee job recovering here
 ## must be cancelled-only, never resubmitted: _resubmit_unreachable_job()
 ## replaces a job through the ordinary, may_be_ordered-gated submit(),
@@ -2321,10 +2316,9 @@ func _trench_climb_ticks(colonist: Dictionary) -> int: # content/actors.json tun
 ## Always is_first=true (_resume_paused_job() only ever calls this for a
 ## colonist not yet carrying anything), so the on_arrive callback must match
 ## whatever the ordinary tick-driven path would use for that same leg
-## (ToilExecutor.leads_into_work()/_arrival_hook(), issue #278/#303 round-1
-## review): a haul/build leg whose own next toil is pick_up, not work, must
+## (ToilExecutor.leads_into_work()/_arrival_hook()): a haul/build leg whose own next toil is pick_up, not work, must
 ## never auto-start the work timer on arrival here either -- the same bug
-## ADR 027 traced on the ordinary path.
+## ADR 028 traced on the ordinary path.
 func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dictionary, target: Vector2i) -> void:
 	var on_arrive := Callable(_toils, "start_work") if _toils.leads_into_work(String(job["kind"]), true) else Callable(self, "_toil_no_op_arrive")
 	if _toils.advance_go_to(colonist, job_id, target, _routable_to(target, String(colonist.get("factionId", "colony"))), "go_to", on_arrive) != "unreachable":
@@ -2346,7 +2340,7 @@ func _toil_no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
 ## would let a different colonist claim the replacement while this one is
 ## told its need is already met); falls back to resolve_job() if the
 ## resubmission itself is rejected. A player-ordered dig/chop/forage job's
-## own assignee restriction (F3, issue #290) has no NeedGiver association at
+## own assignee restriction (F3) has no NeedGiver association at
 ## all, so it is instead read straight off the original job's activated
 ## entry (GlobalAssignment.restrict_to_for()) before _finish_job() below
 ## erases that entry -- without this, the documented "only the named actor
@@ -2376,7 +2370,7 @@ func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable
 ## GlobalAssignment._routable() applies to the scheduler's own route search: a
 ## re-route search may terminate on its own job's target tile even when that
 ## tile's base kind is otherwise impassable (a chop job's tree). faction_id
-## (F5, issue #294) defaults "colony" so every pre-existing colony-only call
+## (F5) defaults "colony" so every pre-existing colony-only call
 ## site is unchanged; _toil_go_to_passable() below passes the acting actor's
 ## own factionId instead.
 func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
@@ -2386,8 +2380,8 @@ func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
 			return 1.0
 		return cost
 
-## A rescue job's own route cost (issue #360 round-4 review finding 5): every
-## trench tile is impassable (a rescuer must never be routed INTO the very
+## A rescue job's own route cost: every
+## trench tile is impassable (a rescuer must never be routed into the very
 ## hazard it is relieving, whichever trench it is), and the target gets none
 ## of _routable_to()'s impassable-target exception -- a rescue target is an
 ## ordinary passable tile the rescuer must actually stand on, so a target
@@ -2403,7 +2397,7 @@ func _rescue_routable_to(_target: Vector2i, faction_id: String = "colony") -> Ca
 	return func(tile: Vector2i) -> float:
 		return 0.0 if _is_trench_tile(tile) else _passable_for_faction(tile, faction_id)
 
-## is_trench callable for RescueGiver (round-2 review round-4 finding 1).
+## is_trench callable for RescueGiver.
 func _is_trench_tile(tile: Vector2i) -> bool:
 	return get_tile(tile.x, tile.y) == TILE_TRENCH
 
@@ -2466,10 +2460,10 @@ func _force_drop_carried_item(colonist: Dictionary) -> void:
 ## Drops a haul/build job's carried item at the shared terminal boundary
 ## (cancel/fail/invalidate commands, an unreachable second leg, a refused
 ## build completion): the live-assignment path first, where job_id still
-## names a worker; otherwise the suspended-owner path (round-2 review) --
+## names a worker; otherwise the suspended-owner path --
 ## a job paused by a critical-need interrupt is only recorded in
 ## _paused_jobs, so its carrier is resolved there and deposits the cargo
-## WITHOUT touching its route/work, which now belong to the need job driving
+## without touching its route/work, which now belong to the need job driving
 ## it. The pause entry is cleared too: the job is about to be terminal, so
 ## there is nothing left to resume.
 func _drop_carried_haul_item(job_id: String) -> void:
@@ -2497,7 +2491,7 @@ func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -
 ## work_target_for callable injected into _toils (ToilExecutor's own
 ## start_work()/advance_work_step()): the tile a job's `work` toil actually
 ## operates on/completes at. Every kind's own job["target"] already names it
-## directly -- a site_work job's "target" IS the site's own origin tile (its
+## directly -- a site_work job's "target" is the site's own origin tile (its
 ## only leg, attach_site()) -- so this is a plain passthrough today; kept as
 ## its own function since _toil_on_work_complete() and every other
 ## work-in-progress-key reader (_trap_actor(), _apply_job_command()'s
@@ -2510,7 +2504,7 @@ func _work_target_for(job: Dictionary) -> Vector2i:
 ## go_to_target hook for _toils: the item's tile for a haul/site_fetch job's
 ## first leg, or job["cell"]/job["site"] for its second leg (site_fetch's
 ## second leg mirrors haul's own "target"/"cell" split, but through
-## job_queue.gd's own "site" field, issue #406). A site_work job has only one
+## job_queue.gd's own "site" field). A site_work job has only one
 ## leg, straight to its own origin tile (already job["target"]). Any other
 ## kind always uses its own single target.
 func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector2i:
@@ -2521,11 +2515,11 @@ func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector2i:
 		return job["site"]
 	return job["target"]
 
-## is_first_leg hook (#400's hands-filling rules, round 3 review): every kind
+## is_first_leg hook (hands-filling rules): every kind
 ## but site_fetch keeps ToilExecutor's original is_carrying()-based default
 ## unchanged. A site_fetch job's own "cell" field -- always null for
 ## site_fetch otherwise, since it never drives a `place` toil (it ends in
-## `deposit`, issue #406) -- doubles as the "done fetching, now delivering"
+## `deposit`) -- doubles as the "done fetching, now delivering"
 ## flag: null while _toil_on_pick_up_success() still finds more worth
 ## visiting, stamped with the site's origin the moment it decides otherwise
 ## (JobQueue.mark_site_fetch_delivering()). This is what lets a single
@@ -2547,12 +2541,12 @@ func _toil_is_first_leg(job: Dictionary, colonist: Dictionary) -> bool:
 ## kept (site_fetch's deposit, staying passable) or trimmed to land the
 ## colonist adjacent instead (site_work, about to sit next to what may become
 ## an impassable object).
-## faction_id (F5, issue #294) is ToilExecutor's own acting-colonist factionId, threaded through so a non-colony actor's route search is gated by its own faction's door permissions; every pre-existing (colony) caller still gets "colony" by default.
+## faction_id (F5) is ToilExecutor's own acting-colonist factionId, threaded through so a non-colony actor's route search is gated by its own faction's door permissions; every pre-existing (colony) caller still gets "colony" by default.
 func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, faction_id: String = "colony") -> Callable:
-	# An incident's destination needs actual arrival on a faction-passable tile (recovery review round 3), never _routable_to()'s dig/chop/forage impassable-target exception -- a door or wall must make it genuinely unreachable.
+	# An incident's destination needs actual arrival on a faction-passable tile, never _routable_to()'s dig/chop/forage impassable-target exception -- a door or wall must make it genuinely unreachable.
 	if String(job["kind"]) == "incident":
 		return func(tile: Vector2i) -> float: return _passable_for_faction(tile, faction_id)
-	# Issue #360 round-4 review finding 5: a rescuer's every re-route (a
+	# A rescuer's every re-route (a
 	# corridor blocked mid-travel, a resume after a need interrupt) runs under
 	# rescue's own trench-excluding, no-target-exception passability, so it
 	# can never be routed through a trench nor trimmed to start work off-target.
@@ -2560,14 +2554,14 @@ func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, fac
 		return _rescue_routable_to(target, faction_id)
 	return _routable_to(target, faction_id) if is_first or String(job["kind"]) != "haul" else _is_passable
 
-## go_to_force_trim_last hook (issue #406): a site_work job's only leg, and a
+## go_to_force_trim_last hook: a site_work job's only leg, and a
 ## site_fetch job's own second (delivery) leg, both target the site's own
 ## origin tile, which is still genuinely passable at travel time -- nothing is
 ## placed there until progress reaches build_ticks -- so the ordinary "trim
 ## only a target that's impassable right now" rule
 ## (ToilExecutor._resume_go_to_reroute()) never fires for it, and a builder
 ## would otherwise walk onto and stand on the exact tile that may become an
-## impassable object. Forcing the trim for BOTH (a builder already standing
+## impassable object. Forcing the trim for both (a builder already standing
 ## on the site is stepped off by ToilExecutor.advance_go_to()'s own step-off
 ## rule) lands every builder adjacent instead, exactly like chop/forage's own
 ## already-impassable target -- and, critically, keeps a site_fetch delivery
@@ -2579,7 +2573,7 @@ func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
 	var kind := String(job["kind"])
 	return kind == "site_work" or (kind == "site_fetch" and not is_first)
 
-## go_to_skip_assignment_path hook (issue #406): a site_work job's single leg
+## go_to_skip_assignment_path hook: a site_work job's single leg
 ## is always "is_first" (_is_first_leg() short-circuits true for any kind
 ## whose toils have no pick_up, before ever consulting a hook), so
 ## _start_current_toil() would otherwise walk GlobalAssignmentScheduler's own
@@ -2591,7 +2585,7 @@ func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
 ## trim, so a builder's work leg lands adjacent to the site exactly like its
 ## own delivery leg already does, never on the tile about to become an object.
 ## A site_fetch job's own fetch leg may visit more than one source before
-## delivering (#400's hands-filling rules, round 3 review), so a job this
+## delivering (the hands-filling rules), so a job this
 ## tick's or an earlier hop's _resolve_freshly_activated_site_fetch_sources()/
 ## _toil_on_pick_up_success() has ever retargeted away from
 ## GlobalAssignment's own precomputed path (_site_fetch_source_retargeted)
@@ -2605,10 +2599,10 @@ func _toil_go_to_skip_assignment_path(job: Dictionary) -> bool:
 
 ## on_unreachable hook: a first-leg target may still be reachable elsewhere, so
 ## it is cancelled and resubmitted; a second-leg haul destination fails outright.
-## An incident actor's target is never resubmitted (F5, issue #294): the
+## An incident actor's target is never resubmitted (F5): the
 ## job is cancelled through the shared finish boundary, whose incident
 ## cleanup despawns the actor. A flee target is likewise never resubmitted
-## here (F5/#302, round-1 review): _resubmit_unreachable_job() replaces a job
+## here: _resubmit_unreachable_job() replaces a job
 ## through the ordinary, may_be_ordered-gated submit() -- refused outright for
 ## a hostile actor, and stripped of the autonomous flag even when accepted,
 ## leaving CombatGiver's own `_fleeing` association pointing at a cancelled
@@ -2620,7 +2614,7 @@ func _toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> vo
 	if String(job["kind"]) in ["incident", CombatGiverType.FLEE_KIND, ApproachGiverType.APPROACH_KIND]:
 		_finish_job(job_id, "cancel_job")
 	elif String(job["kind"]) == "rescue":
-		# Issue #360 round-4 review finding 5: never resubmitted under the same
+		# Never resubmitted under the same
 		# rescuer -- retired, so another available rescuer may be chosen.
 		_retire_rescue_job(job_id, job)
 	elif String(job["kind"]) == "site_fetch":
@@ -2648,7 +2642,7 @@ func _toil_item_id_for(job: Dictionary) -> String:
 
 ## cell_for hook for _toils's place toil: haul's own destination cell.
 ## site_fetch never drives a `place` toil at all (it ends in `deposit`
-## instead, issue #406), so this hook is never called for it.
+## instead), so this hook is never called for it.
 func _toil_cell_for(job: Dictionary) -> Vector2i:
 	return job["cell"]
 
@@ -2661,19 +2655,18 @@ func _toil_site_id_for(job: Dictionary) -> String:
 		return ""
 	return _sites.find_at_origin(job["site"])
 
-## pick_up_count_for hook (issue #406, extended for #400's hands-filling
-## rules round 3 review, extended again for issue #451's chained delivery):
-## clamps a site_fetch pick_up to what the CURRENT target site still needs of
-## that source's own kind (ConstructionSiteTable.remaining()) PLUS every other
-## reachable, still-short, not-already-at-capacity sibling site's own
-## remaining need of the same kind (_reachable_short_sibling_sites(), issue
-## #451: sized so a hands-load can actually carry enough to chain onto more
-## than one block, not just the site job["site"] currently names -- see
-## _toil_on_deposit_success() below, the other half of this design; a sibling
-## already holding its own max_builders worth of queued-or-active
-## fetch-plus-work jobs, per _site_fetch_work_busy(), is excluded from this
-## sum too, since it could never actually accept a chained delivery), MINUS
-## whatever of that same kind colonist's
+## pick_up_count_for hook (construction sites, extended for the hands-filling
+## rules and chained delivery): clamps a site_fetch pick_up to what the
+## current target site still needs of that source's own kind
+## (ConstructionSiteTable.remaining()), plus every other reachable,
+## still-short, not-already-at-capacity sibling site's own remaining need of
+## the same kind (_reachable_short_sibling_sites(): sized so a hands-load can
+## actually carry enough to chain onto more than one block, not just the site
+## job["site"] currently names -- see _toil_on_deposit_success() below, the
+## other half of this design; a sibling already holding its own max_builders
+## worth of queued-or-active fetch-plus-work jobs, per _site_fetch_work_busy(),
+## is excluded from this sum too, since it could never actually accept a
+## chained delivery), minus whatever of that same kind colonist's
 ## hands already hold from an earlier hop this same job -- taking a generous
 ## source's whole remaining-need could otherwise, on a second or later hop,
 ## request more than every reachable site combined actually still needs,
@@ -2692,7 +2685,7 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 	if item.is_empty():
 		return -1
 	var kind := String(item.get("kind", ""))
-	# Cached for _toil_on_pick_up_success() (issue #406 round-4 review): the
+	# Cached for _toil_on_pick_up_success(): the
 	# pick_up this count gates for may exhaust and delete item's own entry
 	# from _items entirely, so that hook cannot re-derive kind the same way
 	# once it runs.
@@ -2705,7 +2698,7 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 	need -= InventoryType.count_of_kind(colonist, kind)
 	return need if need > 0 else -1
 
-## on_pick_up_success hook (#400's hands-filling rules, round 3 review): a
+## on_pick_up_success hook (hands-filling rules): a
 ## site_fetch job's own per-hop decision, made once right after each pick_up
 ## completes (never re-evaluated mid-travel, so a colonist walking toward an
 ## already-chosen source never flip-flops): deliver now
@@ -2734,7 +2727,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
 	var site := _sites.get_site(site_id)
-	# Not _item_lookup(job["item_id"]) (round-4 review): a pick_up that exactly
+	# Not _item_lookup(job["item_id"]): a pick_up that exactly
 	# exhausts its source's remaining count deletes that item from _items
 	# before this hook ever runs (ToilExecutor.pick_up()'s own _remove_item
 	# call), which would silently resolve kind as "" here instead -- see
@@ -2778,31 +2771,31 @@ func _toil_on_toil_fail(job_id: String, reason: String) -> void:
 
 ## on_place_success hook: an ordinary haul job simply completes once its item
 ## lands in its stockpile cell. site_fetch never drives a `place` toil at all
-## (issue #406: it ends in `deposit` instead), so this hook is never called
+## (it ends in `deposit` instead), so this hook is never called
 ## for it.
 func _toil_on_place_success(job_id: String) -> void:
 	_finish_job(job_id, "complete_job")
 
-## on_deposit_success hook (issue #406, extended by issue #451's chained
+## on_deposit_success hook (construction sites, extended for chained
 ## delivery): a site_fetch job completes once its hands are transferred into
-## the site's held_materials -- UNLESS hands still hold units of the job's own
+## the site's held_materials -- unless hands still hold units of the job's own
 ## kind (the deposit toil itself already clamped to what the just-delivered
 ## site still needed, so any leftover means that site is now fully served for
 ## this kind) and a reachable, still-short, same-kind, not-already-at-capacity
 ## sibling site exists (_next_site_fetch_site(), the same deterministic
 ## route-cost search _next_site_fetch_source() uses for sources, applied to
-## sites): retarget the SAME job onto it (JobQueue.retarget_site_fetch_site())
+## sites): retarget the same job onto it (JobQueue.retarget_site_fetch_site())
 ## and let the ordinary per-tick advance() drive a fresh go_to/deposit pair
 ## there instead of completing, rather than ending the job and forcing a fresh
 ## trip back to a stockpile for every further block a hands-load could still
-## serve. job["site"] always names whichever site the job is CURRENTLY
+## serve. job["site"] always names whichever site the job is currently
 ## delivering to either way -- no new persisted field, so a mid-chain
 ## save/load round-trips exactly like a single-site delivery already did.
 ## `kind` is read straight off the colonist's own (persisted) hands rather
 ## than a runtime cache: a source item a pick_up exhausted and deleted, or a
-## save/load between hops, can never leave it unresolved (round-2 review --
-## the prior `_site_fetch_picked_kind` cache is never saved and is empty right
-## after a load, silently ending a chain early). When leftover exists but no
+## save/load between hops, can never leave it unresolved (the
+## `_site_fetch_picked_kind` cache is never saved and is empty right after a
+## load, which would silently end a chain early). When leftover exists but no
 ## sibling qualifies, it is dropped through the same live-assignment
 ## terminal-drop path cancel_job/cancel_site already use
 ## (_drop_carried_item_from()) before completing, so no material is ever
@@ -2835,7 +2828,7 @@ func _toil_on_deposit_success(job_id: String) -> void:
 func _toil_on_work_complete(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
 	var target: Vector2i = _work_target_for(job)
-	# ADR 025 t3: arrival and this work toil's completion can land in the same
+	# ADR 026: arrival and this work toil's completion can land in the same
 	# tick (a wait_ticks=1 job targeting a trench); trapping must preempt the
 	# completion effect/despawn below, so this runs first. _trap_tile_before
 	# != target excludes an actor already standing on a target that merely
@@ -2891,12 +2884,12 @@ func _toil_on_work_complete(job_id: String) -> void:
 				return
 			_tiles[_tile_index(target.x, target.y)] = TILE_PLANTED
 		"site_work":
-			# issue #406: every builder's own site_work job adds one tick of
+			# Every builder's own site_work job adds one tick of
 			# progress per tick it works (ConstructionSiteTable.add_progress(),
 			# not a private per-job counter -- this final tick included, the
 			# ones before it via _set_work_progress()'s own site_work branch),
 			# so the mechanism already sums correctly for more than one
-			# concurrent builder even though this task only ever exercises one.
+			# concurrent builder.
 			# Once accumulated progress meets the site's own declared
 			# build_ticks, _finalize_construction_site() places the declared
 			# object, releases the site's footprint reservation, and removes
@@ -2940,13 +2933,13 @@ func _toil_on_work_complete(job_id: String) -> void:
 	_finish_job(job_id, "complete_job")
 	_resolve_giver_association(job_id, String(job["kind"]))
 
-## rescue's on_work_complete effect (issue #360): the trapped, rescuable
+## rescue's on_work_complete effect: the trapped, rescuable
 ## colonist this specific job_id was actually committed to rescue, read from
-## RescueGiver's own victim_for_job() (round-2 review finding 5) -- never
+## RescueGiver's own victim_for_job() -- never
 ## guessed by scanning for "the first trapped colonist adjacent to target,"
 ## which picks the wrong victim whenever two different trapped colonists are
-## each cardinally adjacent to this same target tile. Round-3 review finding
-## 4: when the assigned victim no longer exists or is no longer trapped (it
+## each cardinally adjacent to this same target tile. When the assigned
+## victim no longer exists or is no longer trapped (it
 ## died, or something else already freed it), this returns {} rather than
 ## falling back to an arbitrary adjacent trapped colonist -- substituting one
 ## could steal a different victim's own, already-claimed rescue (that other
@@ -2990,8 +2983,8 @@ func _toil_on_consume_success(job_id: String) -> void:
 	_finish_job(job_id, "complete_job")
 	_need_giver.resolve_job(job_id)
 
-## on_no_tool_found hook (issue #271 round 6): requeue_assignment(), not
-## suspend_assignment(), so the job keeps its ORIGINAL restrict_to (empty for
+## on_no_tool_found hook: requeue_assignment(), not
+## suspend_assignment(), so the job keeps its original restrict_to (empty for
 ## an ordinary order) instead of getting pinned to a colonist whose own fetch
 ## just failed -- letting any still-eligible colonist pick it back up.
 ## JobQueue.block_no_tool() then applies this kind's own backoff/reason.
@@ -2999,8 +2992,8 @@ func _toil_on_no_tool_found(job_id: String, colonist_id: String, kind: String) -
 	_scheduler.requeue_assignment(colonist_id, job_id)
 	_scheduler.queue.block_no_tool(job_id)
 
-## tool_available callable for JobQueue.set_tool_requirement() (issue #271
-## round 5): true when a matching tool is free, OR already reserved by
+## tool_available callable for JobQueue.set_tool_requirement(): true when a
+## matching tool is free, or already reserved by
 ## job_id itself -- a still-queued job normally holds no tool reservation
 ## yet (fetch_tool only ever reserves one once its job is active, and
 ## _toil_on_no_tool_found()'s callers already release any reservation before
@@ -3011,20 +3004,19 @@ func _tool_exists(job_id: String, kind: String) -> bool:
 	return bool(ToolMatchingType.find_nearest_free_tool(kind, Vector2i.ZERO, job_id,
 		get_tool_items(), get_tool_item_reservation, ToolMatchingType.colonist_position_map(_colonists)).get("found", false))
 
-## tool_requirement_of callable for JobQueue.set_tool_requirement() (issue
-## #271 round 5): {} for a job kind with no needs_tool requirement, else
+## tool_requirement_of callable for JobQueue.set_tool_requirement(): {} for a job kind with no needs_tool requirement, else
 ## {"kind","retry_base_ticks","retry_cap_ticks"} straight from the
 ## content-loaded table _init() built alongside _needs_tool_by_kind.
 func _tool_requirement_for_kind(kind: String) -> Dictionary:
 	return _tool_requirements_by_kind.get(kind, {})
 
-## issue #405: (x, y)'s own footprint origin -- (x, y) itself unless it is a
+## (x, y)'s own footprint origin -- (x, y) itself unless it is a
 ## non-origin tile of a multi-tile object (_object_origin), letting any
 ## footprint tile find the whole object's origin.
 func _object_origin_at(x: int, y: int) -> Vector2i:
 	return _object_origin.get(_object_key(x, y), Vector2i(x, y))
 
-## issue #405: kind's own [w, h] footprint size (content/objects.json's
+## Kind's own [w, h] footprint size (content/objects.json's
 ## "footprint", default [1, 1] for a defensive lookup miss -- real content
 ## always declares it, per objects.schema.json's required field), with width
 ## and height swapped when orientation is "vertical" and kind declares
@@ -3039,7 +3031,7 @@ func _object_footprint_size(kind: String, orientation: String) -> Vector2i:
 		return Vector2i(height, width)
 	return Vector2i(width, height)
 
-## issue #405: every tile kind occupies starting at origin under orientation,
+## Every tile kind occupies starting at origin under orientation,
 ## in row-major order (origin itself always first) -- the one place both
 ## _set_object() and place_object's footprint validation compute this, so
 ## they can never disagree about which tiles a placement touches.
@@ -3054,14 +3046,14 @@ func _object_footprint_tiles(kind: String, origin: Vector2i, orientation: String
 ## Internal mutator: not exposed publicly. Called by
 ## _apply_place_object_command()/_apply_remove_object_command() (and directly
 ## by tests). A tile holds at most one *logical* object, now possibly
-## spanning kind's whole footprint (issue #405, docs/decisions/037): every
+## spanning kind's whole footprint (ADR 039): every
 ## occupied tile carries the same kind/faction_id/health, and orientation is
 ## recorded once at origin (x, y) (meaningful only when kind declares
 ## "rotatable" true). Clearing at (x, y) (kind "") erases the *whole*
 ## existing object there, found via _object_origin_at() so this works from
 ## any of its footprint tiles, not just its origin -- and a bare/no-object
 ## (x, y) still marks/invalidates exactly that one tile, matching this
-## function's pre-#405 behaviour byte-for-byte for every existing footprint
+## function's single-tile behaviour byte-for-byte for every existing footprint
 ## [1,1] kind. faction_id/orientation default to "colony"/"" so every
 ## existing 3-arg caller keeps placing colony-owned, unrotated objects.
 func _set_object(x: int, y: int, kind: String, faction_id: String = "colony", orientation: String = "") -> void:
@@ -3102,21 +3094,21 @@ func _set_object(x: int, y: int, kind: String, faction_id: String = "colony", or
 	if not orientation.is_empty():
 		_object_orientation[origin_key] = orientation
 
-## F5/#302: {} for a bare tile, a tile whose object declares no
+## {} for a bare tile, a tile whose object declares no
 ## health/max_health (content/objects.json), or a not-yet-placed one --
-## CombatTargeting's own "does this object have health" check. issue #405:
-## resolved through _object_origin_at() so every footprint tile of a
+## CombatTargeting's own "does this object have health" check. Resolved
+## through _object_origin_at() so every footprint tile of a
 ## multi-tile object reports the same, single canonical health pool (health
 ## is stored once, at the object's origin tile).
 func _object_health_at(x: int, y: int) -> Dictionary:
 	var origin := _object_origin_at(x, y)
 	return (_object_health.get(_object_key(origin.x, origin.y), {}) as Dictionary).duplicate()
 
-## F5/#302: applies `amount` damage to the object occupying (x, y), clearing
+## Applies `amount` damage to the object occupying (x, y), clearing
 ## it (a wall becomes floor, rule 3) once its hp reaches 0 -- through the same
 ## _set_object() every other object mutation uses, so regions/rooms/dirty-cell
 ## bookkeeping stays correct. A no-op for a tile with no health-bearing object.
-## issue #405: resolved through _object_origin_at() so damage landing on any
+## Resolved through _object_origin_at() so damage landing on any
 ## footprint tile of a multi-tile object updates the one shared health pool
 ## and, at zero, clears the whole footprint via _set_object() at the origin.
 func _damage_object(x: int, y: int, amount: int) -> void:
@@ -3129,7 +3121,7 @@ func _damage_object(x: int, y: int, amount: int) -> void:
 	if int(health["hp"]) <= 0:
 		_set_object(origin.x, origin.y, "")
 
-## Appends to the dirty-cell log (issue #299) -- see _dirty_cells' own doc
+## Appends to the dirty-cell log -- see _dirty_cells' own doc
 ## comment above. Duplicates are left in (a tile dug then immediately built
 ## on is two real changes); get_dirty_cells() callers key their own consumed
 ## index by Array size, exactly like get_events(), so a duplicate costs one
@@ -3162,7 +3154,7 @@ func _get_water_tiles() -> Array[Vector2i]:
 	return _water_tile_cache
 
 ## Keeps _water_tile_cache in sync with any authoritative tile mutation that
-## changes a tile's water membership (round 5 review: forage can legally clear
+## changes a tile's water membership (forage can legally clear
 ## a berry_bush placed on a TILE_WATER tile via a supported place_object
 ## command, converting that water tile to TILE_FLOOR in _toil_on_work_complete()
 ## above -- an unrefreshed cache would keep offering that former water tile as
@@ -3214,7 +3206,7 @@ func _cell_key(x: int, y: int) -> String:
 func _ensure_needs() -> void:
 	for i in _colonists.size():
 		var colonist: Dictionary = _colonists[i]
-		# A generic actor (wolf/trader) never declares "worker" (F5, issue #294), so labour_table_missing would read permanently true and rebuild it into this colonist-only shape every tick, dropping its own fields -- skip any actor without a worker component.
+		# A generic actor (wolf/trader) never declares "worker" (F5), so labour_table_missing would read permanently true and rebuild it into this colonist-only shape every tick, dropping its own fields -- skip any actor without a worker component.
 		if not ActorTableType.has_component(colonist, "worker", _content):
 			continue
 		var needs_component = ActorTableType.get_component(colonist, "needs", _content)
@@ -3236,7 +3228,7 @@ func _ensure_needs() -> void:
 				"route": _route(colonist),
 				"work": colonist.get("work"),
 				"hands": colonist.get("hands", []),
-				"trapped": colonist.get("trapped"), # unconditional (#359), never dropped by this repair
+				"trapped": colonist.get("trapped"), # unconditional, never dropped by this repair
 				"held_tool": worker_component["held_tool"] if worker_component is Dictionary else "",
 				"factionId": String(colonist.get("factionId", "colony")) }
 			if not health_missing:
@@ -3256,7 +3248,7 @@ func _ensure_needs() -> void:
 			if not labour_table.has(kind):
 				labour_table[kind] = defaults[kind]
 
-## A colonist dict missing "held_tool" (a pre-task-#213 fixture) never held a
+## A colonist dict missing "held_tool" (an older fixture) never held a
 ## tool: backfilled to "" in place, always a plain append (never a rebuild
 ## like _ensure_needs()) so state_hash()'s key insertion order matches a
 ## decoded colonist's. Uses has()/index-assignment only (no read of the
@@ -3268,7 +3260,7 @@ func _ensure_held_tool() -> void:
 			colonist["held_tool"] = ""
 
 ## Backfills a missing "health" (ActorTable.spawn()'s default) and
-## "factionId" (issue #284; only one faction exists) with "colony", like
+## "factionId" (only one faction exists) with "colony", like
 ## _ensure_held_tool(). Also "trapped" to null (no component builds it), so
 ## state_hash() never diverges from a freshly decoded StateCodec entity.
 func _ensure_health() -> void:
@@ -3280,14 +3272,13 @@ func _ensure_health() -> void:
 		var definition: Dictionary = _content.get_entry("actors", String(colonist.get("kind", "colonist")))
 		colonist["health"] = HealthType.build_full(definition.get("tunables", {}).get("health", {}))
 
-## F5/#302: backfills a missing "combat" component onto a colonist whose own
-## definition now declares one (content/actors.json's colonist entry, this
-## task) -- ActorTable._spawn_colonist() (docs/decisions/012-actors-and-
-## components.md, not owned by this task) keeps colonist's exact legacy field
+## Backfills a missing "combat" component onto a colonist whose own
+## definition now declares one (content/actors.json's colonist entry) --
+## ActorTable._spawn_colonist() (ADR 012) keeps colonist's exact legacy field
 ## set and never adds a "combat" key itself, mirroring how _ensure_health()/
 ## _ensure_needs() already backfill a component ActorTable's own special-cased
 ## spawn path does not build. A plain append (never a rebuild): every
-## colonist, fresh-spawned or loaded from a save that predates this task, is
+## colonist, fresh-spawned or loaded from a save that predates combat, is
 ## uniformly missing "combat" at this point, so appending it last is the same
 ## key order every time -- state_hash()'s JSON.stringify(_colonists) stays
 ## deterministic across two runs of the same seed. A generic actor (wolf/
@@ -3302,10 +3293,10 @@ func _ensure_combat() -> void:
 		var definition: Dictionary = _content.get_entry("actors", String(colonist.get("kind", "colonist")))
 		colonist["combat"] = CombatType.build(definition.get("tunables", {}).get("combat", {}))
 
-## F5/#302: backfills a missing `_object_health` entry for any placed object
+## Backfills a missing `_object_health` entry for any placed object
 ## whose kind declares `max_health` (content/objects.json). StateCodec.decode()
 ## now restores a save's own persisted per-object hp/maxHp directly (its
-## "health" field, optional so an older save that predates this task simply
+## "health" field, optional so an older save that predates it simply
 ## omits it) -- this backfill only ever fires for such an older save, or a
 ## hand-built fixture that calls `_objects[key] = kind` directly instead of
 ## through `_set_object()`, mirroring `_ensure_health()`/`_ensure_combat()`'s
@@ -3324,8 +3315,7 @@ func _ensure_object_health() -> void:
 			continue
 		_object_health[key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
 
-## F5/#302 (ADR 020): the one new system this objective adds, run once per
-## tick before the fair scheduler sees any colonist. Resolves attacks
+## F5 combat (ADR 021): run once per tick before the fair scheduler sees any colonist. Resolves attacks
 ## (rule 1) via CombatResolver, applies its reported deaths (rule 2) against
 ## this WorldState's own owned state (job/reservation cleanup, dropping
 ## inventory, removal from scheduling), then lets CombatGiver decide whether
@@ -3347,38 +3337,36 @@ func _apply_combat(tick: int) -> void:
 func get_actor_combat_reason(actor_id: String) -> String:
 	return String(_combat_status.get(actor_id, ""))
 
-## F5/#302 rule 2: a dead actor is removed from scheduling. Drops its
+## F5 combat rule 2: a dead actor is removed from scheduling. Drops its
 ## inventory contents as loose items on its own tile -- death-specific, kept
 ## out of the shared _cleanup_actor_scheduling()/_remove_colonist_by_id() an
 ## ordinary (non-death) incident despawn also goes through -- then removes it
 ## through _remove_colonist_by_id(), which owns the scheduling/giver cleanup
-## shared with that despawn path (round-6 review, third pass).
+## shared with that despawn path.
 func _apply_actor_death(actor: Dictionary) -> void:
 	var colonist_id: String = String(actor["id"])
 	_drop_inventory_contents(actor)
 	_remove_colonist_by_id(colonist_id, true)
 
 ## Every nonterminal job restricted to colonist_id -- its own active
-## assignment, a paused one, AND any still-queued or otherwise-routing one
-## (round-1 review: an earlier version only cancelled the first two) --
+## assignment, a paused one, and any still-queued or otherwise-routing one --
 ## cancelled through the shared finish boundary, releasing every reservation
 ## it held and telling NeedGiver/CombatGiver so neither keeps an association
 ## pointing at a removed actor.
 ##
-## Shared by _apply_actor_death() and _remove_colonist_by_id() (round-6
-## review, third pass): an incident job cancelled while combat has it
-## suspended for a flee episode previously left that flee job's own
-## assignment, search, reservation and CombatGiver association orphaned once
-## IncidentScheduler.on_job_finished() removed the actor directly -- cleanup
-## lived only in _apply_actor_death(), never in that despawn path.
+## Shared by _apply_actor_death() and _remove_colonist_by_id(): an incident
+## job cancelled while combat has it suspended for a flee episode would
+## otherwise leave that flee job's own assignment, search, reservation and
+## CombatGiver association orphaned once IncidentScheduler.on_job_finished()
+## removed the actor directly.
 ##
-## The paused job (if any) is captured and detached from _paused_jobs BEFORE
-## the active assignment is cancelled (round-5 review): cancelling an active
-## NEED job below calls NeedGiver.resolve_job() -> _resume_interrupted_job(),
+## The paused job (if any) is captured and detached from _paused_jobs before
+## the active assignment is cancelled: cancelling an active
+## need job below calls NeedGiver.resolve_job() -> _resume_interrupted_job(),
 ## reactivating whatever was paused for an actor about to be removed.
 ## Detaching first makes that resume a no-op.
 ##
-## Cancelling the SAME job this runs on top of (an incident job mid-
+## Cancelling the same job this runs on top of (an incident job mid-
 ## _finish_job()) is not a hazard: _scheduler.finish() rejects an
 ## already-terminal job as a no-op, and the get_jobs() loop below skips it
 ## once its status reads terminal, before the restriction check runs.
@@ -3410,12 +3398,10 @@ func _cleanup_actor_scheduling(colonist_id: String) -> void:
 ## job, tells NeedGiver the resolution too -- the same pairing
 ## _resolve_refused_reservations()/_toil_on_toil_fail() already use, needed
 ## here as well since a dead actor's need job would otherwise leave
-## NeedGiver's own `_pending` map pointing at a removed actor (round-1
-## review).
+## NeedGiver's own `_pending` map pointing at a removed actor.
 func _cancel_job_for_death(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
-	# Only a rescue's own job-scoped key is dropped here (round-4 review
-	# finding 2); an ordinary job's tile progress outlives its actor's death
+	# Only a rescue's own job-scoped key is dropped here; an ordinary job's tile progress outlives its actor's death
 	# exactly as before, so a successor order on that tile inherits it.
 	if _finish_job(job_id, "cancel_job").get("ok", false):
 		_clear_terminated_job_progress(job_id, job, false)
@@ -3438,14 +3424,13 @@ func _job_restricted_to(job_id: String) -> String:
 	return ""
 
 ## Drops whatever `actor` is holding as loose ground items at its own tile:
-## a colonist's hands contents (issue #402, one fresh item per distinct kind
-## held), a colonist's held tool item (ToolItemStore, moved rather than
-## duplicated so its identity/reservation state is preserved -- round-1
-## review: the earlier version left a dead colonist's axe/pick pointing at a
-## deleted colonist, making it permanently unreachable), and/or a generic
-## actor's "inventory" component items array and single "tool" slot, each
-## dispatched by content item kind through _drop_inventory_item() below
-## (round-6 review).
+## a colonist's hands contents (one fresh item per distinct kind held), a
+## colonist's held tool item (ToolItemStore, moved rather than duplicated so
+## its identity/reservation state is preserved; otherwise a dead colonist's
+## axe/pick would point at a deleted colonist and be permanently
+## unreachable), and/or a generic actor's "inventory" component items array
+## and single "tool" slot, each dispatched by content item kind through
+## _drop_inventory_item() below.
 func _drop_inventory_contents(actor: Dictionary) -> void:
 	var x := int(actor["x"])
 	var y := int(actor["y"])
@@ -3463,15 +3448,15 @@ func _drop_inventory_contents(actor: Dictionary) -> void:
 		if not carried_tool_kind.is_empty():
 			_drop_inventory_item(carried_tool_kind, 1, x, y)
 
-## Drops one "inventory" component item of `kind`/`count` at (x, y) (round-6
-## review): a declared tool kind (is_tool_kind(), content/items.json) goes
+## Drops one "inventory" component item of `kind`/`count` at (x, y): a
+## declared tool kind (is_tool_kind(), content/items.json) goes
 ## through spawn_ground_tool_item() -- ToolItemStore, the same store a
 ## worker's tool-match search (ToilExecutor's fetch_tool precondition) only
 ## ever looks in -- so a surviving colonist can actually find and reserve a
 ## dead actor's dropped axe/pick; any other kind goes through
 ## _place_ground_item() as an ordinary stack, same as before. Tools carry
 ## identity, never a count, so a tool entry of `count` N spawns N separate
-## ground tools (round-7 review: one spawn per entry silently lost N-1).
+## ground tools (one spawn per entry would silently lose N-1).
 func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
 	if is_tool_kind(kind):
 		for _unit in count:
@@ -3481,12 +3466,11 @@ func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
 	_next_item_id += 1
 	_place_ground_item(item_id, kind, count, x, y)
 
-## Decays needs (ActorNeeds.apply_tick(), ADR 012/023) by _need_definitions'
+## Decays needs (ActorNeeds.apply_tick(), ADR 012/024) by _need_definitions'
 ## rate_per_day (content/needs.json -- the mutable source _isolate_need()
 ## relies on, not actors.json's own copy) applied through a per-colonist,
-## per-need integer accumulator against the calendar's day_length_ticks (issue
-## #349), and re-clamps health (ActorHealth.apply_tick(), a no-op on hp today
-## -- issue #283 Non-goals).
+## per-need integer accumulator against the calendar's day_length_ticks, and
+## re-clamps health (ActorHealth.apply_tick(), a no-op on hp today).
 func _decay_needs() -> void:
 	_ensure_needs()
 	_ensure_health()
@@ -3544,7 +3528,7 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 		return _resume_paused_rescue(colonist, job_id, job)
 	# A needs_tool job whose tool is no longer satisfied (released on
 	# interrupt, then reserved or physically taken by someone else while
-	# paused, round 4 review) must defer entirely to ToilExecutor's own
+	# paused) must defer entirely to ToilExecutor's own
 	# fetch_tool -> go_to -> work sequence: starting a route toward the job
 	# target (or the work timer) here first would leave stale route/work
 	# state for _advance_fetch_tool() to wrongly reuse as its own travel leg
@@ -3562,9 +3546,8 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 		# start the work timer when this leg genuinely leads into it
 		# (ToilExecutor.leads_into_work()) -- a haul/build leg whose own next
 		# toil is pick_up must defer to the ordinary advance() dispatch on the
-		# next tick instead (issue #278/#303 round-1 review; "work" in toils
-		# alone used to wrongly start build's work timer here too, before
-		# pick_up ever ran).
+		# next tick instead (checking for "work" in toils alone would wrongly
+		# start build's work timer here too, before pick_up ever ran).
 		if _toils.leads_into_work(String(job["kind"]), true):
 			_toils.start_work(colonist, job_id)
 		return job_id
@@ -3574,11 +3557,10 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 		return ""
 	return job_id
 
-## Rescue-specific resume (round-2 review round-4 finding 3, budgeted in
-## round-4 review finding 4): a need interrupt can walk the rescuer across
+## Rescue-specific resume, budgeted like every other re-route: a need interrupt can walk the rescuer across
 ## the victim's own trench, or leave it one tile off the exact adjacent tile
 ## RescueGiver's own commit-time search verified safe. Re-derives the route
-## from the colonist's CURRENT position through the toil executor's own
+## from the colonist's current position through the toil executor's own
 ## bounded, multi-tick re-route (ToilExecutor.advance_go_to(), honouring the
 ## shared per-colonist _route_budget like every other job -- never a
 ## synchronous search run to completion) under rescue's own trench-excluding,
@@ -3611,7 +3593,7 @@ func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary
 ## _pause_work_job(), then suspends the scheduler assignment so the fair
 ## scheduler may offer the now-idle colonist the need job about to be
 ## searched for. Also releases any tool reservation the paused job holds
-## (issue #271: suspend_assignment() only knows JobQueue's ReservationTable,
+## (suspend_assignment() only knows JobQueue's ReservationTable,
 ## not _tool_store's) so the tool stays usable while the interrupt lasts. A
 ## no-op when nothing was paused.
 func _interrupt_current_job(colonist: Dictionary) -> void:
@@ -3623,8 +3605,8 @@ func _interrupt_current_job(colonist: Dictionary) -> void:
 	_tool_store.release_all(job_id)
 	_scheduler.suspend_assignment(colonist_id, job_id)
 
-## resume_interrupted_job callable for NeedGiver AND CombatGiver's own
-## `_resume` (round-6 review, third pass): resumes via _resume_paused_job(),
+## resume_interrupted_job callable for NeedGiver and CombatGiver's own
+## `_resume`: resumes via _resume_paused_job(),
 ## then restores whatever assignment _interrupt_current_job() suspended via
 ## resume_assignment() (ADR 009). When something else claimed the target
 ## while away, that call is a no-op and the job falls to the ordinary
@@ -3635,10 +3617,10 @@ func _interrupt_current_job(colonist: Dictionary) -> void:
 ## not the combat one -- CombatGiver's own interrupt found nothing new to
 ## pause) or it would overwrite the actor's current flee assignment,
 ## orphaning it. Deferring leaves _paused_jobs intact for CombatGiver's own
-## recovery branch, which erases its episode BEFORE calling this function --
+## recovery branch, which erases its episode before calling this function --
 ## owns() already false by then, so the deferred resume proceeds normally.
 ##
-## Round-2 review (issue #278/#303): resume_assignment() can fail to
+## resume_assignment() can fail to
 ## reactivate (JobQueue.reactivate()/_reactivate_build() returns false when a
 ## different job claimed the build's site while this one was suspended). A
 ## haul/build job whose colonist is still physically carrying its cargo must
@@ -3669,8 +3651,8 @@ func _resume_interrupted_job(colonist_id: String) -> void:
 func _set_need_reason(colonist_id: String, reason: String) -> void:
 	_need_status[colonist_id] = reason
 
-## set_reason callable for RescueGiver (issue #360): writes WorldState's own
-## exposed rescue-reason cache, keyed by the trapped VICTIM's colonist_id
+## set_reason callable for RescueGiver: writes WorldState's own
+## exposed rescue-reason cache, keyed by the trapped victim's colonist_id
 ## (never the rescuer's), mirroring _set_need_reason() above.
 func _set_rescue_reason(colonist_id: String, reason: String) -> void:
 	_rescue_status[colonist_id] = reason
@@ -3708,7 +3690,7 @@ func _need_source_candidates(kind: String) -> Array[Vector2i]:
 					candidates.append(Vector2i(int(coords[0]), int(coords[1])))
 	return _reachable_candidates_only(candidates)
 
-## Drops candidates NeedGiver's own search (out of owned paths) could never
+## Drops candidates NeedGiver's own search could never
 ## reach: with no early "impossible" signal it flood-fills the whole component
 ## before giving up, and a far-shore/inaccessible source does not count as a
 ## guaranteed resource. RegionMap lookup, O(1) each.
@@ -3816,8 +3798,8 @@ func _load_work_ticks() -> Dictionary:
 	return ticks
 
 ## needs.json repeats full/job_priority/retry_base_ticks/retry_cap_ticks on
-## every entry rather than once at the root (content_registry.gd, out of
-## owned paths, has no root-field accessor); any entry carries the same value.
+## every entry rather than once at the root (content_registry.gd has no
+## root-field accessor); any entry carries the same value.
 func _load_need_config() -> Dictionary:
 	return _content.list("needs")[0]
 
@@ -3843,7 +3825,7 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		if not check.is_empty():
 			return _rejection(command["command_id"], command["actor"], check["reason"], check["message"])
 		var target := Vector2i(payload["x"], payload["y"])
-		# assignee (F3, issue #290), dig/chop/forage/mine only: carried through
+		# assignee (F3), dig/chop/forage/mine only: carried through
 		# submit()'s existing restrict_to (already used by need_giver.gd).
 		var assignee := String(payload.get("assignee", "")) if command["type"] in ["dig", "chop", "forage", "mine"] else ""
 		result = _scheduler.submit(target, payload.get("priority", 1), _clock.tick, command["type"], assignee)
@@ -3851,20 +3833,20 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
 			return _rejection(command["command_id"], command["actor"], "invalid_payload", "A non-empty job_id is required.")
 		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry
-		# drops the carried item (colonist-ai.md 3.3, issue #406); "complete_job"
+		# drops the carried item (colonist-ai.md 3.3); "complete_job"
 		# already went through the job's own completion effect. A site_work job
 		# never carries anything.
 		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
 			if String(target_job.get("kind", "")) in ["haul", "site_fetch"]:
 				_drop_carried_haul_item(String(payload["job_id"]))
-		# Clear work_progress only once the transition succeeds, by the terminating job's own identity (_clear_terminated_job_progress(): an ordinary job's plain tile key only when it was "active" before -- a queued competitor or a rejected/repeated terminal command must never erase another job's progress, recovery review round 3 -- a rescue's own job-scoped key in every status).
+		# Clear work_progress only once the transition succeeds, by the terminating job's own identity (_clear_terminated_job_progress(): an ordinary job's plain tile key only when it was "active" before -- a queued competitor or a rejected/repeated terminal command must never erase another job's progress -- a rescue's own job-scoped key in every status).
 		var terminal_job := _scheduler.queue.get_job(String(payload["job_id"]))
 		var terminal_was_active: bool = String(terminal_job.get("status", "")) == "active"
 		result = _finish_job(payload["job_id"], command["type"])
 		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
 			_clear_terminated_job_progress(String(payload["job_id"]), terminal_job, terminal_was_active)
-		# Round-2 review finding 4: shares _resolve_giver_association() with
+		# Shares _resolve_giver_association() with
 		# _toil_on_work_complete()/_trap_actor()/_cancel_job_for_death()/
 		# _resolve_refused_reservations() rather than only ever telling
 		# NeedGiver -- a command that cancels/fails/invalidates/completes a
@@ -3873,7 +3855,7 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		# and the rescuer can never take ordinary work or another rescue.
 		if result["ok"]:
 			_resolve_giver_association(String(payload["job_id"]), String(terminal_job.get("kind", "")))
-	# F3 (issue #290, round 2): a cancel/fail/invalidate_job command above can
+	# F3: a cancel/fail/invalidate_job command above can
 	# resolve a need and get a resume refused, entirely outside tick(); drain
 	# it now rather than leaving it for the next tick(). Harmless otherwise.
 	_resolve_refused_reservations()
@@ -3884,13 +3866,13 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 	applied["job_id"] = result["job_id"]
 	return applied
 
-## build {kind, x, y, orientation} submission (issue #406, docs/decisions/038,
-## supersedes ADR 027/036's single-worker `build` job): validates against
+## build {kind, x, y, orientation} submission (ADR 040, superseding ADR
+## 028/038's single-worker `build` job): validates against
 ## _check_construction_command() -- no stock check at all, unlike the
 ## superseded job model, since a site is a standing commitment that waits for
-## materials rather than a one-shot order requiring them up front (acceptance:
-## "ordering a workbench creates a site immediately... before any material
-## arrives") -- then creates the site record and reserves every footprint tile
+## materials rather than a one-shot order requiring them up front (ordering a
+## workbench creates its site immediately, before any material arrives)
+## -- then creates the site record and reserves every footprint tile
 ## directly on the shared ReservationTable, owner "site:<id>" (never a job
 ## id), the instant the order is accepted. No job is submitted here at all:
 ## ConstructionGiver (world_state.gd's _construction_giver) decides on its own
@@ -3912,9 +3894,9 @@ func _apply_construction_submission(command: Dictionary) -> Dictionary:
 		table.acquire(_build_site_key(tile), owner)
 	var applied := _applied(command)
 	applied["site_id"] = site["id"]
-	# job_id mirrors site_id (issue #406 round 2, test_order_input.gd): boot.gd's
+	# job_id mirrors site_id (test_order_input.gd): boot.gd's
 	# Cancel tool still names a pending order by "job_id" (there is no job to
-	# rewire it to yet -- ADR 038, t4 owns that toolbar rewrite), so a site's own
+	# rewire it to yet; see ADR 040), so a site's own
 	# id doubles as the value that identifier carries until then. See
 	# _apply_cancel_job_command()'s matching fallback below.
 	applied["job_id"] = site["id"]
@@ -3928,8 +3910,8 @@ func _apply_construction_submission(command: Dictionary) -> Dictionary:
 ## site's own footprint reservation (invalid_target -- a site's footprint is
 ## reserved the instant it is created, so unlike the superseded per-job model
 ## there is no separate "queued but not yet reserved" commitment to check);
-## for a kind whose object definition is itself impassable (a wall or this
-## task's workbench), the existing blocked_target_unreachable reason
+## for a kind whose object definition is itself impassable (a wall or a
+## workbench), the existing blocked_target_unreachable reason
 ## (docs/architecture/orders-and-movement.md) when placing it would strand a
 ## currently-reachable tile -- never a new reason string. No stock check: a
 ## site is created regardless of what materials are currently on hand.
@@ -3959,8 +3941,8 @@ func _check_construction_command(payload: Dictionary) -> Dictionary:
 ## Shared footprint/occupancy rule for one candidate placement's footprint
 ## tiles -- in-bounds, passable-for-kind, no colonist, no tree, not already an
 ## object, not already claimed by another order's own footprint reservation.
-## EXCLUDES the enclosure check, which a single `build` runs immediately after
-## (above) and `build_line` (issue #450) runs once across a whole surviving
+## Excludes the enclosure check, which a single `build` runs immediately after
+## (above) and `build_line` runs once across a whole surviving
 ## batch instead (_classify_build_line_command()) -- both callers share this
 ## function so a wall placed one tile at a time and dragged as a line always
 ## agree on which tiles are occupancy-valid, and on the exact reason string
@@ -3975,11 +3957,11 @@ func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictiona
 			return {"reason": "invalid_target", "message": "Another order already claims this tile."}
 	return {}
 
-## build_line's complete read-only classification (issue #450, docs/decisions/
-## 040): shared verbatim by apply() (via _apply_build_line_command()) and
+## build_line's complete read-only classification (ADR 042): shared verbatim
+## by apply() (via _apply_build_line_command()) and
 ## preview() so a drag preview and the actually-applied command always agree
 ## on which tiles will be skipped and whether the whole batch is rejected.
-## Returns {"reason", "message"} to reject the WHOLE command (invalid_payload,
+## Returns {"reason", "message"} to reject the whole command (invalid_payload,
 ## or blocked_target_unreachable once the enclosure check below runs), or
 ## {"kind", "orientation", "surviving", "skipped"} otherwise. `tiles` is
 ## canonicalized into row-major order (lowest y, then lowest x) here --
@@ -3988,7 +3970,7 @@ func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictiona
 ## reservation exists yet during classification) and go on to create two
 ## overlapping sites in step 5. Each canonical tile is then classified with
 ## the exact single-tile _construction_footprint_check() rule above (step 3),
-## PLUS a provisional-occupancy check against every earlier surviving tile's
+## plus a provisional-occupancy check against every earlier surviving tile's
 ## own footprint in this same batch (`claimed_footprint` below): a kind wider
 ## than one tile (e.g. workbench's [2,1]) can otherwise have two candidate
 ## origins whose footprints overlap -- (10,10) and (11,10) both individually
@@ -3998,7 +3980,7 @@ func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictiona
 ## with only one of them able to actually acquire it. A later candidate whose
 ## footprint touches an earlier survivor's claimed footprint is skipped
 ## invalid_target instead, the same reason a real reservation conflict would
-## give. Once every tile is classified, _would_enclose_tiles() runs ONCE
+## give. Once every tile is classified, _would_enclose_tiles() runs once
 ## across the whole surviving set (step 4, only meaningful for an impassable
 ## kind) -- a hit there discards "skipped" and rejects the entire command.
 func _classify_build_line_command(payload: Dictionary) -> Dictionary:
@@ -4053,7 +4035,7 @@ func _classify_build_line_command(payload: Dictionary) -> Dictionary:
 			return {"reason": "blocked_target_unreachable", "message": "Building this line would seal off part of the colony."}
 	return {"kind": kind, "orientation": orientation, "surviving": surviving, "skipped": skipped}
 
-## Applies build_line (issue #450, docs/decisions/040): creates one
+## Applies build_line (ADR 042): creates one
 ## construction site per _classify_build_line_command()'s surviving tile, in
 ## the same row-major order, exactly as _apply_construction_submission() does
 ## for a single tile (footprint reservation, ConstructionSiteTable.create()) --
@@ -4081,10 +4063,10 @@ func _apply_build_line_command(command: Dictionary) -> Dictionary:
 	applied["skipped"] = classification["skipped"]
 	return applied
 
-## place_object's complete read-only rule (issue #405), shared verbatim by
+## place_object's complete read-only rule, shared verbatim by
 ## apply() (via _apply_place_object_command()), preview() and
-## CommandChecks.check_place_object_command() (round 3: delegates here instead
-## of keeping its own stale single-tile copy) -- mirrors _check_build_command()'s
+## CommandChecks.check_place_object_command() (which delegates here rather
+## than keeping its own copy) -- mirrors _check_construction_command()'s
 ## shape above. x/y/kind are exactly as strict as the old CommandChecks.
 ## check_place_object_command(): integer x, y, a non-empty string kind naming
 ## a declared object kind. orientation is new and optional: when present it
@@ -4092,9 +4074,9 @@ func _apply_build_line_command(command: Dictionary) -> Dictionary:
 ## otherwise unconsulted here, since _object_footprint_size() already ignores
 ## it for a non-rotatable kind. Every tile of kind's footprint (default [1,1]
 ## -- every existing kind today) is checked in bounds, no colonist, no
-## existing object, and neither TILE_TREE nor TILE_WATER (round 5 review:
-## reusing the strict, build-only _build_site_terrain_valid() here also
-## rejected TILE_ROCK/TILE_TRENCH/TILE_HAZARD, breaking test_debug_scenario_
+## existing object, and neither TILE_TREE nor TILE_WATER (the strict,
+## build-only _build_site_terrain_valid() would also reject
+## TILE_ROCK/TILE_TRENCH/TILE_HAZARD, breaking test_debug_scenario_
 ## objects.gd, test_faction_doors.gd, test_tool_items.gd and existing
 ## test_water_cache_invalidation.gd fixtures that all place objects on rock
 ## through this exact command -- this remains the permissive debug/map-gen
@@ -4123,18 +4105,13 @@ func _check_place_object_command(payload: Dictionary) -> Dictionary:
 			return {"reason": "invalid_target", "message": "Choose an empty, in-bounds tile with no colonist or tree."}
 	return {}
 
-## Terrain a build may target, shared verbatim by submission
-## (_check_build_command()) and the work-completion re-check
-## (_build_completion_failure(), round-3 review), and reused by
-## _check_place_object_command() (round 4) so both placement paths agree on
-## the same buildable-terrain rule: in-bounds, passable, and neither
-## TILE_TREE nor TILE_TRENCH. Trench is passable=true (ADR 025's own
-## trap-on-entry mechanic needs a colonist able to walk onto one), but a
-## freshly dug pit is not valid ground for a foundation -- without this, a
-## build queued on soil that a dig job (racing it, e.g. while build labour is
-## disabled) turns into a trench before delivery completes would otherwise
-## slip through the plain passability() check unrejected, consuming wood and
-## placing the object on the trench once building resumes.
+## Terrain a construction site may occupy, checked per footprint tile by
+## _construction_footprint_check() (shared by build and build_line):
+## in-bounds, passable, and neither TILE_TREE nor TILE_TRENCH. Trench is
+## passable=true (ADR 026's own trap-on-entry mechanic needs a colonist able
+## to walk onto one), but a freshly dug pit is not valid ground for a
+## foundation. place_object deliberately keeps its own, more permissive rule
+## (see _check_place_object_command()).
 func _build_site_terrain_valid(site: Vector2i) -> bool:
 	if site.x < 0 or site.x >= _width or site.y < 0 or site.y >= _height:
 		return false
@@ -4150,7 +4127,7 @@ func _build_site_terrain_valid(site: Vector2i) -> bool:
 func _build_site_key(build_target: Vector2i) -> String:
 	return "%s%d,%d" % [JobQueueType.TARGET_KEY_PREFIX, build_target.x, build_target.y]
 
-## get_construction_sites()/get_construction_site() (issue #406): every
+## get_construction_sites()/get_construction_site(): every
 ## currently active site, mirroring get_objects()/get_object() -- detached
 ## copies, "builder_ids" translated from the internal job-id bookkeeping
 ## (ConstructionSiteTable.add_builder()/remove_builder() key sites on the
@@ -4206,7 +4183,7 @@ func _construction_site_deposit(site_id: String, item_kind: String, count: int) 
 func _construction_item_reservation_owner(item_id: String) -> String:
 	return _scheduler.queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + item_id)
 
-## Comparison-only stand-in for "unreachable" (#400's hands-filling rules):
+## Comparison-only stand-in for "unreachable" (hands-filling rules):
 ## _route_cost() itself returns -1; call sites substitute this instead where
 ## they need a total order against a real cost.
 const _UNREACHABLE_ROUTE_COST := 1 << 30
@@ -4225,9 +4202,9 @@ func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
 	if route.get_status() != RerouteType.STATUS_FOUND: return -1
 	return route.get_path().size() - 1
 
-## Every queued/active site_fetch job except `exclude_job_id` (#400's
-## hands-filling rules): the orders whose source item is committed but, while
-## still queued, not yet reserved -- a still-QUEUED site_fetch job holds no
+## Every queued/active site_fetch job except `exclude_job_id` (hands-filling
+## rules): the orders whose source item is committed but, while
+## still queued, not yet reserved -- a still-queued site_fetch job holds no
 ## live reservation yet (_tick_site_fetch() only acquires one on activation),
 ## so without this exclusion an already-active job's own on-demand search
 ## could freely retarget onto the exact item a queued sibling submitted
@@ -4242,7 +4219,7 @@ func _pending_site_fetch_jobs(exclude_job_id: String = "") -> Array[Dictionary]:
 	return pending
 
 ## The next unclaimed ground-item source of `kind` a site_fetch job should
-## visit from colonist's current position `from` (#400's hands-filling
+## visit from colonist's current position `from` (hands-filling
 ## rules): among every zone-stockpiled item of that kind, either unreserved
 ## or already reserved to job itself, and not another still-queued/active
 ## site_fetch job's own committed item (_pending_site_fetch_jobs(), excluding
@@ -4287,13 +4264,13 @@ func _next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String
 		best_cost = cost
 	return best_id
 
-## Every OTHER active construction site still short of `kind`, reachable from
+## Every other active construction site still short of `kind`, reachable from
 ## `from`, and not already holding its own max_builders' worth of committed
-## fetch+work jobs (issue #451: a colonist whose hands still hold units of
+## fetch+work jobs (chained delivery: a colonist whose hands still hold units of
 ## `kind` after delivering to `exclude_site_id` may chain onward to a further
 ## block instead of completing) -- mirrors _next_site_fetch_source()'s own
 ## deterministic route-cost ranking (_route_cost(), not open-field Chebyshev),
-## applied to sibling SITES instead of ground-item sources: sorted by
+## applied to sibling sites instead of ground-item sources: sorted by
 ## ascending cost, ties by lowest site id, unreachable candidates dropped.
 ## Has no separate item-level exclusion for a site already named by another
 ## pending (merely-queued) site_fetch job the way _next_site_fetch_source()
@@ -4308,7 +4285,7 @@ func _next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String
 ## id to only the first site whose submission claims it, so most siblings are
 ## typically job-less, not merely-queued.) ConstructionSiteTable.deposit()'s
 ## own clamp to remaining() makes two jobs reaching the same site safe either
-## way. It DOES exclude a site already at its own busy cap (round-1 review: a
+## way. It does exclude a site already at its own busy cap (a
 ## retarget bypasses ConstructionGiver.advance()'s own submission-time count
 ## entirely, so without this check a retarget could push an already-full site
 ## over max_builders) via _site_fetch_work_busy(), the same fetch-plus-work
@@ -4335,7 +4312,7 @@ func _reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Ve
 	return out
 
 ## Every currently queued/active site_fetch or site_work job already
-## committed to `origin` (issue #451, round-1 review): the identical
+## committed to `origin`: the identical
 ## fetch-plus-work "busy" count ConstructionGiver.advance() sums per site
 ## before topping it up, mirrored here since a chain-onward retarget never
 ## goes through the giver's own submission path and so is never checked
@@ -4357,10 +4334,10 @@ func _next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector2i, e
 	var candidates := _reachable_short_sibling_sites(colonist, kind, from, exclude_site_id)
 	return candidates[0] if not candidates.is_empty() else {}
 
-## Every currently-active site_fetch job's id (#400's hands-filling rules):
+## Every currently-active site_fetch job's id (hands-filling rules):
 ## tick()'s own before/after snapshot around _scheduler.tick(), so
 ## _resolve_freshly_activated_site_fetch_sources() below can tell which
-## site_fetch jobs just (re)activated THIS tick from the ones that were
+## site_fetch jobs just (re)activated this tick from the ones that were
 ## already active and mid-route -- an already-active job is never touched by
 ## _tick_site_fetch() again (JobQueue.tick() only advances "queued" jobs), so
 ## this diff is exact.
@@ -4371,14 +4348,14 @@ func _active_site_fetch_job_ids() -> Dictionary:
 			ids[String(job["id"])] = true
 	return ids
 
-## #400's hands-filling rules: ConstructionGiver's own submission-time source
+## Hands-filling rules: ConstructionGiver's own submission-time source
 ## choice (ConstructionGiver._choose_source()) is a position-agnostic
 ## placeholder -- no colonist is chosen yet at submission, so it cannot be
 ## "nearest to the builder" itself; it exists only so GlobalAssignment has a
 ## concrete tile to score/route idle colonists against. The instant a
 ## site_fetch job actually (re)activates with a real colonist known --
-## caught by `before` naming every site_fetch job already active BEFORE this
-## tick's _scheduler.tick() call, so only a job that just (re)activated THIS
+## caught by `before` naming every site_fetch job already active before this
+## tick's _scheduler.tick() call, so only a job that just (re)activated this
 ## tick is considered -- this re-runs the exact nearest-source search every
 ## later hop already uses (_next_site_fetch_source()) from the colonist's
 ## real, current position, and swaps away from the placeholder when a
@@ -4387,7 +4364,7 @@ func _active_site_fetch_job_ids() -> Dictionary:
 ## job.get("cell") == null (still fetching): once delivering, item_id no
 ## longer drives movement (_toil_go_to_target() already redirects a
 ## delivering leg at the site), so re-checking it would be inert. Never
-## re-evaluated for a job that was ALREADY active before this tick (mid-route
+## re-evaluated for a job that was already active before this tick (mid-route
 ## toward its current source): `before`'s membership test excludes it,
 ## matching _toil_on_pick_up_success()'s own "decide once, act until the next
 ## discrete boundary" discipline -- a (re)activation is one such boundary, an
@@ -4445,8 +4422,8 @@ func _submit_site_work(origin: Vector2i, tick: int) -> Dictionary:
 ## The first passable, non-trench tile adjacent to any of `tiles` (a site's own
 ## footprint) and not itself one of `tiles` or already in `exclude` -- checked
 ## in the same north/west/east/south-per-tile order _dig_item_placement()
-## already uses for a single tile (cancel_site, issue #406: "nearest free
-## tiles adjacent to the site"). Falls back to tiles[0] when nothing
+## already uses for a single tile (cancel_site's "nearest free tiles
+## adjacent to the site" rule). Falls back to tiles[0] when nothing
 ## qualifies, mirroring _dig_item_placement()'s own "no adjacent tile
 ## qualifies" fallback.
 func _nearest_free_adjacent_to_footprint(tiles: Array[Vector2i], exclude: Dictionary = {}) -> Vector2i:
@@ -4462,13 +4439,13 @@ func _nearest_free_adjacent_to_footprint(tiles: Array[Vector2i], exclude: Dictio
 				return neighbor
 	return tiles[0]
 
-## cancel_site {x, y} (issue #406): terminates every in-flight site_fetch/
+## cancel_site {x, y}: terminates every in-flight site_fetch/
 ## site_work job on the site (dropping a mid-fetch builder's own carried hands
-## through the existing _drop_carried_haul_item() terminal path, #400's rule),
+## through the existing _drop_carried_haul_item() terminal path),
 ## drops every held material on the nearest free tile adjacent to the site
 ## (one distinct tile per kind where possible), releases the site's own
 ## footprint reservation, and removes the site record -- there is no separate
-## "ghost" to erase: it is whatever a future presentation layer draws FROM
+## "ghost" to erase: it is whatever a future presentation layer draws from
 ## get_construction_sites(), which this call already empties.
 func _cancel_construction_site(site_id: String) -> void:
 	var site := _sites.get_site(site_id)
@@ -4507,11 +4484,11 @@ func _check_cancel_site_command(payload: Dictionary) -> Dictionary:
 		return {"reason": "invalid_target", "message": "No construction site occupies this tile."}
 	return {}
 
-## cancel_job {job_id} (issue #406 round 2): boot.gd's Cancel tool still
-## resolves a pending build order by "job_id" (test_order_input.gd, pre-#406;
-## rewiring the toolbar onto the dedicated cancel_site {x,y} command is t4's
-## own change, out of this task's scope). A site has no job at order time
-## (ADR 038), so _apply_construction_submission() hands its own id back as
+## cancel_job {job_id}: boot.gd's Cancel tool still
+## resolves a pending build order by "job_id" (test_order_input.gd; the
+## toolbar has not yet been rewired onto the dedicated cancel_site {x,y}
+## command). A site has no job at order time
+## (ADR 040), so _apply_construction_submission() hands its own id back as
 ## both site_id and job_id; recognising that id here and tearing the site
 ## down through the exact same _cancel_construction_site() cancel_site
 ## {x,y} uses keeps the two entry points equivalent rather than adding a
@@ -4542,14 +4519,14 @@ func _apply_cancel_site_command(command: Dictionary) -> Dictionary:
 	return applied
 
 ## Placement/completion effect once a site's own accumulated progress meets
-## its declared build_ticks (issue #406): places the declared object via
-## t1's footprint-aware _set_object() (clears/re-marks every footprint tile,
+## its declared build_ticks: places the declared object via
+## the footprint-aware _set_object() (clears/re-marks every footprint tile,
 ## invalidates regions/rooms, stamps health when the kind declares one),
 ## releases the site's own footprint reservation (the placed object's own
 ## passability governs the tiles from here on, not a placeholder reservation),
-## completes any OTHER still-active builder job on the site (best-effort: this
-## task only ever exercises one builder, but the mechanism must not strand a
-## second one mid-work once the structure already exists), and removes the
+## completes any other still-active builder job on the site (best-effort: the
+## mechanism must not strand a second builder mid-work once the structure
+## already exists), and removes the
 ## site record -- which also discards held_materials, already fully spent by
 ## definition (ConstructionGiver never submits a site_work job before
 ## materials_met()).
@@ -4565,9 +4542,9 @@ func _finalize_construction_site(site_id: String, completing_job_id: String) -> 
 	_set_object(origin.x, origin.y, String(site["kind"]), "colony", String(site["orientation"]))
 	_sites.remove(site_id)
 
-## _resolve_giver_association()'s site_work branch (issue #406): releases
+## _resolve_giver_association()'s site_work branch: releases
 ## job_id's own builder slot on whichever site it belongs to, on every
-## terminal transition that is NOT the site's own completion (that path
+## terminal transition that is not the site's own completion (that path
 ## already removes the whole record via _finalize_construction_site()).
 ## job.site names the site's origin tile, resolvable even after termination
 ## since JobQueue never deletes a terminal job from its own list.
@@ -4582,9 +4559,9 @@ func _release_site_builder(job_id: String) -> void:
 ## True when treating every one of `tiles` (a candidate site's own footprint)
 ## as impassable simultaneously would strand a tile that is currently
 ## reachable by some colony actor (docs/architecture/orders-and-movement.md's
-## blocked_target_unreachable) -- the only object-placement rule this task
+## blocked_target_unreachable) -- the only object-placement rule construction
 ## adds beyond dig/chop's own target validation, generalized from the
-## superseded single-tile _would_enclose() to a whole footprint (issue #406).
+## superseded single-tile _would_enclose() to a whole footprint.
 ## Every existing impassable site's own footprint (except `exclude_site_id`'s
 ## own) already counts as blocked, so the second of two walls ordered into a
 ## room's two remaining openings is refused. Each colony actor's own reachable
@@ -4597,7 +4574,7 @@ func _release_site_builder(job_id: String) -> void:
 ## disappeared besides the candidate itself" baseline is tiles.size() instead
 ## of the single-tile version's literal 1 -- but counted per reachable
 ## component (`candidates_in_before` below), not over the whole of `tiles`:
-## build_line (issue #450) can submit candidate tiles spanning components that
+## build_line can submit candidate tiles spanning components that
 ## were never connected to begin with (e.g. a wall tile beside one colonist
 ## and an isolated one-tile pocket nobody can reach), and a candidate tile
 ## that this component's flood fill never reached is not "lost" by blocking
@@ -4642,7 +4619,7 @@ func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") 
 
 ## 4-connected BFS over passable(faction "colony") tiles reachable from `start`,
 ## treating every key of `blocked` as impassable regardless of its own real
-## passability -- _would_enclose()'s only use, so kept private and
+## passability -- _would_enclose_tiles()'s only use, so kept private and
 ## untyped-simple rather than a general pathfinder.
 func _flood_fill_passable(start: Vector2i, blocked: Dictionary) -> Dictionary:
 	var visited := {}
@@ -4665,11 +4642,10 @@ func _flood_fill_passable(start: Vector2i, blocked: Dictionary) -> Dictionary:
 	return visited
 
 ## Applies immediately, no job queue involved. Rejected invalid_target for an
-## out-of-bounds/occupied/tree/water tile on any footprint tile (issue #405);
+## out-of-bounds/occupied/tree/water tile on any footprint tile;
 ## rejected invalid_payload for an unknown kind or a malformed orientation.
-## This is the debug/map-gen placement path only (docs/decisions/037) -- the
-## player-facing `build` order flow (_apply_build_submission() above) is
-## unchanged by this task and still only ever produces a footprint [1,1] object.
+## This is the debug/map-gen placement path only (ADR 039) -- the
+## player-facing `build` order flow is _apply_construction_submission() above.
 func _apply_place_object_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var check := _check_place_object_command(payload)
@@ -4697,7 +4673,7 @@ func _apply_set_labour_command(command: Dictionary) -> Dictionary:
 	WorkerType.set_labour_level(colonist, String(payload["kind"]), int(payload["level"]))
 	return _applied(command)
 
-## Debug command (F3, issue #287): mutates one actor's existing "factionId"
+## Debug command (F3): mutates one actor's existing "factionId"
 ## field, mirroring _apply_set_labour_command()'s validation shape. target is
 ## looked up against the actor table (_colonists, per ADR 012 -- every
 ## spawned actor lives there today, not just worker-component colonists), so
@@ -4723,7 +4699,7 @@ func _apply_spawn_incident_command(command: Dictionary) -> Dictionary:
 	applied["actor_ids"] = _incidents.force_spawn(String(payload["id"]), _clock.tick)
 	return applied
 
-## Draws a rectangular stockpile zone (issue #189).
+## Draws a rectangular stockpile zone.
 func _apply_zone_add_command(command: Dictionary) -> Dictionary:
 	var check := CommandChecks.check_zone_add_command(self, command)
 	if not check.is_empty():
@@ -4799,24 +4775,23 @@ func _append_colonist(actor: Dictionary) -> void: # IncidentScheduler append/rem
 ## IncidentScheduler.on_job_finished() (every terminal incident-job
 ## transition, including one cancelled while combat has it suspended for a
 ## flee episode; is_death defaults false there, bound with a single String
-## arg at _init()). Runs _cleanup_actor_scheduling() first (round-6 review,
-## third pass) so both callers share the same scheduling/CombatGiver
-## teardown.
+## arg at _init()). Runs _cleanup_actor_scheduling() first so both callers
+## share the same scheduling/CombatGiver teardown.
 ##
-## round-4 review: is_death distinguishes an actual combat death (always
+## is_death distinguishes an actual combat death (always
 ## removed -- a killed actor must leave the roster and its scheduling/
 ## reservation cleanup regardless of trapped state) from an ordinary
-## incident-lifecycle despawn (suppressed for a trapped actor, #359 -- a
+## incident-lifecycle despawn (suppressed for a trapped actor -- a
 ## wolf whose incident wait job just finished must stay trapped in its
 ## trench, not vanish, until it escapes or dies).
 func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void:
 	_cleanup_actor_scheduling(colonist_id)
 	for i in _colonists.size():
 		if String(_colonists[i]["id"]) == colonist_id:
-			if not is_death and _colonists[i].get("trapped") != null: # trapped, not despawned (#359)
+			if not is_death and _colonists[i].get("trapped") != null: # trapped, not despawned
 				return
 			_colonists.remove_at(i)
-			# A despawned actor gets no further _advance_colonists() pass to release its own in-flight reroute (recovery review round 3) -- release it here instead.
+			# A despawned actor gets no further _advance_colonists() pass to release its own in-flight reroute -- release it here instead.
 			_reroutes.erase(colonist_id)
 			return
 
@@ -4843,7 +4818,7 @@ func get_events() -> Array[Dictionary]:
 ## record=false (preview() only) builds every rejection through _pure_rejection() instead of
 ## _rejection(), so an invalid envelope, a malformed payload or a tick mismatch previewed on an
 ## otherwise-valid actor never appends a command_rejected event or advances _event_sequence
-## (round-1 review, #346) -- apply() always passes record=true (the default), unchanged.
+## -- apply() always passes record=true (the default), unchanged.
 func _validate_command(command, record: bool = true) -> Dictionary:
 	if typeof(command) != TYPE_DICTIONARY:
 		return _reject(null, null, "invalid_envelope", "Command must be a Dictionary.", record)
@@ -4863,7 +4838,7 @@ func _validate_command(command, record: bool = true) -> Dictionary:
 		return _reject(command["command_id"], command["actor"], "invalid_envelope",
 			"Command must include a Dictionary payload.", record)
 	# build_line's own "tiles" payload field is an Array of {x, y} Dictionaries
-	# (issue #450) -- the one deliberate exception to every other command's
+	# -- the one deliberate exception to every other command's
 	# flat String/int payload shape, scoped by both type and key so no other
 	# command gains the exception by accident.
 	for key in command["payload"].keys():
@@ -4919,7 +4894,7 @@ func _rejection(command_id, actor, reason: String, message: String) -> Dictionar
 		})
 	return result
 
-## Pure counterpart of _rejection() (round-1 review, #346): builds the exact same rejection
+## Pure counterpart of _rejection(): builds the exact same rejection
 ## Dictionary apply() would return, without appending a command_rejected event or advancing
 ## _event_sequence -- the only rejection path preview() may ever call.
 func _pure_rejection(command_id, actor, reason: String, message: String) -> Dictionary:
@@ -4974,7 +4949,7 @@ func _generate_map() -> Array[String]:
 
 ## Delegates the clearing search to WorldGeneratorType.place_spawn() (a
 ## river-aware, resource-validated search, not a fixed rectangle -- see
-## docs/decisions/020), consuming its own PLACEMENT_SEED_SALT local RNG for
+## ADR 020), consuming its own PLACEMENT_SEED_SALT local RNG for
 ## the same reason _generate_map() above does not touch _random; this
 ## method's own job is turning that module's pure output into real WorldState
 ## state: surviving berry bush tiles become _objects entries (WorldGenerator
@@ -4995,16 +4970,15 @@ func _spawn_colonists(map: Array[String]) -> Array[Dictionary]:
 	for i in positions.size():
 		var position: Vector2i = positions[i]
 		var colonist := ActorTableType.spawn("colonist", position.x, position.y, _content, "colonist_%d" % i)
-		# ActorTable.spawn() (not owned by issue #402) still literally builds
-		# the legacy single-slot "carrying" field (ADR 012's own frozen shape);
-		# it is replaced here with the empty "hands" list issue #402 defines
-		# instead of touching that out-of-owned-scope file. Key insertion order
+		# ActorTable.spawn() still builds the legacy single-slot "carrying"
+		# field (ADR 012's own frozen shape); it is replaced here with the
+		# empty "hands" list ADR 037 defines. Key insertion order
 		# does not affect state_hash() (JSON.stringify() sorts keys), so a
 		# straight erase+assign is equivalent to inserting "hands" at
 		# "carrying"'s original position.
 		colonist.erase("carrying")
 		colonist["hands"] = []
-		colonist["trapped"] = null # unconditional like health/route (#359)
+		colonist["trapped"] = null # unconditional like health/route
 		spawned.append(colonist)
 	return spawned
 

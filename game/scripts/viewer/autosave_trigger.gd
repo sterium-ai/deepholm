@@ -1,6 +1,6 @@
 extends Node
 
-## Headless-testable autosave trigger (issue #95). Fires
+## Headless-testable autosave trigger. Fires
 ## SaveManager.save_autosave() exactly once per elapsed
 ## SaveConfig.AUTOSAVE_INTERVAL_TICKS boundary of world ticks -- never at
 ## tick 0, never twice for the same boundary -- driven purely by the tick
@@ -32,7 +32,7 @@ var save_manager: SaveManagerType
 
 var _last_boundary: int = 0
 var _epoch: int = 0
-## New Game (issue #299 round 1) suspends autosaving entirely until the
+## New Game suspends autosaving entirely until the
 ## player's first explicit Save: without this, an unsaved fresh game ticking
 ## in the background could rotate into (evict) an existing autosave slot
 ## from a previous game before the player ever confirmed they wanted to keep

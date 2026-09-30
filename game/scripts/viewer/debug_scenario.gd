@@ -37,9 +37,8 @@ const FORAGE_ROW_OFFSET := 2
 const BERRY_BUSH_COUNT := 1
 const BED_COUNT := 1
 
-## One already-plowed tile and a small starting stock of seed items (issue
-## #270, colonist-ai.md "Implemented: farming" -- "starting seed stock ... a
-## later task's concern"), so a fresh web build has something to till/sow
+## One already-plowed tile and a small starting stock of seed items (see
+## colonist-ai.md's farming section), so a fresh web build has something to till/sow
 ## immediately without waiting on a colonist to plow first. The plowed tile
 ## is produced the same way a player would produce it -- a till job
 ## submitted through world.apply() and driven to completion by world.tick()
@@ -47,7 +46,7 @@ const BED_COUNT := 1
 ## command can spawn a stackable ground item on demand, though, so the seed
 ## stock alone is written directly onto WorldState's own item fields (see
 ## _seed_starting_farm_stock()'s doc comment for why that one exception is
-## authorized).
+## allowed).
 ##
 ## The till target is the nearest TILE_SOIL tile to an actual spawned
 ## colonist (_pick_till_target()), not a fixed row further out: colonist
@@ -81,7 +80,7 @@ const NEAR_TILE_SEARCH_RADIUS := 15
 ## keeps a scenario that can somehow never path there from hanging boot.
 const TILL_TICK_BUDGET := 800
 
-## incidents_enabled (F5, issue #294) defaults false so every pre-existing
+## incidents_enabled defaults false so every pre-existing
 ## caller (every test that calls build() with its own default arguments)
 ## keeps building byte-identically; boot.gd's own live/debug viewer entry
 ## point is the one caller that passes true, so spawn_incident is actually
@@ -135,9 +134,9 @@ static func _submit_dig_orders(world: WorldStateType, seed_value: int, excluded:
 		})
 
 ## Places a wall line with one door gap just south of the spawn clearing, and
-## a few chairs and tables just north of it (issue #300: the clearing itself
-## is now WorldState.get_spawn_clearing()'s own river-aware, dynamically
-## chosen rectangle, not a fixed constant -- see docs/decisions/020). Rows are
+## a few chairs and tables just north of it (the clearing itself is
+## WorldState.get_spawn_clearing()'s river-aware, dynamically chosen
+## rectangle, not a fixed constant -- see ADR 020). Rows are
 ## clamped into the map so a clearing search that happened to land near an
 ## edge still gets a valid (if visually tighter) row instead of an out-of-
 ## bounds no-op; _passable_line()'s own bounds check is a second, harmless
@@ -239,9 +238,9 @@ static func _nearest_matching_tile(world: WorldStateType, origin: Vector2i, matc
 ## hang the boot sequence -- it just leaves the tile untilled rather than
 ## looping forever.
 ##
-## Needs are topped up every tick of this loop only (issue #300, mirroring
+## Needs are topped up every tick of this loop only (mirroring
 ## test_new_game_dig_chop.gd's own reasoning): the river-aware spawn search
-## (docs/decisions/020) can legitimately place water/food up to 40 real route
+## (ADR 020) can legitimately place water/food up to 40 real route
 ## steps from the clearing, so a colonist mid-till can now be need-
 ## interrupted, travel that far round trip to service it, and get bumped back
 ## onto a scattered dig order before ever accumulating a full uninterrupted
@@ -270,8 +269,8 @@ static func _till_starting_plot(world: WorldStateType, target: Vector2i) -> void
 		world.tick()
 		ticks += 1
 
-## Writes WorldState's item fields directly -- the one authorized exception
-## (issue #270's task text): no public command can spawn a stackable ground
+## Writes WorldState's item fields directly -- the one deliberate exception:
+## no public command can spawn a stackable ground
 ## item on demand, since the only item-spawn entry points are the
 ## toil-triggered _spawn_wood_item()/_spawn_berries_item() and the tool-only
 ## spawn_ground_tool_item(). Mirrors those helpers' own {id, x, y, kind,

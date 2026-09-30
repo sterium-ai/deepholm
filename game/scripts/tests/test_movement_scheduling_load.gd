@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Covers objective #129/issue #133's load and interruption behavior for the
+## Covers the load and interruption behavior of the
 ## walk/work execution added to WorldState.tick(). Reuses the 300-tick
 ## service bound test_scheduling_fairness.gd already proves for ADR 004
 ## (docs/decisions/004-global-assignment-fairness-policy.md) rather than
@@ -51,21 +51,21 @@ func _build_load_world(seed_value: int) -> WorldType:
 	for y in LOAD_AREA_HEIGHT:
 		for x in LOAD_AREA_WIDTH:
 			world._tiles[world._tile_index(x, y)] = WorldType.TILE_SOIL
-	# Issue #359: the 12 "dig"-labour targets below are mine, not dig, and
+	# The 12 "dig"-labour targets below are mine, not dig, and
 	# left as rock (mine's own precondition) here -- mine's completion turns
 	# rock into floor, never trench, so nothing this open, unrestricted,
 	# 3-colonist/1500-tick fairness scenario ever routes or fetch_tool-chases
-	# a tool across (issue #271: a dropped tool lands wherever a colonist
-	# last stood, not a fixed home slot) can ever trap a colonist permanently
-	# -- unlike a colonist, ADR 025 t4's rescue is out of this task's scope,
-	# so a single trapped colonist here would idle for the rest of the run.
+	# a tool across (a dropped tool lands wherever a colonist last stood,
+	# not a fixed home slot) can ever trap a colonist permanently -- this
+	# scenario does not rely on ADR 026's rescue, so a single trapped
+	# colonist here would idle for the rest of the run.
 	for target in _load_mine_targets():
 		world._tiles[world._tile_index(target.x, target.y)] = WorldType.TILE_ROCK
 	world._colonists.clear()
 	for i in 3:
 		world._colonists.append({"id": "colonist_%d" % i, "kind": "colonist", "x": i, "y": 0, "route": null, "work": null, "carrying": null})
 	# Mixed chop/dig orders mean a colonist must be able to fetch either kind
-	# in turn (issue #271's fetch_tool drops a mismatched held tool first, so a
+	# in turn (fetch_tool drops a mismatched held tool first, so a
 	# dropped tool ends up wherever a colonist last stood, not back at a home
 	# slot). Several of each kind, scattered across the work area rather than
 	# clustered at the colonists' shared start, keeps a free one always close
@@ -81,10 +81,10 @@ func _load_tree_targets() -> Array[Vector2i]:
 	return [Vector2i(1, 2), Vector2i(3, 2), Vector2i(5, 2), Vector2i(7, 2),
 		Vector2i(1, 4), Vector2i(3, 4), Vector2i(5, 4), Vector2i(7, 4)]
 
-## Issue #359: this used to be "dig" on soil (always walkable, before and
+## This used to be "dig" on soil (always walkable, before and
 ## after), whose target tile becomes trench once dug -- trapping any
 ## colonist whose route (or a fetch_tool leg chasing a tool dropped
-## elsewhere, issue #271) later steps onto one. "mine" exercises the same
+## elsewhere) later steps onto one. "mine" exercises the same
 ## needs_tool-pick/fetch_tool/toil path dig does (see _build_load_world()'s
 ## own comment) and its completion effect is floor, never trench, but
 ## unlike soil its target tile is rock -- impassable -- until mined, so
@@ -99,7 +99,7 @@ func _load_mine_targets() -> Array[Vector2i]:
 		Vector2i(2, 3), Vector2i(3, 3), Vector2i(5, 3), Vector2i(7, 3), Vector2i(8, 3)]
 
 ## Row y=5 is otherwise untouched by any dig/chop target, so a 10-cell zone
-## there gives every one of chop's 8 wood items (issue #189's auto-submitted
+## there gives every one of chop's 8 wood items (and their auto-submitted
 ## haul jobs) somewhere to actually land. Without this, every haul job would
 ## be permanently blocked_destination_full with no zone ever able to free a
 ## cell, and their unbounded ADR 004 aging would keep leapfrogging each other
@@ -127,14 +127,14 @@ func _submit_load_orders(world: WorldType) -> int:
 	return order_index
 
 ## "eligible" excludes any job already carrying a nonempty reason (blocked by
-## reservation, unreachability, or -- since issue #189 -- a permanently-full
+## reservation, unreachability, or a permanently-full
 ## haul destination): those jobs are not actually pickable work right now, and
 ## must not count toward "no colonist may idle while work is available" any
 ## more than a target-reserved dig/chop job already didn't (that case happens
 ## to also show up in `reservations`, but blocked_destination_full never
 ## reserves a tile at all, so the reason check is what actually excludes it).
 ## Also excludes any job currently sitting in a worker's pending evaluation
-## batch (get_pending()): a freshly auto-submitted haul job (issue #189) has
+## batch (get_pending()): a freshly auto-submitted haul job has
 ## an empty reason for the one tick between being proposed and its route
 ## search/destination check resolving, so a colonist mid-evaluation of that
 ## exact job would otherwise be flagged as "idling while it was available",
@@ -160,8 +160,8 @@ func _idle_colonists(world: WorldType) -> Array[String]:
 	return idle
 
 ## Counts only the 20 scripted dig/chop orders `total` refers to: a completed
-## auto-submitted haul job (issue #189, now that _add_stockpile_zone() lets
-## them actually succeed) must never let this return true while a scripted
+## auto-submitted haul job (which _add_stockpile_zone() lets actually
+## succeed) must never let this return true while a scripted
 ## order is still outstanding.
 func _all_orders_done(world: WorldType, total: int) -> bool:
 	var completed := 0
@@ -173,15 +173,15 @@ func _all_orders_done(world: WorldType, total: int) -> bool:
 ## Reassignment cannot be instantaneous: WorldState.tick()'s mandated order
 ## runs _scheduler.tick() before _advance_colonists(), so a colonist that
 ## finishes work this tick is invisible to this same tick's evaluation (one
-## tick, not indefinite -- the same reconciliation lag the task spec calls
-## out for an external cancel_job/fail_job/invalidate_job). Beyond that,
+## tick, not indefinite -- the same reconciliation lag that applies to an
+## external cancel_job/fail_job/invalidate_job). Beyond that,
 ## GlobalAssignment evaluates one route candidate per pending worker per
 ## _scheduler.tick() call (see global_assignment.gd's cursor-driven batch
 ## loop, proven multi-tick by test_scheduling_fairness.gd's
 ## _check_route_cost_changes_choice), so a colonist mid-evaluation (present in
 ## _scheduler.get_pending()) can also stay idle for a tick or two while its
-## batch resolves -- that is ADR 004's own candidate-pairing design, which
-## this task must not change. Issue #266's drop_tool toil never adds a fourth
+## batch resolves -- that is ADR 004's own candidate-pairing design. The
+## drop_tool toil never adds a fourth
 ## idle tick on top of these two: it is inserted only at a toil boundary
 ## (colonist.route/work both null) and, whether it drops in place or starts a
 ## route toward a stockpile cell, colonist.route is never left null on the
@@ -193,25 +193,25 @@ func _all_orders_done(world: WorldType, total: int) -> bool:
 ## to null) -- so a drop_tool leg is never itself observable as "idle" by
 ## _idle_colonists()'s own route==null && work==null test below. Streaks of
 ## 1-3 ticks are therefore still the only ones expected for ordinary
-## reassignment/route-evaluation lag, exactly as before this task.
+## reassignment/route-evaluation lag.
 ##
-## Round 6 review: earlier attempts widened THIS check to tolerate a longer
+## Earlier versions widened this check to tolerate a longer
 ## handover wait (a gated exemption, then a split into separate assigned/
 ## unassigned populations) instead of asking why a freshly assigned job could
 ## sit idle at all. The real cause was in tool_fetch_toil.gd: a freshly
 ## assigned job whose needs_tool candidate search landed on a tool already
-## held by a busy foreign colonist could start waiting on its very FIRST tick
+## held by a busy foreign colonist could start waiting on its very first tick
 ## of assignment, even while a farther but immediately free tool of the same
 ## kind sat unused -- a wait this check correctly flagged as "idle while
-## eligible work exists" (the busy colonist's OWN other job was that eligible
+## eligible work exists" (the busy colonist's own other job was that eligible
 ## work in this load scenario). Fixed at the source (ToolFetchToil.advance()
-## now prefers any candidate NOT currently held by a busy colonist, falling
+## now prefers any candidate not currently held by a busy colonist, falling
 ## back to a busy-held one only when no free alternative exists) rather than
 ## exempted here: this check is therefore the exact original, single
 ## continuous per-colonist streak, unconditional on assignment status, with
 ## no handover-specific carve-out at all -- a real, unavoidable handover wait
 ## (no free tool anywhere, as `_check_handover_wait_is_bounded_without_other_
-## queued_work()` below constructs directly) never arises in THIS scenario's
+## queued_work()` below constructs directly) never arises in this scenario's
 ## own geometry (10 tools shared by 3 colonists across 20 orders), so it never
 ## needs one.
 func _waiting_for_handover(world: WorldType, colonist_id: String) -> bool:
@@ -221,8 +221,8 @@ func _waiting_for_handover(world: WorldType, colonist_id: String) -> bool:
 	var wait: Dictionary = world._toils.waiting_for_handover(colonist_id, String(assignment["job_id"]))
 	return not wait.is_empty()
 
-## Generous upper bound on a single genuine handover wait (round 5 review's
-## own "independently test handover progress" requirement): the busy holder's
+## Generous upper bound on a single genuine handover wait, so handover
+## progress is tested independently: the busy holder's
 ## own current toil can, worst case in this load scenario, still be walking
 ## the full load area toward its target (at most ~16 tiles, LOAD_AREA_WIDTH +
 ## LOAD_AREA_HEIGHT, at content/tiles.json's move_ticks_per_tile: 4) and then
@@ -257,8 +257,8 @@ func _check_no_idle_while_work_available() -> void:
 				idle_streaks[id] = 0
 	_expect(_all_orders_done(world, total), "all 20 orders must complete within the load test's tick budget")
 
-## Dedicated, gate-independent handover-progress test (round 6 review): proves
-## the handover mechanism's own bound holds with AT MOST two jobs ever queued
+## Dedicated, gate-independent handover-progress test: proves
+## the handover mechanism's own bound holds with at most two jobs ever queued
 ## at a time (never a third), so the mechanism cannot be hiding behind
 ## _has_eligible_queued_job() finding something else to point at, and drives
 ## the full lifecycle through to the point where the requester -- previously
@@ -269,10 +269,10 @@ func _check_no_idle_while_work_available() -> void:
 ## _check_requester_waits_for_real_handover_then_completes(): colonist_0
 ## (labour "mine" disabled) starts holding the pick as a leftover and takes
 ## forage_a; colonist_1 (labour "forage" disabled) has nothing to do until
-## dig_b is submitted, needing the SAME pick -- now reserved by colonist_1 but
+## dig_b is submitted, needing the same pick -- now reserved by colonist_1 but
 ## still physically held by colonist_0, busy on forage_a -- so colonist_1
 ## must wait. Only once forage_a completes and forage_b (colonist_0's own
-## NEXT dispatched job, submitted only at that point -- so a third job is
+## next dispatched job, submitted only at that point -- so a third job is
 ## never queued while colonist_1 waits) sends colonist_0 to drop the pick does
 ## colonist_1's own wait end and its fetch route begin.
 func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
@@ -364,7 +364,7 @@ func _build_corridor_world(seed_value: int) -> WorldType:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	# Already held: this scenario's exact one-tick-precision assertions leave
-	# no room for fetch_tool's own travel tick (issue #271).
+	# no room for fetch_tool's own travel tick.
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
 	return world
 

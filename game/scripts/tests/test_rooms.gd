@@ -1,6 +1,6 @@
 extends SceneTree
 
-## F5 "Rooms" (foundation-for-breadth.md §3, issue #293): RoomMapType
+## F5 "Rooms" (foundation-for-breadth.md §3): RoomMapType
 ## recognises an enclosed region (walls + at least one door) as a room and
 ## derives size/door_count/has_bed/has_stockpile from it; WorldState wires it
 ## through get_room_at() and scales a completed sleep job's rest restore by
@@ -41,8 +41,7 @@ func _expect(condition: bool, message: String) -> void:
 ## ring, one cell a door on its east side, at (23, 21)) enclosing a 3x3
 ## interior on a 30x30 map. `blocked`/`doors`/`beds` are the live Dictionary
 ## instances the returned RoomMapType's callables read, so a caller can
-## mutate them and call on_passability_changed() to re-drive the flood, the
-## same pattern the original single-function version of this test used.
+## mutate them and call on_passability_changed() to re-drive the flood.
 ## `outside` is (24, 21): the open exterior tile immediately across the door
 ## from `interior` -- orthogonally adjacent to the same door tile, so it
 ## shares the door's door_count with the interior and only enclosure (not
@@ -161,7 +160,7 @@ func _check_wall_removal_breaches_enclosure_resealing_restores_it() -> void:
 
 ## An enclosed walls+door+bed room reports has_bed; adding a stockpile zone
 ## overlapping it also sets has_stockpile without clearing has_bed -- a room
-## with both flags reports both, per the task contract.
+## with both flags reports both.
 func _check_worldstate_recognises_bedroom_and_storeroom_both() -> void:
 	var world := _build_world(300001)
 	var room_coords := _place_room(world, 1, 1)

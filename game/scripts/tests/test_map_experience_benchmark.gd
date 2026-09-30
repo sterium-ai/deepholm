@@ -1,11 +1,11 @@
 extends SceneTree
 
-## Issue #299 acceptance: reproducible generation/load/pan timing evidence for
+## Reproducible generation/load/pan timing evidence for
 ## a 256x256 world, tagged with the commit and environment that produced it,
 ## for later comparison. This is CPU-bound headless
 ## instrumentation (world generation, SaveIO, and MapViewport's own transform
-## math), not a GPU frame-time measurement -- there is no display/GPU in this
-## sandbox to measure real render or interactive pan latency against, so it
+## math), not a GPU frame-time measurement -- a headless run has no
+## display/GPU to measure real render or interactive pan latency against, so it
 ## always prints its numbers and passes; it is evidence to quote, not a pass/
 ## fail performance gate a slower or faster machine should fail on.
 
