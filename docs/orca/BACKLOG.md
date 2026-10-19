@@ -22,12 +22,24 @@ behaviour change in `R*` tasks.
 
 ---
 
-## Phase R — composed core (sequential)
+## Phase R — composed core (sequential, except entries marked *parallel-safe*)
 
 ### R0 — Tooling for the Orca workflow · `done` (this PR)
 
 Windows test runner (`tools/run_tests.ps1`), `tools/measure_core.ps1`, `GODOT` env var,
 Orca helper scripts, this backlog.
+
+### R0b — Stop `godot --import` from dirtying the worktree · `todo` · *parallel-safe*
+
+- **Goal:** after `godot --headless --path game --import` on a fresh checkout, `git status` is
+  clean. Today 31 `game/assets/generated/**/*.png.import` files come back modified by line
+  endings only (committed with CRLF, rewritten with LF, or the reverse). Normalise them once and
+  pin the rule in `.gitattributes` so it cannot drift again.
+- **Owned paths:** `.gitattributes`, `game/**/*.import`, `game/README.md` (one line).
+- **Acceptance:** on a fresh worktree, run the import twice and `git status --porcelain` prints
+  nothing; `git diff --stat main` shows only line-ending changes (`git diff -w --stat` empty);
+  CI import + boot steps still pass.
+- **Non-goals:** touching `.tres`, `.uid`, scripts or any content.
 
 ### R1 — Extract `EventLog` · `todo`
 
@@ -144,7 +156,7 @@ Orca helper scripts, this backlog.
   "composed core" supersedes the budget-increase ADRs.
 - **Acceptance:** suite PASS; `tools/measure_core.ps1` shows no core file above 800.
 
-### R13 — Split `boot.gd` · `todo`
+### R13 — Split `boot.gd` · `todo` · *parallel-safe (viewer only, no core files)*
 
 - **Goal:** `game/scripts/boot.gd` becomes scene composition only; new-game setup, save
   wiring and input wiring move to `viewer/` modules. Under 300 lines.
