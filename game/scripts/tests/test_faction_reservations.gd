@@ -168,8 +168,8 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
@@ -247,8 +247,8 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_elig", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
@@ -382,8 +382,8 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
@@ -435,8 +435,8 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return_blocked", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
@@ -519,8 +519,8 @@ func _check_reservation_gate_refuses_haul_item_and_cell_reservation() -> void:
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve_gate", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")

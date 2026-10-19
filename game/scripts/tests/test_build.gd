@@ -166,9 +166,9 @@ func _add_zone(world: WorldStateType, command_id: String, x: int, y: int, width:
 func _seed_stock_and_order(world: WorldStateType, kind: String, site: Vector2i, stock_tile: Vector2i) -> Dictionary:
 	_add_zone(world, "zone", stock_tile.x, stock_tile.y, 1, 1)
 	for cost_entry in (world._object_definitions[kind]["build_cost"] as Array):
-		world._items["item_%d" % world._next_item_id] = {"id": "item_%d" % world._next_item_id,
+		world._item_table.items["item_%d" % world._item_table.next_item_id] = {"id": "item_%d" % world._item_table.next_item_id,
 			"x": stock_tile.x, "y": stock_tile.y, "kind": String(cost_entry["item"]), "count": int(cost_entry["quantity"])}
-		world._next_item_id += 1
+		world._item_table.next_item_id += 1
 	return _command_ok(world, "build_%s" % kind, "build", {"kind": kind, "x": site.x, "y": site.y})
 
 ## Ticks world until get_construction_site(site) is empty (the site
@@ -184,7 +184,7 @@ func _tick_until_site_gone(world: WorldStateType, site: Vector2i, budget: int = 
 ## reservation-lifecycle/cargo/route-cost checks need deterministic ids to
 ## reason about which source is nearest/lowest-id).
 func _place_item(world: WorldStateType, item_id: String, kind: String, x: int, y: int, count: int = 1) -> void:
-	world._items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
+	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
 
 func _job_by_id(world: WorldStateType, job_id: String) -> Dictionary:
 	return world._scheduler.queue.get_job(job_id)
@@ -229,7 +229,7 @@ func _assert_no_orphaned_reservations(world: WorldStateType, context: String) ->
 func _order_site_fetch(world: WorldStateType, kind: String, site: Vector2i, stockpile: Vector2i = Vector2i(0, 0), count: int = 1) -> String:
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", stockpile.x, stockpile.y, count)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	_add_zone(world, "zone_setup", stockpile.x, stockpile.y, 1, 1)
 	var result := _command_ok(world, "build_%s" % kind, "build", {"kind": kind, "x": site.x, "y": site.y})
 	if not result.get("ok", false):
@@ -566,7 +566,7 @@ func _check_queued_site_fetch_labour_disabled_holds_no_reservation_then_activate
 	var world := _build_world(320100)
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", 0, 0, 1)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	_add_zone(world, "zone_setup", 0, 0, 1, 1)
 	_command_ok(world, "labour_off", "set_labour", {"colonist": "colonist_0", "kind": "build", "level": 0})
 	_command_ok(world, "build_wall", "build", {"kind": "wooden_wall", "x": 0, "y": 10})
@@ -880,7 +880,7 @@ func _prime_site_phase(world: WorldStateType, phase: String, site: Vector2i) -> 
 		world._set_object(x, 6, "wooden_wall")
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", 5, 0)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	_add_zone(world, "zone_setup", 5, 0, 1, 1)
 	if phase == "queued":
 		_command_ok(world, "labour_off", "set_labour", {"colonist": "colonist_0", "kind": "build", "level": 0})
@@ -1113,7 +1113,7 @@ func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_r
 	_place_item(world, "item_1", "wood", 1, 0, 3)
 	_place_item(world, "item_2", "stone", 46, 0, 1)
 	_place_item(world, "item_3", "stone", 42, 0, 1)
-	world._next_item_id = 4
+	world._item_table.next_item_id = 4
 	_add_zone(world, "zone_setup", 0, 0, 48, 3)
 	_command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 
@@ -1125,7 +1125,7 @@ func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_r
 		world.tick()
 		_assert_no_orphaned_reservations(world, "nearest-source/very-close settling")
 		for id in ids:
-			if not seen.has(id) and not world._items.has(id):
+			if not seen.has(id) and not world._item_table.items.has(id):
 				seen[id] = true
 				order.append(id)
 		if world.get_construction_site(site.x, site.y).is_empty():
@@ -1153,7 +1153,7 @@ func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
 	_place_item(world, "item_3", "wood", 0, 3, 1)
 	_place_item(world, "item_4", "wood", 8, 0, 1)
 	_place_item(world, "item_5", "stone", 16, 0, 2)
-	world._next_item_id = 6
+	world._item_table.next_item_id = 6
 	_add_zone(world, "zone_setup", 0, 0, 16, 4)
 	_command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 
@@ -1165,7 +1165,7 @@ func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
 		world.tick()
 		_assert_no_orphaned_reservations(world, "tie-break settling")
 		for id in ids:
-			if not seen.has(id) and not world._items.has(id):
+			if not seen.has(id) and not world._item_table.items.has(id):
 				seen[id] = true
 				order.append(id)
 		if world.get_construction_site(site.x, site.y).is_empty():
@@ -1187,7 +1187,7 @@ func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
 	var site := Vector2i(10, 5)
 	_place_item(world, "item_1", "wood", 10, 0)
 	_place_item(world, "item_2", "wood", 3, 3)
-	world._next_item_id = 3
+	world._item_table.next_item_id = 3
 	# Seal item_2 inside a complete wall ring: every perimeter tile of the
 	# 2..4 x 2..4 box is a wall with no gap, so nothing outside can ever
 	# reach (3,3) or step adjacent to it.
@@ -1202,8 +1202,8 @@ func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
 	var elapsed := _tick_until_site_gone(world, site, 300)
 	_expect(elapsed > 0,
 		"the wall order must complete by fetching the reachable source (item_1), never getting retargeted onto the geometrically-closer but sealed-off item_2")
-	_expect(not world._items.has("item_1"), "item_1, the only reachable wood, must be the one consumed")
-	_expect(world._items.has("item_2"), "item_2, sealed behind the wall ring, must never be visited/consumed")
+	_expect(not world._item_table.items.has("item_1"), "item_1, the only reachable wood, must be the one consumed")
+	_expect(world._item_table.items.has("item_2"), "item_2, sealed behind the wall ring, must never be visited/consumed")
 	_assert_no_orphaned_reservations(world, "after completing behind the obstacle")
 
 ## Carried over from the old single-job suite: cancelling a site_fetch
@@ -1223,7 +1223,7 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 	_place_item(world, "item_3", "wood", 9, 0)
 	_place_item(world, "item_4", "stone", 15, 0)
 	_place_item(world, "item_5", "stone", 19, 0)
-	world._next_item_id = 6
+	world._item_table.next_item_id = 6
 	_add_zone(world, "zone_setup", 0, 0, 47, 2)
 	var result := _command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 	_expect(result.get("ok", false), "the build order must be accepted")
@@ -1249,20 +1249,20 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 		"setup must catch the colonist strictly between sources, not standing on one (got %s)" % [mid_carry_tile])
 	_expect(not job_id.is_empty(), "setup must capture the in-flight site_fetch job's own id")
 
-	var before_ids := world._items.keys()
+	var before_ids := world._item_table.items.keys()
 	_command_ok(world, "cancel_multi_fetch", "cancel_job", {"job_id": job_id})
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "cancelled", "the site_fetch job must be cancelled")
 	var after_colonist := world.get_colonists()[0]
 	_expect(not InventoryType.is_carrying(after_colonist), "the colonist must no longer be carrying anything after cancel")
 
 	var deposited_id := ""
-	for id in world._items.keys():
+	for id in world._item_table.items.keys():
 		if not (id in before_ids):
 			deposited_id = String(id)
 	_expect(not deposited_id.is_empty(), "cancelling mid-fetch must deposit a fresh ground item")
 	if deposited_id.is_empty():
 		return
-	var deposited: Dictionary = world._items[deposited_id]
+	var deposited: Dictionary = world._item_table.items[deposited_id]
 	_expect(String(deposited["kind"]) == "wood" and int(deposited["count"]) == 2,
 		"the deposit must carry both already-visited sources' wood in one stack (got %s)" % [deposited])
 	_expect(Vector2i(int(deposited["x"]), int(deposited["y"])) == mid_carry_tile,
@@ -1331,7 +1331,7 @@ func _run_two_orders_scenario(seed_value: int, two_colonists: bool) -> Dictionar
 	var xs := {"ia": 5, "ib": 6, "ic": 7, "id": 8, "ie": 9, "if": 10, "ig": 11, "ih": 12, "ii": 13, "ij": 14}
 	for id in kinds.keys():
 		_place_item(world, id, String(kinds[id]), int(xs[id]), 0)
-	world._next_item_id = 100
+	world._item_table.next_item_id = 100
 	_add_zone(world, "zone_setup", 0, 0, 16, 2)
 	var site_a := Vector2i(0, 20)
 	var site_b := Vector2i(30, 20)

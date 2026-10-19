@@ -206,11 +206,11 @@ func _finish() -> void:
 ## lives on the colonist and is excluded from the ground-item snapshot.
 func _check_ground_item_counts() -> void:
 	var world := WorldStateType.new(SEED_A, 10)
-	world._items.clear()
-	world._items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "kind": "wood", "count": 2}
-	world._items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "kind": "wood", "count": 3}
-	world._items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "kind": "stone", "count": 4}
-	world._items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "kind": "stone", "count": 7}
+	world._item_table.items.clear()
+	world._item_table.items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "kind": "wood", "count": 2}
+	world._item_table.items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "kind": "wood", "count": 3}
+	world._item_table.items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "kind": "stone", "count": 4}
+	world._item_table.items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "kind": "stone", "count": 7}
 	world._colonists[0]["carrying"] = {"id": "cargo", "kind": "stone", "count": 9}
 	var view := MapViewType.new()
 	view.set_world(world)

@@ -148,7 +148,7 @@ func _check_completed_dig_saves_and_reloads_through_save_io() -> void:
 			"a reloaded world must keep its dug tile as trench")
 	_remove(path)
 
-## world._dig_find_random's own continuation must
+## world._item_table.dig_find_random's own continuation must
 ## survive a real SaveIO.write_atomic()/read() round trip (not just an
 ## in-memory StateCodec.encode()/decode(), already covered by
 ## test_save_migration.gd's own _check_dig_find_rng_continuation_survives_save_load_round_trip()),
@@ -172,7 +172,7 @@ func _check_dig_find_rng_continuation_survives_save_io_round_trip() -> void:
 	if not read_result.get("ok", false):
 		return
 	var restored: WorldStateType = StateCodecType.decode(read_result["state"])
-	_expect(restored._dig_find_random.seed == live._dig_find_random.seed and restored._dig_find_random.state == live._dig_find_random.state,
+	_expect(restored._item_table.dig_find_random.seed == live._item_table.dig_find_random.seed and restored._item_table.dig_find_random.state == live._item_table.dig_find_random.state,
 		"a real SaveIO round trip must preserve the dig-find RNG's own stream exactly")
 
 	# Continue both the live run and its SaveIO-restored counterpart through one

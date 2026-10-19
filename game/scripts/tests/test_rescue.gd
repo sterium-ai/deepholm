@@ -206,7 +206,7 @@ func _check_critical_need_never_diverted_into_rescue() -> void:
 	# Far enough that the resulting eat_food job stays pending across several
 	# ticks (observable by this test's own post-tick polling below), rather
 	# than committing and resolving within a single internal tick() call.
-	world._ground_berries["0_20"] = 1
+	world._item_table.ground_berries["0_20"] = 1
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
@@ -395,7 +395,7 @@ func _check_need_preempts_an_already_active_rescue() -> void:
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["0_20"] = 1
+	world._item_table.ground_berries["0_20"] = 1
 	var need_job_id := ""
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -600,7 +600,7 @@ func _check_save_load_preserves_suspended_rescue_continuation() -> void:
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["0_20"] = 1
+	world._item_table.ground_berries["0_20"] = 1
 	var need_job_id := ""
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1123,7 +1123,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["2_20"] = 1
+	world._item_table.ground_berries["2_20"] = 1
 	var need_job_id := ""
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1273,7 +1273,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["2_40"] = 1
+	world._item_table.ground_berries["2_40"] = 1
 	var interrupted := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()

@@ -27,6 +27,7 @@ static func content_version() -> String:
 	return ContentRegistryType.new().version()
 
 static func encode(world: WorldState) -> Dictionary:
+	var item_table := world._item_table.encode()
 	return {
 		"schemaVersion": SCHEMA_VERSION,
 		"contentVersion": content_version(),
@@ -51,7 +52,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"jobs": _encode_jobs(world._scheduler.queue.get_jobs()),
 		"scheduling": _encode_scheduling(world),
 		"rng": {"seed": world._random.seed, "state": world._random.state},
-		"items": _encode_items(world._items, world._next_item_id, world._item_factions),
+		"items": item_table["items"],
 		"objects": _encode_objects(world._objects, world._object_factions, world._object_health, world._object_origin, world._object_orientation),
 		# One record per active construction site. Optional on the
 		# wire like "combatBlockedTargets"/"digFindRng" above -- an older save
@@ -60,7 +61,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"constructionSites": _encode_construction_sites(world._sites.list()),
 		"zones": _encode_zones(world._zones),
 		"nextZoneId": world._next_zone_id,
-		"groundBerries": _encode_ground_berries(world._ground_berries),
+		"groundBerries": item_table["groundBerries"],
 		"workProgress": _encode_work_progress(world._work_progress),
 		# The exact job_id that owns each workProgress
 		# key, so decode() restores real ownership instead of guessing it from
@@ -98,12 +99,12 @@ static func encode(world: WorldState) -> Dictionary:
 		"calendarAlerts": _encode_calendar_alerts(world._calendar_alerts_fired),
 		"toolFetchExcluded": _encode_tool_fetch_excluded(world._toils.get_fetch_tool_excluded()),
 		"incidentScheduler": _encode_incident_scheduler(world),
-		# ADR 026: dig's own find-roll RNG continuation (world._dig_find_random),
+		# ADR 026: dig's own find-roll RNG continuation (ItemTable.dig_find_random),
 		# mirroring "rng" above and "incidentScheduler.rng" -- optional on the wire (see
 		# SaveIO._validate_state()) so an older hand-built fixture that never exercises dig's
-		# find roll still validates; decode() below leaves the constructor's own fresh
+		# find roll still validates; ItemTable.decode() leaves the constructor's own fresh
 		# seed + WorldState.DIG_FIND_SEED_SALT value in place when this key is absent.
-		"digFindRng": {"seed": world._dig_find_random.seed, "state": world._dig_find_random.state},
+		"digFindRng": item_table["digFindRng"],
 	}
 
 ## Reconstructs a WorldState that ticks identically to the instance that
@@ -135,10 +136,10 @@ static func decode(state: Dictionary) -> WorldState:
 	world._generator_version = int(map.get("generatorVersion", WorldGeneratorType.GENERATOR_VERSION))
 	world._tiles = Array(state["map"]["tiles"], TYPE_STRING, "", null)
 	world._colonists = _decode_entities(state["entities"])
-	var items_data := _decode_items(state["items"])
-	world._items = items_data["items"]
-	world._next_item_id = items_data["next_id"]
-	world._item_factions = items_data["factions"]
+	# "items", "groundBerries" and the optional "digFindRng". Nothing else in
+	# decode() reads them or draws from the dig-find stream, so restoring all
+	# three here (berries and the RNG used to be restored later) is order-safe.
+	world._item_table.decode(state)
 	# State["objects"] holds one record per placed *origin* tile,
 	# not per occupied tile -- _decode_objects() below only decodes the raw
 	## per-origin records; expanding each back out to every tile of its
@@ -180,7 +181,6 @@ static func decode(state: Dictionary) -> WorldState:
 	world._sites.restore(construction_sites, _next_construction_site_id(construction_sites))
 	world._zones = _decode_zones(state["zones"])
 	world._next_zone_id = int(state["nextZoneId"])
-	world._ground_berries = _decode_ground_berries(state["groundBerries"])
 	world._work_progress = _decode_work_progress(state["workProgress"])
 	var work_progress_owners := _decode_work_progress_owners(state.get("workProgressOwners", []))
 	world._suspended_work_progress = _decode_suspended_work_progress(state.get("suspendedWorkProgress", []))
@@ -279,14 +279,6 @@ static func decode(state: Dictionary) -> WorldState:
 	world._incidents._last_processed_day = int(incident_scheduler["lastProcessedDay"])
 	world._incidents._random.seed = int(incident_scheduler["rng"]["seed"])
 	world._incidents._random.state = int(incident_scheduler["rng"]["state"])
-	# ADR 026: restores dig's find-roll RNG continuation when the
-	# save carries it (see encode()'s own comment on "digFindRng" above); absent
-	# only for a hand-built fixture predating this field, which keeps the
-	# constructor's own fresh WorldState.new() seed instead.
-	if state.has("digFindRng"):
-		var dig_find_rng: Dictionary = state["digFindRng"]
-		world._dig_find_random.seed = int(dig_find_rng["seed"])
-		world._dig_find_random.state = int(dig_find_rng["state"])
 
 	return world
 
@@ -378,10 +370,10 @@ static func _decode_tile_array(tiles: Array) -> Array:
 
 # --- items -----------------------------------------------------------------
 
-## world._items is keyed by item id; sorted keys give a deterministic
-## encoding order. next_id is world._next_item_id, carried alongside the list
+## ItemTable.items is keyed by item id; sorted keys give a deterministic
+## encoding order. next_id is ItemTable.next_item_id, carried alongside the list
 ## so a restored WorldState never reuses an id a save already handed out.
-## item_factions is world._item_factions (the persisted counterpart of the
+## item_factions is ItemTable.item_factions (the persisted counterpart of the
 ## "faction_id" runtime field get_items() adds), a parallel map keyed by item id rather than a nested value inside
 ## items itself -- mirroring _encode_objects()'s own parallel
 ## object_factions map.
@@ -543,7 +535,7 @@ static func _decode_objects(objects: Array) -> Array:
 
 # --- ground berries ----------------------------------------------------
 
-## world._ground_berries is keyed by "%d_%d" (see world_state.gd, mirroring
+## ItemTable.ground_berries is keyed by "%d_%d" (see item_table.gd, mirroring
 ## _objects); the sorted keys give a deterministic encoding order. Field name
 ## "berries" mirrors the old per-tile groundItems wire shape's "wood" field
 ## ({target, wood}): ground berries stay a simple per-tile counter, not a

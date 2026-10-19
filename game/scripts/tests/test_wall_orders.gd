@@ -93,9 +93,9 @@ func _tiles_from(positions: Array[Vector2i]) -> Array:
 	return tiles
 
 func _add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
-	var id := "item_%d" % world._next_item_id
-	world._items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
-	world._next_item_id += 1
+	var id := "item_%d" % world._item_table.next_item_id
+	world._item_table.items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
+	world._item_table.next_item_id += 1
 
 func _held_quantity(site: Dictionary, item_kind: String) -> int:
 	for entry in (site["held_materials"] as Array):

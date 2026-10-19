@@ -162,7 +162,7 @@ func _check_eating_colonist_shows_activity_and_toil() -> void:
 	var world := _build_world(20001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["20_0"] = 1
+	world._item_table.ground_berries["20_0"] = 1
 
 	var line := ""
 	for _i in MAX_TICKS:
@@ -220,7 +220,7 @@ func _check_eating_colonist_shows_activity_during_consume() -> void:
 	var world := _build_world(20002)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["20_0"] = 1
+	world._item_table.ground_berries["20_0"] = 1
 
 	var line := ""
 	for _i in MAX_TICKS:
@@ -332,7 +332,7 @@ func _check_blocked_source_reserved_colonist_shows_reason_and_remedy() -> void:
 	var world := _build_world(50001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["47_47"] = 1
+	world._item_table.ground_berries["47_47"] = 1
 
 	world.tick()
 	_expect(_jobs_of_kind(world, "eat_food").is_empty(),

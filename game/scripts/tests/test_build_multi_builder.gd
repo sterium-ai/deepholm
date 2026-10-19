@@ -61,9 +61,9 @@ func _command_ok(world: WorldStateType, command_id: String, command_type: String
 	return result
 
 func _add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
-	var id := "item_%d" % world._next_item_id
-	world._items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
-	world._next_item_id += 1
+	var id := "item_%d" % world._item_table.next_item_id
+	world._item_table.items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
+	world._item_table.next_item_id += 1
 
 ## Zeroes every need kind's decay rate except `kind` (mirrors test_need_jobs.gd's
 ## own helper): only test D deliberately drives a need interrupt, and must not
@@ -142,9 +142,9 @@ func _check_two_concurrent_fetchers_pick_different_nearest_unclaimed_sources() -
 	world._colonists.append(_colonist("colonist_0", 10, 15))
 	world._colonists.append(_colonist("colonist_1", 11, 15))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 5, "width": 25, "height": 15})
-	var item_a_id := "item_%d" % world._next_item_id
+	var item_a_id := "item_%d" % world._item_table.next_item_id
 	_add_stock(world, "wood", 1, 5, 10)
-	var item_b_id := "item_%d" % world._next_item_id
+	var item_b_id := "item_%d" % world._item_table.next_item_id
 	_add_stock(world, "wood", 1, 16, 10)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
@@ -234,7 +234,7 @@ func _check_builder_leaving_mid_work_halves_rate_and_preserves_progress() -> voi
 	# sends the leaving builder away rather than finding nothing to search
 	# for and resuming in the same tick (colonist-ai.md 3.8's need_unmet
 	# "keeps working" fallback, test_need_jobs.gd's own precedent).
-	world._ground_berries["0_5"] = 1
+	world._item_table.ground_berries["0_5"] = 1
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var builder_ids: Array = []

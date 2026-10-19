@@ -69,7 +69,7 @@ const PROTECTED_FIELDS: Array[String] = ["needs", "labourTable", "route", "held_
 
 const EXCLUDED_FILES: Array[String] = [
 	"res://scripts/core/actors/actor_table.gd",
-	"res://scripts/core/jobs/tool_item_store.gd",
+	"res://scripts/core/items/tool_item_store.gd",
 	"res://scripts/core/jobs/tool_fetch_toil.gd",
 	"res://scripts/core/jobs/tool_drop_toil.gd",
 	"res://scripts/core/jobs/givers/calendar_alert_giver.gd",

@@ -70,9 +70,9 @@ func _reason_of(result: Dictionary) -> String:
 	return String((result.get("rejection", {}) as Dictionary).get("reason", ""))
 
 func _add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
-	var id := "item_%d" % world._next_item_id
-	world._items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
-	world._next_item_id += 1
+	var id := "item_%d" % world._item_table.next_item_id
+	world._item_table.items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
+	world._item_table.next_item_id += 1
 
 func _held_quantity(site: Dictionary, item_kind: String) -> int:
 	for entry in (site["held_materials"] as Array):
@@ -152,7 +152,7 @@ func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_se
 			for item in world.get_items():
 				if String(item.get("id", "")) == item_id:
 					still_on_ground = true
-			_expect(not still_on_ground or int(world._items.get(item_id, {}).get("count", 0)) >= 0,
+			_expect(not still_on_ground or int(world._item_table.items.get(item_id, {}).get("count", 0)) >= 0,
 				"a reserved item id must not silently duplicate onto the ground")
 		if world.get_construction_site(10, 10).is_empty():
 			break

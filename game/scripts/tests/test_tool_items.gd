@@ -432,7 +432,7 @@ func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
 ## item's final ground location must be found by kind, not by its original
 ## "item_1" id.
 func _wood_item(world: WorldStateType) -> Dictionary:
-	for item in world._items.values():
+	for item in world._item_table.items.values():
 		if String(item["kind"]) == "wood":
 			return item
 	return {}
@@ -575,7 +575,7 @@ func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["1_1"] = 1
+	world._item_table.ground_berries["1_1"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 
 	var dig_result := _command(world, "dig_1", "dig", {"x": 2, "y": 0, "priority": 1})
@@ -755,7 +755,7 @@ func _check_interrupted_job_refetches_and_works_at_job_target_not_tool_location(
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["1_1"] = 1
+	world._item_table.ground_berries["1_1"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 
 	var dig_result := _command(world, "dig_1", "dig", {"x": 2, "y": 0, "priority": 1})
@@ -2918,8 +2918,8 @@ func _check_drop_tool_during_haul_job_preserves_cargo_identity_in_place() -> voi
 	# drop must fall back to dropping in place, not walking to a stockpile.
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 20, "y": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	world._items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 
 	var haul_job_id := ""
 	for _i in 10:
@@ -2975,8 +2975,8 @@ func _check_drop_tool_during_haul_job_preserves_cargo_identity_via_stockpile() -
 		"reserving colonist_0's held axe for a foreign job must succeed, before any haul job even exists")
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 3, "y": 0, "width": 2, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	world._items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 
 	var haul_job_id := ""
 	for _i in 10:
@@ -3042,8 +3042,8 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 	# the axe's own, independent drop-cell search moments later.
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 3, "y": 0, "width": 3, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	world._items["item_1"] = {"id": "item_1", "x": 15, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 15, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 
 	var haul_job_id := ""
 	for _i in 10:
@@ -3109,8 +3109,8 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 			break
 	_expect(direct_completed, "the uninterrupted run's haul job must still complete")
 	_expect(restored_completed, "the SaveIO-restored run's haul job must also still complete, cargo identity intact throughout")
-	var direct_item: Dictionary = world._items.get("item_1", {})
-	var restored_item: Dictionary = restored._items.get("item_1", {})
+	var direct_item: Dictionary = world._item_table.items.get("item_1", {})
+	var restored_item: Dictionary = restored._item_table.items.get("item_1", {})
 	_expect(direct_item.get("x") == restored_item.get("x") and direct_item.get("y") == restored_item.get("y"),
 		"item_1 must end up at the same final cell in both runs, got %s vs %s" % [direct_item, restored_item])
 

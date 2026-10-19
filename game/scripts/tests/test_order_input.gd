@@ -156,7 +156,7 @@ func _run() -> void:
 	# on rock), and Cancel resolves a pending build by its construction site,
 	# not by the wood tile its scheduler target names.
 	var stock_tile := place_target
-	world._items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "kind": "wood", "count": 1}
+	world._item_table.items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "kind": "wood", "count": 1}
 	_expect(world.apply({"actor": "test", "command_id": "ui_build_zone", "tick": world.get_tick(), "type": "zone_add",
 		"payload": {"x": stock_tile.x, "y": stock_tile.y, "width": 1, "height": 1}}).get("ok", false),
 		"a stockpile zone over the build wood must be accepted")
@@ -214,7 +214,7 @@ func _check_wall_gesture(boot) -> void:
 	world._tiles.fill("floor")
 	world._colonists.clear()
 	world._objects.clear()
-	world._items.clear()
+	world._item_table.items.clear()
 	boot._replace_world(world)
 	var view = boot._map_view
 	boot._tool_buttons[BootType.Tool.WALL].pressed.emit()

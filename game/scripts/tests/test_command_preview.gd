@@ -152,8 +152,8 @@ func _check_till_accepted_and_rejected() -> void:
 func _check_sow_accepted_and_missing_seed_rejected() -> void:
 	var world := _single_colonist_world(346040)
 	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	_check_preview_matches_apply(world, _job_command(world, "sow_accepted", "sow", {"x": 2, "y": 0, "priority": 1}),
 		"sow on a plowed_soil tile with a seed available")
 
@@ -334,8 +334,8 @@ func _check_job_priority_range_rejected() -> void:
 					world._set_object(2, 0, "berry_bush")
 				"sow":
 					world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-					world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-					world._next_item_id = 2
+					world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+					world._item_table.next_item_id = 2
 			var description := "%s with a valid target but unsupported priority %d" % [job_type, priority]
 			var sequence_before: int = world._scheduler.queue.get_sequence()
 			_check_preview_matches_apply(world,
