@@ -156,7 +156,7 @@ Orca helper scripts, this backlog.
   "composed core" supersedes the budget-increase ADRs.
 - **Acceptance:** suite PASS; `tools/measure_core.ps1` shows no core file above 800.
 
-### R13 — Split `boot.gd` · `todo` · *parallel-safe (viewer only, no core files)*
+### R13 — Split `boot.gd` · `review` (branch `antonelmejor50-hub/r13-split-boot-gd`, report `handoffs/R13.md`) · *parallel-safe (viewer only, no core files)*
 
 - **Goal:** `game/scripts/boot.gd` becomes scene composition only; new-game setup, save
   wiring and input wiring move to `viewer/` modules. Under 300 lines.
