@@ -1,12 +1,18 @@
 # R0b evidence: a fresh worktree of the given commit stays clean after two imports and a boot.
 # Usage (from the repo root): docs\orca\handoffs\R0b-verify.ps1 [-Ref HEAD]
 # Run with -Ref main to see the old behaviour (31 *.png.import files reported as modified).
-# Exits 1 if any Godot step fails or leaves the worktree dirty, 0 otherwise.
+# Exits 1 if any Godot step fails or leaves the worktree dirty, 2 if Godot or the worktree
+# cannot be set up, 0 otherwise.
 param([string]$Ref = "HEAD")
 
 $ErrorActionPreference = "Continue"
 $godot = $env:GODOT
 if (-not $godot) { $godot = [Environment]::GetEnvironmentVariable("GODOT", "User") }
+# A missing executable would leave $LASTEXITCODE at git's 0 and report a false PASS.
+if (-not $godot -or -not (Get-Command $godot -ErrorAction SilentlyContinue)) {
+    Write-Output "R0b-verify: Godot not found ('$godot'). Set `$env:GODOT to the 4.7.2 console executable."
+    exit 2
+}
 $dir = Join-Path ([System.IO.Path]::GetTempPath()) ("r0b-verify-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 
 $failed = $false
