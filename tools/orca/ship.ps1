@@ -23,7 +23,8 @@ $existing = gh pr view --json url --jq .url 2>$null
 if ($existing) {
     Write-Output "ship: PR already open: $existing"
 } else {
-    $title = (git log -1 --pretty=%s)
+    # Title = the branch's first commit (the task itself), not the last fix-up; it becomes the squash title.
+    $title = (git log --reverse --pretty=%s "origin/main..HEAD" | Select-Object -First 1)
     $body = (git log "origin/main..HEAD" --pretty="- %s%n%n%b") -join "`n"
     gh pr create --base main --head $branch --title $title --body $body
     $existing = gh pr view --json url --jq .url
