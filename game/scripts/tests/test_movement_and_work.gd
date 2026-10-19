@@ -207,7 +207,7 @@ func _build_interrupt_world(seed_value: int) -> WorldType:
 	# round-tripped through save/load must agree on it to ever hash equal.
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
-	world._ground_berries["5_0"] = 1
+	world._item_table.ground_berries["5_0"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -306,8 +306,8 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 	_isolate_need(world, "food")
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result: Dictionary = world.apply({"actor": "test", "command_id": "zone1", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 5, "y": 1, "width": 1, "height": 1}})
 	_expect(zone_result["ok"], "haul destination zone_add must be accepted")
@@ -334,7 +334,7 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 		if InventoryType.is_carrying(colonist):
 			picked_up = true
 	_expect(picked_up, "a critical need must not prevent pick_up from eventually succeeding")
-	_expect(not world._items.has("item_1"), "the picked-up item must leave the ground map")
+	_expect(not world._item_table.items.has("item_1"), "the picked-up item must leave the ground map")
 
 ## The persisted fields WorldState._work_progress/_paused_jobs round-trip
 ## through to_save_state()/from_save_state() exactly, checked directly rather
@@ -496,8 +496,8 @@ func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 			sand_count += 1
 	_expect(sand_count == 1,
 		"exactly one sand item must exist after two overlapping dig orders on the same soil tile, got %d" % sand_count)
-	_expect(world._pending_dig_finds.is_empty(),
-		"no find roll may remain staged once both overlapping dig orders are terminal, got %s" % [world._pending_dig_finds])
+	_expect(world._item_table.pending_dig_finds.is_empty(),
+		"no find roll may remain staged once both overlapping dig orders are terminal, got %s" % [world._item_table.pending_dig_finds])
 
 	_expect(not world._scheduler.queue.get_reservation_table().is_reserved("tile:%d,%d" % [target.x, target.y]),
 		"the target tile must be unreserved once both dig orders are terminal")
@@ -546,7 +546,7 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 	# Stand in for a second dig job completing on this same tile while colonist_0's job sits
 	# paused: exactly the effect world_state.gd's own "dig" branch would have produced.
 	world._tiles[world._tile_index(3, 0)] = WorldType.TILE_TRENCH
-	world._spawn_item("sand", 4, 0)
+	world._item_table.spawn_item("sand", 4, 0)
 
 	world._resume_interrupted_job("colonist_0")
 	_expect(world._paused_jobs.is_empty(), "_resume_interrupted_job() must clear the paused job bookkeeping")
@@ -576,7 +576,7 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 			sand_count += 1
 	_expect(sand_count == 1,
 		"the resumed dig job must not spawn a second sand item once its target is stale, got %d" % sand_count)
-	_expect(world._pending_dig_finds.is_empty(),
-		"the resumed dig job must not stage a second find roll once its target is stale, got %s" % [world._pending_dig_finds])
+	_expect(world._item_table.pending_dig_finds.is_empty(),
+		"the resumed dig job must not stage a second find roll once its target is stale, got %s" % [world._item_table.pending_dig_finds])
 	_expect(not world._scheduler.queue.get_reservation_table().is_reserved("tile:3,0"),
 		"the resumed dig job must not leave its tile reservation behind once terminal")

@@ -175,7 +175,7 @@ func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 	# accept_trade now draws only from _find_available_build_item()'s own
 	# zone/reservation invariant, never a bare ground item outside a zone.
 	_add_zone(world, "zone_1", 4, 4, 2, 2)
-	world._items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "kind": want_item, "count": 1}
+	world._item_table.items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "kind": want_item, "count": 1}
 	var trader_ref := world._find_colonist(trader_id)
 	_expect(_inventory_kinds(trader_ref).has(give_item), "the trader must carry give_item before the trade")
 	_expect(not _inventory_kinds(trader_ref).has(want_item), "the trader must not carry want_item before the trade")

@@ -77,8 +77,8 @@ func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 	# subsequent build command still resolves through the real stockpile gate.
 	for item_index in range(total_wood):
 		var item_id := "item_%d" % (item_index + 1)
-		world._items[item_id] = {"id": item_id, "x": 0, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = total_wood + 1
+		world._item_table.items[item_id] = {"id": item_id, "x": 0, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = total_wood + 1
 
 	if bedroom:
 		# Establish the opening first so the final wall never seals the only

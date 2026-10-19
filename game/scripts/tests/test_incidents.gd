@@ -583,7 +583,7 @@ func _check_incident_submission_does_not_disturb_queue_clock_or_backoff() -> voi
 	var with_incidents := _build_controlled_world(1111)
 	for world in [baseline, with_incidents]:
 		world._colonists.append(_colonist("solo_colonist", 5, 5))
-		world._items["wood_1"] = {"id": "wood_1", "x": 20, "y": 20, "kind": "wood", "count": 1}
+		world._item_table.items["wood_1"] = {"id": "wood_1", "x": 20, "y": 20, "kind": "wood", "count": 1}
 	for i in 40:
 		baseline.tick()
 		if i == 5:

@@ -58,7 +58,7 @@ Orca helper scripts, this backlog.
   the report.
 - **Non-goals:** changing event names, order or payloads; touching the viewer.
 
-### R2 — Extract `ItemTable` · `todo`
+### R2 — Extract `ItemTable` · `review` (branch `antonelmejor50-hub/r2-extract-itemtable`)
 
 - **Goal:** `game/scripts/core/items/item_table.gd` owns ground items, ground berries, item
   factions, `_next_item_id`, and every spawn/place/remove/consume/lookup function listed in
@@ -207,3 +207,11 @@ The largest gap and the game's identity. Needs a map model that supports several
   pending (see `../design/baseline.md`).
 - `test_save_migration` integrity mismatch on Linux Godot (passes on Windows) — platform
   hash difference, worth a task once the core is split.
+- Found during R2 (pre-existing on `main`, not fixed in a refactor; see `handoffs/R2.md`):
+  - `StateCodec._encode_work_progress_owners()` splits a `rescue` job's job-scoped
+    work-progress key on `_` and writes an out-of-map tile (`{x: 0, y: 17244}`), so
+    `SaveIO.write_atomic()` refuses that save with `invalid tile coordinates`. Fits R4.
+  - `state_hash()` does not cover ground berries: two worlds that differ only in
+    `groundBerries` hash equal although the field is persisted and drives `eat_food`.
+  - Ground-berries factions are never persisted: after a load,
+    `get_ground_berries_faction_id()` returns `""` for berries that were `"colony"`.

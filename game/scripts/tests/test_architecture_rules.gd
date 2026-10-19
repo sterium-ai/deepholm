@@ -236,7 +236,7 @@ func _check_execution_trace() -> void:
 	_run_and_verify("sleep", 204001, func(world: WorldStateType) -> void:
 		_expect(_command(world, "place_object", {"x": 5, "y": 0, "kind": "bed"})["ok"], "bed placement must be accepted"))
 	_run_and_verify("eat_food", 205001, func(world: WorldStateType) -> void:
-		world._ground_berries["5_0"] = 1)
+		world._item_table.ground_berries["5_0"] = 1)
 	_run_and_verify("drink_water", 206001, func(world: WorldStateType) -> void:
 		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_WATER)
 	_check_haul_execution_trace(207001)
@@ -246,8 +246,8 @@ func _check_execution_trace() -> void:
 		_expect(_command(world, "till", {"x": 5, "y": 0, "priority": 1})["ok"], "till order must be accepted"))
 	_run_and_verify("sow", 209001, func(world: WorldStateType) -> void:
 		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_PLOWED_SOIL
-		world._items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
-		world._next_item_id = 2
+		world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
+		world._item_table.next_item_id = 2
 		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
 	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
@@ -337,8 +337,8 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 		return
 	var toils: Array = _jobs_content[kind]
 	var result := _run_scenario(kind, seed_value, func(world: WorldStateType) -> void:
-		world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-		world._next_item_id = 2
+		world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+		world._item_table.next_item_id = 2
 		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted"))
 	var world: WorldStateType = result["world"]
 	_verify_trace_against_toils(kind, toils, world, result["statuses"], result["completed"])
@@ -347,7 +347,7 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 	# item's id may no longer be "item_1" -- only that a wood item still
 	# exists on the ground is checked.
 	var delivered := false
-	for item in world._items.values():
+	for item in world._item_table.items.values():
 		if String(item["kind"]) == "wood":
 			delivered = true
 	_expect(delivered, "the delivered item must still exist on the ground at its stockpile cell")
@@ -369,8 +369,8 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 			return
 	var world := _build_world(seed_value)
 	_isolate_need(world, "")
-	world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
 	var build_result := _command(world, "build", {"kind": "wooden_wall", "x": 10, "y": 0})
 	_expect(build_result["ok"], "build order must be accepted")
@@ -400,7 +400,7 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 	_expect(fetch_verified, "site_fetch must complete before the site itself does")
 	_expect(site_completed, "the construction site must complete within the tick budget")
 	_verify_trace_against_toils("site_work", _jobs_content["site_work"], world, site_work_statuses, site_work_statuses.has("completed"))
-	_expect(not world._items.has("item_1"), "the delivered wood must be consumed by construction, not left on the ground")
+	_expect(not world._item_table.items.has("item_1"), "the delivered wood must be consumed by construction, not left on the ground")
 	_expect(world.get_object(10, 0) == "wooden_wall", "the declared object must appear at the build target")
 
 # --- 2) single per-colonist advance path -------------------------------------

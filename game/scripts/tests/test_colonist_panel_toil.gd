@@ -51,8 +51,8 @@ func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": [],
 	})
-	world._items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 5, "y": 5, "width": 1, "height": 1},

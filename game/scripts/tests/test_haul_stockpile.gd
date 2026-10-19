@@ -42,7 +42,7 @@ func _colonist(id: String, x: int, y: int) -> Dictionary:
 	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "hands": []}
 
 func _place_wood_item(world: WorldStateType, item_id: String, x: int, y: int) -> void:
-	world._items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
+	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
 
 func _apply(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:
 	var result := world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
@@ -87,7 +87,7 @@ func _check_two_of_three_items_reach_a_two_cell_zone() -> void:
 	_place_wood_item(world, "item_1", 10, 0)
 	_place_wood_item(world, "item_2", 10, 3)
 	_place_wood_item(world, "item_3", 10, 6)
-	world._next_item_id = 4
+	world._item_table.next_item_id = 4
 	_add_zone(world, "zone_setup", 20, 0, 1, 2)
 
 	for _i in 400:
@@ -131,7 +131,7 @@ func _check_cancel_mid_carry_drops_item_and_rehauls_later() -> void:
 	var world := _build_world(19002)
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	_add_zone(world, "zone_setup", 0, 10, 1, 1)
 
 	var job_id := ""
@@ -191,7 +191,7 @@ func _check_zone_removed_mid_walk_fails_blocked_destination_gone() -> void:
 	var world := _build_world(19003)
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	var zone_id := _add_zone(world, "zone_setup", 0, 10, 1, 1)
 
 	var job_id := ""
@@ -236,7 +236,7 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	world._colonists.append(_colonist("colonist_1", 5, 5))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._next_item_id = 2
+	world._item_table.next_item_id = 2
 	world._tiles[world._tile_index(7, 5)] = WorldStateType.TILE_SOIL
 	world.spawn_ground_tool_item("pick", 5, 5)
 

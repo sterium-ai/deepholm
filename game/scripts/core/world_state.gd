@@ -8,7 +8,8 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const ToolHandoverType = preload("res://scripts/core/jobs/tool_handover.gd")
 const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
-const ToolItemStoreType = preload("res://scripts/core/jobs/tool_item_store.gd")
+const ToolItemStoreType = preload("res://scripts/core/items/tool_item_store.gd")
+const ItemTableType = preload("res://scripts/core/items/item_table.gd")
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
 const NeedGiverType = preload("res://scripts/core/jobs/givers/need_giver.gd")
 const RescueGiverType = preload("res://scripts/core/jobs/givers/rescue_giver.gd")
@@ -120,17 +121,6 @@ var _clock: SeededClock
 ## never perturb this stream's continuation -- see
 ## test_river_generation.gd's _check_generation_does_not_perturb_simulation_stream().
 var _random: RandomNumberGenerator
-## ADR 026 (docs/decisions/026-trench-trapped-actor-and-rescue.md): dig's own
-## find_table stream, salted off the world seed like incident_scheduler.gd's
-## _random so it never perturbs or is perturbed by _random's own sequence.
-## Reseeded fresh by _init() on every construction, including
-## StateCodec.decode()'s own WorldState.new() call; state_codec.gd then
-## overwrites this fresh value with the save's own persisted continuation,
-## the same way it already restores _random/_incidents._random,
-## so a dig's find sequence keeps going from where the saved run left off
-## instead of restarting -- see state_hash()'s own "dig_find_rng" entry, which
-## is why this stream's continuation is part of the diagnostic hash too.
-var _dig_find_random: RandomNumberGenerator
 var _tiles: Array[String] = []
 ## Generation-time scratch: _generate_map() stashes WorldGenerator's river/berry-bush
 ## output so _spawn_colonists() (the next _init() call) can turn bushes into _objects and
@@ -143,33 +133,26 @@ var _pending_berry_bush_tiles: Array[Vector2i] = []
 ## Empty ({}) on a StateCodec.decode()d world, which never calls _spawn_colonists().
 var _spawn_clearing: Dictionary = {}
 var _colonists: Array[Dictionary] = []
-var _items: Dictionary = {}
-var _next_item_id: int = 1
-## ADR 026: dig completions staged this tick by _toil_on_work_complete(),
-## drained by _resolve_dig_finds() (called once from tick(), right after
-## _advance_colonists()) in ascending job-id order so the find roll sequence
-## never depends on _advance_colonists()'s own colonist-id iteration order.
-## Always empty between tick() calls; not persisted.
-var _pending_dig_finds: Array[Dictionary] = []
+## Ground items, ground berries, their factions and dig's find roll (ADR 026).
+var _item_table: ItemTableType
+## Read-through accessors kept for viewer/debug_scenario.gd, which seeds its
+## starting farm stock through these two names (the viewer is outside R2).
+var _items: Dictionary:
+	get:
+		return _item_table.items
+var _next_item_id: int:
+	get:
+		return _item_table.next_item_id
+	set(value):
+		_item_table.next_item_id = value
 ## Identity-bearing tool items (axe/pick) and their reservations; see tool_item_store.gd.
 var _tool_store: ToolItemStoreType
 var _item_definitions: Dictionary = {}
-## Ground berries left by a completed forage job, keyed like _objects ("%d_%d").
-var _ground_berries: Dictionary = {}
 var _objects: Dictionary = {}
-## faction_id (F3) per placed object/ground-berries cell/item id,
-## keyed like _objects/_ground_berries/_items respectively. Parallel maps, not
-## a nested value inside _objects/_ground_berries/_items: state_codec.gd's
-## _encode_objects()/_encode_items() each assume a fixed value shape (a plain
-## kind String for _objects, an exact {id,x,y,kind,count} for _items) that a
-## faction_id key would either crash (String(Dictionary) has no constructor)
-## or silently drop on the next save/load round trip -- either way diverging
-## state_hash() before vs. after a save/load that changed nothing else, so
-## these maps are deliberately left out of state_hash()'s own snapshot too
-## (persisting faction_id is future work).
+## faction_id (F3) per placed object, keyed like _objects. A parallel map, not
+## a nested value inside _objects: state_codec.gd's _encode_objects() assumes a
+## plain kind String per entry. Deliberately left out of state_hash().
 var _object_factions: Dictionary = {}
-var _ground_berries_factions: Dictionary = {}
-var _item_factions: Dictionary = {}
 ## Per-instance {"hp","maxHp"} for a placed object whose kind
 ## declares "max_health" (content/objects.json), keyed like _objects/
 ## _object_factions. A parallel map, not a nested value inside _objects (the
@@ -333,10 +316,10 @@ var _site_fetch_source_retargeted: Dictionary = {}
 ## job_id -> the item kind _toil_pick_up_count_for() resolved right before
 ## this job's most recent pick_up toil: a source
 ## item whose entire remaining count a pick_up exactly exhausts is removed
-## from _items by that same pick_up (ToilExecutor.pick_up()'s own
+## from the item table by that same pick_up (ToilExecutor.pick_up()'s own
 ## _remove_item call), so _toil_on_pick_up_success() -- which fires
 ## immediately afterward -- can no longer resolve the picked kind by looking
-## job["item_id"] back up in _items; it would silently read "" instead and
+## job["item_id"] back up in the item table; it would silently read "" instead and
 ## mistake "the site needs 0 more of nothing" for "hands already cover the
 ## site's own need," delivering a partial load after a single hop even when
 ## further eligible sources sit right next to the one just visited (test_
@@ -362,8 +345,10 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_clock = SeededClockType.new(tick_rate)
 	_random = RandomNumberGenerator.new()
 	_random.seed = p_seed
-	_dig_find_random = RandomNumberGenerator.new()
-	_dig_find_random.seed = p_seed + DIG_FIND_SEED_SALT
+	# Dig's find_table stream (ADR 026), salted so it never perturbs _random;
+	# owned by _item_table, which StateCodec.decode() restores its continuation into.
+	var dig_find_random := RandomNumberGenerator.new()
+	dig_find_random.seed = p_seed + DIG_FIND_SEED_SALT
 	_content = ContentRegistryType.new()
 	if not _content.is_valid():
 		_fail_startup("fatal ContentRegistry startup failure: %s" % _content.get_error())
@@ -384,6 +369,9 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_tool_store = ToolItemStoreType.new(_find_colonist)
 	_scheduler = AssignmentType.new(_random, _content)
 	_event_log = EventLogType.new(_clock, _scheduler.queue, PRIORITY_COMMAND)
+	_item_table = ItemTableType.new(_content, dig_find_random, func() -> Array[Dictionary]: return _colonists,
+		passability, get_tile, _is_in_any_zone, _scheduler.queue.get_reservation_table,
+		_fail_haul_jobs_referencing_item, _cancel_haul_job_carrying_consumed_item)
 	# F3: wires GlobalAssignment's two faction gates through this
 	# WorldState's own colonist/registry lookups, never a hardcoded "colony"
 	# string -- see _colonist_may_be_ordered()/_colonist_may_reserve_colony_items().
@@ -431,7 +419,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		_fail_startup("jobs.json's 'haul' entry is missing priority/retry_base_ticks/retry_cap_ticks")
 		return
 	_toils = ToilExecutorType.new(int(_content.list("tiles")[0]["move_ticks_per_tile"]), _work_ticks, passability, _get_job,
-		_content, _item_lookup, _remove_ground_item_units, _place_new_ground_item, _is_cell_occupied, _consume_source_valid,
+		_content, _item_table.item_lookup, _item_table.remove_ground_item_units, _item_table.place_new_ground_item, _is_cell_occupied, _consume_source_valid,
 		_resume_work_progress, _set_work_progress, _clear_work_progress, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
 		set_tool_item_held, set_tool_item_ground, get_colonists, _route_budget,
@@ -650,7 +638,7 @@ func tick() -> void:
 	# ADR 026: every dig completion this tick is staged, never rolled inline,
 	# so this drains in ascending job-id order regardless of the colonist-id
 	# order _advance_colonists() just processed them in.
-	_resolve_dig_finds()
+	_item_table.resolve_dig_finds()
 	# F3: drained after _advance_colonists() -- a need
 	# resolving there can itself trigger a second refusal via
 	# resume_interrupted_job(), which must drain too before this returns.
@@ -818,8 +806,6 @@ func state_hash(include_incidents: bool = true) -> int:
 		"width": _width,
 		"height": _height,
 		"tiles": _tiles,
-		"items": _items,
-		"next_item_id": _next_item_id,
 		"tool_items": _tool_store.items,
 		"next_tool_item_id": _tool_store.next_id,
 		"tool_reservations": _tool_store.reservations.snapshot(),
@@ -838,7 +824,6 @@ func state_hash(include_incidents: bool = true) -> int:
 		# JSON-safe-encoded the same way state_codec.gd persists it (Vector2i
 		# cannot be a JSON.stringify() dictionary key directly).
 		"combat_blocked_targets": StateCodec._encode_combat_blocked_targets(_combat_giver.get_blocked_targets()),
-		"dig_find_rng": {"seed": _dig_find_random.seed, "state": _dig_find_random.state},
 		# Two suspended-rescue states naming
 		# different victims for the same job id must not hash equal. Hashed
 		# in the same sorted-by-job-id encoding
@@ -861,6 +846,8 @@ func state_hash(include_incidents: bool = true) -> int:
 		# equal. list() is already sorted by site id for determinism.
 		"construction_sites": _sites.list(),
 	}
+	# "items", "next_item_id", "dig_find_rng" (JSON.stringify sorts keys, so insertion order is irrelevant).
+	_item_table.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 
@@ -909,21 +896,10 @@ func get_tiles() -> Array[String]:
 
 ## Derived sum over ground "wood" items at (x, y) (kept for existing tests).
 func get_ground_wood(x: int, y: int) -> int:
-	var total := 0
-	for item in _items.values():
-		if int(item["x"]) == x and int(item["y"]) == y and String(item["kind"]) == "wood":
-			total += int(item["count"])
-	return total
+	return _item_table.get_ground_wood(x, y)
 
 func get_items() -> Array[Dictionary]:
-	var keys := _items.keys()
-	keys.sort()
-	var copy: Array[Dictionary] = []
-	for key in keys:
-		var item: Dictionary = (_items[key] as Dictionary).duplicate(true)
-		item["faction_id"] = String(_item_factions.get(key, "colony"))
-		copy.append(item)
-	return copy
+	return _item_table.get_items()
 
 ## Tool item CRUD + reservations: thin delegators onto _tool_store (see
 ## tool_item_store.gd), kept as WorldState's own public surface since every
@@ -1033,11 +1009,11 @@ func _release_owned_work_progress(job_id: String, job: Dictionary) -> void:
 		_clear_work_progress(target)
 
 func get_ground_berries(x: int, y: int) -> int:
-	return int(_ground_berries.get(_ground_berries_key(x, y), 0))
+	return _item_table.get_ground_berries(x, y)
 
 ## "" (like get_ground_berries()'s own absence) when no berries are on the ground here.
 func get_ground_berries_faction_id(x: int, y: int) -> String:
-	return String(_ground_berries_factions.get(_ground_berries_key(x, y), ""))
+	return _item_table.get_ground_berries_faction_id(x, y)
 
 func get_object(x: int, y: int) -> String:
 	return String(_objects.get(_object_key(x, y), ""))
@@ -1330,9 +1306,8 @@ func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
 func _is_bare_tile(tile: Vector2i) -> bool:
 	if not get_object(tile.x, tile.y).is_empty() or get_ground_berries(tile.x, tile.y) > 0 or _is_in_any_zone(tile.x, tile.y):
 		return false
-	for item in _items.values():
-		if int(item["x"]) == tile.x and int(item["y"]) == tile.y:
-			return false
+	if _item_table.has_item_at(tile.x, tile.y):
+		return false
 	for tool_item in _tool_store.get_items():
 		var location: Dictionary = tool_item.get("location", {})
 		if int(location.get("x", -1)) == tile.x and int(location.get("y", -1)) == tile.y:
@@ -1385,93 +1360,18 @@ func enable_incidents() -> void:
 	_incidents.set_enabled(true)
 	_incidents.reserve_actor_ordinal_above(_colonists)
 
-## item_lookup callable for _toils's pick_up precondition: {} when gone.
-func _item_lookup(item_id: String) -> Dictionary:
-	if not _items.has(item_id):
-		return {}
-	return (_items[item_id] as Dictionary).duplicate(true)
-
-## Whole-item removal, still used directly by callers that already know the
-## entire item is leaving (e.g. sow's seed consumption via
-## _remove_one_item_of_kind()).
-func _remove_ground_item(item_id: String) -> void:
-	_items.erase(item_id)
-	_item_factions.erase(item_id)
-
-## remove_item callable for _toils's pick_up: decrements the
-## ground item's own count by count, removing it entirely at 0 -- exactly as
-## pick_up already did for a whole stack before hands capped a pick_up below
-## the ground item's own count.
-func _remove_ground_item_units(item_id: String, count: int) -> void:
-	if not _items.has(item_id):
-		return
-	var item: Dictionary = _items[item_id]
-	var remaining := int(item["count"]) - count
-	if remaining > 0:
-		item["count"] = remaining
-	else:
-		_remove_ground_item(item_id)
-
-## place_item callable for _toils's place: preserves id stability across a
-## pick_up/place round trip. faction_id is always "colony": nothing today
-## (set_faction never targets an item; hands has no faction
-## field) can ever produce an item of any other faction, so there is no
-## carried-faction to plumb through the toil executor's hands shape.
-func _place_ground_item(item_id: String, kind: String, count: int, x: int, y: int) -> void:
-	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
-	_item_factions[item_id] = "colony"
-
-## place_item callable for _toils's place: place() now deposits
-## one fresh ground item per distinct hands kind rather than reusing a single
-## carried item's own id (hands entries have no id of their own -- a pick_up
-## may have merged several ground items' units into one entry), so this mints
-## the next id off the same _next_item_id counter every other ground-item
-## spawn uses and returns it.
-func _place_new_ground_item(kind: String, count: int, x: int, y: int) -> String:
-	var item_id: String = "item_%d" % _next_item_id
-	_next_item_id += 1
-	_place_ground_item(item_id, kind, count, x, y)
-	return item_id
-
 ## cell_occupied callable for _toils's place precondition.
 func _is_cell_occupied(x: int, y: int, excluding_colonist_id: String) -> bool:
 	for colonist in _colonists:
 		if String(colonist["id"]) != excluding_colonist_id and int(colonist["x"]) == x and int(colonist["y"]) == y:
 			return true
-	for item in _items.values():
-		if int(item["x"]) == x and int(item["y"]) == y:
-			return true
+	if _item_table.has_item_at(x, y):
+		return true
 	return false
-
-func _spawn_wood_item(x: int, y: int) -> void:
-	var item_id := "item_%d" % _next_item_id
-	_next_item_id += 1
-	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
-	_item_factions[item_id] = "colony"
-
-## Generic ground-item spawn (ADR 026): the same shape _spawn_wood_item()
-## above uses, generalized to an arbitrary content/items.json kind. Used by
-## dig's guaranteed sand and any rolled find item.
-func _spawn_item(kind: String, x: int, y: int) -> void:
-	var item_id := "item_%d" % _next_item_id
-	_next_item_id += 1
-	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": 1}
-	_item_factions[item_id] = "colony"
-
-## ADR 026's item placement rule: the nearest adjacent passable, non-trench
-## tile to (x, y), checked in row-major order (north, west, east, south --
-## already row-major since these four orthogonal neighbours never tie in y),
-## first qualifying tile wins. Falls back to (x, y) itself -- the trench tile
-## -- only when no neighbour qualifies.
-func _dig_item_placement(x: int, y: int) -> Vector2i:
-	for neighbor in [Vector2i(x, y - 1), Vector2i(x - 1, y), Vector2i(x + 1, y), Vector2i(x, y + 1)]:
-		if bool(passability(neighbor.x, neighbor.y)["passable"]) and get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
-			return neighbor
-	return Vector2i(x, y)
 
 ## rescue_giver.gd's target-tile candidates: every passable,
 ## non-trench tile adjacent to a trapped colonist's own tile, in the same
-## row-major neighbour order _dig_item_placement() already uses (ADR 026's own
+## row-major neighbour order ItemTable.dig_item_placement() already uses (ADR 026's own
 ## "item placement" convention) -- but, unlike that helper, a rescue target
 ## must never be the trench tile itself: a rescue job must never target the
 ## trench a rescuer could then fall into. rescue_giver.gd ranks these by real
@@ -1489,7 +1389,7 @@ func _rescue_target_candidates(victim_tile: Vector2i) -> Array[Vector2i]:
 	return candidates
 
 ## escape_trench's exit rule: prefers from_tile (where the actor fell from)
-## when passable for the actor's own faction, else _dig_item_placement()'s
+## when passable for the actor's own faction, else ItemTable.dig_item_placement()'s
 ## row-major order. Vector2i(-1, -1) means no exit (caller retries).
 func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) -> Vector2i:
 	if from_tile != tile and bool(passability(from_tile.x, from_tile.y, faction_id)["passable"]) \
@@ -1500,83 +1400,12 @@ func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) 
 			return neighbor
 	return Vector2i(-1, -1)
 
-## Draws dig's find_table (ADR 026, content/jobs.json's "dig" entry) against
-## _dig_find_random: the rolled item id, or "" for "no find" (a find_table
-## row's item: null). Always consumes exactly one randi_range() draw, so the
-## roll count stays reproducible from the world seed regardless of outcome.
-func _roll_dig_find() -> String:
-	var find_table: Array = _content.get_entry("jobs", "dig").get("yields", {}).get("find_table", [])
-	var roll := _dig_find_random.randi_range(0, 99)
-	var cumulative := 0
-	for entry in find_table:
-		cumulative += int(entry["weight"])
-		if roll < cumulative:
-			var item = entry.get("item")
-			return String(item) if item != null else ""
-	return ""
-
-## Drains _pending_dig_finds (ADR 026) in ascending job-id order -- called
-## once per tick, after _advance_colonists() -- so replaying the same seed
-## against the same command stream always produces the same find sequence no
-## matter which colonist's dig happened to finish first this tick.
-func _resolve_dig_finds() -> void:
-	if _pending_dig_finds.is_empty():
-		return
-	var pending := _pending_dig_finds
-	_pending_dig_finds = []
-	pending.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return int(String(a["job_id"]).trim_prefix("job_")) < int(String(b["job_id"]).trim_prefix("job_")))
-	for entry in pending:
-		var find_item := _roll_dig_find()
-		if find_item.is_empty():
-			continue
-		var at := _dig_item_placement(int(entry["x"]), int(entry["y"]))
-		_spawn_item(find_item, at.x, at.y)
-
-func _spawn_stone_item(x: int, y: int) -> void:
-	var item_id := "item_%d" % _next_item_id
-	_next_item_id += 1
-	_items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "stone", "count": 1}
-	_item_factions[item_id] = "colony"
-
-func _spawn_berries_item(x: int, y: int) -> void:
-	var key := _ground_berries_key(x, y)
-	_ground_berries[key] = int(_ground_berries.get(key, 0)) + 1
-	_ground_berries_factions[key] = "colony"
-
-## sow's blocked_missing_input precondition: a seed counts whether it is on
-## the ground/stockpile or mid-haul in a colonist's hands.
+## command_checks.gd's sow precondition reads this name through the world.
 func _has_item_of_kind(kind: String) -> bool:
-	for item in _items.values():
-		if String(item["kind"]) == kind:
-			return true
-	for colonist in _colonists:
-		if InventoryType.has_kind(colonist, kind):
-			return true
-	return false
-
-## sow's on_work_complete effect: removes one item of `kind`, ground/stockpile
-## first (by id order), else a carried one. Returns false if none exist
-## anywhere, so the caller can fail the job blocked_missing_input instead.
-func _remove_one_item_of_kind(kind: String) -> bool:
-	var ids := _items.keys()
-	ids.sort()
-	for id in ids:
-		var item: Dictionary = _items[id]
-		if String(item["kind"]) != kind:
-			continue
-		var count := int(item.get("count", 1))
-		if count > 1:
-			item["count"] = count - 1
-		else:
-			_items.erase(id)
-			_item_factions.erase(id)
-			_fail_haul_jobs_referencing_item(String(id))
-		return true
-	return _consume_carried_item_of_kind(kind)
+	return _item_table.has_item_of_kind(kind)
 
 ## Fails any nonterminal haul job still naming item_id after
-## _remove_one_item_of_kind() above erased its last ground unit, so it doesn't
+## ItemTable.remove_one_item_of_kind()/remove_stockpiled_item_unit() erased its last ground unit, so it doesn't
 ## retry forever for an item that no longer exists.
 func _fail_haul_jobs_referencing_item(item_id: String) -> void:
 	for job in _scheduler.queue.get_jobs():
@@ -1586,23 +1415,7 @@ func _fail_haul_jobs_referencing_item(item_id: String) -> void:
 			continue
 		_terminate_haul_job_by_id(String(job["id"]), "blocked_missing_input", "resubmit_order")
 
-## Fallback for _remove_one_item_of_kind() above: consumes one unit of `kind`
-## from whichever colonist (lowest id first, for determinism) carries it
-## mid-haul, then fails that colonist's now-empty haul job once its last unit
-## of `kind` is gone (whatever else its hands may still hold).
-func _consume_carried_item_of_kind(kind: String) -> bool:
-	var ordered: Array[Dictionary] = _colonists.duplicate()
-	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
-	for colonist in ordered:
-		if not InventoryType.has_kind(colonist, kind):
-			continue
-		InventoryType.remove_from_hands(colonist, kind, 1)
-		if not InventoryType.has_kind(colonist, kind):
-			_cancel_haul_job_carrying_consumed_item(String(colonist["id"]))
-		return true
-	return false
-
-## Fails colonist_id's haul job after _consume_carried_item_of_kind() above
+## Fails colonist_id's haul job after ItemTable._consume_carried_item_of_kind()
 ## emptied what it was carrying, the way an unreachable destination already
 ## does. Checks _paused_jobs first: a need interrupt may have suspended this
 ## haul after pickup, in which case only the pause entry is cleared, not the
@@ -1632,9 +1445,6 @@ func _cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
 			_reroutes.erase(colonist_id)
 	_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
 	_finish_job(job_id, "fail_job")
-
-func _ground_berries_key(x: int, y: int) -> String:
-	return "%d_%d" % [x, y]
 
 ## The _work_progress key a specific job's progress lives under: scoped by
 ## job id only when that job is a "rescue":
@@ -1870,7 +1680,7 @@ func _pick_trade_items(trader_id: String) -> Array:
 ## _apply_set_faction_command()'s validate-then-mutate shape
 ## (orders-and-movement.md's typed-rejection pattern). Performs the full
 ## two-way swap: one want_item unit moves out of an eligible stockpiled item
-## (_find_available_stockpiled_item(), the same zone/reservation invariant
+## (ItemTable.find_available_stockpiled_item(), the same zone/reservation invariant
 ## the superseded `build` job once resolved its own seed item through -- a
 ## trade must never rip an item out of a colonist's hands mid-haul) into the
 ## trader's own "inventory" component, and the trader's give_item moves out
@@ -1898,14 +1708,14 @@ func _apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	var offer: Dictionary = _pending_trade_offers[trader_id]
 	var want_item := String(offer["want_item"])
 	var give_item := String(offer["give_item"])
-	var stock_item_id := _find_available_stockpiled_item(want_item, 1)
+	var stock_item_id := _item_table.find_available_stockpiled_item(want_item, 1)
 	if stock_item_id.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], "blocked_missing_input",
 			"stockpile_the_required_item")
-	var stock_tile := _remove_stockpiled_item_unit(stock_item_id)
+	var stock_tile := _item_table.remove_stockpiled_item_unit(stock_item_id)
 	_append_trader_inventory_item(trader, want_item)
 	_remove_trader_offered_item(trader, give_item)
-	_spawn_item(give_item, stock_tile.x, stock_tile.y)
+	_item_table.spawn_item(give_item, stock_tile.x, stock_tile.y)
 	_pending_trade_offers.erase(trader_id)
 	var assignment = _scheduler.get_assignments().get(trader_id)
 	if assignment != null:
@@ -1913,46 +1723,6 @@ func _apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	else:
 		_remove_colonist_by_id(trader_id)
 	return _event_log.applied(command)
-
-## The lowest-id ground item of `item_kind` with at least `quantity` count,
-## sitting inside a stockpile zone, and not reserved by any job on the shared
-## ReservationTable -- or "" when none qualifies. Deterministic id order, like
-## _remove_one_item_of_kind(). Used by accept_trade's own stockpile draw; the
-## superseded single-worker `build` job once shared
-## this exact search (as `_find_available_build_item()`) for its own seed
-## item, before it was replaced by a persistent construction site that
-## never resolves an item synchronously at all.
-func _find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
-	var table := _scheduler.queue.get_reservation_table()
-	var ids := _items.keys()
-	ids.sort()
-	for id in ids:
-		var item: Dictionary = _items[id]
-		if String(item["kind"]) != item_kind or int(item.get("count", 1)) < quantity:
-			continue
-		if not _is_in_any_zone(int(item["x"]), int(item["y"])):
-			continue
-		if not table.owner(JobQueueType.ITEM_KEY_PREFIX + String(id)).is_empty():
-			continue
-		return String(id)
-	return ""
-
-## Removes one unit of the stockpiled item _find_available_stockpiled_item()
-## resolved (same decrement/erase shape _remove_one_item_of_kind() uses for a
-## kind-wide search, here applied to a single already-resolved id), and
-## returns the tile it sat on so the give_item side of the swap can land in
-## that same stockpile spot.
-func _remove_stockpiled_item_unit(item_id: String) -> Vector2i:
-	var item: Dictionary = _items[item_id]
-	var tile := Vector2i(int(item["x"]), int(item["y"]))
-	var count := int(item.get("count", 1))
-	if count > 1:
-		item["count"] = count - 1
-	else:
-		_items.erase(item_id)
-		_item_factions.erase(item_id)
-		_fail_haul_jobs_referencing_item(item_id)
-	return tile
 
 ## Appends one unit of `kind` to actor's own "inventory" component items
 ## array (F2's per-instance shape, no "id" field), shared by _post_trade_offer()
@@ -2455,7 +2225,7 @@ func _deposit_carried_item(colonist: Dictionary) -> void:
 ## a forced termination matters more than the destination cell staying tidy.
 func _force_drop_carried_item(colonist: Dictionary) -> void:
 	for entry in InventoryType.hands_snapshot(colonist):
-		_place_new_ground_item(String(entry["kind"]), int(entry["count"]), int(colonist["x"]), int(colonist["y"]))
+		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), int(colonist["x"]), int(colonist["y"]))
 	InventoryType.clear_hands(colonist)
 
 ## Drops a haul/build job's carried item at the shared terminal boundary
@@ -2682,13 +2452,13 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 	var site_id := _toil_site_id_for(job)
 	if site_id.is_empty():
 		return -1
-	var item := _item_lookup(String(job.get("item_id", "")))
+	var item := _item_table.item_lookup(String(job.get("item_id", "")))
 	if item.is_empty():
 		return -1
 	var kind := String(item.get("kind", ""))
 	# Cached for _toil_on_pick_up_success(): the
 	# pick_up this count gates for may exhaust and delete item's own entry
-	# from _items entirely, so that hook cannot re-derive kind the same way
+	# from the item table entirely, so that hook cannot re-derive kind the same way
 	# once it runs.
 	_site_fetch_picked_kind[String(job.get("id", ""))] = kind
 	var site := _sites.get_site(site_id)
@@ -2728,8 +2498,8 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
 	var site := _sites.get_site(site_id)
-	# Not _item_lookup(job["item_id"]): a pick_up that exactly
-	# exhausts its source's remaining count deletes that item from _items
+	# Not _item_table.item_lookup(job["item_id"]): a pick_up that exactly
+	# exhausts its source's remaining count deletes that item from the item table
 	# before this hook ever runs (ToilExecutor.pick_up()'s own _remove_item
 	# call), which would silently resolve kind as "" here instead -- see
 	# _site_fetch_picked_kind's own doc comment.
@@ -2743,7 +2513,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 	if next_id.is_empty():
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
-	var next_item := _item_lookup(next_id)
+	var next_item := _item_table.item_lookup(next_id)
 	var next_tile := Vector2i(int(next_item["x"]), int(next_item["y"]))
 	var faction_id := String(colonist.get("factionId", "colony"))
 	var site_cost := _route_cost(current, site["origin"], faction_id)
@@ -2850,23 +2620,23 @@ func _toil_on_work_complete(job_id: String) -> void:
 				_finish_job(job_id, "fail_job")
 				return
 			_tiles[_tile_index(target.x, target.y)] = TILE_TRENCH
-			var sand_at := _dig_item_placement(target.x, target.y)
-			_spawn_item("sand", sand_at.x, sand_at.y)
-			_pending_dig_finds.append({"job_id": job_id, "x": target.x, "y": target.y})
+			var sand_at := _item_table.dig_item_placement(target.x, target.y)
+			_item_table.spawn_item("sand", sand_at.x, sand_at.y)
+			_item_table.stage_dig_find(job_id, target.x, target.y)
 		"chop":
 			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
-			_spawn_wood_item(target.x, target.y)
+			_item_table.spawn_wood_item(target.x, target.y)
 		"mine":
 			if get_tile(target.x, target.y) != TILE_ROCK:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
 			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
-			_spawn_stone_item(target.x, target.y)
+			_item_table.spawn_stone_item(target.x, target.y)
 		"forage":
 			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
 			_set_object(target.x, target.y, "")
-			_spawn_berries_item(target.x, target.y)
+			_item_table.spawn_berries_item(target.x, target.y)
 		"till":
 			if get_tile(target.x, target.y) != TILE_SOIL:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
@@ -2878,7 +2648,7 @@ func _toil_on_work_complete(job_id: String) -> void:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
-			if not _remove_one_item_of_kind("seed"):
+			if not _item_table.remove_one_item_of_kind("seed"):
 				# Seed was consumed by another sow/haul after this job committed.
 				_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
 				_finish_job(job_id, "fail_job")
@@ -3436,7 +3206,7 @@ func _drop_inventory_contents(actor: Dictionary) -> void:
 	var x := int(actor["x"])
 	var y := int(actor["y"])
 	for entry in InventoryType.hands_snapshot(actor):
-		_place_new_ground_item(String(entry["kind"]), int(entry["count"]), x, y)
+		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), x, y)
 	var held_tool_id := WorkerType.get_held_tool(actor)
 	if not held_tool_id.is_empty():
 		_tool_store.set_ground(held_tool_id, x, y)
@@ -3455,7 +3225,7 @@ func _drop_inventory_contents(actor: Dictionary) -> void:
 ## worker's tool-match search (ToilExecutor's fetch_tool precondition) only
 ## ever looks in -- so a surviving colonist can actually find and reserve a
 ## dead actor's dropped axe/pick; any other kind goes through
-## _place_ground_item() as an ordinary stack, same as before. Tools carry
+## ItemTable.place_new_ground_item() as an ordinary stack, same as before. Tools carry
 ## identity, never a count, so a tool entry of `count` N spawns N separate
 ## ground tools (one spawn per entry would silently lose N-1).
 func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
@@ -3463,9 +3233,7 @@ func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
 		for _unit in count:
 			spawn_ground_tool_item(kind, x, y)
 		return
-	var item_id: String = "item_%d" % _next_item_id
-	_next_item_id += 1
-	_place_ground_item(item_id, kind, count, x, y)
+	_item_table.place_new_ground_item(kind, count, x, y)
 
 ## Decays needs (ActorNeeds.apply_tick(), ADR 012/024) by _need_definitions'
 ## rate_per_day (content/needs.json -- the mutable source _isolate_need()
@@ -3677,8 +3445,8 @@ func _need_source_candidates(kind: String) -> Array[Vector2i]:
 	var candidates: Array[Vector2i] = []
 	match kind:
 		"food":
-			for key in _ground_berries.keys():
-				if int(_ground_berries[key]) <= 0:
+			for key in _item_table.ground_berries.keys():
+				if int(_item_table.ground_berries[key]) <= 0:
 					continue
 				var coords := String(key).split("_")
 				candidates.append(Vector2i(int(coords[0]), int(coords[1])))
@@ -3757,13 +3525,7 @@ func _apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 	needs[need_kind] = mini(_need_full, int(restore))
 	if String(job["kind"]) == "eat_food":
 		var target: Vector2i = job["target"]
-		var key := _ground_berries_key(target.x, target.y)
-		var remaining := maxi(0, int(_ground_berries.get(key, 0)) - 1)
-		if remaining == 0:
-			_ground_berries.erase(key)
-			_ground_berries_factions.erase(key)
-		else:
-			_ground_berries[key] = remaining
+		_item_table.consume_ground_berry(target.x, target.y)
 
 ## Used for a freshly spawned colonist and (via SaveMigrations) a pre-needs
 ## save's backfill.
@@ -4239,10 +4001,10 @@ func _next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String
 		committed[String(other.get("item_id", ""))] = true
 	var best_id := ""
 	var best_cost := 0
-	var ids := _items.keys()
+	var ids := _item_table.items.keys()
 	ids.sort()
 	for id in ids:
-		var item: Dictionary = _items[id]
+		var item: Dictionary = _item_table.items[id]
 		if String(item["kind"]) != kind:
 			continue
 		if not _is_in_any_zone(int(item["x"]), int(item["y"])):
@@ -4382,7 +4144,7 @@ func _resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
 		if colonist.is_empty():
 			continue
 		var current_item_id := String(job.get("item_id", ""))
-		var kind := String(_item_lookup(current_item_id).get("kind", ""))
+		var kind := String(_item_table.item_lookup(current_item_id).get("kind", ""))
 		if kind.is_empty():
 			continue
 		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
@@ -4392,7 +4154,7 @@ func _resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
 		var table := _scheduler.queue.get_reservation_table()
 		table.release(JobQueueType.ITEM_KEY_PREFIX + current_item_id, job_id)
 		table.acquire(JobQueueType.ITEM_KEY_PREFIX + best_id, job_id)
-		var best_item := _item_lookup(best_id)
+		var best_item := _item_table.item_lookup(best_id)
 		_scheduler.queue.retarget_site_fetch_source(job_id, best_id, Vector2i(int(best_item["x"]), int(best_item["y"])))
 		_site_fetch_source_retargeted[job_id] = true
 
@@ -4422,10 +4184,10 @@ func _submit_site_work(origin: Vector2i, tick: int) -> Dictionary:
 
 ## The first passable, non-trench tile adjacent to any of `tiles` (a site's own
 ## footprint) and not itself one of `tiles` or already in `exclude` -- checked
-## in the same north/west/east/south-per-tile order _dig_item_placement()
+## in the same north/west/east/south-per-tile order ItemTable.dig_item_placement()
 ## already uses for a single tile (cancel_site's "nearest free tiles
 ## adjacent to the site" rule). Falls back to tiles[0] when nothing
-## qualifies, mirroring _dig_item_placement()'s own "no adjacent tile
+## qualifies, mirroring ItemTable.dig_item_placement()'s own "no adjacent tile
 ## qualifies" fallback.
 func _nearest_free_adjacent_to_footprint(tiles: Array[Vector2i], exclude: Dictionary = {}) -> Vector2i:
 	var footprint := {}
@@ -4471,7 +4233,7 @@ func _cancel_construction_site(site_id: String) -> void:
 			continue
 		var drop_at := _nearest_free_adjacent_to_footprint(footprint, used)
 		used[drop_at] = true
-		_place_new_ground_item(String(entry["item"]), quantity, drop_at.x, drop_at.y)
+		_item_table.place_new_ground_item(String(entry["item"]), quantity, drop_at.x, drop_at.y)
 	_scheduler.queue.get_reservation_table().release_all(_sites.owner_key(site_id))
 	_sites.remove(site_id)
 

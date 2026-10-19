@@ -239,8 +239,8 @@ func _check_world_state_alert_fires_once_when_conditions_met() -> void:
 	var window_id := "fires_once_test"
 	var world := _synthetic_alert_world(window_id)
 	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	for _i in 80:
 		world.tick()
 	var events := _calendar_alert_events(world, window_id)
@@ -267,8 +267,8 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 	var window_id := "labour_suppresses_test"
 	var world := _synthetic_alert_world(window_id)
 	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	for _i in 10:
 		world.tick()
 	var colonists := world.get_colonists()
@@ -291,7 +291,7 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 ## ground+carrying query world_state.gd's _has_item_of_kind docstring
 ## promises and sow's own blocked_missing_input precondition already relies
 ## on. Places the colony's only seed in colonist 0's carrying slot (never in
-## world._items) with a plowed plot present and every colonist's farm labour
+## world._item_table.items) with a plowed plot present and every colonist's farm labour
 ## at 0, then checks: the alert still fires exactly once at the due tick and
 ## never repeats, and the seed is still in the carrying slot afterwards (this
 ## check never consumes it). A ground-only _has_seed_stock query would see no
@@ -310,8 +310,8 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 	for colonist in world._colonists:
 		if String(colonist["id"]) == carrier_id:
 			InventoryType.add_to_hands(colonist, "seed", 1)
-	_expect(world._items.is_empty(),
-		"setup must place the colony's only seed in a carrying slot, none on the ground, got %s" % [world._items])
+	_expect(world._item_table.items.is_empty(),
+		"setup must place the colony's only seed in a carrying slot, none on the ground, got %s" % [world._item_table.items])
 	for _i in 80:
 		world.tick()
 	var events := _calendar_alert_events(world, window_id)
@@ -324,8 +324,8 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 			still_carrying_seed = InventoryType.has_kind(colonist, "seed")
 	_expect(still_carrying_seed,
 		"the carried seed must still be in the carrying slot (this check never consumes it)")
-	_expect(world._items.is_empty(),
-		"the carried seed must never have been placed on the ground by this check, got %s" % [world._items])
+	_expect(world._item_table.items.is_empty(),
+		"the carried seed must never have been placed on the ground by this check, got %s" % [world._item_table.items])
 
 ## Regression: already_fired is real persisted state
 ## (calendarAlerts.fired, ADR 008 consequence 6), not an in-memory flag a
@@ -344,8 +344,8 @@ func _check_fired_alert_survives_save_restore() -> void:
 	var window_id := "save_restore_test"
 	var world := _synthetic_alert_world(window_id)
 	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	for _i in 60:
 		world.tick()
 	var pre_save_events := _calendar_alert_events(world, window_id)

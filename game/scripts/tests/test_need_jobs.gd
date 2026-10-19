@@ -148,7 +148,7 @@ func _check_eat_food_completes_and_restores_need() -> void:
 	var world := _build_world(50001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["5_0"] = 1
+	world._item_table.ground_berries["5_0"] = 1
 
 	var completed := false
 	for _i in MAX_TICKS:
@@ -199,7 +199,7 @@ func _run_mid_dig_then_eat_scenario(seed_value: int, mutate_at_tick: int, total_
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs()))
 	world._tiles[world._tile_index(10, 0)] = WorldStateType.TILE_SOIL
-	world._ground_berries["15_0"] = 1
+	world._item_table.ground_berries["15_0"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 
 	var dig_result := _command(world, "dig_1", "dig", {"x": 10, "y": 0, "priority": 1})
@@ -268,7 +268,7 @@ func _check_two_colonists_one_berries_source() -> void:
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
 	world._colonists.append(_colonist("colonist_1", 10, 0, _full_needs({"food": 20})))
-	world._ground_berries["5_0"] = 1
+	world._item_table.ground_berries["5_0"] = 1
 
 	# Track "ever fed" as a sticky flag rather than colonist-needs' final value:
 	# with only one unit of food total, the fed colonist eventually hungers
@@ -319,7 +319,7 @@ func _check_blocked_source_reserved_then_need_unmet() -> void:
 	var world := _build_world(90001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["47_47"] = 1
+	world._item_table.ground_berries["47_47"] = 1
 
 	world.tick()
 	_expect(_jobs_of_kind(world, "eat_food").is_empty(),
@@ -422,7 +422,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	# interrupted dig job's requeued-in-waiting representation is actually
 	# observable before the need job resolves and resumes it, rather than
 	# both collapsing into the same tick.
-	world._ground_berries["9_20"] = 1
+	world._item_table.ground_berries["9_20"] = 1
 	world.spawn_ground_tool_item("pick", 9, 0)
 
 	var dig_result := _command(world, "dig_1", "dig", {"x": 10, "y": 0, "priority": 1})
@@ -539,8 +539,8 @@ func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> voi
 		world._set_object(1, y, "wall")
 		if y != 11:
 			world._set_object(21, y, "wall")
-	world._ground_berries["2_2"] = 1
-	world._ground_berries["0_20"] = 1
+	world._item_table.ground_berries["2_2"] = 1
+	world._item_table.ground_berries["0_20"] = 1
 
 	var job := {}
 	for _i in 300:
@@ -570,7 +570,7 @@ func _check_unreachable_need_job_resubmission_keeps_colonist_ownership() -> void
 	var world := _build_world(140001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._ground_berries["5_0"] = 1
+	world._item_table.ground_berries["5_0"] = 1
 
 	var original_job_id := ""
 	for _i in 100:
@@ -621,9 +621,9 @@ func _check_urgent_need_interrupts_haul_at_toil_boundary() -> void:
 	var world := _build_world(160001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs()))
-	world._items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
-	world._ground_berries["9_5"] = 1
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
+	world._item_table.ground_berries["9_5"] = 1
 	var zone_result := _command(world, "zone1", "zone_add", {"x": 5, "y": 1, "width": 1, "height": 1})
 	_expect(zone_result["ok"], "the haul destination zone_add must be accepted")
 
@@ -705,7 +705,7 @@ func _check_urgent_need_interrupts_haul_at_toil_boundary() -> void:
 	# no id of their own to preserve across a pick_up/place round trip), so
 	# the delivered item is found by kind, not by its original "item_1" id.
 	var delivered := {}
-	for item in world._items.values():
+	for item in world._item_table.items.values():
 		if String(item["kind"]) == "wood":
 			delivered = item
 	_expect(not delivered.is_empty(), "the delivered item must still exist on the ground, in its stockpile cell")

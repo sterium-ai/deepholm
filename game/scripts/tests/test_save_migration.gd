@@ -1783,10 +1783,10 @@ func _check_v24_fixture_loads_through_save_io() -> void:
 func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 	var world := WorldStateType.new(20260925, 10)
 	var hash_before_draw := world.state_hash()
-	world._dig_find_random.seed = 777
-	world._dig_find_random.randi() # advances .state away from its fresh-seed default
-	var expected_rng_seed: int = world._dig_find_random.seed
-	var expected_rng_state: int = world._dig_find_random.state
+	world._item_table.dig_find_random.seed = 777
+	world._item_table.dig_find_random.randi() # advances .state away from its fresh-seed default
+	var expected_rng_seed: int = world._item_table.dig_find_random.seed
+	var expected_rng_state: int = world._item_table.dig_find_random.state
 	_expect(world.state_hash() != hash_before_draw,
 		"advancing the dig-find RNG stream must change state_hash(), or a diverged find sequence could hide behind an unchanged hash")
 
@@ -1794,7 +1794,7 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 	_expect(int(saved["digFindRng"]["seed"]) == expected_rng_seed and int(saved["digFindRng"]["state"]) == expected_rng_state,
 		"to_save_state() must encode the live dig-find RNG stream exactly")
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(restored._dig_find_random.seed == expected_rng_seed and restored._dig_find_random.state == expected_rng_state,
+	_expect(restored._item_table.dig_find_random.seed == expected_rng_seed and restored._item_table.dig_find_random.state == expected_rng_state,
 		"a save/load round trip must preserve the dig-find RNG's own stream exactly")
 	_expect(restored.state_hash() == world.state_hash(),
 		"a save/load round trip must reproduce the exact same state_hash() once the dig-find RNG is restored")
@@ -2129,8 +2129,8 @@ func _check_legacy_wall_construction_site_continues_as_wooden_wall_after_load() 
 	var zone_result := world.apply({"actor": "test", "command_id": "zone", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 0, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "setup: zone_add must be accepted: %s" % zone_result)
-	world._items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var build_result := world.apply({"actor": "test", "command_id": "door_1", "tick": world.get_tick(),
 		"type": "build", "payload": {"kind": "door", "x": 5, "y": 5}})
 	_expect(build_result.get("ok", false), "setup: build must be accepted: %s" % build_result)
@@ -2574,7 +2574,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	# save captures a genuinely still-pending need job rather than one that
 	# already committed, walked, ate, and resumed the dig job all within the
 	# same tick the critical interrupt fired.
-	world._ground_berries["9_20"] = 1
+	world._item_table.ground_berries["9_20"] = 1
 	world.spawn_ground_tool_item("pick", 9, 0)
 
 	var dig_result := world.apply({
@@ -2745,7 +2745,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	_expect(active, "setup: the mine job must reach active status before saving")
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_ROCK, "setup: the target tile must still be rock, not yet mined")
 
-	world._spawn_stone_item(5, 5)
+	world._item_table.spawn_stone_item(5, 5)
 	var stone_item_id := ""
 	for item in world.get_items():
 		if String(item["kind"]) == "stone":

@@ -108,8 +108,8 @@ func _check_till_completes_and_plows_tile() -> void:
 func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 	var world := _single_colonist_world(268002)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	var result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "sow submission on a plowed_soil tile with a seed available must be accepted")
 
@@ -120,7 +120,7 @@ func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 			completed = true
 			break
 	_expect(completed, "sow job must complete and turn the target tile to planted within the tick budget")
-	_expect(not world._items.has("item_seed_1"), "sow's on_work_complete effect must consume the seed item")
+	_expect(not world._item_table.items.has("item_seed_1"), "sow's on_work_complete effect must consume the seed item")
 
 ## sow targeting a plowed_soil tile with zero seed items anywhere must be
 ## rejected at submission (like dig/chop's own invalid_target rejection) with
@@ -154,8 +154,8 @@ func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world._colonists.append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 
 	var sow_a := _command(world, "sow_a", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_a.get("ok", false), "first sow submission must be accepted while a seed exists")
@@ -183,7 +183,7 @@ func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -
 		if String(job.get("status", "")) == "failed":
 			_expect(String(job.get("reason", "")) == "blocked_missing_input",
 				"the sow order that loses the race for the only seed must fail blocked_missing_input, got %s" % job)
-	_expect(not world._items.has("item_seed_1"), "the single seed must be consumed exactly once, by the winner only")
+	_expect(not world._item_table.items.has("item_seed_1"), "the single seed must be consumed exactly once, by the winner only")
 	var planted_count := 0
 	if world.get_tile(1, 0) == WorldStateType.TILE_PLANTED:
 		planted_count += 1
@@ -209,8 +209,8 @@ func _check_sow_counts_a_seed_mid_haul() -> void:
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world._colonists.append({"id": "farmer", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 21, "y": 20, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 21, "y": 20, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	_expect(_command(world, "zone_1", "zone_add", {"x": 47, "y": 47, "width": 1, "height": 1}).get("ok", false),
 		"a stockpile zone far from the pickup must be accepted")
 
@@ -223,7 +223,7 @@ func _check_sow_counts_a_seed_mid_haul() -> void:
 		if hauler_carrying:
 			break
 	_expect(hauler_carrying, "setup: the hauler must pick up the only seed before this test submits sow")
-	_expect(not world._items.has("item_seed_1"), "setup: the picked-up seed must have left the ground map")
+	_expect(not world._item_table.items.has("item_seed_1"), "setup: the picked-up seed must have left the ground map")
 
 	var sow_result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_result.get("ok", false), "sow submission must be accepted while the only seed is mid-haul")
@@ -293,9 +293,9 @@ func _first_activated_kinds(world: WorldStateType) -> Dictionary:
 func _check_labour_priority_till_before_haul() -> void:
 	var world := _mixed_labour_world(268004)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
-	world._items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 3
+	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 3
 	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")
 	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
@@ -313,10 +313,10 @@ func _check_labour_priority_till_before_haul() -> void:
 func _check_labour_priority_sow_before_haul() -> void:
 	var world := _mixed_labour_world(268009)
 	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
-	world._items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 4
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 4
 	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")
 	_expect(_command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
@@ -351,9 +351,9 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._tiles[world._tile_index(9, 9)] = WorldStateType.TILE_SOIL
 	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	# dig/chop's needs_tool fetch_tool toil requires a matching
 	# tool to exist somewhere; both sit right under the colonist so this
 	# test's dig/chop completion checks are unaffected by travel time.
@@ -419,8 +419,8 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 
 	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"first till submission must be accepted")
@@ -471,8 +471,8 @@ func _check_save_state_passes_runtime_validator() -> void:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 
 	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"till submission must be accepted")
@@ -517,9 +517,9 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	for kind in world._need_definitions.keys():
 		if kind != "food":
 			world._need_definitions[kind]["rate_per_day"] = 0
-	world._ground_berries["1_1"] = 1
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 0, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.ground_berries["1_1"] = 1
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 0, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1}).get("ok", false),
 		"a stockpile zone for the seed haul must be accepted")
 
@@ -636,9 +636,9 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> void:
 	var world := _single_colonist_world(268014)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 3
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 3
 
 	var sow_1 := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_1.get("ok", false), "first sow submission on a plowed_soil tile with seeds available must be accepted")
@@ -668,7 +668,7 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 				"the second sow order to reach an already-planted tile must fail invalid_target (a second seed exists, so it is not blocked_missing_input), got %s" % job)
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_PLANTED, "the tile must end up planted exactly once")
 	var remaining_seeds := 0
-	for item in world._items.values():
+	for item in world._item_table.items.values():
 		if String(item["kind"]) == "seed":
 			remaining_seeds += int(item.get("count", 1))
 	_expect(remaining_seeds == 1, "only one of the two available seeds may be consumed; the stale second sow must not consume the other, got %d" % remaining_seeds)
@@ -682,8 +682,8 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void:
 	var world := _single_colonist_world(268015)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 2
 
 	var haul_job_id := ""
 	for _i in TICK_BUDGET:
@@ -737,8 +737,8 @@ func _check_replay_determinism() -> void:
 	var second := _deterministic_farm_world(seed_value)
 	var colonist_id: String = first.get_colonists()[0]["id"]
 	for world in [first, second]:
-		world._items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-		world._next_item_id = 2
+		world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+		world._item_table.next_item_id = 2
 
 	var setup_commands := [
 		{"actor": "player", "command_id": "labour_1", "tick": 0, "type": "set_labour",
