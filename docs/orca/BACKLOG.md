@@ -41,7 +41,7 @@ Orca helper scripts, this backlog.
   CI import + boot steps still pass.
 - **Non-goals:** touching `.tres`, `.uid`, scripts or any content.
 
-### R1 — Extract `EventLog` · `todo`
+### R1 — Extract `EventLog` · `review` (branch `antonelmejor50-hub/r1-extract-eventlog`)
 
 - **Goal:** `game/scripts/core/world/event_log.gd` owns `_events`, `_event_sequence`,
   `_queue_event_sequence`, event insertion/ordering (`_insert_event`, `_next_sequence`,

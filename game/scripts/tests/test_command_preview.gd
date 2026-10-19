@@ -72,15 +72,15 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 func _check_preview_matches_apply(world: WorldStateType, command: Dictionary, description: String) -> void:
 	var hash_before := world.state_hash()
 	var events_before: int = world.get_events().size()
-	var sequence_before: int = world._event_sequence
+	var sequence_before: int = world._event_log._event_sequence
 	var preview_result: Dictionary = world.preview(command)
 	world.preview(command)
 	world.preview(command)
 	_expect(world.state_hash() == hash_before, "%s: preview() must leave state_hash() unchanged" % description)
 	_expect(world.get_events().size() == events_before,
 		"%s: preview() (called 3x) must not append any event (before=%d after=%d)" % [description, events_before, world.get_events().size()])
-	_expect(world._event_sequence == sequence_before,
-		"%s: preview() (called 3x) must not advance _event_sequence (before=%d after=%d)" % [description, sequence_before, world._event_sequence])
+	_expect(world._event_log._event_sequence == sequence_before,
+		"%s: preview() (called 3x) must not advance _event_sequence (before=%d after=%d)" % [description, sequence_before, world._event_log._event_sequence])
 	var apply_result: Dictionary = world.apply(command)
 	_expect(preview_result.get("ok", false) == apply_result.get("ok", false),
 		"%s: preview()['ok']=%s must equal apply()['ok']=%s" % [description, preview_result.get("ok", false), apply_result.get("ok", false)])
