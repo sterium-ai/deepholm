@@ -32,7 +32,10 @@ de Orca que tú abres y cierras.
    terminal de Orca no encuentra lo instalado bajo `AppData\Roaming\npm`; por eso nunca se
    instalan herramientas ahí. Para actualizar:
    `npm install -g --prefix C:\dev\tools\npm @anthropic-ai/claude-code @openai/codex`.
-6. Claude Code pregunta una vez por carpeta si confías en ella (cada worktree es una carpeta
+6. El autoupdate de Claude Code está desactivado (variable de usuario `DISABLE_AUTOUPDATER=1`):
+   una actualización a mitad de tarea dejó el `claude` de `C:\dev\tools\npm` sin binario. Actualiza
+   a mano, entre tareas, con el comando del punto 5.
+7. Claude Code pregunta una vez por carpeta si confías en ella (cada worktree es una carpeta
    nueva): `new-task.ps1` contesta "Yes, I trust this folder" por ti; si lo lanzas desde la app,
    baja con la flecha y pulsa Enter.
 
