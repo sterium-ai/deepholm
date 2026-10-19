@@ -1,4 +1,4 @@
-# Opens a backlog task as an Orca worktree with Claude Code inside and hands it the task.
+﻿# Opens a backlog task as an Orca worktree with Claude Code inside and hands it the task.
 # Usage: tools\orca\new-task.ps1 R1 [-Agent claude] [-NoActivate]
 # Requires: Orca installed (orca.exe on PATH), the repo registered in Orca (tools\orca\setup.ps1).
 [CmdletBinding()]
@@ -13,8 +13,9 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $backlog = Join-Path $repoRoot "docs\orca\BACKLOG.md"
 
 # Find the entry "### <id> — <title> · ..." and build a short kebab slug from the title.
-$pattern = "^### $([regex]::Escape($TaskId))\s+[—-]\s+(.+?)\s+·"
-$line = Get-Content -LiteralPath $backlog | Where-Object { $_ -match $pattern } | Select-Object -First 1
+$dash = [char]0x2014; $dot = [char]0x00B7
+$pattern = "^### $([regex]::Escape($TaskId))\s+[$dash-]\s+(.+?)\s+$dot"
+$line = Get-Content -LiteralPath $backlog -Encoding UTF8 | Where-Object { $_ -match $pattern } | Select-Object -First 1
 if (-not $line) {
     Write-Error "new-task: no entry '### $TaskId — ...' in docs/orca/BACKLOG.md"
     exit 1
@@ -48,4 +49,23 @@ if (-not $result.ok) { Write-Output $raw; exit 1 }
 $path = $result.result.worktree.path
 if (-not $path) { $path = $result.result.path }
 Write-Output "new-task: worktree ready at $path"
+
+# Claude Code asks once per folder whether to trust it (the repo pre-approves tool permissions).
+# Every worktree is a new folder, so answer "Yes, I trust this folder" for the owner: Down + Enter.
+$handle = $result.result.agentTerminalHandle
+if (-not $handle) { $handle = $result.result.startupTerminal.handle }
+if ($handle -and $Agent -eq "claude") {
+    for ($i = 0; $i -lt 12; $i++) {
+        Start-Sleep -Seconds 5
+        $tail = (orca terminal read --terminal $handle --limit 30 --json 2>$null | ConvertFrom-Json).result.terminal.tail -join "`n"
+        if ($tail -like "*trust this folder*") {
+            orca terminal send --terminal $handle --text ([string][char]27 + "[B") --json | Out-Null
+            Start-Sleep -Milliseconds 500
+            orca terminal send --terminal $handle --text ([string][char]13) --json | Out-Null
+            Write-Output "new-task: answered the Claude Code trust prompt"
+            break
+        }
+        if ($tail -like "*Claude Code v*") { break }
+    }
+}
 Write-Output "new-task: when $Agent reports done, open a terminal in that worktree and run tools\orca\review.ps1"

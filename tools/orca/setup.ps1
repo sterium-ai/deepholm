@@ -1,4 +1,4 @@
-# One-time setup of this machine for the Orca workflow (idempotent).
+﻿# One-time setup of this machine for the Orca workflow (idempotent).
 # Usage: tools\orca\setup.ps1 [-GodotExe <path to Godot_v4.7.2-stable_win64_console.exe>]
 [CmdletBinding()]
 param([string]$GodotExe = "")

@@ -27,6 +27,14 @@ de Orca que tú abres y cierras.
    se crean en `C:\Users\<usuario>\orca\workspaces\deepholm\<nombre>`.
 4. Claude Code usa Opus por defecto en este repo (`.claude/settings.json`). Codex revisa con
    `codex review`.
+5. `claude` y `codex` están instalados en `C:\dev\tools\npm` (ruta sin acentos, en el PATH).
+   La carpeta de perfil del usuario existe en `C:\Users` con varias codificaciones de la "ñ" y la
+   terminal de Orca no encuentra lo instalado bajo `AppData\Roaming\npm`; por eso nunca se
+   instalan herramientas ahí. Para actualizar:
+   `npm install -g --prefix C:\dev\tools\npm @anthropic-ai/claude-code @openai/codex`.
+6. Claude Code pregunta una vez por carpeta si confías en ella (cada worktree es una carpeta
+   nueva): `new-task.ps1` contesta "Yes, I trust this folder" por ti; si lo lanzas desde la app,
+   baja con la flecha y pulsa Enter.
 
 ## Ciclo de una tarea
 

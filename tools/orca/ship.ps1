@@ -1,4 +1,4 @@
-# Pushes the current task branch and opens (or updates) its pull request.
+﻿# Pushes the current task branch and opens (or updates) its pull request.
 # Usage (inside the task worktree): tools\orca\ship.ps1 [-AutoMerge]
 # CI (GitHub Actions, Windows) runs the full headless suite on the PR. Merge from Orca's PR tab
 # or with `gh pr merge --squash` once it is green. -AutoMerge asks GitHub to squash-merge

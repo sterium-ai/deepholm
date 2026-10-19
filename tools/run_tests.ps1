@@ -1,4 +1,4 @@
-# Runs the headless Godot test suite on Windows.
+﻿# Runs the headless Godot test suite on Windows.
 # Usage: tools\run_tests.ps1 [-Filter <substring>] [-GodotPath <exe>] [-SkipImport]
 # Godot is taken from -GodotPath, then $env:GODOT, then "godot" on PATH.
 [CmdletBinding()]

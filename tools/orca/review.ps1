@@ -1,4 +1,4 @@
-# Independent review of the current worktree against main, following docs/orca/REVIEW.md.
+﻿# Independent review of the current worktree against main, following docs/orca/REVIEW.md.
 # Usage (from a terminal inside the task worktree): tools\orca\review.ps1 [-Agent codex|claude] [-Base origin/main] [-NoSend]
 # Writes the verdict to .orca-review.md (git-ignored) and tries to hand it to the author's
 # Claude terminal in the same Orca worktree.

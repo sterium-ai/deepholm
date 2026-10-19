@@ -1,4 +1,4 @@
-# Prints total / code / comment line counts for every .gd file under game/scripts/core
+﻿# Prints total / code / comment line counts for every .gd file under game/scripts/core
 # (and boot.gd), largest first, plus the longest function per file. Quote its output in
 # refactor handoff reports.
 # Usage: tools\measure_core.ps1 [-Top 30] [-All]
