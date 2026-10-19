@@ -192,14 +192,12 @@ static func decode(state: Dictionary) -> WorldState:
 	world._clock.tick = int(state["tick"])
 	world._random.seed = int(state["rng"]["seed"])
 	world._random.state = int(state["rng"]["state"])
-	world._events = []
 	world._need_giver.restore_pending_assignments(_decode_paused_jobs(state["needJobAssignments"]))
 	world._calendar_alerts_fired = _decode_calendar_alerts(state["calendarAlerts"])
 	world._toils.restore_fetch_tool_excluded(_decode_tool_fetch_excluded(state["toolFetchExcluded"]))
 
 	var scheduling: Dictionary = state["scheduling"]
-	world._event_sequence = int(scheduling["eventSequence"])
-	world._queue_event_sequence = int(scheduling["queueEventSequence"])
+	world._event_log.decode(scheduling)
 
 	var jobs := _decode_jobs(state["jobs"])
 	var rescue_jobs := _surviving_rescue_jobs(jobs)
@@ -1225,12 +1223,13 @@ static func _next_construction_site_id(sites: Array[Dictionary]) -> int:
 
 static func _encode_scheduling(world: WorldState) -> Dictionary:
 	var scheduler = world._scheduler
+	var event_log := world._event_log.encode()
 	return {
 		"nextJobId": scheduler.queue.get_next_id(),
 		"jobSequence": scheduler.queue.get_sequence(),
 		"jobTick": scheduler.queue.get_tick(),
-		"queueEventSequence": world._queue_event_sequence,
-		"eventSequence": world._event_sequence,
+		"queueEventSequence": event_log["queueEventSequence"],
+		"eventSequence": event_log["eventSequence"],
 		"waiting": _encode_entries(scheduler.get_waiting()),
 		"nextOrdinal": scheduler.get_next_ordinal(),
 		"cursors": scheduler.get_cursors(),

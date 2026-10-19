@@ -133,12 +133,12 @@ func _check_calendar_boost_reflected_in_column_header() -> void:
 
 ## Appends a synthetic calendar_alert event (the same {type, tick, data:
 ## {id, label, days_until}} shape CalendarAlertGiver emits) directly to
-## world._events -- a test-only poke, same as test_calendar.gd's own direct
+## world._event_log._events -- a test-only poke, same as test_calendar.gd's own direct
 ## WorldState-field setup, and outside scripts/viewer/'s purity scan since
 ## this file lives under scripts/tests/. The panel must reflect it without
 ## any special wiring beyond world.get_events().
 func _fire_synthetic_alert(world: WorldStateType, tick: int, days_until: int, id: String = "sow", label: String = "sowing window") -> void:
-	world._events.append({
+	world._event_log._events.append({
 		"type": "calendar_alert", "tick": tick, "system_priority": 0,
 		"entity_id": "world", "sequence": world.get_events().size(),
 		"data": {"id": id, "label": label, "days_until": days_until},
