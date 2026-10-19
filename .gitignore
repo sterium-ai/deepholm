@@ -14,3 +14,7 @@ game/.godot/
 
 # Export output
 game/build/
+
+# Orca workflow scratch files (review verdicts, test baselines)
+.orca-*
+baseline.txt

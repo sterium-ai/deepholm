@@ -119,4 +119,9 @@ See [Running the tests](../README.md#running-the-tests) for commands.
 | [Agent ownership](architecture/agent-ownership.md) | One owner per subsystem and how changes are coordinated |
 | [ADR 002](decisions/002-agent-ownership-and-review.md) | Why authors and reviewers are different agents |
 | [Pull request template](../.github/PULL_REQUEST_TEMPLATE.md) | What every change must report |
-| [Agent orchestrator](https://github.com/sterium-ai/agent-orchestrator) | The separate tool that assigns tasks and reviewers |
+| [Agent orchestrator](https://github.com/sterium-ai/agent-orchestrator) | The automated pipeline that built the first 470 changes (retired) |
+| [Working from Orca](orca/README.md) | Current workflow: one Orca worktree per task, Claude authors, Codex reviews |
+| [Backlog](orca/BACKLOG.md) | Ordered tasks with owned paths and acceptance checks |
+| [Refactor plan](orca/REFACTOR-PLAN.md) | How `world_state.gd` becomes a composed core without changing behaviour |
+| [Review guide](orca/REVIEW.md) | What the reviewer checks and the verdict format |
+| [Baseline](design/baseline.md) | The minimum feature set to reach before new ideas |

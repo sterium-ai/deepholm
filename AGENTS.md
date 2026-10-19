@@ -86,10 +86,27 @@ ADR before the implementation lands.
   contributor machine; report that limitation instead of claiming a passing
   test.
 
-Agents are coordinated by a separate orchestrator,
-[sterium-ai/agent-orchestrator](https://github.com/sterium-ai/agent-orchestrator),
-which assigns tasks, owned paths and reviewers. Agents do not modify the
-orchestrator unless the task explicitly says so.
+## Working from Orca (current workflow)
+
+Work is organised with [Orca](https://www.onorca.dev/): one git worktree per
+task, Claude Code (Opus) as the author inside it, Codex as the independent
+reviewer. There is no automated supervisor any more; the owner opens tasks and
+merges. The operating guide is `docs/orca/README.md`.
+
+- **Take exactly one task by id from `docs/orca/BACKLOG.md`.** Read the whole
+  entry (goal, owned paths, acceptance, non-goals) before touching a file. If
+  the entry is ambiguous, ask in the terminal; do not guess.
+- **Refactor tasks (`R*`) follow `docs/orca/REFACTOR-PLAN.md` step by step** and
+  change no behaviour. Feature tasks (`F*`) start only when their *Design* block
+  is filled in.
+- **Before handoff, read `docs/orca/REVIEW.md`**: it is the reviewer's script, so
+  everything it checks should already be true.
+- **Update your task's status row in `BACKLOG.md`** in the same change.
+- **Never weaken verification.** Disabling, skipping or loosening a test, or
+  raising a size budget to make a check pass, is a defect in itself.
+- Windows is the development host. Godot is `$env:GODOT`; run
+  `tools\run_tests.ps1` for the suite and `tools\measure_core.ps1` for the
+  line counts quoted in the report.
 
 ## Validation
 
@@ -101,7 +118,8 @@ by git; the generated `*.uid` files next to scripts are committed.
 ```text
 godot --headless --path game --import
 godot --headless --path game --quit-after 1
-tools/run_tests.sh [path-to-godot]
+tools/run_tests.sh [path-to-godot]        # bash / CI
+tools\run_tests.ps1 [-Filter name]        # Windows (uses $env:GODOT)
 ```
 
 `tools/run_tests.sh` (bash) runs every `game/scripts/tests/test_*.gd`
@@ -120,8 +138,11 @@ validate changed JSON files (for example with `python -m json.tool`).
 Use one branch per coherent change:
 
 ```text
-agent/<issue-number>-<short-kebab-description>
+<backlog-id>-<short-kebab-description>          e.g. r1-extract-eventlog
 ```
+
+Orca names the branch after the worktree; `tools\orca\new-task.ps1` uses
+the form above.
 
 Fetch `main` before starting and before handoff. Keep commits atomic, never
 force-push a shared branch, and do not mix generated files or unrelated
