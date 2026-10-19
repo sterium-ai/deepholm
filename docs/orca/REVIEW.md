@@ -14,7 +14,7 @@ answers one question: **is this change safe to merge as it is?** It never edits 
 2. **Tests are real.** No test deleted, skipped, commented out, renamed to stop matching
    `test_*.gd`, or weakened (an assertion removed or loosened). Compare the list of
    `test_*.gd` files and the count of `_check_*`/assert sites with `main`.
-3. **Suite ran.** The handoff report quotes the runner's final line
+3. **Suite ran.** The handoff report (`docs/orca/handoffs/<id>.md`, in the diff) quotes the runner's final line
    (`run_all_tests: all N test(s) PASS` or the bash equivalent) for the branch head. A
    report without it, or with a smaller N than `main`, is blocking.
 4. **Core rules (AGENTS.md).** No scene/node/rendering/wall-clock dependency entered

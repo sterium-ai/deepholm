@@ -4,6 +4,8 @@
 param([string]$GodotExe = "")
 
 $ErrorActionPreference = "Stop"
+# git/orca print UTF-8; Windows PowerShell 5.1 would otherwise mangle paths with accents
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 
 # 1. Godot

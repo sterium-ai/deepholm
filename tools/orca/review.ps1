@@ -10,12 +10,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# git/orca print UTF-8; Windows PowerShell 5.1 would otherwise mangle paths with accents
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $root = (git rev-parse --show-toplevel 2>$null)
 if (-not $root) { Write-Error "review: run this inside the task worktree"; exit 1 }
 $root = (Resolve-Path $root).Path
 Set-Location $root
 $branch = git rev-parse --abbrev-ref HEAD
-$taskId = ($branch -split "-")[0].ToUpperInvariant()
+$taskId = ((($branch -split "/")[-1]) -split "-")[0].ToUpperInvariant()   # Orca may prefix the branch with the GitHub user
 
 git fetch origin main --quiet
 $changed = git diff --name-only "$Base...HEAD"
@@ -26,13 +28,17 @@ $instructions = @"
 You are the independent reviewer for branch '$branch' (backlog task $taskId) against $Base.
 Read docs/orca/REVIEW.md and apply every check in it. Read the task entry '### $taskId' in
 docs/orca/BACKLOG.md for the owned paths, acceptance and non-goals. The author's handoff
-report is in the last commit message(s) and/or the BACKLOG status row. Do not edit any file.
+report is docs/orca/handoffs/$taskId.md (part of the diff). Do not edit any file.
 Answer using exactly the verdict format from REVIEW.md, starting with 'VERDICT:'.
 "@
 
 $out = Join-Path $root ".orca-review.md"
+$ErrorActionPreference = "Continue"   # the agents write progress to stderr; under "Stop" that would abort the script
 if ($Agent -eq "codex") {
-    $text = & codex review --base $Base $instructions 2>&1 | Out-String
+    # `codex review --base` does not accept custom instructions, so run a read-only exec with the
+    # diff command spelled out; the sandbox forbids writes, so the reviewer cannot edit anything.
+    $instructions += "`nThe diff to review: run 'git diff $Base...HEAD' (and 'git log $Base..HEAD') yourself."
+    $text = "" | & codex exec --sandbox read-only --skip-git-repo-check $instructions 2>&1 | Out-String   # empty stdin: exec reads stdin when not a TTY
 } else {
     $text = & claude -p --permission-mode plan "$instructions`n`nThe diff to review is: git diff $Base...HEAD" 2>&1 | Out-String
 }

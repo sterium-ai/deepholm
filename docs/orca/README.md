@@ -56,7 +56,8 @@ Termina con el informe de entrega que pide AGENTS.md.
 ```
 
 Claude trabaja solo: importa el proyecto, hace el cambio, corre la suite de tests headless y
-escribe un informe. Si pregunta algo, contesta en su terminal.
+escribe el informe de entrega en `docs/orca/handoffs/<id>.md` (Codex solo ve el repo, no su
+terminal). Si pregunta algo, contesta en su terminal.
 
 ### 2. Revisar con Codex
 

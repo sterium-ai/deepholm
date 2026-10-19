@@ -7,6 +7,8 @@
 param([switch]$AutoMerge)
 
 $ErrorActionPreference = "Stop"
+# git/orca print UTF-8; Windows PowerShell 5.1 would otherwise mangle paths with accents
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $root = (git rev-parse --show-toplevel 2>$null)
 if (-not $root) { Write-Error "ship: run this inside the task worktree"; exit 1 }
 Set-Location $root

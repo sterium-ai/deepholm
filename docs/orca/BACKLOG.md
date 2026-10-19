@@ -17,7 +17,8 @@ agent that finishes a task updates its own row in the same PR.
 - **Non-goals** — what is explicitly out, even if tempting.
 
 Every task also inherits: import first, full headless suite green on Windows, handoff report
-per `AGENTS.md`, no behaviour change in `R*` tasks.
+as `docs/orca/handoffs/<id>.md` per `AGENTS.md` (the reviewer only sees the repo), no
+behaviour change in `R*` tasks.
 
 ---
 

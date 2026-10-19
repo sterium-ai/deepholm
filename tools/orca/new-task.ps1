@@ -9,6 +9,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+# git/orca print UTF-8; Windows PowerShell 5.1 would otherwise mangle paths with accents
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $backlog = Join-Path $repoRoot "docs\orca\BACKLOG.md"
 
@@ -35,7 +37,7 @@ if (-not $status.result.app.running) {
     orca open --json | Out-Null
 }
 
-$prompt = "Lee AGENTS.md y docs/orca/README.md. Tu encargo es la tarea $TaskId de docs/orca/BACKLOG.md: lee la entrada completa (goal, owned paths, acceptance, non-goals) y hazla siguiendo docs/orca/REFACTOR-PLAN.md si es una tarea R. Primero importa el proyecto y pasa la suite completa con tools/run_tests.ps1 para tener la linea base. No toques nada fuera de los owned paths. Antes de entregar lee docs/orca/REVIEW.md y comprueba que todo lo que pide ya se cumple. Termina con el informe de entrega de AGENTS.md, incluyendo la linea final del runner de tests y las cifras de tools/measure_core.ps1, y actualiza la fila de estado de $TaskId en BACKLOG.md."
+$prompt = "Lee AGENTS.md y docs/orca/README.md. Tu encargo es la tarea $TaskId de docs/orca/BACKLOG.md: lee la entrada completa (goal, owned paths, acceptance, non-goals) y hazla siguiendo docs/orca/REFACTOR-PLAN.md si es una tarea R. Primero importa el proyecto y pasa la suite completa con tools/run_tests.ps1 para tener la linea base. No toques nada fuera de los owned paths. Antes de entregar lee docs/orca/REVIEW.md y comprueba que todo lo que pide ya se cumple. Escribe el informe de entrega de AGENTS.md en docs/orca/handoffs/$TaskId.md (el revisor solo ve el repo, no esta terminal), incluyendo la linea final del runner de tests, las cifras de tools/measure_core.ps1 y los comandos de verificacion reproducibles, y actualiza la fila de estado de $TaskId en BACKLOG.md. Haz commit al terminar; no hagas push."
 
 $args = @("worktree", "create", "--repo", "path:$repoRoot", "--name", $name, "--no-parent",
           "--agent", $Agent, "--prompt", $prompt, "--json")

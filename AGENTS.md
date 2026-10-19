@@ -150,7 +150,10 @@ cleanup into a feature.
 
 ## Handoff report
 
-Every handoff reports:
+The report is a file in the repository, `docs/orca/handoffs/<task-id>.md`, committed
+with the change: the reviewer sees only the repo, never the author's terminal. Any
+script used for evidence (a scenario dump, a diff harness) goes next to it. Every
+handoff reports:
 
 - branch and commit;
 - owned paths and the files actually changed;
