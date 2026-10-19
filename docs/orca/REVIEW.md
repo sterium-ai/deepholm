@@ -34,8 +34,12 @@ answers one question: **is this change safe to merge as it is?** It never edits 
   confirm the logic is the same statements in the same order. A renamed variable or
   reindented block is fine; a reordered condition, a changed default, a dropped early return
   or a "simplified" loop is a behaviour change and blocking.
-- **No back-reference.** The new module never stores or receives `WorldState`. Dependencies
-  are explicit `_init` parameters or `Callable`s.
+- **No back-reference (core modules).** A new module under `game/scripts/core/` never stores
+  or receives `WorldState`; dependencies are explicit `_init` parameters or `Callable`s.
+  Viewer modules (`game/scripts/viewer/`, `boot.gd`) are the other side of the
+  simulation/presentation boundary and may hold the `WorldState` reference they read from
+  and send commands to — that is their documented contract (`simulation-boundaries.md`), not
+  a violation.
 - **Persistence delegated.** `state_codec.gd` calls the module's `encode`/`decode` and the
   JSON key names and value shapes are unchanged. Spot-check two fields against `main`.
 - **Hash coverage unchanged.** Fields that were in `state_hash()` still are; fields that were
