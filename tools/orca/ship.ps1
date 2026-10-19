@@ -16,7 +16,9 @@ $branch = git rev-parse --abbrev-ref HEAD
 if ($branch -eq "main") { Write-Error "ship: you are on main"; exit 1 }
 if (git status --porcelain) { Write-Error "ship: uncommitted changes; ask the author to commit first"; exit 1 }
 
-git push -u origin $branch
+$ErrorActionPreference = "Continue"   # git and gh report progress on stderr
+git push -u origin $branch 2>&1 | ForEach-Object { "$_" }
+if ($LASTEXITCODE -ne 0) { Write-Output "ship: push failed"; exit 1 }
 $existing = gh pr view --json url --jq .url 2>$null
 if ($existing) {
     Write-Output "ship: PR already open: $existing"
