@@ -1,3 +1,5 @@
 * text=auto
 *.sh text eol=lf
+# Godot always writes .import files with LF; pin it so --import never dirties a Windows checkout.
+*.import text eol=lf
 *.png binary

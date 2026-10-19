@@ -29,7 +29,7 @@ behaviour change in `R*` tasks.
 Windows test runner (`tools/run_tests.ps1`), `tools/measure_core.ps1`, `GODOT` env var,
 Orca helper scripts, this backlog.
 
-### R0b — Stop `godot --import` from dirtying the worktree · `todo` · *parallel-safe*
+### R0b — Stop `godot --import` from dirtying the worktree · `review` · *parallel-safe*
 
 - **Goal:** after `godot --headless --path game --import` on a fresh checkout, `git status` is
   clean. Today 31 `game/assets/generated/**/*.png.import` files come back modified by line

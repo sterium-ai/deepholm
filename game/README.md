@@ -14,6 +14,8 @@ godot --path game                          # play (or open project.godot in the 
 godot --headless --path game --quit-after 1   # headless boot check
 ```
 
+`*.import` files are pinned to LF in `.gitattributes`, so the import leaves `git status` clean.
+
 The boot scene (`scenes/boot.tscn` + `scripts/boot.gd`) starts a paused, seeded
 New Game with the map viewer, order toolbar, colonist panel and work-priority
 table. `WorldState` receives an explicit seed and advances only through
