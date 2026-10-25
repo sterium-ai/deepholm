@@ -10,6 +10,10 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
 
 const SEED := 424242
+## The bar's intended geometry, written here as literals rather than read from map_view.gd's
+## constants, so moving or resizing the bar in production fails this test.
+const EXPECTED_GAP := 1.0
+const EXPECTED_HEIGHT := 3.0
 const SPECS := [
 	["wooden_wall", "", Vector2i(1, 1)],
 	["stone_wall", "", Vector2i(1, 1)],
@@ -52,11 +56,11 @@ func _check_bars(world: WorldStateType, row: Vector2i) -> void:
 		_expect(footprint == Rect2(Vector2(origin) * tile, Vector2(expected_size.get(origin, Vector2i.ONE)) * tile),
 			"%s: footprint rect must cover its own tiles, got %s" % [label, footprint])
 		var bar := MapViewType.construction_bar_rect(footprint)
-		_expect(is_equal_approx(bar.end.y, footprint.position.y - MapViewType.CONSTRUCTION_BAR_GAP),
-			"%s: bar must end %s px above the footprint top (%s), got bar %s" % [label, MapViewType.CONSTRUCTION_BAR_GAP, footprint.position.y, bar])
+		_expect(is_equal_approx(bar.end.y, footprint.position.y - EXPECTED_GAP),
+			"%s: bar must end %s px above the footprint top (%s), got bar %s" % [label, EXPECTED_GAP, footprint.position.y, bar])
 		_expect(is_equal_approx(bar.position.x, footprint.position.x) and is_equal_approx(bar.size.x, footprint.size.x),
 			"%s: bar must span exactly the footprint's width, got bar %s for footprint %s" % [label, bar, footprint])
-		_expect(bar.size.y > 0.0, "%s: bar must have a height" % label)
+		_expect(is_equal_approx(bar.size.y, EXPECTED_HEIGHT), "%s: bar must be %s px high, got %s" % [label, EXPECTED_HEIGHT, bar.size.y])
 
 ## The leftmost tile of a horizontal run of `length` free soil tiles whose row below is
 ## free soil too (the vertical workbench covers it).
