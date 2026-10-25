@@ -28,7 +28,7 @@ func _expect(condition: bool, message: String) -> void:
 
 func _check_migrant_incident_and_recruitment() -> void:
 	var world := WorldStateType.new(306278, 10, 32, 32, true)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append(ActorTableType.spawn("colonist", 16, 16, world._content, "colonist_home"))
 
@@ -81,7 +81,7 @@ func _check_migrant_incident_and_recruitment() -> void:
 	_expect(String(world._find_colonist(migrant_id).get("factionId", "")) == "colony", "recruitment must switch faction to colony")
 
 	var target := Vector2i(int(migrant["x"]) + 1, int(migrant["y"]))
-	world._tiles[world._tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
 	var pick_id := world.spawn_ground_tool_item("pick", migrant["x"], migrant["y"])
 	_expect(world.set_tool_item_held(pick_id, migrant_id), "recruited migrant must be able to hold a pick")
 	var dig_result := world.apply({

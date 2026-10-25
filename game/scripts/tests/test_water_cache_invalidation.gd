@@ -1,6 +1,6 @@
 extends SceneTree
 
-## WorldState._water_tile_cache (a performance cache for
+## WorldState._tile_grid.water_tile_cache (a performance cache for
 ## _need_source_candidates("water")) originally assumed TILE_WATER
 ## tiles never change after generation. That is false: a berry_bush object
 ## sitting on a TILE_WATER tile is reachable independently of place_object
@@ -46,17 +46,17 @@ func _expect(condition: bool, message: String) -> void:
 
 func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	var world := WorldStateType.new(SEED, 10, 20, 20)
-	world._tiles.fill(WorldStateType.TILE_SOIL)
-	world._objects.clear()
-	world._object_factions.clear()
-	world._tiles[world._tile_index(WATER_TILE.x, WATER_TILE.y)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles.fill(WorldStateType.TILE_SOIL)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
+	world._tile_grid.tiles[world._tile_grid.tile_index(WATER_TILE.x, WATER_TILE.y)] = WorldStateType.TILE_WATER
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "route": null, "work": null, "carrying": null})
 
 	# Force the water-tile cache to build before the mutation below, so this
 	# proves the cache is kept in sync, not merely lazily rebuilt fresh every
 	# time (which would hide the bug this test exists to catch).
-	_expect(world._get_water_tiles().has(WATER_TILE),
+	_expect(world._tile_grid.get_water_tiles().has(WATER_TILE),
 		"setup: the water tile cache must include the fixture's own water tile before any mutation")
 
 	# place_object now rejects a water footprint tile with the
@@ -76,7 +76,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 		"place_object must reject a berry_bush on a water tile with invalid_target: %s" % place_result)
 	_expect(world.get_object(WATER_TILE.x, WATER_TILE.y).is_empty(),
 		"a rejected place_object must leave the water tile empty")
-	world._set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
+	world._object_table.set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
 
 	var forage_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "forage_water_bush", "tick": world.get_tick(),

@@ -94,11 +94,11 @@ func _check_generator_provenance_preserved_through_resave() -> void:
 ## precondition never blocks it.
 func _build_dig_test_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, 16, 16)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in range(0, 8):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)

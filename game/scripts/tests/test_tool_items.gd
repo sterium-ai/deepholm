@@ -200,9 +200,9 @@ func _command(world: WorldStateType, command_id: String, kind: String, payload: 
 ## after a single tick(), without letting it run to natural completion.
 func _build_single_dig_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 4):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	return world
@@ -566,8 +566,8 @@ func _check_held_tool_reuse_respects_other_jobs_reservation() -> void:
 ## free (no extra travel) since the interrupt never made the colonist drop it.
 func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 	var world := WorldStateType.new(271004, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
@@ -629,10 +629,10 @@ func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 ## out unreachable -- a farther, genuinely reachable one must still be tried.
 func _check_fetch_tool_skips_unreachable_candidate_for_farther_one() -> void:
 	var world := WorldStateType.new(271005)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 7):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(6, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2) but walled off on every side
@@ -662,10 +662,10 @@ func _check_fetch_tool_skips_unreachable_candidate_for_farther_one() -> void:
 ## per tick.
 func _check_fetch_tool_does_not_chain_multiple_candidates_in_one_tick() -> void:
 	var world := WorldStateType.new(271006)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 9):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(8, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(8, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2), walled off
@@ -743,8 +743,8 @@ func _check_rejected_complete_job_preserves_tool_block_recovery() -> void:
 ## holder), return, and complete at the original target.
 func _check_interrupted_job_refetches_and_works_at_job_target_not_tool_location() -> void:
 	var world := WorldStateType.new(271008, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
@@ -870,9 +870,9 @@ func _check_blocked_no_tool_respects_labour_disabled() -> void:
 ## different, tool-free forage job.
 func _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_colonist() -> void:
 	var world := WorldStateType.new(271011)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 6):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
@@ -975,13 +975,13 @@ func _check_blocked_no_tool_reason_survives_backoff_window() -> void:
 ## the same order.
 func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void:
 	var world := WorldStateType.new(271013)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(9, 9)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(2, 2)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 2)] = WorldStateType.TILE_ROCK
 	for dx in [-1, 0, 1]:
 		for dy in [-1, 0, 1]:
 			if dx != 0 or dy != 0:
-				world._tiles[world._tile_index(2 + dx, 2 + dy)] = WorldStateType.TILE_ROCK
+				world._tile_grid.tiles[world._tile_grid.tile_index(2 + dx, 2 + dy)] = WorldStateType.TILE_ROCK
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {"mine": 3},
@@ -1029,10 +1029,10 @@ func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void
 ## completion match an uninterrupted run.
 func _check_save_io_round_trip_after_candidate_excluded() -> void:
 	var world := WorldStateType.new(271014)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 7):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(6, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2) but walled off
@@ -1176,7 +1176,7 @@ func _check_held_tool_skips_fetch_tool_travel() -> void:
 ## and must no longer hold the tool once dropped.
 func _check_foreign_reservation_triggers_drop_tool_handover() -> void:
 	var world := WorldStateType.new(266002)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "place_bush", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
@@ -1221,7 +1221,7 @@ func _check_foreign_reservation_triggers_drop_tool_handover() -> void:
 ## instead of dropping in place.
 func _check_drop_tool_prefers_nearby_stockpile_cell() -> void:
 	var world := WorldStateType.new(266003)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 1, "height": 1}).get("ok", false),
@@ -1332,8 +1332,8 @@ func _find_job_colonist_id(world: WorldStateType, job_id: String) -> String:
 ## releases it -- only then does colonist_1 pick it up and complete.
 func _check_requester_waits_for_real_handover_then_completes() -> void:
 	var world := WorldStateType.new(266010)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -1405,10 +1405,10 @@ func _check_requester_waits_for_real_handover_then_completes() -> void:
 ## still-existing candidate instead of failing.
 func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 	var world := WorldStateType.new(266006)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 9):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(8, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(8, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var near_id := world.spawn_ground_tool_item("pick", 3, 0)
@@ -1464,7 +1464,7 @@ func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 ## longer free and drop on the ground there instead.
 func _check_drop_tool_revalidates_destination_at_arrival() -> void:
 	var world := WorldStateType.new(266007)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 4, "height": 1}).get("ok", false),
@@ -1518,7 +1518,7 @@ func _check_drop_tool_revalidates_destination_at_arrival() -> void:
 ## at the stockpile cell instead of completing the handover.
 func _check_save_io_round_trip_mid_drop_tool_movement_matches_uninterrupted_run() -> void:
 	var world := WorldStateType.new(266008)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 4, "y": 0, "width": 1, "height": 1}).get("ok", false),
@@ -1591,12 +1591,12 @@ func _check_save_io_round_trip_mid_drop_tool_movement_matches_uninterrupted_run(
 ## more than one tick.
 func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_run() -> void:
 	var world := WorldStateType.new(266009)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 21):
 		for y in range(0, 21):
-			world._tiles[world._tile_index(x, y)] = WorldStateType.TILE_FLOOR
+			world._tile_grid.tiles[world._tile_grid.tile_index(x, y)] = WorldStateType.TILE_FLOOR
 	for y in range(11, 15):
-		world._tiles[world._tile_index(10, y)] = WorldStateType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(10, y)] = WorldStateType.TILE_ROCK
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 10, "y": 15, "width": 1, "height": 1}).get("ok", false),
@@ -1660,8 +1660,8 @@ func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_
 ## ToilExecutor's own waiting_for_handover() gate ever runs again.
 func _check_adjacent_busy_holder_does_not_steal_tool_same_tick() -> void:
 	var world := WorldStateType.new(266011)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -1719,8 +1719,8 @@ func _check_adjacent_busy_holder_does_not_steal_tool_same_tick() -> void:
 ## back off with blocked_no_tool instead of completing.
 func _check_fetch_tool_retargets_when_holder_drops_tool_elsewhere() -> void:
 	var world := WorldStateType.new(266012)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -1781,7 +1781,7 @@ func _check_fetch_tool_retargets_when_holder_drops_tool_elsewhere() -> void:
 ## stockpile cell instead of letting it reach its own job's target.
 func _check_ordinary_route_not_misclassified_as_drop_when_reservation_appears_midflight() -> void:
 	var world := WorldStateType.new(266013)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "place_bush", "place_object", {"x": 20, "y": 0, "kind": "berry_bush"}).get("ok", false),
@@ -1824,10 +1824,10 @@ func _check_ordinary_route_not_misclassified_as_drop_when_reservation_appears_mi
 ## target, not a drop cell, so it must never be reinterpreted as a drop leg.
 func _check_fetch_route_not_misclassified_as_drop_when_other_reservation_appears() -> void:
 	var world := WorldStateType.new(266014)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 21):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(20, 0)] = WorldStateType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
@@ -1874,8 +1874,8 @@ func _check_fetch_route_not_misclassified_as_drop_when_other_reservation_appears
 ## holder's own job target.
 func _check_requester_cancellation_midflight_still_completes_drop_correctly() -> void:
 	var world := WorldStateType.new(266015)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -1954,9 +1954,9 @@ func _check_requester_cancellation_midflight_still_completes_drop_correctly() ->
 ## must keep recognizing the same in-flight leg regardless.
 func _check_drop_continues_when_holders_own_next_job_needs_a_different_tool() -> void:
 	var world := WorldStateType.new(266029)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(15, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(15, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	var labour_table_all_but_mine := {"mine": 0, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 	var labour_table_all_but_chop := {"mine": 3, "chop": 0, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
@@ -2031,8 +2031,8 @@ func _check_drop_continues_when_holders_own_next_job_needs_a_different_tool() ->
 ## uninterrupted run.
 func _check_fetch_route_not_misclassified_as_drop_when_leftover_tool_also_foreign_reserved() -> void:
 	var world := WorldStateType.new(266030)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	var labour_table_all_but_chop := {"mine": 3, "chop": 0, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 	var labour_table_all_3 := {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
@@ -2124,7 +2124,7 @@ func _check_fetch_route_not_misclassified_as_drop_when_leftover_tool_also_foreig
 ## cell in the zone must be used rather than falling back to the ground.
 func _check_drop_cell_adjacent_to_impassable_ordinary_target_uses_nearest_stockpile_cell() -> void:
 	var world := WorldStateType.new(266016)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 3, "height": 1}).get("ok", false),
@@ -2159,8 +2159,8 @@ func _check_drop_cell_adjacent_to_impassable_ordinary_target_uses_nearest_stockp
 ## nearer alternative to prefer.
 func _check_drop_cell_exactly_on_passable_ordinary_target_is_used() -> void:
 	var world := WorldStateType.new(266028)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 3, "y": 0, "width": 1, "height": 1}).get("ok", false),
@@ -2195,8 +2195,8 @@ func _check_drop_cell_exactly_on_passable_ordinary_target_is_used() -> void:
 ## the nearest-cell tie-break must still choose one of them, not the target.
 func _check_drop_cell_near_passable_ordinary_target_uses_nearest_stockpile_cell() -> void:
 	var world := WorldStateType.new(266024)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 3, "height": 1}).get("ok", false),
@@ -2272,8 +2272,8 @@ func _check_destroyed_tool_among_multiple_reservations_not_first_and_unrelated_h
 ## check must run before any route interpretation regardless of geometry.
 func _check_destroyed_fetch_target_preserves_unrelated_held_tool() -> void:
 	var world := WorldStateType.new(266018)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(20, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
@@ -2322,8 +2322,8 @@ func _check_destroyed_fetch_target_preserves_unrelated_held_tool() -> void:
 ## active the whole time.
 func _check_fetch_route_survives_impassable_fetch_destination_trim() -> void:
 	var world := WorldStateType.new(266022)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
@@ -2373,8 +2373,8 @@ func _check_fetch_route_survives_impassable_fetch_destination_trim() -> void:
 ## for the axe once it genuinely arrives), never mid-travel.
 func _check_fetch_route_survives_drifting_handover_holder_while_requester_holds_leftover() -> void:
 	var world := WorldStateType.new(266023)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
@@ -2442,9 +2442,9 @@ func _check_fetch_route_survives_drifting_handover_holder_while_requester_holds_
 ## diverging tick fails immediately.
 func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_holder_and_stockpile() -> void:
 	var world := WorldStateType.new(266019)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	for x in range(0, 48):
-		world._tiles[world._tile_index(x, 6)] = WorldStateType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 6)] = WorldStateType.TILE_ROCK
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "route": null, "work": null})
 	_expect(_command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"}).get("ok", false),
@@ -2506,7 +2506,7 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 ## items, never tool items.
 func _check_drop_tool_skips_cell_already_occupied_by_another_tool() -> void:
 	var world := WorldStateType.new(266020)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 2, "height": 1}).get("ok", false),
@@ -2539,7 +2539,7 @@ func _check_drop_tool_skips_cell_already_occupied_by_another_tool() -> void:
 ## back to dropping on the ground when the zone is gone.
 func _check_drop_tool_falls_back_to_ground_when_destination_zone_removed_midflight() -> void:
 	var world := WorldStateType.new(266021)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var zone_result := _command(world, "zone_add_1", "zone_add", {"x": 2, "y": 0, "width": 1, "height": 1})
@@ -2592,8 +2592,8 @@ func _check_drop_tool_falls_back_to_ground_when_destination_zone_removed_midflig
 ## uninterrupted run through to both forage jobs completing.
 func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 	var world := WorldStateType.new(266031)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
@@ -2728,8 +2728,8 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 ## foreign-reserved -- proven directly below before the save is taken.
 func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign_reserved_held_tool() -> void:
 	var world := WorldStateType.new(266032)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(25, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	var labour_table_all_but_chop := {"mine": 3, "chop": 0, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 	var labour_table_all_3 := {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
@@ -2834,7 +2834,7 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 ## a restore.
 func _check_save_io_round_trip_ordinary_route_after_held_tool_foreign_reserved_midflight() -> void:
 	var world := WorldStateType.new(266033)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	_expect(_command(world, "place_bush", "place_object", {"x": 20, "y": 0, "kind": "berry_bush"}).get("ok", false),
@@ -2906,7 +2906,7 @@ func _check_save_io_round_trip_ordinary_route_after_held_tool_foreign_reserved_m
 ## haul job still completes and places its real cargo.
 func _check_drop_tool_during_haul_job_preserves_cargo_identity_in_place() -> void:
 	var world := WorldStateType.new(266040)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
@@ -2966,7 +2966,7 @@ func _check_drop_tool_during_haul_job_preserves_cargo_identity_in_place() -> voi
 ## cells inside the same zone, and that the cargo's own itemId survives.
 func _check_drop_tool_during_haul_job_preserves_cargo_identity_via_stockpile() -> void:
 	var world := WorldStateType.new(266041)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
@@ -3028,7 +3028,7 @@ func _check_drop_tool_during_haul_job_preserves_cargo_identity_via_stockpile() -
 ## haul state.
 func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_completes() -> void:
 	var world := WorldStateType.new(266042)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
@@ -3129,8 +3129,8 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 ## colonist, and colonist_0 can still pick up a genuinely new tool afterward.
 func _check_destroyed_foreign_held_tool_while_waiting_reconciles_holder() -> void:
 	var world := WorldStateType.new(266030)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -3207,8 +3207,8 @@ func _check_destroyed_foreign_held_tool_while_waiting_reconciles_holder() -> voi
 ## go_to leg and arrive at the drop cell instead of its actual target.
 func _check_destroyed_foreign_held_tool_mid_drop_reconciles_holder_route() -> void:
 	var world := WorldStateType.new(266031)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})

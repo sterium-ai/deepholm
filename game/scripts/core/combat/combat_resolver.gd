@@ -54,12 +54,12 @@ static func _hp_fraction(actor: Dictionary) -> float:
 ## caller to apply (rule 2: dead, removed from scheduling, drops inventory).
 ## Object damage/destruction (rule 3) is applied immediately through
 ## `damage_object`, since -- unlike an actor -- an object has no dict of its
-## own for this module to hand back to the caller; WorldState's own
-## `_damage_object()` already owns clearing a destroyed object back to
+## own for this module to hand back to the caller; ObjectTable's own
+## `damage_object()` already owns clearing a destroyed object back to
 ## no-object (a wall becomes floor).
 ## `object_at`/`object_health_at`/`object_faction_at`/`damage_object` must be
-## WorldState's own get_object/_object_health_at/get_object_faction_id/
-## _damage_object. `insert_event`/`next_sequence` must be WorldState's own
+## WorldState's own get_object/get_object_faction_id and ObjectTable's
+## object_health_at/damage_object. `insert_event`/`next_sequence` must be WorldState's own
 ## event log writers. Returns {"dead_actors": Array[Dictionary], "fighting":
 ## Array[String]}.
 static func resolve_tick(actors: Array[Dictionary], content, relations, tick: int, priority: int,

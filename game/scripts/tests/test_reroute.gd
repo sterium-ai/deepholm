@@ -100,15 +100,15 @@ func _fetch_tool_has_excluded(world: WorldType, job_id: String) -> bool:
 ## row 1, which stays well within a single RouteSearch.STEP_BUDGET (64) call.
 func _build_two_row_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on one of this fixture's
 	# own narrow rows and block a route the test expects to be open.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in range(0, 5):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tiles[world._tile_index(x, 1)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 1)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -195,8 +195,8 @@ func _check_unreachable_target_releases_job() -> void:
 		ticks += 1
 		var colonist := world.get_colonists()[0]
 		if not walled and colonist["x"] == 2 and colonist["y"] == 0:
-			world._set_object(3, 0, "wooden_wall")
-			world._set_object(4, 1, "wooden_wall")
+			world._object_table.set_object(3, 0, "wooden_wall")
+			world._object_table.set_object(4, 1, "wooden_wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -227,16 +227,16 @@ func _check_unreachable_target_releases_job() -> void:
 ## search to save mid-flight, not one that resolves in the same tick.
 func _build_racetrack_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	# See _build_two_row_world()'s own doc comment above.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in range(0, 6):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tiles[world._tile_index(x, WorldType.MAP_HEIGHT - 1)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, WorldType.MAP_HEIGHT - 1)] = WorldType.TILE_SOIL
 	for y in range(0, WorldType.MAP_HEIGHT):
-		world._tiles[world._tile_index(0, y)] = WorldType.TILE_SOIL
-		world._tiles[world._tile_index(5, y)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(0, y)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -250,7 +250,7 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 		return walled
 	var colonist := world.get_colonists()[0]
 	if colonist["x"] == 1 and colonist["y"] == 0:
-		world._set_object(2, 0, "wooden_wall")
+		world._object_table.set_object(2, 0, "wooden_wall")
 		return true
 	return walled
 
@@ -268,8 +268,8 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 ## search -- and could resolve differently.
 func _build_fetch_tool_racetrack_world(seed_value: int) -> WorldType:
 	var world := _build_racetrack_world(seed_value)
-	world._tiles[world._tile_index(1, 0)] = WorldType.TILE_TREE
-	world._tiles[world._tile_index(5, 0)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldType.TILE_ROCK
 	world.spawn_ground_tool_item("axe", 5, 0)
 	return world
 
@@ -507,8 +507,8 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 ## least one observable tick.
 func _build_fetch_tool_return_leg_racetrack_world(seed_value: int) -> WorldType:
 	var world := _build_racetrack_world(seed_value)
-	world._tiles[world._tile_index(1, 0)] = WorldType.TILE_ROCK
-	world._tiles[world._tile_index(5, 24)] = WorldType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 24)] = WorldType.TILE_TREE
 	world.spawn_ground_tool_item("axe", 0, 2)
 	return world
 
@@ -600,8 +600,8 @@ func _build_fetch_tool_racetrack_world_with_moving_holder(seed_value: int) -> Wo
 	# (3,1) sits off every racetrack corridor tile (only reachable via (3,0),
 	# on the top row) so it cannot block the long left/bottom/right-column
 	# detour the second fetch_tool search below needs once (2,0) is walled.
-	world._tiles[world._tile_index(3, 1)] = WorldType.TILE_TREE
-	world._tiles[world._tile_index(5, 0)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldType.TILE_ROCK
 	# colonist_1 stands on (5,0), itself now impassable rock (only enterable
 	# via the fetch_tool target-tile exception): a RouteSearch starting from
 	# an impassable tile is invalid by construction (RouteSearch._init()), so
@@ -629,7 +629,7 @@ func _drive_fetch_tool_holder_moves_fixture(world: WorldType, state: Dictionary)
 	var colonist := world.get_colonists()[0]
 	if not state.get("walled", false):
 		if colonist["x"] == 1 and colonist["y"] == 0:
-			world._set_object(2, 0, "wooden_wall")
+			world._object_table.set_object(2, 0, "wooden_wall")
 			state["walled"] = true
 		return
 	if state.get("moved", false):

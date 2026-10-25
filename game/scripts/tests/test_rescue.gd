@@ -68,9 +68,9 @@ func _expect(condition: bool, message: String) -> void:
 ## reference this file holds across many world.tick() calls).
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
 		"needs": {"food": 100, "water": 100, "rest": 100},
@@ -117,8 +117,8 @@ func _tick_until_job_active(world: WorldStateType, job_id: String, bound: int) -
 ## Traps colonist_0 at (1, 0) the same way test_trapped_actors.gd's own first
 ## check does: a till job whose only route crosses the trench tile.
 func _trap_colonist_0(world: WorldStateType) -> void:
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(colonist["id"]))
 	_expect(submit.get("ok", false), "setup: till submission must be accepted")
@@ -132,8 +132,8 @@ func _trap_colonist_0(world: WorldStateType) -> void:
 func _trap_colonist_at(world: WorldStateType, colonist: Dictionary, trench: Vector2i) -> void:
 	colonist["x"] = trench.x - 1
 	colonist["y"] = trench.y
-	world._tiles[world._tile_index(trench.x, trench.y)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(trench.x + 1, trench.y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(trench.x, trench.y)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(trench.x + 1, trench.y)] = WorldStateType.TILE_SOIL
 	var submit := world._scheduler.submit(Vector2i(trench.x + 1, trench.y), 1, world.get_tick(), "till", String(colonist["id"]))
 	_expect(submit.get("ok", false), "setup: till submission for the custom trap must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: colonist must become trapped at the requested tile")
@@ -178,7 +178,7 @@ func _check_rescue_job_auto_generated_and_completes() -> void:
 	var report := ReservationInvariantsType.check(reservation_table, world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "a completed rescue must leave no orphaned reservations")
 	# Resumes ordinary scheduling: an unrelated labour order is now accepted and eventually assigned to the freed colonist.
-	world._tiles[world._tile_index(int(victim["x"]) + 3, int(victim["y"]))] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(int(victim["x"]) + 3, int(victim["y"]))] = WorldStateType.TILE_SOIL
 	var order := world._scheduler.submit(Vector2i(int(victim["x"]) + 3, int(victim["y"])), 1, world.get_tick(), "till", victim_id)
 	_expect(order.get("ok", false), "the freed colonist must accept an ordinary order again")
 	var resumed := false
@@ -243,7 +243,7 @@ func _check_pending_rescue_preempts_ordinary_labour() -> void:
 	# rescue_giver.gd's _advance_search() -- a candidate still travelling the
 	# whole time never lets a distance-scaling sweep finish before it moves
 	# again, so this deliberately keeps travel short instead of long).
-	world._tiles[world._tile_index(10, 2)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 2)] = WorldStateType.TILE_SOIL
 	var labour_submit := world._scheduler.submit(Vector2i(10, 2), 1, world.get_tick(), "till", worker_id)
 	_expect(labour_submit.get("ok", false), "setup: the ordinary labour order must be accepted")
 	var labour_job_id: String = String(labour_submit["job_id"])
@@ -288,10 +288,10 @@ func _check_pending_rescue_preempts_ordinary_labour() -> void:
 ## reservation key.
 func _check_two_victims_each_get_own_rescue_no_double_claim() -> void:
 	var world := _fresh_world(360004)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(1, 10)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(2, 10)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 10)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 10)] = WorldStateType.TILE_SOIL
 	var victim_a: Dictionary = world._colonists[0]
 	var victim_b := _spawn_colonist(world, "colonist_1", 0, 10)
 	var rescuer_a := _spawn_colonist(world, "colonist_2", 0, 5)
@@ -454,7 +454,7 @@ func _check_command_cancelled_rescue_frees_the_rescuer() -> void:
 	_expect(cancel_result.get("ok", false), "cancelling the rescue job through the command boundary must be accepted")
 	_expect(world._rescue_giver.get_pending_job(rescuer_id).is_empty(),
 		"cancelling a rescue job through a command must clear RescueGiver's own association for the rescuer")
-	world._tiles[world._tile_index(int(rescuer["x"]) + 3, int(rescuer["y"]))] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(int(rescuer["x"]) + 3, int(rescuer["y"]))] = WorldStateType.TILE_SOIL
 	var order := world._scheduler.submit(Vector2i(int(rescuer["x"]) + 3, int(rescuer["y"])), 1, world.get_tick(), "till", rescuer_id)
 	_expect(order.get("ok", false), "setup: an ordinary order restricted to the freed rescuer must be accepted")
 	var scheduled := false
@@ -488,11 +488,11 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 	var world := _fresh_world(360011)
 	var victim_a: Dictionary = world._colonists[0]
 	var victim_a_id: String = String(victim_a["id"])
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var submit_a := world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "till", victim_a_id)
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_TRENCH
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
 	var submit_b := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
@@ -502,8 +502,8 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 	# Only blocked now, after victim B's own approach already crossed both
 	# tiles -- forces victim B's rescue target to the shared tile (2, 0),
 	# its only remaining passable, non-trench neighbour.
-	world._tiles[world._tile_index(4, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(3, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_ROCK
 	var rescuer_b := _spawn_colonist(world, "colonist_2", 2, 5)
 	var rescuer_b_id: String = String(rescuer_b["id"])
 	var job_b := {}
@@ -640,8 +640,8 @@ func _check_unsafe_route_rejected_in_favour_of_a_safe_candidate() -> void:
 	var world := _fresh_world(360014)
 	var victim: Dictionary = world._colonists[0]
 	_trap_colonist_at(world, victim, Vector2i(2, 2))
-	world._tiles[world._tile_index(2, 1)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(2, 3)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 3)] = WorldStateType.TILE_ROCK
 	# Reserves the near-side target directly on the shared table, exactly like
 	# an unrelated job's own active tile reservation would, forcing the only
 	# remaining target to (3, 2).
@@ -682,9 +682,9 @@ func _check_no_rescue_when_every_route_crosses_the_trench() -> void:
 	var victim: Dictionary = world._colonists[0]
 	var victim_id: String = String(victim["id"])
 	_trap_colonist_at(world, victim, Vector2i(5, 0))
-	world._tiles[world._tile_index(4, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldStateType.TILE_ROCK
 	for y in range(1, world.get_map_height()):
-		world._tiles[world._tile_index(5, y)] = WorldStateType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldStateType.TILE_ROCK
 	var rescuer := _spawn_colonist(world, "rescuer", 0, 0)
 	var job := {}
 	var exposed := false
@@ -710,18 +710,18 @@ func _check_no_rescue_when_every_route_crosses_the_trench() -> void:
 func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 	var world := _fresh_world(360016)
 	var victim_a: Dictionary = world._colonists[0]
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var submit_a := world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_TRENCH
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
 	var submit_b := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
-	world._tiles[world._tile_index(4, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(3, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_ROCK
 	var rescuer_b := _spawn_colonist(world, "colonist_2", 2, 5)
 	var rescuer_b_id: String = String(rescuer_b["id"])
 	var job_b := {}
@@ -780,18 +780,18 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 	_expect(early_rescued, "setup: the unrelated early rescue must complete before the shared-target scenario begins")
 
 	var victim_a: Dictionary = world._colonists[0]
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var submit_a := world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_TRENCH
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
 	var submit_b := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
-	world._tiles[world._tile_index(4, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(3, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_ROCK
 	var rescuer_b := _spawn_colonist(world, "colonist_2", 2, 5)
 	var rescuer_b_id: String = String(rescuer_b["id"])
 	var job_b := {}
@@ -839,9 +839,9 @@ func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 	var world := _fresh_world(360018)
 	var victim: Dictionary = world._colonists[0]
 	_trap_colonist_at(world, victim, Vector2i(5, 0))
-	world._tiles[world._tile_index(6, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(5, 1)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_TRENCH
 	var unsafe_rescuer := _spawn_colonist(world, "unsafe_rescuer", 0, 0)
 	var safe_rescuer := _spawn_colonist(world, "safe_rescuer", 4, 5)
 	var safe_id: String = String(safe_rescuer["id"])
@@ -881,7 +881,7 @@ func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void
 	# cumulative time to exhaust MAX_STALE_RETRIES grows too -- a shorter trip
 	# lets the worker simply arrive and go stationary first, legitimately (not
 	# staleness) resolving the search before the retry bound is ever tested.
-	world._tiles[world._tile_index(46, 5)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(46, 5)] = WorldStateType.TILE_SOIL
 	var labour_submit := world._scheduler.submit(Vector2i(46, 5), 1, world.get_tick(), "till", worker_id)
 	_expect(labour_submit.get("ok", false), "setup: the long ordinary labour order must be accepted")
 	var labour_job_id: String = String(labour_submit["job_id"])
@@ -981,7 +981,7 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	var victim: Dictionary = world._colonists[0]
 	_trap_colonist_at(world, victim, Vector2i(5, 0))
 	for y in range(1, world.get_map_height()):
-		world._tiles[world._tile_index(5, y)] = WorldStateType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldStateType.TILE_ROCK
 	var rescuer := _spawn_colonist(world, "colonist_1", 0, 0)
 	var rescuer_id: String = String(rescuer["id"])
 	var job_id := ""
@@ -1043,8 +1043,8 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 	var world := _fresh_world(360022)
 	var victim: Dictionary = world._colonists[0]
 	_trap_colonist_at(world, victim, Vector2i(2, 0))
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(2, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_ROCK
 	var rescuer := _spawn_colonist(world, "colonist_1", 3, 5)
 	var rescuer_id: String = String(rescuer["id"])
 	var job := {}
@@ -1091,12 +1091,12 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	var world := _fresh_world(360023)
 	var victim_a: Dictionary = world._colonists[0]
 	var victim_a_id: String = String(victim_a["id"])
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var submit_a := world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "till", victim_a_id)
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_ROCK
 	var rescuer_a := _spawn_colonist(world, "rescuer_a", 2, 5)
 	var rescuer_a_id: String = String(rescuer_a["id"])
 	var job_a_id := ""
@@ -1138,12 +1138,12 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 
 	var victim_b := _spawn_colonist(world, "victim_b", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_TRENCH
 	var submit_b := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
-	world._tiles[world._tile_index(4, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(3, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_ROCK
 
 	var rescuer_b := _spawn_colonist(world, "rescuer_b", 2, 10)
 	var rescuer_b_id: String = String(rescuer_b["id"])
@@ -1256,8 +1256,8 @@ func _has_progress_key_for(world: WorldStateType, job_id: String) -> bool:
 func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void:
 	var world := _fresh_world(360025)
 	_trap_colonist_0(world)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_ROCK
 	var worker := _spawn_colonist(world, "colonist_1", 2, 3)
 	var worker_id: String = String(worker["id"])
 	var till := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", worker_id)
@@ -1384,10 +1384,10 @@ func _check_rescuer_death_clears_the_rescue_progress_key() -> void:
 ## save/load, since the associations themselves are identical.
 func _check_state_hash_equal_across_save_load_with_digit_boundary_rescue_ids() -> void:
 	var world := _fresh_world(360028)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(1, 10)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(2, 10)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 10)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 10)] = WorldStateType.TILE_SOIL
 	var victim_a: Dictionary = world._colonists[0]
 	var victim_b := _spawn_colonist(world, "colonist_1", 0, 10)
 	var submit_a := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
@@ -1403,7 +1403,7 @@ func _check_state_hash_equal_across_save_load_with_digit_boundary_rescue_ids() -
 	# Burn job ids up to job_8 with orders cancelled straight away.
 	while world._scheduler.queue.get_next_id() < 9:
 		var y: int = 20 + world._scheduler.queue.get_next_id()
-		world._tiles[world._tile_index(5, y)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldStateType.TILE_SOIL
 		var burn := world._scheduler.submit(Vector2i(5, y), 1, world.get_tick(), "till", "")
 		_expect(burn.get("ok", false), "setup: id-burning order must be accepted")
 		world.apply({"actor": "test", "command_id": "burn_%d" % y, "tick": world.get_tick(), "type": "cancel_job",
@@ -1448,8 +1448,8 @@ func _check_rescue_searches_share_the_per_colonist_route_budget() -> void:
 		var trench: Vector2i = entry[1]
 		victim["x"] = trench.x - 1
 		victim["y"] = trench.y
-		world._tiles[world._tile_index(trench.x, trench.y)] = WorldStateType.TILE_TRENCH
-		world._tiles[world._tile_index(trench.x + 1, trench.y)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(trench.x, trench.y)] = WorldStateType.TILE_TRENCH
+		world._tile_grid.tiles[world._tile_grid.tile_index(trench.x + 1, trench.y)] = WorldStateType.TILE_SOIL
 		var submit := world._scheduler.submit(Vector2i(trench.x + 1, trench.y), 1, world.get_tick(), "till", String(victim["id"]))
 		_expect(submit.get("ok", false), "setup: each victim's own till submission must be accepted")
 	var all_trapped := false
@@ -1520,14 +1520,14 @@ func _check_rescue_searches_share_the_per_colonist_route_budget() -> void:
 ## through a trench) and rescuer 2 (east) must be chosen instead.
 func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_helps() -> void:
 	var world := _fresh_world(360030)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 11):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
-		world._tiles[world._tile_index(x, 5)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 5)] = WorldStateType.TILE_FLOOR
 	for y in range(0, 6):
-		world._tiles[world._tile_index(0, y)] = WorldStateType.TILE_FLOOR
-		world._tiles[world._tile_index(10, y)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(5, 5)] = WorldStateType.TILE_TRENCH
+		world._tile_grid.tiles[world._tile_grid.tile_index(0, y)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(10, y)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 5)] = WorldStateType.TILE_TRENCH
 	var victim: Dictionary = world._colonists[0]
 	_trap_colonist_at(world, victim, Vector2i(5, 0))
 	var rescuer_1 := _spawn_colonist(world, "colonist_1", 0, 0)
@@ -1549,7 +1549,7 @@ func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_
 			reached_corridor = true
 			break
 	_expect(reached_corridor, "setup: rescuer 1 must be walking the west corridor")
-	world._set_object(3, 0, "wooden_wall")
+	world._object_table.set_object(3, 0, "wooden_wall")
 	var retired := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1583,8 +1583,8 @@ func _check_blocked_corridor_with_a_safe_detour_reroutes_without_crossing_the_tr
 	var world := _fresh_world(360031)
 	_trap_colonist_0(world)
 	var victim: Dictionary = world._colonists[0]
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_ROCK
 	var rescuer := _spawn_colonist(world, "colonist_1", 0, 6)
 	var rescuer_id: String = String(rescuer["id"])
 	var job := {}
@@ -1602,8 +1602,8 @@ func _check_blocked_corridor_with_a_safe_detour_reroutes_without_crossing_the_tr
 			reached = true
 			break
 	_expect(reached, "setup: the rescuer must be walking up column x=0")
-	world._set_object(0, 2, "wooden_wall")
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_FLOOR
+	world._object_table.set_object(0, 2, "wooden_wall")
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_FLOOR
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1627,8 +1627,8 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 	_trap_colonist_0(world)
 	var victim: Dictionary = world._colonists[0]
 	var victim_id: String = String(victim["id"])
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_ROCK
 	var rescuer := _spawn_colonist(world, "colonist_1", 2, 8)
 	var rescuer_id: String = String(rescuer["id"])
 	var queued_job := {}
@@ -1640,7 +1640,7 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 	_expect(not queued_job.is_empty() and queued_job["target"] == Vector2i(2, 0), "setup: the rescue must target (2, 0)")
 	_expect(String(queued_job.get("status", "")) == "queued", "setup: the commitment is still queued the tick it appears")
 	var queued_job_id: String = String(queued_job["id"])
-	world._set_object(2, 0, "wooden_wall")
+	world._object_table.set_object(2, 0, "wooden_wall")
 	var retired_before_moving := false
 	for _i in 20:
 		world.tick()
@@ -1656,7 +1656,7 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 	_expect(world.get_colonist_rescue_reason(victim_id) == world._rescue_giver.REASON_NO_RESCUER_AVAILABLE,
 		"with every neighbour blocked the victim's reason must read no_rescuer_available")
 	_expect(Vector2i(int(rescuer["x"]), int(rescuer["y"])) == Vector2i(2, 8), "no rescue may be re-proposed while the only target is impassable")
-	world._set_object(2, 0, "")
+	world._object_table.set_object(2, 0, "")
 	var job := {}
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1673,7 +1673,7 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 			mid_travel = true
 			break
 	_expect(mid_travel, "setup: the rescuer must be mid-travel toward the target")
-	world._set_object(2, 0, "wooden_wall")
+	world._object_table.set_object(2, 0, "wooden_wall")
 	var retired_mid_travel := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1683,7 +1683,7 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 			break
 	_expect(retired_mid_travel, "a rescue whose target becomes impassable mid-travel must be retired, never trimmed to start work adjacent")
 	_expect(victim.get("trapped") != null and Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(1, 0), "the victim must be untouched")
-	world._set_object(2, 0, "")
+	world._object_table.set_object(2, 0, "")
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND * 2:
 		world.tick()

@@ -45,7 +45,7 @@ func _expect(condition: bool, message: String) -> void:
 ## the one rock tile _check_place_onto_blocked_destination_fails_typed() uses.
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	return world
 
@@ -134,7 +134,7 @@ func _check_place_onto_blocked_destination_fails_typed() -> void:
 	if _failed:
 		return
 	var world := _build_world(1004)
-	world._tiles[world._tile_index(6, 6)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 6)] = WorldStateType.TILE_ROCK
 	_place_wood_item(world, "item_1", 2, 2)
 	var colonist := _colonist("colonist_0", 2, 2)
 	world._colonists.append(colonist)

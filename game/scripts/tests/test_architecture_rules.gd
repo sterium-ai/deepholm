@@ -86,14 +86,14 @@ func _load_jobs_content() -> Dictionary:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	# A freshly generated world can now place berry_bush objects
 	# (ADR 020); this fixture rebuilds tiles/colonists from scratch
 	# and must clear generator-placed objects the same way, or a stray one
 	# left over from the real (pre-override) terrain could sit on a coordinate
 	# this scenario relies on being free.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
@@ -218,15 +218,15 @@ func _check_execution_trace() -> void:
 			% [_jobs_content.size(), _jobs_content.keys(), expected_kinds.size(), expected_kinds])
 
 	_run_and_verify("dig", 201001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_SOIL
 		world.spawn_ground_tool_item("pick", 0, 0)
 		_expect(_command(world, "dig", {"x": 5, "y": 0, "priority": 1})["ok"], "dig order must be accepted"))
 	_run_and_verify("mine", 201501, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_ROCK
 		world.spawn_ground_tool_item("pick", 0, 0)
 		_expect(_command(world, "mine", {"x": 5, "y": 0, "priority": 1})["ok"], "mine order must be accepted"))
 	_run_and_verify("chop", 202001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_TREE
 		world.spawn_ground_tool_item("axe", 0, 0)
 		_expect(_command(world, "chop", {"x": 5, "y": 0, "priority": 1})["ok"], "chop order must be accepted"))
 	_run_and_verify("forage", 203001, func(world: WorldStateType) -> void:
@@ -238,14 +238,14 @@ func _check_execution_trace() -> void:
 	_run_and_verify("eat_food", 205001, func(world: WorldStateType) -> void:
 		world._item_table.ground_berries["5_0"] = 1)
 	_run_and_verify("drink_water", 206001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_WATER)
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_WATER)
 	_check_haul_execution_trace(207001)
 	_check_construction_execution_trace(207501)
 	_run_and_verify("till", 208001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_SOIL
 		_expect(_command(world, "till", {"x": 5, "y": 0, "priority": 1})["ok"], "till order must be accepted"))
 	_run_and_verify("sow", 209001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_PLOWED_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_PLOWED_SOIL
 		world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
 		world._item_table.next_item_id = 2
 		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
@@ -263,7 +263,7 @@ func _check_execution_trace() -> void:
 	# _run_scenario()'s clear_trace() right after setup returns, below), so
 	# only the escape_trench job's own go_to/work toils are traced.
 	_run_and_verify("escape_trench", 211001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(1, 5)] = WorldStateType.TILE_TRENCH
+		world._tile_grid.tiles[world._tile_grid.tile_index(1, 5)] = WorldStateType.TILE_TRENCH
 		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, world._content, "arch_wolf_trap")
 		wolf["factionId"] = "wildlife"
 		_expect(not world._incidents.propose(wolf, Vector2i(1, 5), 5).is_empty(),
@@ -297,8 +297,8 @@ func _check_execution_trace() -> void:
 	# clear_trace() right after setup returns), then spawns the rescuer so only
 	# the rescue job's own go_to/work toils are traced.
 	_run_and_verify("rescue", 213001, func(world: WorldStateType) -> void:
-		world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-		world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+		world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 		var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", "colonist_0")
 		_expect(submit.get("ok", false), "setup: till submission for the rescue trap scenario must be accepted")
 		for _i in 50:

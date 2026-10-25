@@ -105,8 +105,8 @@ func _reservation_owner(world: WorldStateType, key: String) -> String:
 ## many the haul (~45 ticks uninterrupted) finishes first.
 func _build_combined_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
@@ -244,7 +244,7 @@ func _check_combined_round_trip_matches_uninterrupted_run(seed_value: int) -> vo
 
 func _build_haul_only_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)

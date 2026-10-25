@@ -98,9 +98,9 @@ const SCENARIO_1_MAX_TICKS := 400
 
 func _check_scenario_1_two_colonists_one_axe_two_chop_orders() -> void:
 	var world := WorldStateType.new(266101)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(9, 0)] = WorldStateType.TILE_TREE
-	world._tiles[world._tile_index(9, 1)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 1)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null})
@@ -155,8 +155,8 @@ func _check_scenario_1_two_colonists_one_axe_two_chop_orders() -> void:
 
 func _check_scenario_2_no_tool_anywhere_blocks_and_frees_colonist() -> void:
 	var world := WorldStateType.new(266102)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(9, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 
@@ -196,8 +196,8 @@ func _check_scenario_2_no_tool_anywhere_blocks_and_frees_colonist() -> void:
 
 func _check_scenario_3_destroyed_tool_mid_job_fails_and_requeues() -> void:
 	var world := WorldStateType.new(266103)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("axe", 0, 0)
@@ -270,8 +270,8 @@ const SCENARIO_4_MAX_TICKS := 500
 
 func _check_scenario_4_handover_bounded_ticks() -> void:
 	var world := WorldStateType.new(266104)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
@@ -350,8 +350,8 @@ func _check_scenario_4_handover_bounded_ticks() -> void:
 
 func _check_scenario_5a_save_load_mid_fetch_tool_matches_hash() -> void:
 	var world := WorldStateType.new(266105)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(11, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(11, 0)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 10, 0)
@@ -399,8 +399,8 @@ func _check_scenario_5a_save_load_mid_fetch_tool_matches_hash() -> void:
 
 func _check_scenario_5b_save_load_mid_handover_drop_matches_hash() -> void:
 	var world := WorldStateType.new(266106)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})

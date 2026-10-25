@@ -156,7 +156,7 @@ func _check_reachable_handles_work_targets() -> void:
 	_expect(not regions.reachable(from, Vector2i(-1, 0)), "an out-of-bounds target must never be reachable")
 	_expect(regions.reachable(from, from), "a passable target in from's own region must be reachable")
 
-## WorldState._set_object()'s own RegionMap.on_passability_changed()
+## WorldState._object_table.set_object()'s own RegionMap.on_passability_changed()
 ## call must run for every tile of a placed footprint, not just its origin --
 ## otherwise the second tile's cached region_id would stay whatever it was
 ## before placement (this RegionMap only recomputes a tile explicitly told to
@@ -167,11 +167,11 @@ func _check_reachable_handles_work_targets() -> void:
 ## and checks both tiles' region_id() dropped to 0 (impassable/no region).
 func _check_footprint_object_invalidates_every_occupied_tile() -> void:
 	var world := WorldStateType.new(400, 10)
-	world._tiles[world._tile_index(2, 2)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(3, 2)] = WorldStateType.TILE_FLOOR
-	var regions := world._get_regions()
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 2)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 2)] = WorldStateType.TILE_FLOOR
+	var regions := world._tile_grid.get_regions()
 	_expect(regions.region_id(2, 2) != 0 and regions.region_id(3, 2) != 0,
 		"both setup tiles must start passable/regioned")
-	world._set_object(2, 2, "test_footprint_crate", "colony", "horizontal")
+	world._object_table.set_object(2, 2, "test_footprint_crate", "colony", "horizontal")
 	_expect(regions.region_id(2, 2) == 0, "the origin footprint tile's region cache must be invalidated to impassable")
 	_expect(regions.region_id(3, 2) == 0, "the second footprint tile's region cache must also be invalidated to impassable")

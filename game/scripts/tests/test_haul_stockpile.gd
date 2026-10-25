@@ -34,7 +34,7 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	return world
 
@@ -237,7 +237,7 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	world._colonists.append(_colonist("colonist_1", 5, 5))
 	_place_wood_item(world, "item_1", 0, 0)
 	world._item_table.next_item_id = 2
-	world._tiles[world._tile_index(7, 5)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(7, 5)] = WorldStateType.TILE_SOIL
 	world.spawn_ground_tool_item("pick", 5, 5)
 
 	var dig_result := _apply(world, "dig_other", "dig", {"x": 7, "y": 5, "priority": 1})

@@ -70,7 +70,7 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(colonist_x: int, colonist_y: int) -> WorldStateType:
 	var world := WorldStateType.new(1, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({
 		"id": "colonist_0", "kind": "colonist", "x": colonist_x, "y": colonist_y,
@@ -191,7 +191,7 @@ func _check_paused_freezes_t() -> void:
 func _check_snap_on_new_game() -> void:
 	var world_a := _build_world(3, 3)
 	var world_b := WorldStateType.new(2, 10)
-	world_b._tiles.fill(WorldStateType.TILE_FLOOR)
+	world_b._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world_b._colonists.clear()
 	world_b._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 7, "y": 7, "route": null, "work": null, "carrying": null})
 	world_b._colonists.append({"id": "colonist_2", "kind": "colonist", "x": 9, "y": 1, "route": null, "work": null, "carrying": null})
@@ -244,11 +244,11 @@ func _build_straight_route_world() -> WorldStateType:
 ## a berry_bush placed on the corridor's own last cell (5,6).
 func _build_l_route_world() -> WorldStateType:
 	var world := WorldStateType.new(1, 10)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 6):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
 	for y in range(0, 7):
-		world._tiles[world._tile_index(5, y)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldStateType.TILE_FLOOR
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	var place_result := _command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"})

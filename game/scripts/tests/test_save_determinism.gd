@@ -56,16 +56,16 @@ func _expect(condition: bool, message: String) -> void:
 ## activates within a single resume() call.
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on this fixture's own
 	# single-tile-wide corridor.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in WorldStateType.MAP_WIDTH:
-		world._tiles[x] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[x] = WorldStateType.TILE_SOIL
 	for y in range(1, WorldStateType.MAP_HEIGHT):
-		world._tiles[y * WorldStateType.MAP_WIDTH + (WorldStateType.MAP_WIDTH - 1)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[y * WorldStateType.MAP_WIDTH + (WorldStateType.MAP_WIDTH - 1)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 47, "y": 0, "route": null, "work": null, "hands": []})
@@ -262,16 +262,16 @@ func _check_seed(seed_value: int) -> void:
 ## entirely so it cannot shorten FAR's own path.
 func _chop_save_load_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	# See _fresh_world()'s own doc comment above.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in WorldStateType.MAP_WIDTH:
-		world._tiles[x] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[x] = WorldStateType.TILE_SOIL
 	for y in range(1, WorldStateType.MAP_HEIGHT):
-		world._tiles[world._tile_index(WorldStateType.MAP_WIDTH - 1, y)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._tiles[world._tile_index(WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1)] = WorldStateType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(WorldStateType.MAP_WIDTH - 1, y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("axe", 0, 0), "colonist_0")
@@ -438,7 +438,7 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(HAUL_SAVE_SEED, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
@@ -470,7 +470,7 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	# Mid-carry (leg two): a fresh run, ticked until the colonist is carrying
 	# and mid-route toward the reserved cell.
 	var carry_world := WorldStateType.new(HAUL_SAVE_SEED, 10)
-	carry_world._tiles.fill(WorldStateType.TILE_FLOOR)
+	carry_world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	carry_world._colonists.clear()
 	carry_world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	carry_world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
@@ -518,8 +518,8 @@ func _check_mine_save_load() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(MINE_SAVE_SEED, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": []})

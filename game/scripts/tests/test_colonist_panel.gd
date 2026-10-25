@@ -49,7 +49,7 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	return world
 
@@ -189,7 +189,7 @@ func _check_drinking_colonist_shows_activity_and_toil() -> void:
 	var world := _build_world(21001)
 	_isolate_need(world, "water")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"water": 20})))
-	world._tiles[world._tile_index(20, 0)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 0)] = WorldStateType.TILE_WATER
 
 	var line := ""
 	for _i in MAX_TICKS:
@@ -244,7 +244,7 @@ func _check_drinking_colonist_shows_activity_during_consume() -> void:
 	var world := _build_world(21002)
 	_isolate_need(world, "water")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"water": 20})))
-	world._tiles[world._tile_index(20, 0)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 0)] = WorldStateType.TILE_WATER
 
 	var line := ""
 	for _i in MAX_TICKS:

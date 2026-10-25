@@ -77,9 +77,9 @@ func _expect(condition: bool, message: String) -> void:
 ## defensively via .get().
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
@@ -136,8 +136,8 @@ func _tick_until_trapped(world: WorldStateType, colonist: Dictionary, bound: int
 ## the trench tile at (1,0) on the way to its (2,0) soil target.
 func _check_colonist_falls_into_trench_releases_job() -> void:
 	var world := _fresh_world(301001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id)
@@ -164,9 +164,9 @@ func _check_colonist_falls_into_trench_releases_job() -> void:
 ## already gets.
 func _check_trapped_colonist_refuses_new_job() -> void:
 	var world := _fresh_world(302001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(3, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
@@ -188,8 +188,8 @@ func _check_trapped_colonist_refuses_new_job() -> void:
 ## needs-decay tick.
 func _check_trapped_colonist_needs_keep_decaying() -> void:
 	var world := _fresh_world(303001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
@@ -205,8 +205,8 @@ func _check_trapped_colonist_needs_keep_decaying() -> void:
 ## auto-submitted job.
 func _check_colonist_stays_trapped_indefinitely() -> void:
 	var world := _fresh_world(304001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
@@ -228,7 +228,7 @@ func _check_colonist_stays_trapped_indefinitely() -> void:
 ## IncidentScheduler's day-gated draw.
 func _check_hostile_actor_auto_escapes() -> void:
 	var world := _fresh_world(305001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf")
 	_expect(submit.get("ok", false), "direct autonomous submission for the trap scenario must be accepted")
@@ -268,10 +268,10 @@ func _diamond_world(seed_value: int, detour_kind: String) -> WorldStateType:
 	var world := _fresh_world(seed_value)
 	world._colonists[0]["x"] = 0
 	world._colonists[0]["y"] = 1
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 0)] = detour_kind
-	world._tiles[world._tile_index(1, 2)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(2, 1)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = detour_kind
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 2)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_SOIL
 	return world
 
 func _check_route_choice_unaffected_by_trench() -> void:
@@ -335,7 +335,7 @@ func _escape_and_confirm(world: WorldStateType, wolf: Dictionary, wolf_id: Strin
 
 func _check_hostile_escapes_despite_ground_item_on_trench() -> void:
 	var world := _fresh_world(320001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	world._item_table.items["item_test_wood"] = {"id": "item_test_wood", "x": 1, "y": 0, "kind": "wood", "count": 1}
 	world._item_table.item_factions["item_test_wood"] = "colony"
 	var wolf := _spawn_wolf(world, "trap_wolf_item", 0, 0)
@@ -343,22 +343,22 @@ func _check_hostile_escapes_despite_ground_item_on_trench() -> void:
 
 func _check_hostile_escapes_despite_tool_item_on_trench() -> void:
 	var world := _fresh_world(320002)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	_expect(not world.spawn_ground_tool_item("pick", 1, 0).is_empty(), "setup: a tool item must spawn on the trench tile")
 	var wolf := _spawn_wolf(world, "trap_wolf_tool", 0, 0)
 	_escape_and_confirm(world, wolf, "trap_wolf_tool", Vector2i(1, 0), "tool item")
 
 func _check_hostile_escapes_despite_object_on_trench() -> void:
 	var world := _fresh_world(320003)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._set_object(1, 0, "chair")
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._object_table.set_object(1, 0, "chair")
 	var wolf := _spawn_wolf(world, "trap_wolf_object", 0, 0)
 	_escape_and_confirm(world, wolf, "trap_wolf_object", Vector2i(1, 0), "object")
 
 func _check_hostile_escapes_despite_stockpile_cell_on_trench() -> void:
 	var world := _fresh_world(320004)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._zones["zone_test"] = {"id": "zone_test", "x": 1, "y": 0, "width": 1, "height": 1}
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._zone_table.zones["zone_test"] = {"id": "zone_test", "x": 1, "y": 0, "width": 1, "height": 1}
 	var wolf := _spawn_wolf(world, "trap_wolf_zone", 0, 0)
 	_escape_and_confirm(world, wolf, "trap_wolf_zone", Vector2i(1, 0), "stockpile cell")
 
@@ -368,7 +368,7 @@ func _check_hostile_escapes_despite_stockpile_cell_on_trench() -> void:
 ## incident's own completion effect and despawn, not run after it.
 func _check_incident_wait_job_traps_before_despawn() -> void:
 	var world := _fresh_world(321001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var actor := ActorTableType.spawn("wolf", 0, 0, world._content, "trap_wolf_incident")
 	actor["factionId"] = "wildlife"
 	var job_id := world._incidents.propose(actor, Vector2i(1, 0), 1)
@@ -400,7 +400,7 @@ func _check_incident_wait_job_traps_before_despawn() -> void:
 ## than west (already exercised by _check_hostile_actor_auto_escapes()).
 func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
 	var world := _fresh_world(322001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_south", 1, 1)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_south")
 	_expect(submit.get("ok", false), "setup: submission from the south must be accepted")
@@ -422,12 +422,12 @@ func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
 ## remaining candidates, never leave the actor stuck on a stale preference.
 func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 	var world := _fresh_world(322002)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_blocked_entry", 1, 1)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_blocked_entry")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
-	world._set_object(1, 1, "wooden_wall") # seal the tile it fell from after it is already trapped
+	world._object_table.set_object(1, 1, "wooden_wall") # seal the tile it fell from after it is already trapped
 	var escaped := false
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -448,8 +448,8 @@ func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 ## skip the wildlife-forbidden door north of it.
 func _check_hostile_exit_never_uses_forbidden_door() -> void:
 	var world := _fresh_world(322003)
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_TRENCH
-	world._set_object(1, 0, "door") # north row-major candidate: colony-passable, wildlife-forbidden
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_TRENCH
+	world._object_table.set_object(1, 0, "door") # north row-major candidate: colony-passable, wildlife-forbidden
 	# west (0,1) and south (1,2) stay plain floor from _fresh_world()'s own fill.
 	var wolf := _spawn_wolf(world, "trap_wolf_door", 2, 1)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_door")
@@ -457,7 +457,7 @@ func _check_hostile_exit_never_uses_forbidden_door() -> void:
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	_expect((wolf["trapped"] as Dictionary).get("fromTile") == Vector2i(2, 1),
 		"setup: the wolf must have fallen in from the east")
-	world._set_object(2, 1, "wooden_wall") # seal fromTile so the search must fall through to the row-major order
+	world._object_table.set_object(2, 1, "wooden_wall") # seal fromTile so the search must fall through to the row-major order
 	var escaped := false
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -481,15 +481,15 @@ func _check_hostile_exit_never_uses_forbidden_door() -> void:
 ## Rock is plain impassable terrain with no object health to attack.
 func _check_hostile_stays_trapped_and_retries_when_no_exit_available() -> void:
 	var world := _fresh_world(322004)
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_sealed", 1, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_sealed")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(2, 1)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 2)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 2)] = WorldStateType.TILE_ROCK
 	for _i in 300:
 		world.tick()
 	_expect(wolf.get("trapped") != null,
@@ -505,7 +505,7 @@ func _check_hostile_stays_trapped_and_retries_when_no_exit_available() -> void:
 ## a save/load round trip mid-climb must preserve exactly that live value.
 func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
 	var world := _fresh_world(323001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_sync", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_sync")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -538,7 +538,7 @@ func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
 ## never the placeholder content/jobs.json work_ticks=1 a stale key would give it.
 func _check_two_hostiles_trapped_on_same_tile_each_get_correct_duration() -> void:
 	var world := _fresh_world(324001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf_a := _spawn_wolf(world, "trap_wolf_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_b", 2, 0)
 	var submit_a := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_a")
@@ -604,7 +604,7 @@ func _remove_save_io_target() -> void:
 func _check_save_io_round_trip_preserves_trapped_hostile() -> void:
 	_remove_save_io_target()
 	var world := _fresh_world(325001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_saveio", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_saveio")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -637,7 +637,7 @@ func _check_save_io_round_trip_preserves_trapped_hostile() -> void:
 ## key -- an out-of-bounds fromTile must still be a typed schema_error.
 func _check_save_io_rejects_malformed_from_tile() -> void:
 	var world := _fresh_world(325002)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_malformed", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_malformed")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -662,7 +662,7 @@ func _check_save_io_rejects_malformed_from_tile() -> void:
 ## bookkeeping of its own to hold.
 func _check_save_load_immediately_after_trapping_preserves_escape_duration() -> void:
 	var world := _fresh_world(326001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_immediate", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_immediate")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -687,7 +687,7 @@ func _check_save_load_immediately_after_trapping_preserves_escape_duration() -> 
 ## its own configured duration once it later activates after loading.
 func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> void:
 	var world := _fresh_world(326002)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf_a := _spawn_wolf(world, "trap_wolf_q_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_q_b", 2, 0)
 	var submit_a := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_q_a")
@@ -742,7 +742,7 @@ func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> vo
 ## lose that retry's own configured duration either.
 func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 	var world := _fresh_world(326003)
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_retry", 1, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_retry")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -752,10 +752,10 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 1):
 			initial_job_id = String(job["id"])
 	_expect(not initial_job_id.is_empty(), "setup: the wolf's first escape_trench job must be found")
-	world._set_object(1, 0, "wooden_wall")
-	world._set_object(0, 1, "wooden_wall")
-	world._set_object(2, 1, "wooden_wall")
-	world._set_object(1, 2, "wooden_wall")
+	world._object_table.set_object(1, 0, "wooden_wall")
+	world._object_table.set_object(0, 1, "wooden_wall")
+	world._object_table.set_object(2, 1, "wooden_wall")
+	world._object_table.set_object(1, 2, "wooden_wall")
 	# Tick only until the FIRST climb finishes and the blocked exit forces a
 	# fresh resubmission (a new job_id on the same tile) -- save right as
 	# that retry appears, still queued or only just active, the exact window
@@ -771,7 +771,7 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 			break
 	_expect(not retry_job_id.is_empty(), "setup: a blocked climb-out must resubmit a fresh escape_trench job to retry")
 	_expect(wolf.get("trapped") != null, "setup: the wolf must still be trapped, now retrying")
-	world._set_object(1, 2, "") # open exactly one exit for the retry to find
+	world._object_table.set_object(1, 2, "") # open exactly one exit for the retry to find
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
 	var restored_wolf := restored._find_colonist("trap_wolf_retry")
@@ -794,7 +794,7 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 ## need job for the same need kind.
 func _check_trapping_during_need_journey_resolves_need_giver() -> void:
 	var world := _fresh_world(327001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	world._item_table.ground_berries["2_0"] = 1
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
@@ -822,7 +822,7 @@ func _check_trapping_during_need_journey_resolves_need_giver() -> void:
 ## job's progress must not survive the trap.
 func _check_trapping_on_work_target_arrival_clears_progress() -> void:
 	var world := _fresh_world(328001)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_TRENCH
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id)
@@ -843,9 +843,9 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 	# pickup happens in place. (1,0) and (2,0) are walled off so the second
 	# leg (carrying the item to the stockpile cell) has no equal-or-cheaper
 	# route around the trench at (1,1): it must step onto it.
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_TRENCH
 	world._item_table.items["item_test_wood"] = {"id": "item_test_wood", "x": 0, "y": 1, "kind": "wood", "count": 1}
 	var colonist: Dictionary = world._colonists[0]
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
@@ -878,7 +878,7 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 ## still-adjacent, never-moved actor on its own (non-trench) tile.
 func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void:
 	var world := _fresh_world(330001)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	world.spawn_ground_tool_item("pick", 0, 0)
 	var colonist: Dictionary = world._colonists[0]
 	colonist["x"] = 1
@@ -900,7 +900,7 @@ func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void
 	# completing -- never having actually stepped onto target this tick. Its
 	# held_tool (a real tool item id, fetched above) is left exactly as the
 	# simulation produced it.
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_TRENCH
 	colonist["x"] = 1
 	colonist["y"] = 0
 	colonist["route"] = null
@@ -921,8 +921,8 @@ func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void
 ## death always has.
 func _check_trapped_colonist_removed_on_death() -> void:
 	var world := _fresh_world(331001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
@@ -944,7 +944,7 @@ func _check_trapped_colonist_removed_on_death() -> void:
 ## termination, and reservation release.
 func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 	var world := _fresh_world(332001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var wolf := _spawn_wolf(world, "trap_wolf_death", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_death")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -988,7 +988,7 @@ func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 ## a trapped actor's own cancelled job would be.
 func _check_trader_crosses_trench_unaffected() -> void:
 	var world := _fresh_world(333001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
 	var trader := _spawn_trader(world, "trap_trader", 0, 0)
 	var submit := world._scheduler.submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_trader")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
@@ -1027,8 +1027,8 @@ func _check_trader_crosses_trench_unaffected() -> void:
 ## be the reservation gate at work, not an absent threat.
 func _check_trapped_colonist_cannot_flee_via_combat_giver() -> void:
 	var world := _fresh_world(334001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
@@ -1074,7 +1074,7 @@ func _box_in_except_north(world: WorldStateType, x: int, y: int) -> void:
 		for dy in range(-1, 2):
 			if dx == 0 and dy == 0: continue
 			if dx == 0 and dy == -1: continue # the one open exit
-			world._tiles[world._tile_index(x + dx, y + dy)] = WorldStateType.TILE_ROCK
+			world._tile_grid.tiles[world._tile_grid.tile_index(x + dx, y + dy)] = WorldStateType.TILE_ROCK
 
 func _check_colonist_trapped_during_active_flee_episode() -> void:
 	var world := _fresh_world(335001)
@@ -1083,7 +1083,7 @@ func _check_colonist_trapped_during_active_flee_episode() -> void:
 	colonist["x"] = 5
 	colonist["y"] = 5
 	_box_in_except_north(world, 5, 5)
-	world._tiles[world._tile_index(5, 4)] = WorldStateType.TILE_TRENCH # the one exit, away from the threat below
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldStateType.TILE_TRENCH # the one exit, away from the threat below
 	_spawn_raider(world, "flee_threat_raider", 5, 20)
 	colonist["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND),
@@ -1119,7 +1119,7 @@ func _check_save_load_preserves_trapped_state_during_flee_episode() -> void:
 	colonist["x"] = 5
 	colonist["y"] = 5
 	_box_in_except_north(world, 5, 5)
-	world._tiles[world._tile_index(5, 4)] = WorldStateType.TILE_TRENCH # the one exit, away from the threat below
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldStateType.TILE_TRENCH # the one exit, away from the threat below
 	_spawn_raider(world, "flee_threat_raider_save", 5, 20)
 	colonist["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must become trapped mid-flee")

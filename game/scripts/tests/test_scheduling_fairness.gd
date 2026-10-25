@@ -36,15 +36,15 @@ func _expect(condition: bool, message: String) -> void:
 ## mechanics are loaded. The surrounding 48x48 world is impassable rock.
 func _world() -> WorldType:
 	var world := WorldType.new(47)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit inside this fixture's own
 	# 20x10 soil pocket.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for y in 10:
 		for x in 20:
-			world._tiles[y * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
+			world._tile_grid.tiles[y * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	for i in 8:
 		world._colonists.append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5})
@@ -276,7 +276,7 @@ func _check_blocked_prefix() -> void:
 ## zero route expansions/resumes across every tick, and the job never activates.
 func _check_enclosed_unreachable_zero_expansions() -> void:
 	var world := _world()
-	world._tiles[30 * WorldType.MAP_WIDTH + 30] = WorldType.TILE_SOIL
+	world._tile_grid.tiles[30 * WorldType.MAP_WIDTH + 30] = WorldType.TILE_SOIL
 	var target := Vector2i(30, 30)
 	var submitted: Dictionary = {}
 	_submit(world, target, 2, submitted)

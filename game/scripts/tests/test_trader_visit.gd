@@ -49,9 +49,9 @@ func _expect(condition: bool, message: String) -> void:
 ## random same-region bare target) is fully determined by the seed alone.
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	return world
 

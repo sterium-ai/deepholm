@@ -138,9 +138,9 @@ func _check_needs_clamp_at_zero() -> void:
 	# never this test's actual claim ("decay clamps at 0 with no source ever
 	# reachable"). Removing every tile/object a need source could resolve
 	# against makes that claim terrain-independent instead of seed-dependent.
-	world._tiles.fill("rock")
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill("rock")
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	var day_length := world._calendar.day_length_ticks()
 	var need_full := world._need_full
 	var slowest_rate := 999999
@@ -168,9 +168,9 @@ func _check_needs_reach_zero_at_expected_tick() -> void:
 		return
 	var definitions := _load_need_definitions()
 	var world := WorldStateType.new(3300, 10)
-	world._tiles.fill("rock")
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill("rock")
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	var day_length := world._calendar.day_length_ticks()
 	var need_full := world._need_full
 	var expected: Dictionary = {}

@@ -61,9 +61,9 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	return world
 
 func _colonist(id: String, x: int, y: int) -> Dictionary:
@@ -358,10 +358,10 @@ func _check_overlapping_footprints_within_one_batch_skip_the_later_origin_vertic
 ## is false) a batch that must still be rejected.
 func _check_batch_with_a_disconnected_unreachable_candidate_still_detects_enclosure() -> void:
 	var world := _build_world(450800)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in [1, 2, 3]:
-		world._tiles[world._tile_index(x, 1)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(10, 10)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 1)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 10)] = WorldStateType.TILE_FLOOR
 	world._colonists.append(_colonist("colonist_0", 1, 1))
 	var payload := {"kind": "wooden_wall", "tiles": [_tile(2, 1), _tile(10, 10)]}
 	var hash_before := world.state_hash()

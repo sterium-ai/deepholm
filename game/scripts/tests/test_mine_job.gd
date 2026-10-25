@@ -48,9 +48,9 @@ func _command(world: WorldStateType, command_id: String, kind: String, payload: 
 ## search, none of which need the real world generator's terrain.
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, MAP_SIZE, MAP_SIZE)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	return world
@@ -76,7 +76,7 @@ func _check_invalid_target_on_non_rock_tile() -> void:
 ## other_work()) -- staying a queued, non-terminal job.
 func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 	var world := _build_world(352002)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_ROCK
 	var submitted := _command(world, "mine_1", "mine", {"x": 2, "y": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "mine submission on a rock tile must be accepted even with no pick anywhere")
 	var job_id := String(submitted.get("job_id", ""))
@@ -101,9 +101,9 @@ func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 	var world := _build_world(352003)
 	var target := Vector2i(5, 0)
-	world._tiles[world._tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
 	var untouched_rock := Vector2i(15, 15)
-	world._tiles[world._tile_index(untouched_rock.x, untouched_rock.y)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(untouched_rock.x, untouched_rock.y)] = WorldStateType.TILE_ROCK
 	world.spawn_ground_tool_item("pick", 0, 0)
 
 	var submitted := _command(world, "mine_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
@@ -155,7 +155,7 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 	# haul job kind (WorldState auto-submits one haul job per unreserved ground item every tick).
 	var zone_result := _command(world, "zone_setup", "zone_add", {"x": 12, "y": 0, "width": 2, "height": 2})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var zone: Dictionary = world._zones[String(zone_result["zone_id"])]
+	var zone: Dictionary = world._zone_table.zones[String(zone_result["zone_id"])]
 
 	var hauled := false
 	for _i in 200:
@@ -181,7 +181,7 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 func _check_overlapping_mine_orders_produce_one_stone() -> void:
 	var world := _build_world(352004)
 	var target := Vector2i(2, 0)
-	world._tiles[world._tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
 	world.spawn_ground_tool_item("pick", 0, 0)
 
 	var mine_1 := _command(world, "mine_dup_1", "mine", {"x": target.x, "y": target.y, "priority": 1})

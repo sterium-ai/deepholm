@@ -111,9 +111,9 @@ func _command(world: WorldType, command_id: String, kind: String, payload: Dicti
 ## path to the bush.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	for x in range(0, 5):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	var place_result := _command(world, "place_bush", "place_object", {"x": 4, "y": 0, "kind": "berry_bush"})

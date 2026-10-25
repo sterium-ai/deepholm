@@ -294,7 +294,7 @@ func _place(world: WorldStateType, x: int, y: int, kind: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	return world
 

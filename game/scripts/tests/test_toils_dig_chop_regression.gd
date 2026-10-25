@@ -49,7 +49,7 @@ const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## Both literals also cover snapshot keys that stay empty in this run, because
 ## each key changes the dict shape regardless of its value: the colonist
 ## "combat" component (content/actors.json, backfilled by
-## WorldState._ensure_combat()), world._object_health, CombatGiver's
+## WorldState._ensure_combat()), world._object_table.object_health, CombatGiver's
 ## excluded-flee-destination set, "suspended_work_progress",
 ## "approach_job_targets" (ADR 033), RescueGiver's
 ## "rescue_victim_assignments" (hashed as a sorted {jobId, victimId} array so
@@ -152,18 +152,18 @@ func _command(world: WorldType, command_id: String, kind: String, payload: Dicti
 ## rather than restricting assignment.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020) before overwriting
 	# tiles: a stray one would leak into state_hash() even though it cannot
 	# affect this fixture's two corridors, moving EXPECTED_HASH /
 	# COLONY_EXPECTED_HASH for a reason unrelated to what either documents.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for x in range(0, 10):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tiles[world._tile_index(x, 2)] = WorldType.TILE_SOIL
-	world._tiles[world._tile_index(9, 0)] = WorldType.TILE_TREE
-	world._tiles[world._tile_index(9, 2)] = WorldType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 2)] = WorldType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 0)] = WorldType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 2)] = WorldType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "route": null, "work": null})

@@ -164,7 +164,7 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 	if _failed:
 		return
 	var world := WorldStateType.new(3, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
@@ -243,7 +243,7 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(5, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
@@ -290,10 +290,10 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 ## before or after the walls come back down.
 func _build_two_row_colony_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 5):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_SOIL
-		world._tiles[world._tile_index(x, 1)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 1)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null, "hands": []})
@@ -339,8 +339,8 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 		ticks += 1
 		var colonist_0 := world.get_colonists()[0]
 		if not walled and int(colonist_0["x"]) == 2 and int(colonist_0["y"]) == 0:
-			world._set_object(3, 0, "wall")
-			world._set_object(4, 1, "wall")
+			world._object_table.set_object(3, 0, "wall")
+			world._object_table.set_object(4, 1, "wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -349,8 +349,8 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 				replacement_job_id = String(blocked_job["id"])
 				_expect(_waiting_restrict_to(world, replacement_job_id) == "colonist_0",
 					"the replacement job must preserve the original assignee's restrict_to")
-				world._set_object(3, 0, "")
-				world._set_object(4, 1, "")
+				world._object_table.set_object(3, 0, "")
+				world._object_table.set_object(4, 1, "")
 		if released:
 			var assignments := world._scheduler.get_assignments()
 			if assignments.has("colonist_1") and String(assignments["colonist_1"]["job_id"]) == replacement_job_id:
@@ -378,7 +378,7 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(6, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
@@ -431,7 +431,7 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	if _failed:
 		return
 	var world := WorldStateType.new(12, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
@@ -515,7 +515,7 @@ func _check_reservation_gate_refuses_haul_item_and_cell_reservation() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(14, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	var colonist_id := "colonist_0"
 	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
