@@ -71,8 +71,9 @@ func _check_drag_preview() -> void:
 	for tile in view._preview_tiles:
 		if world.get_tile(tile.x, tile.y) == "tree":
 			trees.append(tile)
+	_expect(trees.size() >= 5, "sanity: the previewed rectangle must hold trees")
 	for tile in trees.slice(0, 5):
-		world._tiles[tile.y * world.get_map_width() + tile.x] = "soil"
+		world._tile_grid.tiles[world._tile_grid.tile_index(tile.x, tile.y)] = "soil" # a test-only poke
 	world.tick()
 	view.refresh()
 	view.finish_preview_work()
