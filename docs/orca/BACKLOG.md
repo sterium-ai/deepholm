@@ -86,7 +86,7 @@ Orca helper scripts, this backlog.
   rooms rebuilt lazily exactly as before (the existing region/room tests prove it).
 - **Non-goals:** multi-layer maps (that is F-phase).
 
-### R4 — Extract `WorkProgress` · `todo`
+### R4 — Extract `WorkProgress` · `review (antonelmejor50-hub/r4-extract-workprogress)`
 
 - **Goal:** `jobs/work_progress.gd` owns `_work_progress`, `_work_progress_owner`,
   `_suspended_work_progress` and every function that reads or writes them, including the

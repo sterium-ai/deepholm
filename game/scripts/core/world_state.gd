@@ -36,6 +36,7 @@ const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
 const ZoneTableType = preload("res://scripts/core/objects/zone_table.gd")
 const ConstructionGiverType = preload("res://scripts/core/jobs/givers/construction_giver.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
+const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
 
 ## Default/fixture map size: every existing test and the debug scenario
 ## construct WorldState with no explicit width/height and must keep getting
@@ -180,34 +181,8 @@ var _reroutes: Dictionary = {}
 
 ## colonist_id -> the scheduler job_id a critical need paused mid-`work`.
 var _paused_jobs: Dictionary = {}
-## "%d_%d" -> ticks remaining on a `work` toil's timer, so pausing never loses progress.
-var _work_progress: Dictionary = {}
-## "%d_%d" -> the job_id that last wrote _work_progress at that key. A job
-## suspended mid-work (status reverts to "queued", _pause_work_job()) still
-## owns its stored progress until it resumes or is terminated, so job
-## "status" alone cannot distinguish that from an abandoned key. Persisted as
-## "workProgressOwners": a second job (e.g. a dig) can legitimately be queued
-## targeting a tile a build already owns mid-haul -- the submission-time
-## duplicate-target rejection only guards a single job kind's own target --
-## so guessing the owner on load from "whichever job targets this tile"
-## could hand a build's progress to that unrelated dig, or vice versa.
-## StateCodec.decode() restores the exact persisted job_id instead (see
-## _restore_work_progress_owners() below); a save taken before this field
-## existed restores with no owners at all rather than guess one.
-var _work_progress_owner: Dictionary = {}
-## job_id -> ticks remaining on a `work` toil's timer, for a job suspended
-## (status "queued", not terminated) while its own work-progress tile is
-## still keyed live to it -- moved here at the moment colonist.work is
-## cleared for any non-terminal reason (JobQueue's own
-## activation/reactivation lifecycle can hand a suspended job's released
-## site/tile to a different job's own `work` toil, which would otherwise
-## read/overwrite the same "%d_%d" slot in _work_progress -- inheriting the
-## suspended job's stale ticks on start, then clobbering them tick by tick,
-## then erasing them at its own completion). _resume_work_progress() below is
-## the only reader (consumes the entry back into _work_progress on resume);
-## _release_owned_work_progress() is the only place that drops an entry whose
-## job terminates while still suspended. Persisted as "suspendedWorkProgress".
-var _suspended_work_progress: Dictionary = {}
+## Work-toil progress, its owners and suspended progress (jobs/work_progress.gd).
+var _progress_table: WorkProgressType
 ## job kind -> its needs_tool item kind, from content/jobs.json.
 var _needs_tool_by_kind: Dictionary = {}
 ## job kind -> {"kind","retry_base_ticks","retry_cap_ticks"} for JobQueue's
@@ -356,6 +331,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		_flee_target_reserved, _cancel_autonomous_job)
 	_calendar = CalendarServiceType.new("", _content.document("calendar"))
 	_work_ticks = _load_work_ticks()
+	_progress_table = WorkProgressType.new(_scheduler.queue, _work_ticks, _tile_key, _work_target_for)
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -374,7 +350,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		return
 	_toils = ToilExecutorType.new(int(_content.list("tiles")[0]["move_ticks_per_tile"]), _work_ticks, passability, _get_job,
 		_content, _item_table.item_lookup, _item_table.remove_ground_item_units, _item_table.place_new_ground_item, _is_cell_occupied, _consume_source_valid,
-		_resume_work_progress, _set_work_progress, _clear_work_progress, _reroutes, _route_search_factory,
+		_resume_work_progress, _set_work_progress, _progress_table.clear, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
 		set_tool_item_held, set_tool_item_ground, get_colonists, _route_budget,
 		get_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
@@ -783,10 +759,6 @@ func state_hash(include_incidents: bool = true) -> int:
 		# affects the next commit/adjacency decision, so two states that
 		# differ only here must not hash equal.
 		"approach_job_targets": StateCodec._encode_approach_job_targets(_approach_giver.get_job_targets()),
-		# A suspended job's own work-toil ticks
-		# affect what happens the moment it resumes, so two states that differ
-		# only here must not hash equal.
-		"suspended_work_progress": StateCodec._encode_suspended_work_progress(_suspended_work_progress),
 		# A site's own held_materials/progress/builder_ids affect
 		# what happens next (a fetch/work job the giver submits, or what
 		# cancel_site drops), so two states differing only here must not hash
@@ -795,11 +767,12 @@ func state_hash(include_incidents: bool = true) -> int:
 	}
 	# Each module adds its own keys (JSON.stringify sorts keys, so insertion order is irrelevant):
 	# "width"/"height"/"tiles", "objects"/"object_health", "zones"/"next_zone_id",
-	# "items"/"next_item_id"/"dig_find_rng".
+	# "items"/"next_item_id"/"dig_find_rng", "suspended_work_progress".
 	_tile_grid.hash_into(snapshot)
 	_object_table.hash_into(snapshot)
 	_zone_table.hash_into(snapshot)
 	_item_table.hash_into(snapshot)
+	_progress_table.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 
@@ -928,37 +901,10 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 			# tracking below and keeps its own pre-existing "active at finish"
 			# rule instead, unchanged.
 			if String(job.get("status", "")) == "active":
-				_clear_work_progress(job["target"])
+				_progress_table.clear(job["target"])
 		else:
-			_release_owned_work_progress(job_id, job)
+			_progress_table.release_owned(job_id, job)
 	return result
-
-## The one place every terminal transition (complete/cancel/fail/invalidate,
-## from any caller: a command, a trap, a death, an unreachable second leg, a
-## refused reservation resolution) converges, so this is the one place a
-## terminating job's own stored work-toil progress is cleared -- ownership
-## tracked by job_id (_work_progress_owner), not by the job's "status" at
-## termination time: a build/dig/etc. job interrupted mid-
-## work by a critical need is suspended (status reverts to "queued",
-## _pause_work_job()) without losing its progress, by design, so it can
-## resume from where it left off; but if it is instead cancelled/failed while
-## still suspended, the old "status == active" heuristic never fired, leaving
-## the abandoned tick count behind for whatever gets built/dug there next.
-## Job-id ownership fixes this for every terminal path uniformly, while still
-## never erasing a genuinely different job's progress at a coincidentally
-## shared target/site (the concern the old heuristic protected against).
-## Never called for "incident" (see _finish_job()'s own branch above).
-func _release_owned_work_progress(job_id: String, job: Dictionary) -> void:
-	if job.is_empty() or not _work_ticks.has(String(job.get("kind", ""))):
-		return
-	# A job cancelled/failed while still suspended (_suspend_work_progress()
-	# already moved its ticks out of the live tile cache) must not leak that
-	# snapshot forever.
-	_suspended_work_progress.erase(job_id)
-	var target: Vector2i = _work_target_for(job)
-	var key := _work_progress_key(target.x, target.y)
-	if String(_work_progress_owner.get(key, "")) == job_id:
-		_clear_work_progress(target)
 
 func get_ground_berries(x: int, y: int) -> int:
 	return _item_table.get_ground_berries(x, y)
@@ -1288,88 +1234,10 @@ func _cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
 	_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
 	_finish_job(job_id, "fail_job")
 
-## The _work_progress key a specific job's progress lives under: scoped by
-## job id only when that job is a "rescue":
-## a tile-only key would let two different rescue jobs sharing one target (two
-## victims can share a target) read and clear each other's progress across a
-## suspend/resume. Every other kind keeps the plain tile key every existing
-## test/save already assumes, since an ordinary job's target changes kind (or
-## is no longer valid) once it completes, so a same-kind job can never really
-## reuse that exact tile. Takes the job's own explicit identity, never the
-## tile's current reservation owner: every
-## terminal boundary below clears progress after _finish_job() has already
-## released that reservation, when an owner lookup would name nobody.
-func _work_progress_key_for_job(job_id: String, job: Dictionary) -> String:
-	var target: Vector2i = job["target"]
-	if String(job.get("kind", "")) != "rescue":
-		return "%d_%d" % [target.x, target.y]
-	return "%s:%d_%d" % [job_id, target.x, target.y]
-
-## The tile-addressed variant ToilExecutor's own get/set/clear hooks use mid-
-## work, when the tile's reservation owner is the job being worked: resolves
-## that owner and delegates to _work_progress_key_for_job() above.
-func _work_progress_key(x: int, y: int) -> String:
-	var owning_job_id: String = _scheduler.queue.get_reservation_table().owner(_tile_key(x, y))
-	if owning_job_id.is_empty():
-		return "%d_%d" % [x, y]
-	# A construction site's own footprint reservation is owned by
-	# "site:<id>", never a job id (ConstructionSiteTable.owner_key()) -- fall
-	# back to the plain tile key exactly like the unreserved case above rather
-	# than resolving a nonexistent job, which get_job() reports as {}.
-	var owning_job := _scheduler.queue.get_job(owning_job_id)
-	if owning_job.is_empty():
-		return "%d_%d" % [x, y]
-	return _work_progress_key_for_job(owning_job_id, owning_job)
-
-## Progress cleanup for a job that just took a terminal transition, by its
-## own explicit identity. A rescue job's progress
-## key names that job alone, so it is dropped on every terminal transition --
-## active or merely queued/suspended -- since no other job can ever own it;
-## an ordinary job's plain tile key is shared with any paused job on the same
-## tile, so it is dropped only when the terminating job was the active owner
-## (a queued competitor or a repeated terminal command must never erase
-## another job's paused progress).
-func _clear_terminated_job_progress(job_id: String, job: Dictionary, was_active: bool) -> void:
-	if not job.has("target"):
-		return
-	var kind := String(job.get("kind", ""))
-	if kind == "rescue" or (was_active and _work_ticks.has(kind)):
-		_work_progress.erase(_work_progress_key_for_job(job_id, job))
-
-## null when the tile has no stored progress, otherwise the ticks remaining
-## on its `work` toil the last time it was worked (colonist-ai.md 3.6). Any
-## job's progress at the tile, regardless of owner -- escape_trench's own
-## dedup check (_activate_pending_escapes()) is the only caller, and it only
-## ever needs "has anything been stamped here yet", never whose.
-func _get_work_progress(target: Vector2i):
-	var key := _work_progress_key(target.x, target.y)
-	if not _work_progress.has(key):
-		return null
-	return int(_work_progress[key])
-
-## start_work()'s own resume/start lookup, job-id scoped:
-## unlike _get_work_progress() above, a different job's stale value at the
-## same tile (a still-suspended job's own entry, or simply nothing) must never
-## be handed to job_id as its own starting point. Checks _suspended_work_progress
-## first (a suspended job's own snapshot, moved there by _suspend_work_progress()
-## below) and consumes it on read -- the resuming job's own next advance_work_step()
-## tick immediately re-establishes it live in _work_progress via _set_work_progress()
-## -- then falls back to _work_progress only when its recorded owner is job_id
-## itself (the ordinary "already mid-work, tick advanced since" case). Returns
-## null (use the job kind's own declared duration) for every other case,
-## including a different job's still-live entry at the same tile.
+## start_work()'s resume/start lookup (WorkProgress.resume()). A site_work job's
+## duration is always re-derived from its site (ConstructionSiteTable.progress is
+## the one authoritative counter), so it bypasses the progress table entirely.
 func _resume_work_progress(target: Vector2i, job_id: String):
-	# A site_work job's own duration is never a fixed
-	# content/jobs.json constant (every object kind declares its own
-	# build_ticks) nor a per-job private counter -- it is always exactly
-	# "how many ticks does the site's own progress still need", re-derived
-	# fresh on every start_work() call (a genuinely fresh activation and a
-	# resumption after a critical-need interrupt look identical here, since
-	# ConstructionSiteTable.progress -- not this job-id-scoped cache -- is the
-	# one persisted, authoritative counter). Bypasses _suspended_work_progress
-	# entirely: that cache exists to stop a different job inheriting a stale
-	# tile-keyed value, a problem this kind cannot have since its own value is
-	# always computed from the site record, never cached here at all.
 	var job := _get_job(job_id)
 	if String(job.get("kind", "")) == "site_work":
 		var site_id := _sites.find_at_origin(job.get("site", target))
@@ -1377,67 +1245,12 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 			return 0
 		var site := _sites.get_site(site_id)
 		return maxi(0, int(site["build_ticks"]) - int(site["progress"]))
-	if _suspended_work_progress.has(job_id):
-		var value := int(_suspended_work_progress[job_id])
-		_suspended_work_progress.erase(job_id)
-		return value
-	var key := _work_progress_key(target.x, target.y)
-	if not _work_progress.has(key):
-		return null
-	# An empty owner is "incident"'s own deliberate no-job_id stamp (see
-	# _work_progress_owner's doc comment and _finish_job()'s "incident"
-	# branch) -- IncidentSchedulerType.activate_pending() pre-stamps its wait
-	# before the actor's own `work` toil ever starts, precisely so start_work()
-	# picks it up here; only a non-empty owner naming a different job must be
-	# refused.
-	var owner := String(_work_progress_owner.get(key, ""))
-	if not owner.is_empty() and owner != job_id:
-		return null
-	return int(_work_progress[key])
-
-## Moves a still-queued (suspended, not terminated) job's in-progress `work`
-## timer out of the shared per-tile cache into _suspended_work_progress before
-## its colonist.work is cleared for any reason other than that job's own
-## completion: JobQueue's own activation/reactivation
-## lifecycle can hand the tile this job's site/target reservation just
-## released to a completely different job's own `work` toil, which must never
-## read, overwrite, or erase this job's own saved ticks at that same "%d_%d"
-## key. No-op for a terminal job (_release_owned_work_progress() already owns
-## that cleanup, keyed the same way) or a kind with no `work` toil at all.
-func _suspend_work_progress(work) -> void:
-	if work == null:
-		return
-	var job_id := String(work.get("job_id", ""))
-	var job := _scheduler.queue.get_job(job_id)
-	# "active" as well as "queued": _pause_work_job() calls this before
-	# suspend_assignment() actually flips the job's own status to "queued",
-	# so at that call site the job is still nominally "active" even though
-	# colonist.work is about to be cleared for it right here. A genuinely
-	# terminal status (already handled by _release_owned_work_progress(),
-	# which always runs before this could ever see it) is the only case this
-	# must not treat as a suspend.
-	if job.is_empty() or String(job.get("status", "")) not in ["active", "queued"]:
-		return
-	var kind := String(job.get("kind", ""))
-	# "incident" never participates in job-id-owned work progress at all (see
-	# _finish_job()'s own "incident" branch and _work_progress_owner's doc
-	# comment): its stamped wait is written job_id-less by
-	# IncidentSchedulerType.activate_pending() and cleared directly by
-	# _finish_job(), never through this suspend/resume path.
-	if kind == "incident" or not _work_ticks.has(kind):
-		return
-	_suspended_work_progress[job_id] = int(work.get("ticks_remaining", 0))
-	var target: Vector2i = _work_target_for(job)
-	var key := _work_progress_key(target.x, target.y)
-	if String(_work_progress_owner.get(key, "")) == job_id:
-		_clear_work_progress(target)
+	return _progress_table.resume(target, job_id)
 
 ## Called every tick for every work-toil job kind. For an active
 ## escape_trench job, also mirrors trapped.ticksRemaining from this same
-## real work timer -- never a countdown of its own. job_id,
-## when non-empty, records this key's owner in _work_progress_owner so
-## _release_owned_work_progress() can later tell a genuinely abandoned key
-## from one merely paused.
+## real work timer -- never a countdown of its own. job_id, when non-empty,
+## becomes the key's owner (WorkProgress.record()).
 func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
 	# A site_work job never writes into the shared tile-keyed
 	# cache below at all -- ConstructionSiteTable.progress is the one
@@ -1456,10 +1269,7 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 			if progress >= int(_sites.get_site(site_id)["build_ticks"]):
 				_finalize_construction_site(site_id, "")
 		return
-	var key := _work_progress_key(target.x, target.y)
-	_work_progress[key] = ticks_remaining
-	if not job_id.is_empty():
-		_work_progress_owner[key] = job_id
+	_progress_table.record(target, ticks_remaining, job_id)
 	var escaping := _escaping_actor_at(target)
 	if not escaping.is_empty() and escaping.get("trapped") != null:
 		(escaping["trapped"] as Dictionary)["ticksRemaining"] = ticks_remaining
@@ -1601,133 +1411,6 @@ func _escaping_actor_at(target: Vector2i) -> Dictionary:
 			return _find_colonist(worker_id)
 	return {}
 
-func _clear_work_progress(target: Vector2i) -> void:
-	var key := _work_progress_key(target.x, target.y)
-	_work_progress.erase(key)
-	_work_progress_owner.erase(key)
-
-## StateCodec.decode()'s own post-load restore of _work_progress_owner from
-## the persisted "workProgressOwners" job_id (see its declaration above),
-## rather than guessing an owner from whichever job currently targets a key
-## (a dig queued at a build's site would make that guess pick the wrong
-## job). Cross-checked against the just-restored job list -- exactly
-## the same non-terminal/kind-has-work_ticks filter the old guess used -- so
-## a hand-edited or corrupted save can never resurrect an owner pointing at a
-## job that no longer exists, has gone terminal, or never ticks work.
-## `persisted` is StateCodec's decoded key -> job_id map ({} for a save taken
-## before this field existed, restoring with no owners at all). Must run
-## once jobs are restored but before _reconcile_incident_jobs_after_load()
-## may cancel one through the shared _finish_job() boundary, so that
-## cancellation's own ownership-gated cleanup fires correctly immediately
-## after a load exactly like it would have on a live, uninterrupted run.
-func _restore_work_progress_owners(persisted: Dictionary) -> void:
-	_work_progress_owner.clear()
-	for key in persisted:
-		var job_id := String(persisted[key])
-		var job := _scheduler.queue.get_job(job_id)
-		if job.is_empty() or String(job.get("status", "")) not in ["queued", "active"]:
-			continue
-		var kind := String(job.get("kind", ""))
-		# "incident" never participates -- see _finish_job()'s own comment.
-		if kind == "incident" or not _work_ticks.has(kind):
-			continue
-		if _work_progress.has(key):
-			_work_progress_owner[key] = job_id
-	# "workProgressOwners" is optional on the wire
-	# (see StateCodec.encode()'s own comment), so a save taken before this
-	# field existed decodes `persisted` as {} here even though _work_progress
-	# itself (unconditional on the wire, restored above this call) may still
-	# hold real in-flight progress -- an active dig/build's own timer, or one
-	# a need interrupt suspended mid-work. Leaving those keys ownerless (the
-	# old behaviour) let them survive forever: _release_owned_work_progress()
-	# only clears a key its own job_id owns, so a cancel/fail of that exact
-	# job could never match and a replacement job at the same tile silently
-	# inherited the abandoned timer. Recover ownership from execution state
-	# the save format has always carried -- never by guessing from which job
-	# merely targets the key -- then drop whatever
-	# still has no recovered owner so it cannot leak forward either.
-	var reconstructed := _reconstruct_work_progress_owners()
-	for key in reconstructed:
-		if _work_progress_owner.has(key):
-			continue
-		var candidate = reconstructed[key]
-		if candidate != null:
-			_work_progress_owner[key] = String(candidate)
-	# An active "incident" job's own stored wait never gets a job_id owner by
-	# design (_finish_job()'s own comment -- IncidentSchedulerType.
-	# activate_pending() writes it through a job_id-less call), so it must
-	# never be swept up as "abandoned" here; exclude its keys before pruning.
-	var incident_keys := _active_incident_work_progress_keys()
-	for key in _work_progress.keys():
-		if not _work_progress_owner.has(key) and not incident_keys.has(key):
-			_work_progress.erase(key)
-
-## Fallback ownership source for _restore_work_progress_owners() above, used
-## for a work-progress key its `persisted` argument doesn't name (a legacy
-## save predating "workProgressOwners", or a persisted entry that pointed at
-## a job load itself rejected as stale). Built only from execution state the
-## save format has always carried, unconditionally, so it is as trustworthy
-## as a persisted job_id -- never a guess from which job happens to target a
-## tile:
-##  - a colonist's own "work" field: the job_id its currently-active `work`
-##    toil belongs to (state_codec.gd's entity "work"/"jobId").
-##  - _paused_jobs: the job_id a need interrupt suspended mid-work, restored
-##    from "pausedJobs" before this runs (see decode()'s own ordering
-##    comment) -- exactly the case where "status" alone can't
-##    tell a merely-paused owner from an abandoned one.
-## Two different candidates never legitimately name the same key: each only
-## exists for a job that has genuinely started its own `work` toil (the only
-## place a job_id is ever recorded against a key in the first place, in
-## _set_work_progress()), and a target is claimed by at most one such job at
-## a time. A collision is therefore corruption, not a real ownership
-## question -- recorded as null so the caller drops the key rather than
-## guessing which candidate is real.
-func _reconstruct_work_progress_owners() -> Dictionary:
-	var result: Dictionary = {}
-	for colonist in _colonists:
-		var work = colonist.get("work")
-		if work != null:
-			_claim_reconstructed_owner(result, String(work.get("job_id", "")))
-	for colonist_id in _paused_jobs.keys():
-		var job_id := String(_paused_jobs[colonist_id])
-		var job := _scheduler.queue.get_job(job_id)
-		if not job.is_empty() and String(job.get("status", "")) == "queued":
-			_claim_reconstructed_owner(result, job_id)
-	return result
-
-## Every work-progress key an active "incident" job currently owns without a
-## job_id (see _restore_work_progress_owners()'s own comment above), so the
-## pruning step there can tell that deliberate absence from a genuinely
-## abandoned key instead of erasing it.
-func _active_incident_work_progress_keys() -> Dictionary:
-	var keys: Dictionary = {}
-	for job in _scheduler.queue.get_jobs():
-		if String(job.get("kind", "")) == "incident" and String(job.get("status", "")) == "active":
-			var target: Vector2i = _work_target_for(job)
-			keys[_work_progress_key(target.x, target.y)] = true
-	return keys
-
-func _claim_reconstructed_owner(result: Dictionary, job_id: String) -> void:
-	if job_id.is_empty():
-		return
-	var job := _scheduler.queue.get_job(job_id)
-	var kind := String(job.get("kind", ""))
-	# "incident" never owns a work-progress key by job_id -- see
-	# _restore_work_progress_owners()'s own persisted-loop and
-	# _finish_job()'s comment; excluded here too so reconstruction never
-	# hands one an owner live play itself never records.
-	if job.is_empty() or kind == "incident" or not _work_ticks.has(kind):
-		return
-	var target: Vector2i = _work_target_for(job)
-	var key := _work_progress_key(target.x, target.y)
-	if not _work_progress.has(key):
-		return
-	if result.has(key):
-		if String(result[key]) != job_id:
-			result[key] = null
-	else:
-		result[key] = job_id
-
 ## F3: terminally resolves every job GlobalAssignment's
 ## may_be_ordered/may_reserve_colony_items gates refused, with the same typed
 ## fail() path zone_remove's blocked_destination_gone already uses -- nothing
@@ -1751,7 +1434,7 @@ func _resolve_refused_reservations() -> void:
 					_drop_carried_item_from(refused_colonist)
 			_scheduler.queue.set_pending_fail_reason(job_id, REASON_NOT_ORDERED_BY_PLAYER, "assign_an_orderable_actor")
 			if _finish_job(job_id, "fail_job").get("ok", false):
-				_clear_terminated_job_progress(job_id, job, false)
+				_progress_table.clear_terminated_job(job_id, job, false)
 			_resolve_giver_association(job_id, String(job.get("kind", "")))
 		refused = _scheduler.take_refused_reservations()
 
@@ -1768,7 +1451,7 @@ func _advance_colonists() -> void:
 		var assignment = assignments.get(colonist_id)
 		if assignment == null:
 			if _route(colonist) != null or colonist.get("work") != null:
-				_suspend_work_progress(colonist.get("work"))
+				_progress_table.suspend(colonist.get("work"))
 				colonist["route"] = null
 				colonist["work"] = null
 				_reroutes.erase(colonist["id"])
@@ -1787,7 +1470,7 @@ func _advance_colonists() -> void:
 		var work = colonist.get("work")
 		if (route != null and route["job_id"] != job_id) or (work != null and work["job_id"] != job_id):
 			if work != null and work["job_id"] != job_id:
-				_suspend_work_progress(work)
+				_progress_table.suspend(work)
 			colonist["route"] = null
 			colonist["work"] = null
 			_reroutes.erase(colonist["id"])
@@ -1839,7 +1522,7 @@ func _retire_rescue_job(job_id: String, job: Dictionary = {}) -> void:
 		job = _scheduler.queue.get_job(job_id)
 	var was_active := String(job.get("status", "")) == "active"
 	if _finish_job(job_id, "cancel_job").get("ok", false):
-		_clear_terminated_job_progress(job_id, job, was_active)
+		_progress_table.clear_terminated_job(job_id, job, was_active)
 	_rescue_giver.resolve_job(job_id)
 
 ## ADR 026: traps an actor whose route step lands it on trench (the
@@ -1876,7 +1559,7 @@ func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> v
 		var job_kind := String(job.get("kind", ""))
 		if job_kind in ["haul", "site_fetch"]: _drop_carried_haul_item(job_id)
 		if _finish_job(job_id, "cancel_job").get("ok", false):
-			_clear_terminated_job_progress(job_id, job, true)
+			_progress_table.clear_terminated_job(job_id, job, true)
 			_resolve_giver_association(job_id, job_kind)
 	if not hostile: return
 	_submit_trench_escape(colonist, tile)
@@ -1898,7 +1581,7 @@ func _activate_pending_escapes() -> void:
 		var job := _scheduler.queue.get_job(job_id)
 		if String(job.get("kind", "")) != "escape_trench" or String(job.get("status", "")) != "active": continue
 		var target: Vector2i = job["target"]
-		if _get_work_progress(target) != null: continue
+		if _progress_table.get_progress(target) != null: continue
 		var actor := _find_colonist(worker_id)
 		if actor.is_empty(): continue
 		_set_work_progress(target, _trench_climb_ticks(actor), job_id)
@@ -2816,7 +2499,7 @@ func _cancel_job_for_death(job_id: String) -> void:
 	# Only a rescue's own job-scoped key is dropped here; an ordinary job's tile progress outlives its actor's death
 	# exactly as before, so a successor order on that tile inherits it.
 	if _finish_job(job_id, "cancel_job").get("ok", false):
-		_clear_terminated_job_progress(job_id, job, false)
+		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association(job_id, String(job.get("kind", "")))
 
 ## restrict_to_for()'s own restriction, falling back to the raw waiting-queue
@@ -2911,7 +2594,7 @@ func _pause_work_job(colonist: Dictionary) -> void:
 	var work = colonist.get("work")
 	if work != null:
 		_paused_jobs[colonist_id] = String(work["job_id"])
-		_suspend_work_progress(work)
+		_progress_table.suspend(work)
 		colonist["work"] = null
 		return
 	var assignment = _scheduler.get_assignments().get(colonist_id)
@@ -2982,7 +2665,7 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 ## reservation may not be reacquired yet at this point in the resume sequence
 ## (_resume_interrupted_job() calls this before resume_assignment()
 ## reactivates it) -- deferring to the ordinary tick path is what keeps
-## _work_progress_key()'s own reservation-owner scoping correct here. An
+## WorkProgress.key()'s own reservation-owner scoping correct here. An
 ## unreachable commitment (no trench-free route at all) is retired through
 ## _retire_rescue_job() -- immediately when the executor proves it so in
 ## its first budgeted step, or later through the ordinary on_unreachable
@@ -3244,12 +2927,12 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
 			if String(target_job.get("kind", "")) in ["haul", "site_fetch"]:
 				_drop_carried_haul_item(String(payload["job_id"]))
-		# Clear work_progress only once the transition succeeds, by the terminating job's own identity (_clear_terminated_job_progress(): an ordinary job's plain tile key only when it was "active" before -- a queued competitor or a rejected/repeated terminal command must never erase another job's progress -- a rescue's own job-scoped key in every status).
+		# Clear work_progress only once the transition succeeds, by the terminating job's own identity (WorkProgress.clear_terminated_job(): an ordinary job's plain tile key only when it was "active" before -- a queued competitor or a rejected/repeated terminal command must never erase another job's progress -- a rescue's own job-scoped key in every status).
 		var terminal_job := _scheduler.queue.get_job(String(payload["job_id"]))
 		var terminal_was_active: bool = String(terminal_job.get("status", "")) == "active"
 		result = _finish_job(payload["job_id"], command["type"])
 		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
-			_clear_terminated_job_progress(String(payload["job_id"]), terminal_job, terminal_was_active)
+			_progress_table.clear_terminated_job(String(payload["job_id"]), terminal_job, terminal_was_active)
 		# Shares _resolve_giver_association() with
 		# _toil_on_work_complete()/_trap_actor()/_cancel_job_for_death()/
 		# _resolve_refused_reservations() rather than only ever telling

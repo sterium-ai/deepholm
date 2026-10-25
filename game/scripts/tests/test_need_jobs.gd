@@ -448,7 +448,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	var original_entry: Dictionary = activated.get(dig_job_id, {})
 
 	var dig_target_key := "10_0"
-	var progress_before := int(world._work_progress.get(dig_target_key, -1))
+	var progress_before := int(world._progress_table.progress.get(dig_target_key, -1))
 	_expect(progress_before > 0 and progress_before < int(world._work_ticks["dig"]),
 		"real (partial) work progress must exist before the interrupt (got %d)" % progress_before)
 
@@ -483,10 +483,10 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	# shared tile cache into per-job storage (world_state.gd's own
 	# _suspend_work_progress()), so a different job that later works the same
 	# tile can never inherit or clobber it -- checked here instead of
-	# world._work_progress, which is now empty for a suspended job.
-	_expect(int(world._suspended_work_progress.get(dig_job_id, -1)) == progress_before,
+	# world._progress_table.progress, which is now empty for a suspended job.
+	_expect(int(world._progress_table.suspended.get(dig_job_id, -1)) == progress_before,
 		"the interrupted work toil's own progress must be kept, not reset")
-	_expect(not world._work_progress.has(dig_target_key),
+	_expect(not world._progress_table.progress.has(dig_target_key),
 		"a suspended job's tile-cache entry must be cleared, not left for a different job to inherit")
 
 	var eat_completed := false
@@ -512,7 +512,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	_expect(not colonist_1_ever_assigned,
 		"an otherwise-idle second colonist must never be offered the restricted eat_food job or the restrict_to-protected dig job")
 	_expect(world_tile_is_trench(world, 10, 0), "the resumed dig job must still finish transforming its target tile")
-	_expect(not world._work_progress.has(dig_target_key),
+	_expect(not world._progress_table.progress.has(dig_target_key),
 		"a completed job must clear its tile's work-progress entry")
 	_expect(colonist_0_ever_fed,
 		"the interrupted colonist's own food need must be restored at some point, not some other colonist's")

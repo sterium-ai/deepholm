@@ -1,12 +1,13 @@
 {
   "_note": "Line-count caps for the largest core files, checked in CI. Raising one requires an ADR in the same change.",
-  "game/scripts/core/world_state.gd": 4290,
+  "game/scripts/core/world_state.gd": 3980,
   "game/scripts/core/world/event_log.gd": 800,
   "game/scripts/core/items/item_table.gd": 800,
   "game/scripts/core/map/tile_grid.gd": 800,
   "game/scripts/core/map/passability.gd": 800,
   "game/scripts/core/objects/object_table.gd": 800,
   "game/scripts/core/objects/zone_table.gd": 800,
+  "game/scripts/core/jobs/work_progress.gd": 800,
   "game/scripts/core/jobs/toil_executor.gd": 970,
   "game/scripts/core/jobs/job_queue.gd": 790,
   "game/scripts/core/scheduling/global_assignment.gd": 688

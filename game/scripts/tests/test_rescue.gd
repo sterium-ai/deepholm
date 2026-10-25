@@ -1023,7 +1023,7 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "cancelled",
 		"the unsafe stale commitment must be retired (cancelled), never walked through the trench")
 	_expect(rescuer.get("trapped") == null, "the rescuer must never have fallen into the trench while re-routing")
-	for key in world._work_progress.keys():
+	for key in world._progress_table.progress.keys():
 		_expect(not String(key).begins_with(job_id + ":"), "retiring the stale rescue must drop its own job-scoped progress key")
 	_expect(not fresh_job.is_empty() and fresh_job["target"] == Vector2i(6, 0),
 		"the fresh target must be the east-side candidate, reachable from the rescuer's new side without crossing the trench")
@@ -1175,7 +1175,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 			break
 	_expect(need_resolved, "setup: rescuer A's own need must be satisfied so the rescue can resume")
 	# A suspended job's own progress now lives in
-	# WorldState._suspended_work_progress (job-id-keyed) rather than staying
+	# WorldState._progress_table.suspended (job-id-keyed) rather than staying
 	# live under the shared tile-keyed _work_progress cache -- exactly the
 	# same mechanism a suspended ordinary job now uses -- so it is only
 	# re-established there once the rescuer physically arrives back at the
@@ -1199,7 +1199,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	var live_ticks_remaining := int(rescuer_a["work"]["ticks_remaining"])
 	_expect(live_ticks_remaining <= remaining_before_interrupt and live_ticks_remaining >= remaining_before_interrupt - 1,
 		"job A must resume from its own preserved progress, not restart fresh or inherit job B's leftover (got %d, expected close to %d)" % [live_ticks_remaining, remaining_before_interrupt])
-	var restored_progress = world._get_work_progress(Vector2i(2, 0))
+	var restored_progress = world._progress_table.get_progress(Vector2i(2, 0))
 	_expect(restored_progress != null and int(restored_progress) == live_ticks_remaining,
 		"job A's cached progress must match its own current live work state, never job B's leftover or a corrupted value (got %s expected %s)" % [restored_progress, live_ticks_remaining])
 	var rescued_a := false
@@ -1234,12 +1234,12 @@ func _tick_until_rescue_progress(world: WorldStateType, colonist: Dictionary, jo
 			continue
 		var target: Vector2i = job["target"]
 		var key := "%s:%d_%d" % [job_id, target.x, target.y]
-		if colonist.get("work") != null and world._work_progress.has(key):
+		if colonist.get("work") != null and world._progress_table.progress.has(key):
 			return key
 	return ""
 
 func _has_progress_key_for(world: WorldStateType, job_id: String) -> bool:
-	for key in world._work_progress.keys():
+	for key in world._progress_table.progress.keys():
 		if String(key).begins_with(job_id + ":"):
 			return true
 	return false
@@ -1265,7 +1265,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	var till_started := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
-		if worker.get("work") != null and world._work_progress.has("2_0"):
+		if worker.get("work") != null and world._progress_table.progress.has("2_0"):
 			till_started = true
 			break
 	_expect(till_started, "setup: the worker must be tilling the shared tile with parked progress")
@@ -1290,9 +1290,9 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	# cache (see WorldState._suspend_work_progress()'s own doc comment); this
 	# is what removes the shared-tile collision risk this scenario exercises,
 	# so the till job's own parked progress is checked there instead.
-	var paused_progress = world._suspended_work_progress.get(till_job_id)
+	var paused_progress = world._progress_table.suspended.get(till_job_id)
 	_expect(paused_progress != null, "setup: the suspended till job must keep its progress parked under its own job id")
-	_expect(not world._work_progress.has("2_0"), "setup: the suspended till job must release the shared tile's own cache entry")
+	_expect(not world._progress_table.progress.has("2_0"), "setup: the suspended till job must release the shared tile's own cache entry")
 	var rescuer := _spawn_colonist(world, "colonist_2", 2, 6)
 	var rescuer_id: String = String(rescuer["id"])
 	var job := {}
@@ -1305,12 +1305,12 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	var job_id: String = String(job["id"])
 	var rescue_key := _tick_until_rescue_progress(world, rescuer, job_id, RESCUE_TICK_BOUND)
 	_expect(not rescue_key.is_empty(), "setup: the rescue must be mid-work with progress parked under its own job-scoped key")
-	_expect(world._suspended_work_progress.get(till_job_id) == paused_progress, "setup: rescue work must never touch the till job's own parked progress")
+	_expect(world._progress_table.suspended.get(till_job_id) == paused_progress, "setup: rescue work must never touch the till job's own parked progress")
 	var cancel := world.apply({"actor": "test", "command_id": "cancel_active_rescue_progress_key",
 		"tick": world.get_tick(), "type": "cancel_job", "payload": {"job_id": job_id}})
 	_expect(cancel.get("ok", false), "cancelling the active rescue through the command boundary must be accepted")
-	_expect(not world._work_progress.has(rescue_key), "cancelling an active rescue must drop its own job-scoped progress key")
-	_expect(world._suspended_work_progress.get(till_job_id) == paused_progress,
+	_expect(not world._progress_table.progress.has(rescue_key), "cancelling an active rescue must drop its own job-scoped progress key")
+	_expect(world._progress_table.suspended.get(till_job_id) == paused_progress,
 		"cancelling an active rescue must never erase a paused ordinary job's own parked progress on the same tile")
 	_expect(String(world._scheduler.queue.get_job(String(till["job_id"])).get("status", "")) == "queued",
 		"the paused till job must be untouched by the rescue's cancellation")
@@ -1343,12 +1343,12 @@ func _check_cancel_while_suspended_clears_the_rescue_progress_key() -> void:
 	# of _work_progress into job-id-keyed _suspended_work_progress (see
 	# WorldState._suspend_work_progress()'s own doc comment), the same
 	# mechanism every other suspended work-ticked kind now uses.
-	_expect(not world._work_progress.has(key), "setup: a suspended rescue releases its own tile-keyed cache entry")
-	_expect(world._suspended_work_progress.has(job_id), "a suspended rescue keeps its own parked progress until it resumes or terminates")
+	_expect(not world._progress_table.progress.has(key), "setup: a suspended rescue releases its own tile-keyed cache entry")
+	_expect(world._progress_table.suspended.has(job_id), "a suspended rescue keeps its own parked progress until it resumes or terminates")
 	var cancel := world.apply({"actor": "test", "command_id": "cancel_suspended_rescue_progress_key",
 		"tick": world.get_tick(), "type": "cancel_job", "payload": {"job_id": job_id}})
 	_expect(cancel.get("ok", false), "cancelling the suspended rescue must be accepted")
-	_expect(not world._suspended_work_progress.has(job_id), "cancelling a suspended rescue must drop its own parked progress")
+	_expect(not world._progress_table.suspended.has(job_id), "cancelling a suspended rescue must drop its own parked progress")
 	_expect(world._rescue_giver.get_pending_job(rescuer_id).is_empty(), "the rescuer must be freed")
 
 ## Death: the rescuer dies mid-work; its rescue is
@@ -1371,7 +1371,7 @@ func _check_rescuer_death_clears_the_rescue_progress_key() -> void:
 	_expect(not key.is_empty(), "setup: the rescue must be mid-work with parked progress")
 	world._apply_actor_death(rescuer)
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "cancelled", "the dead rescuer's rescue must be cancelled")
-	_expect(not world._work_progress.has(key), "a rescue cancelled by its rescuer's death must drop its own job-scoped progress key")
+	_expect(not world._progress_table.progress.has(key), "a rescue cancelled by its rescuer's death must drop its own job-scoped progress key")
 	_expect(victim.get("trapped") != null, "the victim stays trapped -- nobody rescued it")
 	_expect(world._rescue_giver.get_pending_job(rescuer_id).is_empty() and world._rescue_giver.victim_for_job(job_id).is_empty(),
 		"RescueGiver must drop every association of the dead rescuer's job")

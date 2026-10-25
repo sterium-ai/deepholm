@@ -828,7 +828,7 @@ func _check_trapping_on_work_target_arrival_clears_progress() -> void:
 	var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id)
 	_expect(submit.get("ok", false), "setup: till submission targeting the pre-existing trench tile must be accepted (bypasses CommandChecks, exactly like the scheduler's own gate does for an autonomous/direct submission)")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "the colonist must become trapped on arriving at its own job's target")
-	_expect(world._get_work_progress(Vector2i(2, 0)) == null,
+	_expect(world._progress_table.get_progress(Vector2i(2, 0)) == null,
 		"trapping on arrival at a work target must clear that target's owned work-progress key, not leave the cancelled job's progress behind")
 
 ## An actor trapped while carrying a haul item

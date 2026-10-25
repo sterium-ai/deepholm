@@ -257,9 +257,9 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 	# the shared tile cache into job-id-keyed storage the instant colonist.work
 	# is cleared for it (world_state.gd's own _suspend_work_progress()), so a
 	# different job that later works the same tile can never inherit it.
-	_expect(int(world._suspended_work_progress.get(dig_job_id, -1)) == ticks_remaining_before_interrupt,
+	_expect(int(world._progress_table.suspended.get(dig_job_id, -1)) == ticks_remaining_before_interrupt,
 		"the paused job's own progress must equal the exact tick count it was interrupted at")
-	_expect(not world._work_progress.has("3_0"),
+	_expect(not world._progress_table.progress.has("3_0"),
 		"a suspended job's tile-cache entry must be cleared, not left for a different job to inherit")
 
 	# From here to completion, "3_0"'s stored progress must never increase and
@@ -278,8 +278,8 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 		var colonist := _colonist_by_id(world, "colonist_0")
 		if colonist.get("work") != null and String(colonist["work"]["job_id"]) == dig_job_id:
 			resumed = true
-		if world._work_progress.has("3_0"):
-			var current := int(world._work_progress["3_0"])
+		if world._progress_table.progress.has("3_0"):
+			var current := int(world._progress_table.progress["3_0"])
 			_expect(current <= last_seen_progress and current >= last_seen_progress - 1,
 				"work_progress must decrease by exactly one tick at a time, never reset upward (was %d, now %d)"
 					% [last_seen_progress, current])
@@ -293,7 +293,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 		"the critical hunger must have been satisfied by the interrupt's need job")
 	_expect(world.get_tile(3, 0) == WorldType.TILE_TRENCH, "the dig target must become trench")
 	_expect(_has_sand_near(world, Vector2i(3, 0)), "the dig target must leave a sand item on or adjacent to the trench")
-	_expect(not world._work_progress.has("3_0"), "work_progress for a finished tile must be cleared")
+	_expect(not world._progress_table.progress.has("3_0"), "work_progress for a finished tile must be cleared")
 
 ## The same critical need does not interrupt a
 ## `pick_up` toil (or the `go_to` leg leading to it) mid-way -- a haul
@@ -336,7 +336,7 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 	_expect(picked_up, "a critical need must not prevent pick_up from eventually succeeding")
 	_expect(not world._item_table.items.has("item_1"), "the picked-up item must leave the ground map")
 
-## The persisted fields WorldState._work_progress/_paused_jobs round-trip
+## The persisted fields WorldState._progress_table.progress/_paused_jobs round-trip
 ## through to_save_state()/from_save_state() exactly, checked directly rather
 ## than via state_hash(): an in-flight need job/search is deliberately not
 ## persisted (colonist-ai.md 3.1's own non-goal -- WorldState.get_jobs()
@@ -366,16 +366,16 @@ func _check_paused_job_and_work_progress_round_trip() -> void:
 	# A suspended job's own progress now lives in
 	# job-id-keyed _suspended_work_progress, not the shared tile-keyed
 	# _work_progress cache (world_state.gd's own _suspend_work_progress()).
-	_expect(world._work_progress.is_empty(), "the paused tile's own tile-cache entry must have moved out")
-	_expect(not world._suspended_work_progress.is_empty(), "the paused job must still carry its own suspended progress")
+	_expect(world._progress_table.progress.is_empty(), "the paused tile's own tile-cache entry must have moved out")
+	_expect(not world._progress_table.suspended.is_empty(), "the paused job must still carry its own suspended progress")
 
 	var saved := world.to_save_state()
 	var restored := WorldType.from_save_state(saved)
 	_expect(restored._paused_jobs == world._paused_jobs,
 		"pausedJobs must round-trip through to_save_state()/from_save_state() unchanged")
-	_expect(restored._work_progress == world._work_progress,
+	_expect(restored._progress_table.progress == world._progress_table.progress,
 		"workProgress must round-trip through to_save_state()/from_save_state() unchanged")
-	_expect(restored._suspended_work_progress == world._suspended_work_progress,
+	_expect(restored._progress_table.suspended == world._progress_table.suspended,
 		"suspendedWorkProgress must round-trip through to_save_state()/from_save_state() unchanged")
 
 ## Saving after a critical-need interrupt has already

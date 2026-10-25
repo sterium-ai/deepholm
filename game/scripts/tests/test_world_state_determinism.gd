@@ -435,7 +435,7 @@ func _check_incident_replay_determinism() -> void:
 ##   world._object_table.object_health, CombatGiver's excluded-flee-destination set,
 ##   world._item_table.dig_find_random's seed/state (hashed unconditionally, not gated by
 ##   include_incidents), the colonist "trapped" field (ADR 026),
-##   world._suspended_work_progress, "rescue_victim_assignments" (hashed as a
+##   world._progress_table.suspended, "rescue_victim_assignments" (hashed as a
 ##   sorted {jobId, victimId} array so insertion order does not matter),
 ##   "approach_job_targets" (ADR 033), the colonist "hands" list (ADR 037) and
 ##   "construction_sites" (ADR 040).
