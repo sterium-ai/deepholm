@@ -164,6 +164,46 @@ Orca helper scripts, this backlog.
 
 ---
 
+## Phase B — bugs found by the owner's playtests
+
+### B1 — Large area orders freeze the game and the selection lags the cursor · `todo` · *parallel-safe (coordinate with R4 on world_state.gd)*
+
+- **Symptom (owner, 2026-10-25, main `e0a9f56`, native Windows build 1600×900):** dragging a
+  large rectangle for an order (dig/mine/chop/cancel/zone) makes the game stutter and then
+  freeze ("no es capaz de procesar"); while dragging, the drawn selection trails behind the
+  real cursor position.
+- **Goal:** both symptoms gone. Dragging any rectangle up to the whole 256×256 map stays at
+  frame rate with the preview glued to the cursor; releasing a whole-map order never blocks
+  the frame for more than a few milliseconds; the resulting jobs/zones are the same as today.
+- **Find the causes, with numbers, before fixing:** likely (a) the viewer recomputes the
+  valid/invalid preview for every tile of the rectangle on every mouse move, through
+  `WorldState.preview()` per tile; (b) `apply()` of an area order creates/validates thousands
+  of jobs synchronously (job queue insertion, reservations, reachability by region) in one
+  frame; (c) per-frame rebuild of designation overlays/TileMap cells instead of incremental
+  updates. Write `game/scripts/tests/bench_area_orders.gd` (headless) measuring: preview of a
+  rectangle of N tiles, apply of an area order of N tiles, for N = 100 / 1,000 / 10,000 /
+  65,536; quote before/after numbers in the handoff.
+- **Fix principles:** the core stays deterministic and tick-based — if an area order must be
+  spread over several ticks, that is an explicit, deterministic, saved queue (a command that
+  expands N tiles per tick), never wall-clock based; the viewer does only incremental work per
+  frame (diff of the rectangle against the previous frame; coarse preview — e.g. one cheap
+  check per tile without routing — with the exact check only on release); no per-frame
+  allocations proportional to map size.
+- **Owned paths:** `game/scripts/viewer/` (order tools, designation overlay, map view),
+  `game/scripts/core/commands/` and `game/scripts/core/world_state.gd` ONLY in the area-order
+  apply path (R4 is extracting `*_work_progress*` at the same time: do not touch those
+  functions), `game/scripts/core/jobs/job_queue.gd` if insertion cost is the culprit, new
+  bench + tests, `docs/architecture/orders-and-movement.md` if the order semantics change
+  (then an ADR too).
+- **Acceptance:** `bench_area_orders.gd` numbers in the report, before and after; the full
+  suite passes; a new headless test proves a whole-map dig order yields the same job set as
+  before (count, targets, order) and that a save taken mid-expansion (if expansion is spread
+  over ticks) reloads and completes identically; the owner reproduces the drag on the native
+  build and confirms no freeze and no lag.
+- **Non-goals:** changing which tiles are valid for an order; new order kinds; UI redesign.
+
+---
+
 ## Phase A — foundation for scale (owner request, 2026-10-25)
 
 The owner's ambition: thousands of things built on this base — NPCs, stories, levels, maps,
