@@ -433,7 +433,7 @@ func _check_incident_replay_determinism() -> void:
 ## - New snapshot keys that are always empty in this colony-only scenario but
 ##   still change the dict shape: the colonist "combat" component,
 ##   world._object_health, CombatGiver's excluded-flee-destination set,
-##   world._dig_find_random's seed/state (hashed unconditionally, not gated by
+##   world._item_table.dig_find_random's seed/state (hashed unconditionally, not gated by
 ##   include_incidents), the colonist "trapped" field (ADR 026),
 ##   world._suspended_work_progress, "rescue_victim_assignments" (hashed as a
 ##   sorted {jobId, victimId} array so insertion order does not matter),

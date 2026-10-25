@@ -53,8 +53,8 @@ func _colonist(id: String, x: int, y: int) -> Dictionary:
 	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "hands": []}
 
 func _place_wood_item(world: WorldStateType, item_id: String, x: int, y: int, count: int = 1) -> void:
-	world._items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": count}
-	world._next_item_id = 2
+	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": count}
+	world._item_table.next_item_id = 2
 
 ## Sum of every hands entry's count -- must never exceed InventoryType.HANDS_CAPACITY.
 func _hands_total(colonist: Dictionary) -> int:
@@ -88,7 +88,7 @@ func _check_pick_up_then_place_moves_the_item() -> void:
 	_expect(world.get_ground_wood(5, 5) == 1, "place must put the item down at the destination cell")
 	_expect(world.get_ground_wood(2, 2) == 0, "the item must not remain at its original tile")
 	var placed_id: String = String((place_result["item_ids"] as Array)[0])
-	_expect(world._items[placed_id]["x"] == 5 and world._items[placed_id]["y"] == 5,
+	_expect(world._item_table.items[placed_id]["x"] == 5 and world._item_table.items[placed_id]["y"] == 5,
 		"the placed item must sit at the new position")
 
 ## A colonist too far from the item's tile must fail pick_up with a typed
@@ -178,8 +178,8 @@ func _check_place_onto_item_occupied_destination_fails_typed() -> void:
 		return
 	var world := _build_world(1007)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._items["item_2"] = {"id": "item_2", "x": 6, "y": 6, "kind": "wood", "count": 1}
-	world._next_item_id = 3
+	world._item_table.items["item_2"] = {"id": "item_2", "x": 6, "y": 6, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 3
 	var carrier := _colonist("colonist_0", 2, 2)
 	world._colonists.append(carrier)
 
@@ -201,8 +201,8 @@ func _check_save_load_round_trip_with_items_and_carrying() -> void:
 		return
 	var world := _build_world(1005)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._items["item_2"] = {"id": "item_2", "x": 7, "y": 7, "kind": "wood", "count": 1}
-	world._next_item_id = 3
+	world._item_table.items["item_2"] = {"id": "item_2", "x": 7, "y": 7, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 3
 	var colonist := _colonist("colonist_0", 2, 2)
 	world._colonists.append(colonist)
 
@@ -228,11 +228,11 @@ func _check_state_hash_reflects_next_item_id() -> void:
 		return
 	var world_a := _build_world(1008)
 	_place_wood_item(world_a, "item_1", 2, 2)
-	world_a._next_item_id = 5
+	world_a._item_table.next_item_id = 5
 
 	var world_b := _build_world(1008)
 	_place_wood_item(world_b, "item_1", 2, 2)
-	world_b._next_item_id = 6
+	world_b._item_table.next_item_id = 6
 
 	_expect(world_a.state_hash() != world_b.state_hash(),
 		"differing next_item_id counters must produce different state_hash() results")
@@ -246,17 +246,17 @@ func _check_save_load_preserves_next_item_id_continuation() -> void:
 		return
 	var world := _build_world(1009)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._next_item_id = 7
+	world._item_table.next_item_id = 7
 
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(restored._next_item_id == 7, "restore must preserve the source's next_item_id counter")
+	_expect(restored._item_table.next_item_id == 7, "restore must preserve the source's next_item_id counter")
 
-	world._spawn_wood_item(9, 9)
-	restored._spawn_wood_item(9, 9)
-	_expect(world._items.has("item_7") and restored._items.has("item_7"),
+	world._item_table.spawn_wood_item(9, 9)
+	restored._item_table.spawn_wood_item(9, 9)
+	_expect(world._item_table.items.has("item_7") and restored._item_table.items.has("item_7"),
 		"the source and its restore must generate the same next item id after loading")
-	_expect(world._next_item_id == restored._next_item_id,
+	_expect(world._item_table.next_item_id == restored._item_table.next_item_id,
 		"the source and its restore must advance the counter identically after generating an item")
 
 ## 4 units from a ground stack of exactly 4 move in one

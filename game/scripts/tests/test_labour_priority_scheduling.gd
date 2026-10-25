@@ -199,7 +199,7 @@ func _check_haul_unaffected_by_labour_disabled() -> void:
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 3, "y": 3, "width": 2, "height": 2}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	world._items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	world._item_table.items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "kind": "wood", "count": 1}
 
 	world.tick()
 	var haul_jobs: Array[Dictionary] = []
@@ -814,7 +814,7 @@ func _haul_backoff_world(seed_value: int) -> WorldStateType:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	world._item_table.items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "kind": "wood", "count": 1}
 	return world
 
 func _settle_with_needs(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector2i,

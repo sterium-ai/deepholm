@@ -131,7 +131,7 @@ func _check_malformed_nested_state_rejected(expected: Dictionary) -> void:
 
 ## A rehashed save (valid envelope, hash recomputed to match) whose items.list
 ## carries two entries sharing the same id must be refused: StateCodec's
-## decoder keys world._items by id, so duplicate ids would silently overwrite
+## decoder keys world._item_table.items by id, so duplicate ids would silently overwrite
 ## one item with the other on load rather than crash, changing state_hash()
 ## with no typed error to explain why.
 func _check_duplicate_item_id_is_schema_error(expected: Dictionary) -> void:

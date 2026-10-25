@@ -111,10 +111,10 @@ func _build_combined_world(seed_value: int) -> WorldStateType:
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
-	world._ground_berries["4_1"] = 1
+	world._item_table.ground_berries["4_1"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
-	world._items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	_apply(world, "zone_setup", "zone_add", {"x": 30, "y": 0, "width": 1, "height": 1})
 	return world
 
@@ -248,9 +248,9 @@ func _build_haul_only_world(seed_value: int) -> WorldStateType:
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
-	world._ground_berries["4_1"] = 1
-	world._items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.ground_berries["4_1"] = 1
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	_apply(world, "zone_setup", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1})
 	return world
 

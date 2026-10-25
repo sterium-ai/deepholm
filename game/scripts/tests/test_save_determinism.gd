@@ -441,8 +441,8 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	world._tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	world._next_item_id = 2
+	world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result["ok"], "haul save/load setup zone_add must succeed: %s" % zone_result)
@@ -473,8 +473,8 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	carry_world._tiles.fill(WorldStateType.TILE_FLOOR)
 	carry_world._colonists.clear()
 	carry_world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	carry_world._items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	carry_world._next_item_id = 2
+	carry_world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	carry_world._item_table.next_item_id = 2
 	var carry_zone_result := carry_world.apply({"actor": "test", "command_id": "zone_setup", "tick": carry_world.get_tick(),
 		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
 	_expect(carry_zone_result["ok"], "haul save/load mid-carry setup zone_add must succeed: %s" % carry_zone_result)
@@ -524,7 +524,7 @@ func _check_mine_save_load() -> void:
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
-	world._spawn_stone_item(5, 5)
+	world._item_table.spawn_stone_item(5, 5)
 
 	var submit := _apply(world, "mine_1", "mine", {"x": 1, "y": 0, "priority": 1})
 	var job_id := String(submit["job_id"])

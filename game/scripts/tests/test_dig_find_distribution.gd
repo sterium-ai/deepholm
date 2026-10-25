@@ -124,29 +124,29 @@ func _check_placement_rules() -> void:
 	world._tiles.fill(WorldType.TILE_FLOOR)
 
 	# All four neighbours open: row-major order (north, west, east, south) picks north.
-	var picked := world._dig_item_placement(5, 5)
+	var picked := world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 4), "an open north neighbour must win, got %s" % [picked])
 
 	# North blocked by an impassable tile (rock): west wins next.
 	world._tiles[world._tile_index(5, 4)] = WorldType.TILE_ROCK
-	picked = world._dig_item_placement(5, 5)
+	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(4, 5), "with north impassable, west must win, got %s" % [picked])
 
 	# North+west blocked -- west is a trench tile specifically (passable but
 	# excluded by kind, not by impassability): east wins.
 	world._tiles[world._tile_index(4, 5)] = WorldType.TILE_TRENCH
-	picked = world._dig_item_placement(5, 5)
+	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(6, 5),
 		"a passable trench neighbour must still be excluded, east must win, got %s" % [picked])
 
 	# North+west+east blocked: south wins.
 	world._tiles[world._tile_index(6, 5)] = WorldType.TILE_ROCK
-	picked = world._dig_item_placement(5, 5)
+	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 6), "with only south open, south must win, got %s" % [picked])
 
 	# All four neighbours blocked: falls back to the dug tile itself.
 	world._tiles[world._tile_index(5, 6)] = WorldType.TILE_ROCK
-	picked = world._dig_item_placement(5, 5)
+	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 5),
 		"with every neighbour blocked, placement must fall back to the tile itself, got %s" % [picked])
 
@@ -236,16 +236,16 @@ func _check_simultaneous_resolution_order() -> void:
 	world._tiles[world._tile_index(9, 8)] = WorldType.TILE_FLOOR
 	world._objects.clear()
 	world._object_factions.clear()
-	world._items.clear()
-	world._item_factions.clear()
+	world._item_table.items.clear()
+	world._item_table.item_factions.clear()
 
 	# job_5 appended before job_2: the order a colonist array iterated out of
 	# job-id order would produce, not ascending job-id order.
-	world._pending_dig_finds = [
+	world._item_table.pending_dig_finds = [
 		{"job_id": "job_5", "x": 9, "y": 9},
 		{"job_id": "job_2", "x": 1, "y": 0},
 	]
-	world._resolve_dig_finds()
+	world._item_table.resolve_dig_finds()
 
 	var reference := RandomNumberGenerator.new()
 	reference.seed = seed_value + WorldType.DIG_FIND_SEED_SALT
@@ -266,5 +266,5 @@ func _check_simultaneous_resolution_order() -> void:
 				found = true
 		_expect(found, "job_5's find '%s' must land at its own placement (9, 8)" % expected_kind_job5)
 
-	_expect(world._dig_find_random.state == reference.state,
+	_expect(world._item_table.dig_find_random.state == reference.state,
 		"resolving 2 pending finds must consume exactly 2 draws in ascending job-id order, state mismatch")

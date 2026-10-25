@@ -336,8 +336,8 @@ func _escape_and_confirm(world: WorldStateType, wolf: Dictionary, wolf_id: Strin
 func _check_hostile_escapes_despite_ground_item_on_trench() -> void:
 	var world := _fresh_world(320001)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._items["item_test_wood"] = {"id": "item_test_wood", "x": 1, "y": 0, "kind": "wood", "count": 1}
-	world._item_factions["item_test_wood"] = "colony"
+	world._item_table.items["item_test_wood"] = {"id": "item_test_wood", "x": 1, "y": 0, "kind": "wood", "count": 1}
+	world._item_table.item_factions["item_test_wood"] = "colony"
 	var wolf := _spawn_wolf(world, "trap_wolf_item", 0, 0)
 	_escape_and_confirm(world, wolf, "trap_wolf_item", Vector2i(1, 0), "ground item")
 
@@ -795,7 +795,7 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 func _check_trapping_during_need_journey_resolves_need_giver() -> void:
 	var world := _fresh_world(327001)
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._ground_berries["2_0"] = 1
+	world._item_table.ground_berries["2_0"] = 1
 	var colonist: Dictionary = world._colonists[0]
 	var colonist_id: String = colonist["id"]
 	colonist["needs"]["food"] = 5
@@ -846,7 +846,7 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
 	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_ROCK
 	world._tiles[world._tile_index(1, 1)] = WorldStateType.TILE_TRENCH
-	world._items["item_test_wood"] = {"id": "item_test_wood", "x": 0, "y": 1, "kind": "wood", "count": 1}
+	world._item_table.items["item_test_wood"] = {"id": "item_test_wood", "x": 0, "y": 1, "kind": "wood", "count": 1}
 	var colonist: Dictionary = world._colonists[0]
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 2, "y": 1, "width": 1, "height": 1}})

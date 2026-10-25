@@ -159,7 +159,7 @@ func _check_chopped_item_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(8, 10)
-	world._spawn_wood_item(5, 5)
+	world._item_table.spawn_wood_item(5, 5)
 	var items := world.get_items()
 	_expect(items.size() == 1 and items[0]["faction_id"] == "colony",
 		"a chopped wood item must default to faction_id 'colony'")
@@ -171,6 +171,6 @@ func _check_foraged_berries_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(9, 10)
-	world._spawn_berries_item(6, 6)
+	world._item_table.spawn_berries_item(6, 6)
 	_expect(world.get_ground_berries_faction_id(6, 6) == "colony",
 		"foraged berries must default to faction_id 'colony'")
