@@ -14,7 +14,8 @@
 > them on 2026-10-25.
 
 Audit date: 2026-10-25, at `main` `052d8c4` (Phase R through R3; `world_state.gd` is 4,290
-lines). This page is the evidence. A plain-language summary for the owner, in Spanish, is
+lines). R4 (`95b06b8`) landed afterwards. It moved only the work-progress functions, and
+none of the functions cited here moved. This page is the evidence. A plain-language summary for the owner, in Spanish, is
 [foundation-audit-summary.md](foundation-audit-summary.md).
 
 ## 0. Method and how to reproduce
@@ -558,7 +559,8 @@ error codes, and rotating autosave slots. That is better than most shipped games
 What does not scale (numbers in §2.4):
 
 - **One JSON document**, with tiles as an array of 65,536 strings (`state_codec.gd`
-  `encode()`, `"tiles": world._tiles.duplicate()`).
+  `encode()`, `"tiles": world._tile_grid.encode()["tiles"]`, which is `TileGrid.encode()`'s
+  `tiles.duplicate()`).
 - **In-flight route searches saved in full.** `StateCodec._encode_route()` writes
   `visited`, `cameFrom` and `frontier`. One long search is up to about 2 MB of JSON (§2.3,
   `snapshot_json`).
@@ -568,9 +570,22 @@ What does not scale (numbers in §2.4):
   happens on the main thread.
 
 The smallest change (A7): one registry per session, one stringify and one hash, a compact
-tile encoding (palette plus run-length; a schema bump with a migration and fixture), route
-state saved as `{start, target, expansions}` and replayed deterministically on load, and the
+tile encoding (palette plus run-length; a schema bump with a migration and fixture), and the
 file write and read-back moved off the main thread after `encode()`.
+
+In-flight route state must stay a real continuation. It is tempting to save only
+`{start, target, expansions}` and re-run the search on load, but that is wrong. A search
+spans many ticks, and the map can change in between: a wall placed, a tree chopped, a door
+built. Its `visited`, `came_from` and `frontier` record decisions taken against the map as
+it was at each step, which a re-run against the saved (current) map would not reproduce.
+So A7 keeps the same content in a compact form:
+
+- `visited` as a bitset over tile indices;
+- `came_from` as a 2-bit direction per visited tile;
+- `frontier` as tile indices in order;
+- all as base64 strings instead of arrays of `{x, y}` dictionaries.
+
+The continuation stays exact at a fraction of the size.
 
 ## 5. Best-practice check
 

@@ -460,17 +460,24 @@ one.
 
 - **Goal:** one `ContentRegistry` per session, injected into `StateCodec`/`SaveIO` instead of
   rebuilt from disk per save and per validation. `write_atomic()` stringifies and hashes
-  once. Tiles are saved as a palette plus run-length encoding. In-flight route searches are
-  saved as `{start, target, expansions}` and replayed to the same point on load. The file
+  once. Tiles are saved as a palette plus run-length encoding. In-flight route searches keep their full
+  continuation state (`frontier`, `visited`, `came_from`), because a search can span a map
+  change and a re-run against the saved map would diverge. Only its encoding becomes compact:
+  `visited` as a tile-index bitset, `came_from` as a 2-bit direction per visited tile,
+  `frontier` as ordered tile indices, all base64. The file
   write and read-back run on a worker thread after `encode()`. `WorldState` gets `dispose()`
   so a replaced world is freed.
-- **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (replay helper),
+- **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (compact snapshot helpers),
   `world_state.gd`, `viewer/save_wiring.gd`, `docs/architecture/save-system.md`,
   `contracts/game-state.schema.json`, an ADR, fixtures, affected tests.
 - **Acceptance:** after R14, every schema change carries a version bump, a migration and a
   fixture, and so does this one (the next number after A5's, or a shared bump with A5 if they
   land together). If it lands before R14, the same applies within today's chain.
   `test_save_*` unchanged;
+  a new test starts a long search, changes passability on a tile the search has already
+  visited (and, separately, on a frontier tile) between ticks, saves and loads mid-search,
+  then finishes. It ends with the same path, status, expansion count and `state_hash()` as
+  an uninterrupted run with the same map change. A round trip reproduces `snapshot()` exactly.
   `bench_save_load` 1,000 actors: main-thread save ≤ 150 ms (baseline 1,976 ms total), file
   ≤ 50% of baseline (1,408 KB), `hash_match=true`; leak check delta 0.
 - **Non-goals:** changing what is saved (beyond encoding); cloud saves.
