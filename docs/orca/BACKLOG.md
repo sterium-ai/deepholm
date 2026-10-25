@@ -268,6 +268,30 @@ Orca helper scripts, this backlog.
 - **Non-goals:** touching the core; changing tile size or colonist size; redrawing anything by
   hand or with AI (owner rule: art comes from the pack or PixelLab, never agent pixels).
 
+### B4 — Two visual bugs from the owner's playtest: progress bar offset, chopped tree shows wall art · `todo` · *parallel-safe (viewer/tileset only)*
+
+- **Owner (2026-10-25, main `052d8c4`, native build):**
+  1. The construction progress bar is drawn "a bit above where it should be" for every
+     construction (site). Expected: the bar sits directly above the object's footprint top
+     edge (or over the site tile for 1×1), same offset for every object kind, both
+     orientations of the workbench, glued to the tile — not to a sprite row.
+  2. After chopping a tree, the tile underneath shows **wall art**. Expected: the tile shows
+     the terrain it had (grass/sand/dirt) — i.e. the same terrain as its neighbours / what the
+     core says the tile is after removal. Find whether the core leaves a wrong tile kind after
+     `chop` (then it is a core bug: fix in the removal path with a test) or the viewer's
+     terrain atlas maps the post-chop tile to the wrong region (tileset/autotile mapping,
+     `tile_atlas_map.gd` / terrain sheet indexes).
+- **Owned paths:** `game/scripts/viewer/` (map view, tile atlas map, designation/site
+  overlays, colonist/object sprites), `game/data/tilesets/`, `docs/art/terrain-autotile.md`;
+  core only if (2) is a core bug: the chop/removal path in `world_state.gd` or `tile_grid.gd`
+  (not `*_work_progress*`: R4 owns those) + a headless test proving the tile kind after chop.
+- **Acceptance:** before/after screenshots of both cases in the handoff (use the screenshot
+  tool in `game/scripts/tools/`); a headless test for the tile kind after chop on each terrain
+  (grass, sand, dirt); if the atlas mapping was wrong, a test that every tile kind in
+  `tiles.json` maps to an atlas region; full suite passes; the owner confirms on the native
+  build.
+- **Non-goals:** new art; changing what chopping yields.
+
 ---
 
 ## Phase A — foundation for scale (owner request, 2026-10-25)
