@@ -57,11 +57,11 @@ func _command(world: WorldType, command_id: String, kind: String, payload: Dicti
 ## stockpile zone) haul job instead of finishing this test's one dig.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value, 10)
-	world._tiles.fill(WorldType.TILE_ROCK)
-	world._tiles[world._tile_index(0, 0)] = WorldType.TILE_FLOOR
-	world._tiles[world._tile_index(1, 0)] = WorldType.TILE_SOIL
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_SOIL
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 0, "build": 3, "craft": 3, "cook": 3}})
@@ -121,31 +121,31 @@ func _check_find_distribution() -> void:
 ## coordinate rather than a loose "is sand somewhere near the trench" check.
 func _check_placement_rules() -> void:
 	var world := WorldType.new(1, 10)
-	world._tiles.fill(WorldType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
 
 	# All four neighbours open: row-major order (north, west, east, south) picks north.
 	var picked := world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 4), "an open north neighbour must win, got %s" % [picked])
 
 	# North blocked by an impassable tile (rock): west wins next.
-	world._tiles[world._tile_index(5, 4)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldType.TILE_ROCK
 	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(4, 5), "with north impassable, west must win, got %s" % [picked])
 
 	# North+west blocked -- west is a trench tile specifically (passable but
 	# excluded by kind, not by impassability): east wins.
-	world._tiles[world._tile_index(4, 5)] = WorldType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 5)] = WorldType.TILE_TRENCH
 	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(6, 5),
 		"a passable trench neighbour must still be excluded, east must win, got %s" % [picked])
 
 	# North+west+east blocked: south wins.
-	world._tiles[world._tile_index(6, 5)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 5)] = WorldType.TILE_ROCK
 	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 6), "with only south open, south must win, got %s" % [picked])
 
 	# All four neighbours blocked: falls back to the dug tile itself.
-	world._tiles[world._tile_index(5, 6)] = WorldType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 6)] = WorldType.TILE_ROCK
 	picked = world._item_table.dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 5),
 		"with every neighbour blocked, placement must fall back to the tile itself, got %s" % [picked])
@@ -227,15 +227,15 @@ func _check_simultaneous_resolution_order() -> void:
 		return
 
 	var world := WorldType.new(seed_value, 10)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	# Two isolated trench tiles, each with exactly one open neighbour, far
 	# enough apart that their placements can never collide.
-	world._tiles[world._tile_index(1, 0)] = WorldType.TILE_TRENCH
-	world._tiles[world._tile_index(0, 0)] = WorldType.TILE_FLOOR
-	world._tiles[world._tile_index(9, 9)] = WorldType.TILE_TRENCH
-	world._tiles[world._tile_index(9, 8)] = WorldType.TILE_FLOOR
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 9)] = WorldType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 8)] = WorldType.TILE_FLOOR
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._item_table.items.clear()
 	world._item_table.item_factions.clear()
 

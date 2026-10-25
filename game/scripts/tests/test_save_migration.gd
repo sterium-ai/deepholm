@@ -1809,9 +1809,9 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 func _check_multi_tile_object_round_trips_through_save_load() -> void:
 	var world := WorldStateType.new(20260926, 10)
 	var origin := Vector2i(5, 5)
-	world._tiles[world._tile_index(origin.x, origin.y)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(origin.x, origin.y + 1)] = WorldStateType.TILE_FLOOR
-	world._set_object(origin.x, origin.y, "test_footprint_crate", "colony", "vertical")
+	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x, origin.y)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x, origin.y + 1)] = WorldStateType.TILE_FLOOR
+	world._object_table.set_object(origin.x, origin.y, "test_footprint_crate", "colony", "vertical")
 	_expect(world.get_object(origin.x, origin.y) == "test_footprint_crate" and world.get_object(origin.x, origin.y + 1) == "test_footprint_crate",
 		"setup must occupy both footprint tiles before the round trip")
 	var before_hash := world.state_hash()
@@ -1887,9 +1887,9 @@ func _check_state_without_construction_sites_field_loads_unchanged() -> void:
 ## validator, not only StateCodec's internal round trip.
 func _check_construction_site_round_trips_through_save_load() -> void:
 	var world := WorldStateType.new(20260927, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	var apply_result := world.apply({"actor": "test", "command_id": "wb", "tick": world.get_tick(), "type": "build",
@@ -2121,9 +2121,9 @@ func _check_wall_content_rename_migrates_to_wooden_wall() -> void:
 ## current health.
 func _check_legacy_wall_construction_site_continues_as_wooden_wall_after_load() -> void:
 	var world := WorldStateType.new(449001, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	var zone_result := world.apply({"actor": "test", "command_id": "zone", "tick": world.get_tick(),
@@ -2187,7 +2187,7 @@ func _check_legacy_wall_construction_site_continues_as_wooden_wall_after_load() 
 	_expect(not (restored.passability(5, 5)["passable"] as bool), "a completed wooden_wall must be impassable, matching content's own passable:false")
 	var registry := ContentRegistryType.new()
 	var wooden_wall_definition := registry.get_entry("objects", "wooden_wall")
-	var health: Dictionary = restored._object_health_at(5, 5)
+	var health: Dictionary = restored._object_table.object_health_at(5, 5)
 	_expect(not health.is_empty(), "a completed wooden_wall must carry per-instance health")
 	_expect(int(health.get("maxHp", -1)) == int(wooden_wall_definition.get("max_health", -2)),
 		"the completed wooden_wall's maxHp must come from content's own current max_health")
@@ -2569,7 +2569,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 		"labourTable": world._default_labour_table(),
 		"route": null, "work": null, "hands": [],
 	})
-	world._tiles[world._tile_index(10, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 0)] = WorldStateType.TILE_SOIL
 	# Far enough that the eat_food search/walk spans several ticks, so the
 	# save captures a genuinely still-pending need job rather than one that
 	# already committed, walked, ate, and resumed the dig job all within the
@@ -2720,8 +2720,8 @@ func _check_non_default_labour_table_survives_save_load_round_trip() -> void:
 ## tick on the fetch_tool toil (jobs.json's "mine" entry needs_tool: "pick").
 func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	var world := WorldStateType.new(353001, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": [], "labourTable": world._default_labour_table()})

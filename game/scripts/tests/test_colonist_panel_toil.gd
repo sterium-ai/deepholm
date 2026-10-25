@@ -45,7 +45,7 @@ func _expect(condition: bool, message: String) -> void:
 ## after pick_up (hands just populated, leg-two route not started yet).
 func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	var world := WorldStateType.new(24601, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({
 		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
@@ -151,8 +151,8 @@ func _command(world: WorldStateType, id: String, kind: String, payload: Dictiona
 
 func _check_no_tool_reason() -> void:
 	var world := WorldStateType.new(274)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TREE
 	_expect(_command(world, "chop", "chop", {"x": 1, "y": 0}).get("ok", false), "chop accepted without tool")
 	var panel := _panel(world)
 	var seen := false
@@ -184,8 +184,8 @@ func _find_colonist(world: WorldStateType, colonist_id: String) -> Dictionary:
 
 func _check_handover_reason() -> void:
 	var world := WorldStateType.new(266104)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(10, 9)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})

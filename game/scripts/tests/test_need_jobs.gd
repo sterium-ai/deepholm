@@ -49,7 +49,7 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	return world
 
@@ -198,7 +198,7 @@ func _run_mid_dig_then_eat_scenario(seed_value: int, mutate_at_tick: int, total_
 	var world := _build_world(seed_value)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs()))
-	world._tiles[world._tile_index(10, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 0)] = WorldStateType.TILE_SOIL
 	world._item_table.ground_berries["15_0"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 
@@ -240,7 +240,7 @@ func _check_no_reachable_food_exposes_need_unmet_once_and_keeps_working() -> voi
 	var world := _build_world(70001)
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._tiles[world._tile_index(5, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_SOIL
 	world.spawn_ground_tool_item("pick", 0, 0)
 	var dig_result := _command(world, "dig_1", "dig", {"x": 5, "y": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
@@ -417,7 +417,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	_isolate_need(world, "food")
 	world._colonists.append(_colonist("colonist_0", 9, 0, _full_needs()))
 	world._colonists.append(_colonist("colonist_1", 20, 20, _full_needs()))
-	world._tiles[world._tile_index(10, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 0)] = WorldStateType.TILE_SOIL
 	# Far enough that the eat_food search/walk spans several ticks, so the
 	# interrupted dig job's requeued-in-waiting representation is actually
 	# observable before the need job resolves and resumes it, rather than
@@ -533,12 +533,12 @@ func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> voi
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
 
 	for x in range(1, 22):
-		world._set_object(x, 1, "wall")
-		world._set_object(x, 21, "wall")
+		world._object_table.set_object(x, 1, "wall")
+		world._object_table.set_object(x, 21, "wall")
 	for y in range(1, 22):
-		world._set_object(1, y, "wall")
+		world._object_table.set_object(1, y, "wall")
 		if y != 11:
-			world._set_object(21, y, "wall")
+			world._object_table.set_object(21, y, "wall")
 	world._item_table.ground_berries["2_2"] = 1
 	world._item_table.ground_berries["0_20"] = 1
 

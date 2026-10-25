@@ -22,8 +22,8 @@ const HealthType = preload("res://scripts/core/actors/components/health.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
-const RegionMapType = preload("res://scripts/core/map/regions.gd")
-const RoomMapType = preload("res://scripts/core/map/rooms.gd")
+const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
+const PassabilityType = preload("res://scripts/core/map/passability.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const IncidentSchedulerType = preload("res://scripts/core/incidents/incident_scheduler.gd")
 const CombatType = preload("res://scripts/core/actors/components/combat.gd")
@@ -32,6 +32,8 @@ const CombatResolverType = preload("res://scripts/core/combat/combat_resolver.gd
 const CombatGiverType = preload("res://scripts/core/combat/combat_giver.gd")
 const ApproachGiverType = preload("res://scripts/core/combat/approach_giver.gd")
 const ConstructionSiteTableType = preload("res://scripts/core/objects/construction_site.gd")
+const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
+const ZoneTableType = preload("res://scripts/core/objects/zone_table.gd")
 const ConstructionGiverType = preload("res://scripts/core/jobs/givers/construction_giver.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
 
@@ -101,14 +103,12 @@ const LABOUR_MIN := 0
 const LABOUR_MAX := 4
 
 var _seed: int
-## This world's actual dimensions: resolved once in _init() from the
-## constructor's width/height arguments (clamped by
-## WorldGeneratorType.resolve_size()), or overwritten by StateCodec.decode()
-## with a loaded save's own exact map.width/map.height. Never mutated again
-## afterward -- loading a different save replaces the whole WorldState.
-var _width: int = MAP_WIDTH
-var _height: int = MAP_HEIGHT
-## The algorithm that actually produced _tiles: the running build's constant
+## Map dimensions, tiles, water cache, dirty cells, regions and rooms
+## (map/tile_grid.gd). Its width/height are resolved once in _init()
+## (WorldGeneratorType.resolve_size()), or overwritten by StateCodec.decode()
+## with a loaded save's exact size; loading a different save replaces the whole WorldState.
+var _tile_grid: TileGridType
+## The algorithm that actually produced _tile_grid.tiles: the running build's constant
 ## for a freshly generated world, or a loaded save's own map.generatorVersion
 ## (state_codec.gd's decode() overwrites this directly), so re-saving an
 ## older save keeps its true provenance instead of relabelling it.
@@ -121,9 +121,8 @@ var _clock: SeededClock
 ## never perturb this stream's continuation -- see
 ## test_river_generation.gd's _check_generation_does_not_perturb_simulation_stream().
 var _random: RandomNumberGenerator
-var _tiles: Array[String] = []
 ## Generation-time scratch: _generate_map() stashes WorldGenerator's river/berry-bush
-## output so _spawn_colonists() (the next _init() call) can turn bushes into _objects and
+## output so _spawn_colonists() (the next _init() call) can turn bushes into _object_table.objects and
 ## bias its clearing search toward the river. Emptied there; never read after, never persisted.
 var _pending_water_tiles: Array[Vector2i] = []
 var _pending_berry_bush_tiles: Array[Vector2i] = []
@@ -148,38 +147,12 @@ var _next_item_id: int:
 ## Identity-bearing tool items (axe/pick) and their reservations; see tool_item_store.gd.
 var _tool_store: ToolItemStoreType
 var _item_definitions: Dictionary = {}
-var _objects: Dictionary = {}
-## faction_id (F3) per placed object, keyed like _objects. A parallel map, not
-## a nested value inside _objects: state_codec.gd's _encode_objects() assumes a
-## plain kind String per entry. Deliberately left out of state_hash().
-var _object_factions: Dictionary = {}
-## Per-instance {"hp","maxHp"} for a placed object whose kind
-## declares "max_health" (content/objects.json), keyed like _objects/
-## _object_factions. A parallel map, not a nested value inside _objects (the
-## same reason _object_factions is one, per its own comment above). Unlike
-## _object_factions, this is included in state_hash()'s own snapshot (a
-## wall's accumulated damage changes future combat outcomes, so two saves
-## that otherwise match but differ in a wall's remaining hp must not hash
-## equal) and is persisted by state_codec.gd's _encode_objects()/
-## _decode_objects() as each entry's optional "health" field.
-var _object_health: Dictionary = {}
-## For a footprint tile other than a placed object's own origin
-## tile, the origin's Vector2i -- lets _set_object() find and clear every
-## footprint tile of a multi-tile object from any one of them (e.g. a
-## remove_object command aimed at the object's second tile). Absent for a
-## footprint [1,1] object (every existing kind today) and for an origin tile
-## itself, both of which are their own origin by definition -- mirroring
-## _object_factions/_object_origin's own "absent means the default" idiom.
-## Not persisted or hashed: state_codec.gd re-derives it from the persisted
-## origin record on decode() (_object_footprint_tiles()), the same way
-## _object_health is rebuilt from content on a save that predates it.
-var _object_origin: Dictionary = {}
-## origin_key -> "horizontal"/"vertical" for a placed object whose
-## kind declares rotatable true and was placed with a non-default orientation;
-## absent (never "") means no rotation, matching game-state.schema.json's
-## optional "orientation" field. Keyed by origin tile only, like
-## _object_health, not duplicated to every footprint tile.
-var _object_orientation: Dictionary = {}
+## Placed objects, their footprints, factions, health and orientation (objects/object_table.gd).
+var _object_table: ObjectTableType
+## Stockpile zones and the zone id counter (objects/zone_table.gd).
+var _zone_table: ZoneTableType
+## The movement and faction rules over _tile_grid/_object_table (map/passability.gd).
+var _passability: PassabilityType
 ## The single content bundle loader (F1), schema-validated and
 ## cross-reference-checked at construction.
 var _content: ContentRegistryType
@@ -189,34 +162,12 @@ var _tile_definitions: Dictionary = {}
 var _work_ticks: Dictionary = {} # see _load_work_ticks()
 var _need_full: int = 0 # see _load_need_config()
 var _mapgen: Dictionary = {}
-var _zones: Dictionary = {}
-var _next_zone_id: int = 1
 ## trader_id -> {"give_item", "want_item"}: a trader's own
 ## trade_offer, posted partway through its generic incident wait (see
 ## _maybe_post_trade_offer()). Not persisted, like IncidentScheduler's own
 ## _staged/_actor_by_job: an offer in flight across a save/load is
 ## simply lost, and the trader still leaves on schedule either way.
 var _pending_trade_offers: Dictionary = {}
-## F5 "Regions": connected-walkable partition, updated incrementally by the
-## on_passability_changed() call sites below. Built lazily in _get_regions(),
-## not _init(), so a save/load's direct _tiles/_objects overwrite (state_codec.gd)
-## never leaves it stale.
-var _regions: RegionMapType
-## F5 "Rooms": lazily built alongside _regions, same reason.
-var _rooms: RoomMapType
-## Lazily built list of every TILE_WATER cell, same reasoning as _regions:
-## built on first use so a save/load's direct _tiles overwrite is never
-## stale. Kept in sync afterwards by _update_water_tile_cache() whenever a
-## tile's water membership changes.
-var _water_tile_cache: Array[Vector2i] = []
-var _water_tile_cache_built := false
-## Append-only log of every cell whose tile kind or object changed, never
-## cleared -- see get_dirty_cells()' own doc comment for why this is a log,
-## not a clear-on-read set. Lets a presentation layer with a large map update
-## only the affected cells instead of rebuilding the whole map every tick.
-## Colonist/item movement never appends here -- those are read fresh every
-## frame by their own presentation layers, never cached against this log.
-var _dirty_cells: Array[Vector2i] = []
 var _scheduler: AssignmentType
 var _toils: ToilExecutorType
 ## Callables ToilExecutor.advance() cannot resolve itself, keyed by hook name.
@@ -360,27 +311,30 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_tile_definitions = _index_by_field(_content.list("tiles"), "id")
 	_mapgen = _content.document("mapgen").duplicate(true)
 	var resolved_size := WorldGeneratorType.resolve_size(p_width, p_height, _mapgen)
-	_width = resolved_size.x
-	_height = resolved_size.y
+	_zone_table = ZoneTableType.new()
+	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, passability, get_object, _zone_table.is_in_any_zone)
+	_object_table = ObjectTableType.new(_object_definitions, _tile_grid)
+	_passability = PassabilityType.new(_content, _tile_grid, _object_table, _object_definitions, _tile_definitions,
+		_actor_faction, _find_colonist)
 	_need_full = int(_load_need_config()["full"]); NEED_FULL = _need_full # _spawn_colonists() below needs this via _full_needs()
-	_tiles = _generate_map()
-	_colonists = _spawn_colonists(_tiles)
+	_tile_grid.tiles = _generate_map()
+	_colonists = _spawn_colonists(_tile_grid.tiles)
 	_ensure_combat()
 	_tool_store = ToolItemStoreType.new(_find_colonist)
 	_scheduler = AssignmentType.new(_random, _content)
 	_event_log = EventLogType.new(_clock, _scheduler.queue, PRIORITY_COMMAND)
 	_item_table = ItemTableType.new(_content, dig_find_random, func() -> Array[Dictionary]: return _colonists,
-		passability, get_tile, _is_in_any_zone, _scheduler.queue.get_reservation_table,
+		passability, get_tile, _zone_table.is_in_any_zone, _scheduler.queue.get_reservation_table,
 		_fail_haul_jobs_referencing_item, _cancel_haul_job_carrying_consumed_item)
 	# F3: wires GlobalAssignment's two faction gates through this
 	# WorldState's own colonist/registry lookups, never a hardcoded "colony"
-	# string -- see _colonist_may_be_ordered()/_colonist_may_reserve_colony_items().
-	_scheduler.set_order_eligibility(_colonist_may_be_ordered)
-	_scheduler.set_reservation_gate(_colonist_may_reserve_colony_items)
+	# string -- see _passability.colonist_may_be_ordered()/_passability.colonist_may_reserve_colony_items().
+	_scheduler.set_order_eligibility(_passability.colonist_may_be_ordered)
+	_scheduler.set_reservation_gate(_passability.colonist_may_reserve_colony_items)
 	# F5 (ADR 014 Amendment): an autonomous (incident) entry's own
 	# target-aware reservation gate and faction-aware route passability.
 	_scheduler.set_autonomous_reservation_gate(_actor_may_reserve_target)
-	_scheduler.set_autonomous_passability(_passable_for_worker)
+	_scheduler.set_autonomous_passability(_passability.passable_for_worker)
 	# A flee job (rule 4) submits autonomously too, the same reason
 	# an incident actor's own job does -- a non-colony actor's own job must
 	# skip the ordinary may_be_ordered gate (ADR 014 Amendment). Wired through
@@ -397,8 +351,8 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	# entry, so a save/load mid-flee (queued or still searching) still finds
 	# its own actor's restriction and never submits a duplicate leg.
 	_combat_giver = CombatGiverType.new(_scheduler.submit_autonomous, _get_job, _scheduler.queue.get_jobs,
-		_job_restricted_to, _interrupt_current_job, _resume_interrupted_job, _passable_for_flee,
-		_actor_may_reserve_target, _region_reachable, Vector2i(_width - 1, _height - 1), _content, _relations,
+		_job_restricted_to, _interrupt_current_job, _resume_interrupted_job, _passability.passable_for_flee,
+		_actor_may_reserve_target, _passability.region_reachable, Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _content, _relations,
 		_flee_target_reserved, _cancel_autonomous_job)
 	_calendar = CalendarServiceType.new("", _content.document("calendar"))
 	_work_ticks = _load_work_ticks()
@@ -456,19 +410,19 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		"on_pick_up_success": _toil_on_pick_up_success,
 	}
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
-	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs, get_items, _is_in_any_zone, _scheduler.submit,
+	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs, get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	_construction_giver = ConstructionGiverType.new(_sites.list, get_jobs, get_items, _is_in_any_zone,
+	_construction_giver = ConstructionGiverType.new(_sites.list, get_jobs, get_items, _zone_table.is_in_any_zone,
 		_construction_item_reservation_owner, _submit_site_fetch, _submit_site_work, _sites.materials_met, _sites.remaining)
-	# Live _tiles by reference: the giver only scans it per tick, and get_tiles() would copy 65536 Strings.
-	_calendar_alert_giver = CalendarAlertGiverType.new(get_colonists, func() -> Array[String]: return _tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
+	# Live _tile_grid.tiles by reference: the giver only scans it per tick, and get_tiles() would copy 65536 Strings.
+	_calendar_alert_giver = CalendarAlertGiverType.new(get_colonists, func() -> Array[String]: return _tile_grid.tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
 	_build_dimension_services(incidents_enabled)
 
 ## Builds NeedGiver and IncidentScheduler from this WorldState's current
-## _width/_height: factored out of _init() so
+## _tile_grid.width/_tile_grid.height: factored out of _init() so
 ## StateCodec.decode() can call it again after overwriting the constructor's
-## resolve_size()-clamped _width/_height with a saved map's own exact
+## resolve_size()-clamped _tile_grid.width/_tile_grid.height with a saved map's own exact
 ## dimensions. Without a rebuild, a saved map smaller than
 ## WorldGenerator's 16-tile new-game minimum (e.g. 8x8) left NeedGiver's
 ## source-candidate bounds and IncidentScheduler's edge-spawn bounds pointing
@@ -478,7 +432,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 ## after StateCodec has already overwritten it still salts IncidentScheduler's
 ## own RNG with the saved world's real seed.
 func _build_dimension_services(incidents_enabled: bool) -> void:
-	var bounds_max := Vector2i(_width - 1, _height - 1)
+	var bounds_max := Vector2i(_tile_grid.width - 1, _tile_grid.height - 1)
 	var need_config := _load_need_config()
 	_need_giver = NeedGiverType.new(_need_definitions, _need_full, int(need_config["retry_base_ticks"]), int(need_config["retry_cap_ticks"]),
 		int(need_config["job_priority"]), bounds_max, _scheduler.queue.get_reservation_table(), _need_job_targets,
@@ -497,12 +451,12 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	# reservation-eligibility/region-reachability/target-reservation wrappers
 	# and the same _route_budget ledger RescueGiver/CombatGiver already share.
 	_approach_giver = ApproachGiverType.new(_scheduler.submit_autonomous, _get_job, _scheduler.queue.get_jobs,
-		_job_restricted_to, _passable_for_flee, _actor_may_reserve_target, _region_reachable,
+		_job_restricted_to, _passability.passable_for_flee, _actor_may_reserve_target, _passability.region_reachable,
 		_flee_target_reserved, _routable_to, bounds_max, _content, _relations, _route_budget,
-		_combat_giver.owns, get_objects, get_object, _object_health_at, get_object_faction_id,
+		_combat_giver.owns, get_objects, get_object, _object_table.object_health_at, get_object_faction_id,
 		_cancel_autonomous_job)
 	_incidents = IncidentSchedulerType.new(_seed, _content, _append_colonist, _remove_colonist_by_id,
-		_width, _height, _passable_for_faction, _is_bare_tile, _get_regions, _submit_incident_job,
+		_tile_grid.width, _tile_grid.height, _passability.passable_for_faction, _is_bare_tile, _tile_grid.get_regions, _submit_incident_job,
 		_get_job, _finish_job.bind("cancel_job"), _set_work_progress,
 		_calendar.day_of_tick, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK, incidents_enabled)
 
@@ -510,7 +464,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 ## exact same pre-mutation check apply()'s own handler consults (CommandChecksType.check(), see
 ## game/scripts/core/commands/command_checks.gd) without touching state, so a hover/drag
 ## preview or Play-mode cursor can ask "would apply() accept this?" per tile without
-## StateCodec.encode()/decode()'s whole-world round trip. Never mutates _tiles, _colonists,
+## StateCodec.encode()/decode()'s whole-world round trip. Never mutates _tile_grid.tiles, _colonists,
 ## _jobs, the event log or any other field -- state_hash() is unchanged before and after a call, and
 ## unlike apply() a rejected preview() never appends a command_rejected event or advances
 ## the event sequence: _validate_command(command, false) and
@@ -594,9 +548,9 @@ func tick() -> void:
 	_construction_giver.advance(_clock.tick)
 	_apply_combat(_clock.tick)
 	var active_site_fetch_jobs_before := _active_site_fetch_job_ids()
-	_scheduler.tick(_clock.tick, _scheduler_workers(), _is_passable, Vector2i.ZERO,
-		Vector2i(_width - 1, _height - 1), _toils.get_labour, _calendar.active_boost, _colonists,
-		_committed_jobs(), _get_regions().reachable)
+	_scheduler.tick(_clock.tick, _scheduler_workers(), _passability.is_passable, Vector2i.ZERO,
+		Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _toils.get_labour, _calendar.active_boost, _colonists,
+		_committed_jobs(), _tile_grid.get_regions().reachable)
 	# Hands-filling rules: a site_fetch job's own submission-time seed
 	# is a position-agnostic placeholder (no colonist is chosen yet at
 	# submission); the instant one really (re)activates with a colonist
@@ -714,7 +668,7 @@ func _rescue_candidates() -> Array[Dictionary]:
 		# and GlobalAssignment's order-eligibility check consult: a "colonist"-def
 		# actor under a hostile/neutral faction (a raider, ADR 014) still has a
 		# worker component but must never be offered to rescue a colony colonist.
-		if not _colonist_may_be_ordered(colonist_id): continue
+		if not _passability.colonist_may_be_ordered(colonist_id): continue
 		filtered.append(colonist)
 	return filtered
 
@@ -803,16 +757,9 @@ func state_hash(include_incidents: bool = true) -> int:
 	var snapshot := {
 		"seed": _seed,
 		"tick": _clock.tick,
-		"width": _width,
-		"height": _height,
-		"tiles": _tiles,
 		"tool_items": _tool_store.items,
 		"next_tool_item_id": _tool_store.next_id,
 		"tool_reservations": _tool_store.reservations.snapshot(),
-		"objects": _objects,
-		"object_health": _object_health,
-		"zones": _zones,
-		"next_zone_id": _next_zone_id,
 		"colonists": _colonists,
 		"jobs": get_jobs(),
 		"scheduling": _scheduler.snapshot(),
@@ -846,7 +793,12 @@ func state_hash(include_incidents: bool = true) -> int:
 		# equal. list() is already sorted by site id for determinism.
 		"construction_sites": _sites.list(),
 	}
-	# "items", "next_item_id", "dig_find_rng" (JSON.stringify sorts keys, so insertion order is irrelevant).
+	# Each module adds its own keys (JSON.stringify sorts keys, so insertion order is irrelevant):
+	# "width"/"height"/"tiles", "objects"/"object_health", "zones"/"next_zone_id",
+	# "items"/"next_item_id"/"dig_find_rng".
+	_tile_grid.hash_into(snapshot)
+	_object_table.hash_into(snapshot)
+	_zone_table.hash_into(snapshot)
 	_item_table.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
@@ -873,10 +825,10 @@ func get_tick() -> int:
 ## that must size/clip itself to whatever map is currently loaded rather than
 ## assume the 48x48 fixture default (WorldState.MAP_WIDTH/MAP_HEIGHT).
 func get_map_width() -> int:
-	return _width
+	return _tile_grid.width
 
 func get_map_height() -> int:
-	return _height
+	return _tile_grid.height
 
 ## The generator algorithm version that actually produced this world's stored
 ## terrain (for reproducibility): _generator_version, above.
@@ -889,10 +841,10 @@ func get_move_ticks_per_tile() -> int:
 	return int(_content.list("tiles")[0]["move_ticks_per_tile"])
 
 func get_tile(x: int, y: int) -> String:
-	return _tiles[_tile_index(x, y)]
+	return _tile_grid.get_tile(x, y)
 
 func get_tiles() -> Array[String]:
-	return _tiles.duplicate()
+	return _tile_grid.get_tiles()
 
 ## Derived sum over ground "wood" items at (x, y) (kept for existing tests).
 func get_ground_wood(x: int, y: int) -> int:
@@ -1016,105 +968,25 @@ func get_ground_berries_faction_id(x: int, y: int) -> String:
 	return _item_table.get_ground_berries_faction_id(x, y)
 
 func get_object(x: int, y: int) -> String:
-	return String(_objects.get(_object_key(x, y), ""))
+	return _object_table.get_object(x, y)
 
 ## "" (like get_object()'s own "none") when no object is placed here.
 func get_object_faction_id(x: int, y: int) -> String:
-	return String(_object_factions.get(_object_key(x, y), ""))
+	return _object_table.get_object_faction_id(x, y)
 
-## The one authoritative movement rule for a tile and its object: an
-## impassable object blocks the tile; a passable one supplies its move cost.
-## `faction_id` (F3) defaults to "colony" so every pre-existing
-## single-arg call site (route search, movement stepping, dig/chop/forage
-## target validation, reachability checks -- all colony-only until F5) keeps
-## its old behaviour unchanged. It is only consulted for a door object: a
-## non-door object or tile is unaffected by faction_id.
+## The one authoritative movement rule for a tile and its object (map/passability.gd).
+## faction_id (F3) defaults to "colony" and only matters for a door.
 func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
-	if x < 0 or x >= _width or y < 0 or y >= _height:
-		return {"passable": false, "cost": 0, "is_door": false}
-	var object_kind := get_object(x, y)
-	if not object_kind.is_empty():
-		var object_definition: Dictionary = _object_definitions.get(object_kind, {})
-		if object_definition.is_empty():
-			return {"passable": false, "cost": 0, "is_door": false}
-		var is_door := bool(object_definition.get("is_door", false))
-		if is_door and not _faction_may_pass_doors(faction_id):
-			return {"passable": false, "cost": 0, "is_door": true}
-		var object_passable := bool(object_definition.get("passable", false))
-		return {
-			"passable": object_passable,
-			"cost": int(object_definition.get("move_cost", 0)) if object_passable else 0,
-			"is_door": is_door
-		}
-	var tile_kind := get_tile(x, y)
-	var tile_definition: Dictionary = _tile_definitions.get(tile_kind, {})
-	var tile_passable := bool(tile_definition.get("passable", false))
-	return {"passable": tile_passable, "cost": int(tile_definition.get("move_cost", 0)) if tile_passable else 0, "is_door": false}
-
-## rules.may_pass_doors consultation (ADR 014, F3) for a door object's
-## passability. Defaults true for a faction_id absent from the factions
-## registry (get_entry() returns {} for an unknown id) so a caller that never
-## passes faction_id -- resolving to "colony", always declared -- and any
-## other lookup miss fails open rather than silently blocking every door.
-func _faction_may_pass_doors(faction_id: String) -> bool:
-	var faction: Dictionary = _content.get_entry("factions", faction_id)
-	if faction.is_empty():
-		return true
-	return bool(faction.get("rules", {}).get("may_pass_doors", true))
-
-## rules.may_be_ordered consultation (F3): whether faction_id may
-## be named as a dig/chop/forage command's assignee, read through the
-## registry rather than a hardcoded "colony" string. Fails open like
-## _faction_may_pass_doors() above.
-func _faction_may_be_ordered(faction_id: String) -> bool:
-	var faction: Dictionary = _content.get_entry("factions", faction_id)
-	if faction.is_empty():
-		return true
-	return bool(faction.get("rules", {}).get("may_be_ordered", true))
-
-## rules.may_reserve_colony_items consultation (F3): the single
-## reusable check _enforce_faction_reservations() below consults for the
-## assigned actor's faction before a job's reserve step is allowed to stand.
-func _faction_may_reserve_colony_items(faction_id: String) -> bool:
-	var faction: Dictionary = _content.get_entry("factions", faction_id)
-	if faction.is_empty():
-		return true
-	return bool(faction.get("rules", {}).get("may_reserve_colony_items", true))
-
-## may_be_ordered callable for GlobalAssignment.set_order_eligibility() (F3): consulted for every worker before it may even be proposed for any job -- the gate that reaches haul, which has no actor pool of its own to filter (see haul_giver.gd). Also resolves a staged incident actor (F5); an unknown id fails open, matching _faction_may_be_ordered().
-func _colonist_may_be_ordered(colonist_id: String) -> bool:
-	if _find_colonist(colonist_id).get("trapped") != null: return false
-	return _faction_may_be_ordered(_actor_faction(colonist_id))
-
-## may_reserve callable for GlobalAssignment.set_reservation_gate() (F3):
-## consulted immediately before a chosen job's reserve step, or
-## a suspended job's reactivate() on resume -- never after -- so a refused
-## actor's reservation is never even transiently acquired.
-func _colonist_may_reserve_colony_items(colonist_id: String) -> bool:
-	return _faction_may_reserve_colony_items(_actor_faction(colonist_id))
+	return _passability.passability(x, y, faction_id)
 
 func get_objects() -> Array[Dictionary]:
-	var keys := _objects.keys()
-	keys.sort()
-	var copy: Array[Dictionary] = []
-	for key in keys:
-		var coords := String(key).split("_")
-		copy.append({"x": int(coords[0]), "y": int(coords[1]), "kind": String(_objects[key]),
-			"faction_id": String(_object_factions.get(key, "colony"))})
-	return copy
+	return _object_table.get_objects()
 
 func get_zones() -> Array[Dictionary]:
-	var keys := _zones.keys()
-	keys.sort()
-	var copy: Array[Dictionary] = []
-	for key in keys:
-		copy.append((_zones[key] as Dictionary).duplicate(true))
-	return copy
+	return _zone_table.get_zones()
 
 func get_zone(id: String) -> Dictionary:
-	if not _zones.has(id):
-		return {}
-	return (_zones[id] as Dictionary).duplicate(true)
+	return _zone_table.get_zone(id)
 
 ## True when no job/haul reservation owns (x, y)'s "cell:" key; zone_add/
 ## zone_remove never acquire a cell reservation, only rectangle bookkeeping.
@@ -1209,36 +1081,6 @@ func get_scheduling_metrics() -> Dictionary:
 func get_assignments() -> Dictionary:
 	return _scheduler.get_assignments()
 
-## RouteSearch's cost callable. StateCodec forwards this method reference
-## unchanged into GlobalAssignment.restore_scheduling().
-func _is_passable(tile: Vector2i) -> float:
-	return float(passability(tile.x, tile.y)["cost"])
-
-## Faction-aware cost callable for IncidentScheduler's spawn-tile/target selection (F5): the colony-only _is_passable() above would let a wildlife actor spawn on/target a tile only reachable through a colony door.
-func _passable_for_faction(tile: Vector2i, faction_id: String) -> float:
-	return float(passability(tile.x, tile.y, faction_id)["cost"])
-
-## GlobalAssignment's autonomous passability (F5): an incident
-## actor's initial bounded route search runs under its own faction.
-func _passable_for_worker(actor_id: String, tile: Vector2i) -> float:
-	return _passable_for_faction(tile, _actor_faction(actor_id))
-
-## CombatGiver's own faction-aware passability(x,y)->Dictionary check for a
-## flee candidate tile: a hostile actor's own faction, not
-## "colony", decides whether a door blocks it, mirroring
-## _passable_for_worker() above but returning the full passability()
-## Dictionary a flee candidate check needs rather than just its cost.
-func _passable_for_flee(actor_id: String, x: int, y: int) -> Dictionary:
-	return passability(x, y, _actor_faction(actor_id))
-
-## CombatGiver's own region-reachability check for a flee candidate tile.
-## A single-tile passability check alone would let it pick a
-## candidate that is passable but disconnected from the fleeing actor's own
-## region (an isolated pocket), leaving the actor permanently stuck pursuing
-## an unreachable target.
-func _region_reachable(from: Vector2i, target: Vector2i) -> bool:
-	return _get_regions().reachable(from, target)
-
 ## CombatGiver's own destination-reservation check for a flee candidate tile:
 ## true when (x, y) is already the "tile:" target of
 ## another active (or backed-off) job, the same shared ReservationTable
@@ -1294,7 +1136,7 @@ func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
 	var trapped_actor := _find_colonist(actor_id)
 	if not trapped_actor.is_empty() and trapped_actor.get("trapped") != null:
 		return Vector2i(int(trapped_actor["x"]), int(trapped_actor["y"])) == target
-	if _faction_may_reserve_colony_items(_actor_faction(actor_id)):
+	if _passability.faction_may_reserve_colony_items(_actor_faction(actor_id)):
 		return true
 	if not trapped_actor.is_empty() and Vector2i(int(trapped_actor["x"]), int(trapped_actor["y"])) == target:
 		return true
@@ -1304,7 +1146,7 @@ func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
 ## IncidentScheduler's target/spawn-tile selection, so a proposed target is
 ## one the gate accepts.
 func _is_bare_tile(tile: Vector2i) -> bool:
-	if not get_object(tile.x, tile.y).is_empty() or get_ground_berries(tile.x, tile.y) > 0 or _is_in_any_zone(tile.x, tile.y):
+	if not get_object(tile.x, tile.y).is_empty() or get_ground_berries(tile.x, tile.y) > 0 or _zone_table.is_in_any_zone(tile.x, tile.y):
 		return false
 	if _item_table.has_item_at(tile.x, tile.y):
 		return false
@@ -1886,15 +1728,6 @@ func _claim_reconstructed_owner(result: Dictionary, job_id: String) -> void:
 	else:
 		result[key] = job_id
 
-## is_in_any_zone callable for _haul_giver and RoomMapType's has_stockpile.
-func _is_in_any_zone(x: int, y: int) -> bool:
-	for zone in _zones.values():
-		var zx: int = zone["x"]
-		var zy: int = zone["y"]
-		if x >= zx and x < zx + int(zone["width"]) and y >= zy and y < zy + int(zone["height"]):
-			return true
-	return false
-
 ## F3: terminally resolves every job GlobalAssignment's
 ## may_be_ordered/may_reserve_colony_items gates refused, with the same typed
 ## fail() path zone_remove's blocked_destination_gone already uses -- nothing
@@ -2134,7 +1967,7 @@ func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 ## bounds, reusing RouteSearch's own step budget rather than an unbounded
 ## recompute.
 func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable) -> RerouteType:
-	var bounds_max := Vector2i(_width - 1, _height - 1)
+	var bounds_max := Vector2i(_tile_grid.width - 1, _tile_grid.height - 1)
 	return RerouteType.new(start, target, passable, Vector2i.ZERO, bounds_max)
 
 ## Wraps passability() with the same target-tile exception
@@ -2146,7 +1979,7 @@ func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable
 ## own factionId instead.
 func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
 	return func(tile: Vector2i) -> float:
-		var cost := _passable_for_faction(tile, faction_id)
+		var cost := _passability.passable_for_faction(tile, faction_id)
 		if tile == target and cost <= 0.0:
 			return 1.0
 		return cost
@@ -2166,7 +1999,7 @@ func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
 ## for hook-signature symmetry with _routable_to()).
 func _rescue_routable_to(_target: Vector2i, faction_id: String = "colony") -> Callable:
 	return func(tile: Vector2i) -> float:
-		return 0.0 if _is_trench_tile(tile) else _passable_for_faction(tile, faction_id)
+		return 0.0 if _is_trench_tile(tile) else _passability.passable_for_faction(tile, faction_id)
 
 ## is_trench callable for RescueGiver.
 func _is_trench_tile(tile: Vector2i) -> bool:
@@ -2316,14 +2149,14 @@ func _toil_is_first_leg(job: Dictionary, colonist: Dictionary) -> bool:
 func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, faction_id: String = "colony") -> Callable:
 	# An incident's destination needs actual arrival on a faction-passable tile, never _routable_to()'s dig/chop/forage impassable-target exception -- a door or wall must make it genuinely unreachable.
 	if String(job["kind"]) == "incident":
-		return func(tile: Vector2i) -> float: return _passable_for_faction(tile, faction_id)
+		return func(tile: Vector2i) -> float: return _passability.passable_for_faction(tile, faction_id)
 	# A rescuer's every re-route (a
 	# corridor blocked mid-travel, a resume after a need interrupt) runs under
 	# rescue's own trench-excluding, no-target-exception passability, so it
 	# can never be routed through a trench nor trimmed to start work off-target.
 	if String(job["kind"]) == "rescue":
 		return _rescue_routable_to(target, faction_id)
-	return _routable_to(target, faction_id) if is_first or String(job["kind"]) != "haul" else _is_passable
+	return _routable_to(target, faction_id) if is_first or String(job["kind"]) != "haul" else _passability.is_passable
 
 ## go_to_force_trim_last hook: a site_work job's only leg, and a
 ## site_fetch job's own second (delivery) leg, both target the site's own
@@ -2612,37 +2445,37 @@ func _toil_on_work_complete(job_id: String) -> void:
 				and _actor_traps_on_trench(arriving_actor):
 			_trap_actor(arriving_actor, job_id, _trap_tile_before)
 			return
-	var tile_before: String = _tiles[_tile_index(target.x, target.y)]
+	var tile_before: String = _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)]
 	match job["kind"]:
 		"dig":
 			if get_tile(target.x, target.y) != TILE_SOIL:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
-			_tiles[_tile_index(target.x, target.y)] = TILE_TRENCH
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_TRENCH
 			var sand_at := _item_table.dig_item_placement(target.x, target.y)
 			_item_table.spawn_item("sand", sand_at.x, sand_at.y)
 			_item_table.stage_dig_find(job_id, target.x, target.y)
 		"chop":
-			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
 			_item_table.spawn_wood_item(target.x, target.y)
 		"mine":
 			if get_tile(target.x, target.y) != TILE_ROCK:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
-			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
 			_item_table.spawn_stone_item(target.x, target.y)
 		"forage":
-			_tiles[_tile_index(target.x, target.y)] = TILE_FLOOR
-			_set_object(target.x, target.y, "")
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
+			_object_table.set_object(target.x, target.y, "")
 			_item_table.spawn_berries_item(target.x, target.y)
 		"till":
 			if get_tile(target.x, target.y) != TILE_SOIL:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
-			_tiles[_tile_index(target.x, target.y)] = TILE_PLOWED_SOIL
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLOWED_SOIL
 		"sow":
 			if get_tile(target.x, target.y) != TILE_PLOWED_SOIL:
 				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
@@ -2653,7 +2486,7 @@ func _toil_on_work_complete(job_id: String) -> void:
 				_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
 				_finish_job(job_id, "fail_job")
 				return
-			_tiles[_tile_index(target.x, target.y)] = TILE_PLANTED
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLANTED
 		"site_work":
 			# Every builder's own site_work job adds one tick of
 			# progress per tick it works (ConstructionSiteTable.add_progress(),
@@ -2696,11 +2529,11 @@ func _toil_on_work_complete(job_id: String) -> void:
 				victim["x"] = rescuer["x"]
 				victim["y"] = rescuer["y"]
 				victim["trapped"] = null
-	if _tiles[_tile_index(target.x, target.y)] != tile_before:
-		_update_water_tile_cache(target.x, target.y, tile_before == TILE_WATER, _tiles[_tile_index(target.x, target.y)] == TILE_WATER)
-		_mark_dirty(target.x, target.y)
-		_get_regions().on_passability_changed(target.x, target.y)
-		_get_rooms().on_passability_changed(target.x, target.y)
+	if _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] != tile_before:
+		_tile_grid.update_water_tile_cache(target.x, target.y, tile_before == TILE_WATER, _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] == TILE_WATER)
+		_tile_grid.mark_dirty(target.x, target.y)
+		_tile_grid.get_regions().on_passability_changed(target.x, target.y)
+		_tile_grid.get_rooms().on_passability_changed(target.x, target.y)
 	_finish_job(job_id, "complete_job")
 	_resolve_giver_association(job_id, String(job["kind"]))
 
@@ -2781,183 +2614,13 @@ func _tool_exists(job_id: String, kind: String) -> bool:
 func _tool_requirement_for_kind(kind: String) -> Dictionary:
 	return _tool_requirements_by_kind.get(kind, {})
 
-## (x, y)'s own footprint origin -- (x, y) itself unless it is a
-## non-origin tile of a multi-tile object (_object_origin), letting any
-## footprint tile find the whole object's origin.
-func _object_origin_at(x: int, y: int) -> Vector2i:
-	return _object_origin.get(_object_key(x, y), Vector2i(x, y))
-
-## Kind's own [w, h] footprint size (content/objects.json's
-## "footprint", default [1, 1] for a defensive lookup miss -- real content
-## always declares it, per objects.schema.json's required field), with width
-## and height swapped when orientation is "vertical" and kind declares
-## "rotatable" true. A non-rotatable kind or an empty/"horizontal"
-## orientation always keeps the declared [w, h] as-is.
-func _object_footprint_size(kind: String, orientation: String) -> Vector2i:
-	var definition: Dictionary = _object_definitions.get(kind, {})
-	var footprint: Array = definition.get("footprint", [1, 1])
-	var width := int(footprint[0])
-	var height := int(footprint[1])
-	if orientation == "vertical" and bool(definition.get("rotatable", false)):
-		return Vector2i(height, width)
-	return Vector2i(width, height)
-
-## Every tile kind occupies starting at origin under orientation,
-## in row-major order (origin itself always first) -- the one place both
-## _set_object() and place_object's footprint validation compute this, so
-## they can never disagree about which tiles a placement touches.
-func _object_footprint_tiles(kind: String, origin: Vector2i, orientation: String) -> Array[Vector2i]:
-	var size := _object_footprint_size(kind, orientation)
-	var tiles: Array[Vector2i] = []
-	for dy in size.y:
-		for dx in size.x:
-			tiles.append(Vector2i(origin.x + dx, origin.y + dy))
-	return tiles
-
-## Internal mutator: not exposed publicly. Called by
-## _apply_place_object_command()/_apply_remove_object_command() (and directly
-## by tests). A tile holds at most one *logical* object, now possibly
-## spanning kind's whole footprint (ADR 039): every
-## occupied tile carries the same kind/faction_id/health, and orientation is
-## recorded once at origin (x, y) (meaningful only when kind declares
-## "rotatable" true). Clearing at (x, y) (kind "") erases the *whole*
-## existing object there, found via _object_origin_at() so this works from
-## any of its footprint tiles, not just its origin -- and a bare/no-object
-## (x, y) still marks/invalidates exactly that one tile, matching this
-## function's single-tile behaviour byte-for-byte for every existing footprint
-## [1,1] kind. faction_id/orientation default to "colony"/"" so every
-## existing 3-arg caller keeps placing colony-owned, unrotated objects.
-func _set_object(x: int, y: int, kind: String, faction_id: String = "colony", orientation: String = "") -> void:
-	var origin := Vector2i(x, y)
-	var origin_key := _object_key(x, y)
-	var existing_origin := _object_origin_at(x, y)
-	var existing_origin_key := _object_key(existing_origin.x, existing_origin.y)
-	var existing_kind := String(_objects.get(existing_origin_key, ""))
-	var clear_tiles: Array[Vector2i] = [origin]
-	if not existing_kind.is_empty():
-		clear_tiles = _object_footprint_tiles(existing_kind, existing_origin, String(_object_orientation.get(existing_origin_key, "")))
-		_object_orientation.erase(existing_origin_key)
-	for tile in clear_tiles:
-		var clear_key := _object_key(tile.x, tile.y)
-		_objects.erase(clear_key)
-		_object_factions.erase(clear_key)
-		_object_health.erase(clear_key)
-		_object_origin.erase(clear_key)
-		_mark_dirty(tile.x, tile.y)
-		_get_regions().on_passability_changed(tile.x, tile.y)
-		_get_rooms().on_passability_changed(tile.x, tile.y)
-	if kind.is_empty():
-		return
-	var definition: Dictionary = _object_definitions.get(kind, {})
-	for tile in _object_footprint_tiles(kind, origin, orientation):
-		var key := _object_key(tile.x, tile.y)
-		_objects[key] = kind
-		_object_factions[key] = faction_id
-		if key != origin_key:
-			_object_origin[key] = origin
-		_mark_dirty(tile.x, tile.y)
-		_get_regions().on_passability_changed(tile.x, tile.y)
-		_get_rooms().on_passability_changed(tile.x, tile.y)
-	if definition.has("max_health"):
-		_object_health[origin_key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
-	else:
-		_object_health.erase(origin_key)
-	if not orientation.is_empty():
-		_object_orientation[origin_key] = orientation
-
-## {} for a bare tile, a tile whose object declares no
-## health/max_health (content/objects.json), or a not-yet-placed one --
-## CombatTargeting's own "does this object have health" check. Resolved
-## through _object_origin_at() so every footprint tile of a
-## multi-tile object reports the same, single canonical health pool (health
-## is stored once, at the object's origin tile).
-func _object_health_at(x: int, y: int) -> Dictionary:
-	var origin := _object_origin_at(x, y)
-	return (_object_health.get(_object_key(origin.x, origin.y), {}) as Dictionary).duplicate()
-
-## Applies `amount` damage to the object occupying (x, y), clearing
-## it (a wall becomes floor, rule 3) once its hp reaches 0 -- through the same
-## _set_object() every other object mutation uses, so regions/rooms/dirty-cell
-## bookkeeping stays correct. A no-op for a tile with no health-bearing object.
-## Resolved through _object_origin_at() so damage landing on any
-## footprint tile of a multi-tile object updates the one shared health pool
-## and, at zero, clears the whole footprint via _set_object() at the origin.
-func _damage_object(x: int, y: int, amount: int) -> void:
-	var origin := _object_origin_at(x, y)
-	var key := _object_key(origin.x, origin.y)
-	if not _object_health.has(key):
-		return
-	var health: Dictionary = _object_health[key]
-	health["hp"] = maxi(0, int(health["hp"]) - amount)
-	if int(health["hp"]) <= 0:
-		_set_object(origin.x, origin.y, "")
-
-## Appends to the dirty-cell log -- see _dirty_cells' own doc
-## comment above. Duplicates are left in (a tile dug then immediately built
-## on is two real changes); get_dirty_cells() callers key their own consumed
-## index by Array size, exactly like get_events(), so a duplicate costs one
-## harmless extra touch, never a missed one.
-func _mark_dirty(x: int, y: int) -> void:
-	_dirty_cells.append(Vector2i(x, y))
-
-## Every cell whose tile kind or object changed, in the order it changed,
-## since this world was created -- an append-only log, never cleared, for a
-## presentation layer's incremental refresh. Mirrors get_events()'s own
-## append-only/never-drained contract (a viewer-purity rule permits only
-## get_*/apply/tick/get_events from game/scripts/viewer/*.gd, so this
-## cannot be a clear-on-read "drain"): a caller tracks how much of this
-## Array it has already consumed, exactly as map_view.gd does.
+## Append-only log of every cell whose tile kind or object changed (map/tile_grid.gd).
 func get_dirty_cells() -> Array[Vector2i]:
-	return _dirty_cells.duplicate()
-
-func _get_regions() -> RegionMapType:
-	if _regions == null:
-		_regions = RegionMapType.new(_width, _height, func(x, y): return passability(x, y)["passable"])
-	return _regions
-
-func _get_water_tiles() -> Array[Vector2i]:
-	if not _water_tile_cache_built:
-		for y in _height:
-			for x in _width:
-				if _tiles[_tile_index(x, y)] == TILE_WATER:
-					_water_tile_cache.append(Vector2i(x, y))
-		_water_tile_cache_built = true
-	return _water_tile_cache
-
-## Keeps _water_tile_cache in sync with any authoritative tile mutation that
-## changes a tile's water membership (forage can legally clear
-## a berry_bush placed on a TILE_WATER tile via a supported place_object
-## command, converting that water tile to TILE_FLOOR in _toil_on_work_complete()
-## above -- an unrefreshed cache would keep offering that former water tile as
-## a "water" need candidate forever after). Hooked into the same "tile
-## actually changed kind" boundary that already drives the dirty-cell/region/
-## room updates, not a special case for forage: any future tile-mutating toil
-## gets this for free. A no-op while the cache has never been built (the next
-## _get_water_tiles() call will scan current _tiles and see the change itself).
-func _update_water_tile_cache(x: int, y: int, was_water: bool, is_water: bool) -> void:
-	if not _water_tile_cache_built or was_water == is_water:
-		return
-	if is_water:
-		_water_tile_cache.append(Vector2i(x, y))
-	else:
-		var index := _water_tile_cache.find(Vector2i(x, y))
-		if index != -1:
-			_water_tile_cache.remove_at(index)
-
-func _get_rooms() -> RoomMapType:
-	if _rooms == null:
-		_rooms = RoomMapType.new(_width, _height, func(x, y): return passability(x, y)["passable"],
-			func(x, y): return bool(passability(x, y)["is_door"]), func(x, y): return get_object(x, y) == "bed",
-			_is_in_any_zone)
-	return _rooms
+	return _tile_grid.get_dirty_cells()
 
 ## {} for a tile with no recognised room; otherwise RoomMapType.get_room_at().
 func get_room_at(x: int, y: int) -> Dictionary:
-	return _get_rooms().get_room_at(x, y)
-
-## JSON-safe key for _objects, mirroring _ground_item_key.
-func _object_key(x: int, y: int) -> String:
-	return "%d_%d" % [x, y]
+	return _tile_grid.get_room_at(x, y)
 
 ## Namespaces a tile into the shared ReservationTable's generic String key
 ## space (colonist-ai.md 3.4), distinct from JobQueue's own "tile:" target
@@ -3064,28 +2727,6 @@ func _ensure_combat() -> void:
 		var definition: Dictionary = _content.get_entry("actors", String(colonist.get("kind", "colonist")))
 		colonist["combat"] = CombatType.build(definition.get("tunables", {}).get("combat", {}))
 
-## Backfills a missing `_object_health` entry for any placed object
-## whose kind declares `max_health` (content/objects.json). StateCodec.decode()
-## now restores a save's own persisted per-object hp/maxHp directly (its
-## "health" field, optional so an older save that predates it simply
-## omits it) -- this backfill only ever fires for such an older save, or a
-## hand-built fixture that calls `_objects[key] = kind` directly instead of
-## through `_set_object()`, mirroring `_ensure_health()`/`_ensure_combat()`'s
-## own backfill idiom for a component a restore path does not build. Resets to
-## the object's own full/default health, the only truthful value for a save
-## that never tracked per-instance damage in the first place.
-func _ensure_object_health() -> void:
-	for key in _objects.keys():
-		if _object_origin.has(key):
-			continue
-		if _object_health.has(key):
-			continue
-		var kind := String(_objects[key])
-		var definition: Dictionary = _object_definitions.get(kind, {})
-		if not definition.has("max_health"):
-			continue
-		_object_health[key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
-
 ## F5 combat (ADR 021): run once per tick before the fair scheduler sees any colonist. Resolves attacks
 ## (rule 1) via CombatResolver, applies its reported deaths (rule 2) against
 ## this WorldState's own owned state (job/reservation cleanup, dropping
@@ -3094,7 +2735,7 @@ func _ensure_object_health() -> void:
 ## (rule 4) -- per ADR 011, WorldState calls both, implements neither.
 func _apply_combat(tick: int) -> void:
 	var result := CombatResolverType.resolve_tick(_colonists, _content, _relations, tick, PRIORITY_TICK,
-		get_object, _object_health_at, get_object_faction_id, _damage_object, _event_log.insert_event, _event_log.next_sequence)
+		get_object, _object_table.object_health_at, get_object_faction_id, _object_table.damage_object, _event_log.insert_event, _event_log.next_sequence)
 	_combat_status.clear()
 	for actor_id in (result["fighting"] as Array):
 		_combat_status[String(actor_id)] = REASON_FIGHTING
@@ -3244,7 +2885,7 @@ func _decay_needs() -> void:
 	_ensure_needs()
 	_ensure_health()
 	_ensure_combat()
-	_ensure_object_health()
+	_object_table.ensure_object_health()
 	var rates: Dictionary = {}
 	for kind in _need_definitions.keys():
 		rates[kind] = int(_need_definitions[kind].get("rate_per_day", 0))
@@ -3451,10 +3092,10 @@ func _need_source_candidates(kind: String) -> Array[Vector2i]:
 				var coords := String(key).split("_")
 				candidates.append(Vector2i(int(coords[0]), int(coords[1])))
 		"water":
-			candidates = _get_water_tiles()
+			candidates = _tile_grid.get_water_tiles()
 		"rest":
-			for key in _objects.keys():
-				if String(_objects[key]) == "bed":
+			for key in _object_table.objects.keys():
+				if String(_object_table.objects[key]) == "bed":
 					var coords := String(key).split("_")
 					candidates.append(Vector2i(int(coords[0]), int(coords[1])))
 	return _reachable_candidates_only(candidates)
@@ -3466,7 +3107,7 @@ func _need_source_candidates(kind: String) -> Array[Vector2i]:
 func _reachable_candidates_only(candidates: Array[Vector2i]) -> Array[Vector2i]:
 	if _colonists.is_empty():
 		return candidates
-	var regions := _get_regions()
+	var regions := _tile_grid.get_regions()
 	return candidates.filter(func(candidate):
 		return _colonists.any(func(colonist):
 			return regions.reachable(Vector2i(int(colonist["x"]), int(colonist["y"])), candidate)))
@@ -3653,7 +3294,7 @@ func _apply_construction_submission(command: Dictionary) -> Dictionary:
 		int(definition["build_ticks"]), int(definition["max_builders"]))
 	var owner := _sites.owner_key(String(site["id"]))
 	var table := _scheduler.queue.get_reservation_table()
-	for tile in _object_footprint_tiles(kind, origin, orientation):
+	for tile in _object_table.object_footprint_tiles(kind, origin, orientation):
 		table.acquire(_build_site_key(tile), owner)
 	var applied := _event_log.applied(command)
 	applied["site_id"] = site["id"]
@@ -3693,7 +3334,7 @@ func _check_construction_command(payload: Dictionary) -> Dictionary:
 	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
 		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
 	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
-	var footprint_tiles := _object_footprint_tiles(kind, origin, orientation)
+	var footprint_tiles := _object_table.object_footprint_tiles(kind, origin, orientation)
 	var occupancy_check := _construction_footprint_check(footprint_tiles)
 	if not occupancy_check.is_empty():
 		return occupancy_check
@@ -3774,7 +3415,7 @@ func _classify_build_line_command(payload: Dictionary) -> Dictionary:
 	var skipped: Array[Dictionary] = []
 	var claimed_footprint := {}
 	for tile in canonical:
-		var footprint := _object_footprint_tiles(kind, tile, orientation)
+		var footprint := _object_table.object_footprint_tiles(kind, tile, orientation)
 		var occupancy_check := _construction_footprint_check(footprint)
 		if not occupancy_check.is_empty():
 			skipped.append({"x": tile.x, "y": tile.y, "reason": occupancy_check["reason"]})
@@ -3793,7 +3434,7 @@ func _classify_build_line_command(payload: Dictionary) -> Dictionary:
 	if not surviving.is_empty() and not bool(_object_definitions[kind].get("passable", true)):
 		var combined_footprint: Array[Vector2i] = []
 		for tile in surviving:
-			combined_footprint.append_array(_object_footprint_tiles(kind, tile, orientation))
+			combined_footprint.append_array(_object_table.object_footprint_tiles(kind, tile, orientation))
 		if _would_enclose_tiles(combined_footprint):
 			return {"reason": "blocked_target_unreachable", "message": "Building this line would seal off part of the colony."}
 	return {"kind": kind, "orientation": orientation, "surviving": surviving, "skipped": skipped}
@@ -3818,7 +3459,7 @@ func _apply_build_line_command(command: Dictionary) -> Dictionary:
 		var site := _sites.create(kind, tile, orientation, definition["build_cost"] as Array,
 			int(definition["build_ticks"]), int(definition["max_builders"]))
 		var owner := _sites.owner_key(String(site["id"]))
-		for footprint_tile in _object_footprint_tiles(kind, tile, orientation):
+		for footprint_tile in _object_table.object_footprint_tiles(kind, tile, orientation):
 			table.acquire(_build_site_key(footprint_tile), owner)
 		sites.append({"id": site["id"], "x": tile.x, "y": tile.y})
 	var applied := _event_log.applied(command)
@@ -3834,7 +3475,7 @@ func _apply_build_line_command(command: Dictionary) -> Dictionary:
 ## check_place_object_command(): integer x, y, a non-empty string kind naming
 ## a declared object kind. orientation is new and optional: when present it
 ## must be "horizontal" or "vertical" (invalid_payload otherwise); it is
-## otherwise unconsulted here, since _object_footprint_size() already ignores
+## otherwise unconsulted here, since ObjectTable.object_footprint_size() already ignores
 ## it for a non-rotatable kind. Every tile of kind's footprint (default [1,1]
 ## -- every existing kind today) is checked in bounds, no colonist, no
 ## existing object, and neither TILE_TREE nor TILE_WATER (the strict,
@@ -3859,8 +3500,8 @@ func _check_place_object_command(payload: Dictionary) -> Dictionary:
 	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
 		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
 	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
-	for tile in _object_footprint_tiles(kind, origin, orientation):
-		if (tile.x < 0 or tile.x >= _width or tile.y < 0 or tile.y >= _height
+	for tile in _object_table.object_footprint_tiles(kind, origin, orientation):
+		if (tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height
 				or _colonist_at(tile.x, tile.y)
 				or not get_object(tile.x, tile.y).is_empty()
 				or get_tile(tile.x, tile.y) == TILE_TREE
@@ -3876,7 +3517,7 @@ func _check_place_object_command(payload: Dictionary) -> Dictionary:
 ## foundation. place_object deliberately keeps its own, more permissive rule
 ## (see _check_place_object_command()).
 func _build_site_terrain_valid(site: Vector2i) -> bool:
-	if site.x < 0 or site.x >= _width or site.y < 0 or site.y >= _height:
+	if site.x < 0 or site.x >= _tile_grid.width or site.y < 0 or site.y >= _tile_grid.height:
 		return false
 	var tile_kind := get_tile(site.x, site.y)
 	if tile_kind == TILE_TREE or tile_kind == TILE_TRENCH:
@@ -3927,7 +3568,7 @@ func get_construction_site(x: int, y: int) -> Dictionary:
 func _construction_site_id_at(x: int, y: int) -> String:
 	var tile := Vector2i(x, y)
 	for site in _sites.list():
-		if _object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])).has(tile):
+		if _object_table.object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])).has(tile):
 			return String(site["id"])
 	return ""
 
@@ -4007,7 +3648,7 @@ func _next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String
 		var item: Dictionary = _item_table.items[id]
 		if String(item["kind"]) != kind:
 			continue
-		if not _is_in_any_zone(int(item["x"]), int(item["y"])):
+		if not _zone_table.is_in_any_zone(int(item["x"]), int(item["y"])):
 			continue
 		if committed.has(String(id)):
 			continue
@@ -4225,7 +3866,7 @@ func _cancel_construction_site(site_id: String) -> void:
 		if kind == "site_fetch":
 			_drop_carried_haul_item(job_id)
 		_finish_job(job_id, "cancel_job")
-	var footprint := _object_footprint_tiles(String(site["kind"]), origin, String(site["orientation"]))
+	var footprint := _object_table.object_footprint_tiles(String(site["kind"]), origin, String(site["orientation"]))
 	var used := {}
 	for entry in (site["held_materials"] as Array):
 		var quantity := int(entry["quantity"])
@@ -4283,7 +3924,7 @@ func _apply_cancel_site_command(command: Dictionary) -> Dictionary:
 
 ## Placement/completion effect once a site's own accumulated progress meets
 ## its declared build_ticks: places the declared object via
-## the footprint-aware _set_object() (clears/re-marks every footprint tile,
+## the footprint-aware _object_table.set_object() (clears/re-marks every footprint tile,
 ## invalidates regions/rooms, stamps health when the kind declares one),
 ## releases the site's own footprint reservation (the placed object's own
 ## passability governs the tiles from here on, not a placeholder reservation),
@@ -4302,7 +3943,7 @@ func _finalize_construction_site(site_id: String, completing_job_id: String) -> 
 			_finish_job(String(other_job_id), "complete_job")
 	_scheduler.queue.get_reservation_table().release_all(_sites.owner_key(site_id))
 	var origin: Vector2i = site["origin"]
-	_set_object(origin.x, origin.y, String(site["kind"]), "colony", String(site["orientation"]))
+	_object_table.set_object(origin.x, origin.y, String(site["kind"]), "colony", String(site["orientation"]))
 	_sites.remove(site_id)
 
 ## _resolve_giver_association()'s site_work branch: releases
@@ -4349,7 +3990,7 @@ func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") 
 			continue
 		if bool(_object_definitions.get(String(site["kind"]), {}).get("passable", true)):
 			continue
-		for tile in _object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])):
+		for tile in _object_table.object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])):
 			blocked[tile] = true
 	var seen := {}
 	for colonist in _colonists:
@@ -4396,7 +4037,7 @@ func _flood_fill_passable(start: Vector2i, blocked: Dictionary) -> Dictionary:
 			var next: Vector2i = current + offset
 			if blocked.has(next) or visited.has(next):
 				continue
-			if next.x < 0 or next.x >= _width or next.y < 0 or next.y >= _height:
+			if next.x < 0 or next.x >= _tile_grid.width or next.y < 0 or next.y >= _tile_grid.height:
 				continue
 			if not bool(passability(next.x, next.y)["passable"]):
 				continue
@@ -4414,7 +4055,7 @@ func _apply_place_object_command(command: Dictionary) -> Dictionary:
 	var check := _check_place_object_command(payload)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	_set_object(int(payload["x"]), int(payload["y"]), String(payload["kind"]), "colony", String(payload.get("orientation", "")))
+	_object_table.set_object(int(payload["x"]), int(payload["y"]), String(payload["kind"]), "colony", String(payload.get("orientation", "")))
 	return _event_log.applied(command)
 
 ## Rejected invalid_target for an out-of-bounds tile or one holding no object.
@@ -4423,7 +4064,7 @@ func _apply_remove_object_command(command: Dictionary) -> Dictionary:
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
 	var payload: Dictionary = command["payload"]
-	_set_object(int(payload["x"]), int(payload["y"]), "")
+	_object_table.set_object(int(payload["x"]), int(payload["y"]), "")
 	return _event_log.applied(command)
 
 ## Mutates one colonist's labour table (colonist-ai.md 3.2).
@@ -4468,10 +4109,7 @@ func _apply_zone_add_command(command: Dictionary) -> Dictionary:
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
 	var payload: Dictionary = command["payload"]
-	var zone_id := "zone_%d" % _next_zone_id
-	_next_zone_id += 1
-	_zones[zone_id] = {"id": zone_id, "x": int(payload["x"]), "y": int(payload["y"]),
-		"width": int(payload["width"]), "height": int(payload["height"])}
+	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]))
 	var applied := _event_log.applied(command)
 	applied["zone_id"] = zone_id
 	return applied
@@ -4483,8 +4121,7 @@ func _apply_zone_remove_command(command: Dictionary) -> Dictionary:
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
 	var payload: Dictionary = command["payload"]
 	var zone_id: String = payload["id"]
-	var removed: Dictionary = _zones[zone_id]
-	_zones.erase(zone_id)
+	var removed := _zone_table.remove(zone_id)
 	_fail_haul_jobs_targeting_removed_zone(int(removed["x"]), int(removed["y"]), int(removed["width"]), int(removed["height"]))
 	_event_log.collect_queue_events()
 	return _event_log.applied(command)
@@ -4503,17 +4140,6 @@ func _fail_haul_jobs_targeting_removed_zone(x: int, y: int, width: int, height: 
 		var cy: int = cell.y
 		if cx >= x and cx < x + width and cy >= y and cy < y + height:
 			_terminate_haul_job_by_id(job["id"], "blocked_destination_gone", "choose_reachable_destination")
-
-## Half-open interval overlap test on both axes.
-func _zone_overlaps(x: int, y: int, width: int, height: int) -> bool:
-	for zone in _zones.values():
-		var zx: int = zone["x"]
-		var zy: int = zone["y"]
-		var zw: int = zone["width"]
-		var zh: int = zone["height"]
-		if x < zx + zw and zx < x + width and y < zy + zh and zy < y + height:
-			return true
-	return false
 
 func _colonist_at(x: int, y: int) -> bool:
 	for colonist in _colonists:
@@ -4599,9 +4225,6 @@ func _validate_command(command, record: bool = true) -> Dictionary:
 			"Command tick %d does not match current tick %d." % [command["tick"], _clock.tick], record)
 	return {"ok": true}
 
-func _tile_index(x: int, y: int) -> int:
-	return y * _width + x
-
 ## Delegates to WorldGeneratorType, a pure, scene-independent module so
 ## world_state.gd's own core-budgets.json cap has room for width/height
 ## plumbing. Consumes a GEOGRAPHY_SEED_SALT-derived local RNG, not _random
@@ -4615,7 +4238,7 @@ func _tile_index(x: int, y: int) -> int:
 func _generate_map() -> Array[String]:
 	var geography_random := RandomNumberGenerator.new()
 	geography_random.seed = _seed + GEOGRAPHY_SEED_SALT
-	var result := WorldGeneratorType.generate_with_decorations(geography_random, _width, _height, _mapgen)
+	var result := WorldGeneratorType.generate_with_decorations(geography_random, _tile_grid.width, _tile_grid.height, _mapgen)
 	_pending_water_tiles = result["water_tiles"]
 	_pending_berry_bush_tiles = result["berry_bush_tiles"]
 	return result["tiles"]
@@ -4625,17 +4248,17 @@ func _generate_map() -> Array[String]:
 ## ADR 020), consuming its own PLACEMENT_SEED_SALT local RNG for
 ## the same reason _generate_map() above does not touch _random; this
 ## method's own job is turning that module's pure output into real WorldState
-## state: surviving berry bush tiles become _objects entries (WorldGenerator
+## state: surviving berry bush tiles become _object_table.objects entries (WorldGenerator
 ## owns no object store), and the chosen positions become spawned colonists.
 func _spawn_colonists(map: Array[String]) -> Array[Dictionary]:
 	var placement_random := RandomNumberGenerator.new()
 	placement_random.seed = _seed + PLACEMENT_SEED_SALT
-	var placement: Dictionary = WorldGeneratorType.place_spawn(placement_random, map, _width, _height, _mapgen,
+	var placement: Dictionary = WorldGeneratorType.place_spawn(placement_random, map, _tile_grid.width, _tile_grid.height, _mapgen,
 		_pending_water_tiles, _pending_berry_bush_tiles, int(_mapgen["colonist_count"]))
 	_spawn_clearing = placement["clearing"]
 	for pos in placement["berry_bush_tiles"]:
-		_objects[_object_key(pos.x, pos.y)] = "berry_bush"
-		_object_factions[_object_key(pos.x, pos.y)] = "colony"
+		_object_table.objects[_object_table.object_key(pos.x, pos.y)] = "berry_bush"
+		_object_table.object_factions[_object_table.object_key(pos.x, pos.y)] = "colony"
 	_pending_water_tiles = []
 	_pending_berry_bush_tiles = []
 	var spawned: Array[Dictionary] = []

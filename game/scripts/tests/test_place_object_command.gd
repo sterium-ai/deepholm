@@ -228,14 +228,14 @@ func _check_place_object_footprint_rejects_overlap_on_second_tile() -> void:
 ## naturally-occurring floor/tree pair could silently find none and skip this
 ## case entirely, so this forces the fixture deterministically instead --
 ## _find_floor_pair() guarantees an adjacent floor pair, then the second tile
-## is overwritten to TILE_TREE directly (the same world._tiles[...] pattern
+## is overwritten to TILE_TREE directly (the same world._tile_grid.tiles[...] pattern
 ## test_build.gd already uses to force terrain for a fixture).
 func _check_place_object_footprint_rejects_tree_on_second_tile() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(12, 10)
 	var origin := _find_floor_pair(world)
-	world._tiles[world._tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_TREE
 	var result := _place_command(world, "footprint_tree", origin.x, origin.y, "test_footprint_crate", "horizontal")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is a tree must be rejected invalid_target")
@@ -250,7 +250,7 @@ func _check_place_object_footprint_rejects_water_on_second_tile() -> void:
 		return
 	var world := WorldStateType.new(15, 10)
 	var origin := _find_floor_pair(world)
-	world._tiles[world._tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_WATER
 	var result := _place_command(world, "footprint_water", origin.x, origin.y, "test_footprint_crate", "horizontal")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is water must be rejected invalid_target")
@@ -266,7 +266,7 @@ func _check_place_object_rejects_water_tile() -> void:
 		return
 	var world := WorldStateType.new(16, 10)
 	var tile := _find_tile(world, WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(tile.x, tile.y)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(tile.x, tile.y)] = WorldStateType.TILE_WATER
 	var result := _place_command(world, "place_water", tile.x, tile.y, "chair")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object on a water tile must be rejected invalid_target")

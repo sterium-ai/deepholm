@@ -28,6 +28,8 @@ static func content_version() -> String:
 
 static func encode(world: WorldState) -> Dictionary:
 	var item_table := world._item_table.encode()
+	var object_table := world._object_table.encode()
+	var zone_table := world._zone_table.encode()
 	return {
 		"schemaVersion": SCHEMA_VERSION,
 		"contentVersion": content_version(),
@@ -44,7 +46,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"map": {
 			"width": world.get_map_width(),
 			"height": world.get_map_height(),
-			"tiles": world._tiles.duplicate(),
+			"tiles": world._tile_grid.encode()["tiles"],
 			"generatorVersion": world.get_generator_version(),
 		},
 		"entities": _encode_entities(world._colonists),
@@ -53,14 +55,14 @@ static func encode(world: WorldState) -> Dictionary:
 		"scheduling": _encode_scheduling(world),
 		"rng": {"seed": world._random.seed, "state": world._random.state},
 		"items": item_table["items"],
-		"objects": _encode_objects(world._objects, world._object_factions, world._object_health, world._object_origin, world._object_orientation),
+		"objects": object_table["objects"],
 		# One record per active construction site. Optional on the
 		# wire like "combatBlockedTargets"/"digFindRng" above -- an older save
 		# predating construction sites simply has none, matching decode()'s own
 		# constructor default (a fresh, empty ConstructionSiteTable).
 		"constructionSites": _encode_construction_sites(world._sites.list()),
-		"zones": _encode_zones(world._zones),
-		"nextZoneId": world._next_zone_id,
+		"zones": zone_table["zones"],
+		"nextZoneId": zone_table["nextZoneId"],
 		"groundBerries": item_table["groundBerries"],
 		"workProgress": _encode_work_progress(world._work_progress),
 		# The exact job_id that owns each workProgress
@@ -121,66 +123,34 @@ static func decode(state: Dictionary) -> WorldState:
 	# subject to on restore (SaveIO._validate_state() only rejects a map
 	# above that upper bound; a smaller saved fixture, e.g. 3x2, is valid and
 	# must decode at its own exact size). Overwrite the constructor's resolved
-	# _width/_height with the saved dimensions before replacing _tiles, or
+	# width/height with the saved dimensions before replacing the tiles, or
 	# every tile index below would use the wrong row stride.
-	world._width = width
-	world._height = height
+	world._tile_grid.width = width
+	world._tile_grid.height = height
 	# The constructor above already built
 	# NeedGiver/IncidentScheduler against its own resolve_size()-clamped
 	# width/height (16..512), before the two lines above corrected
-	# world._width/_height to the saved map's real, possibly-smaller size.
+	# world._tile_grid.width/height to the saved map's real, possibly-smaller size.
 	# Rebuild both services now, from the corrected dimensions, before
 	# anything below (restore_pending_assignments, the reroute rebuild,
 	# _reconcile_incident_jobs_after_load) touches them.
 	world._build_dimension_services(false)
 	world._generator_version = int(map.get("generatorVersion", WorldGeneratorType.GENERATOR_VERSION))
-	world._tiles = Array(state["map"]["tiles"], TYPE_STRING, "", null)
+	world._tile_grid.decode(state["map"])
 	world._colonists = _decode_entities(state["entities"])
 	# "items", "groundBerries" and the optional "digFindRng". Nothing else in
 	# decode() reads them or draws from the dig-find stream, so restoring all
 	# three here (berries and the RNG used to be restored later) is order-safe.
 	world._item_table.decode(state)
-	# State["objects"] holds one record per placed *origin* tile,
-	# not per occupied tile -- _decode_objects() below only decodes the raw
-	## per-origin records; expanding each back out to every tile of its
-	# footprint needs world._object_definitions (footprint/rotatable), already
-	# populated by the WorldState.new() constructor above, so that expansion
-	# happens here via world._object_footprint_tiles() rather than inside a
-	# static helper with no world to call through (mirrors
-	# world._build_dimension_services() above, already called directly on
-	# `world` from this same static decode()).
-	var objects: Dictionary = {}
-	var object_factions: Dictionary = {}
-	var object_health: Dictionary = {}
-	var object_origin: Dictionary = {}
-	var object_orientation: Dictionary = {}
-	for record in _decode_objects(state["objects"]):
-		var origin: Vector2i = record["origin"]
-		var origin_key := "%d_%d" % [origin.x, origin.y]
-		var kind: String = record["kind"]
-		var orientation: String = record["orientation"]
-		for tile in world._object_footprint_tiles(kind, origin, orientation):
-			var key := "%d_%d" % [tile.x, tile.y]
-			objects[key] = kind
-			object_factions[key] = record["factionId"]
-			if key != origin_key:
-				object_origin[key] = origin
-		if record.has("health"):
-			object_health[origin_key] = (record["health"] as Dictionary).duplicate()
-		if not orientation.is_empty():
-			object_orientation[origin_key] = orientation
-	world._objects = objects
-	world._object_factions = object_factions
-	world._object_health = object_health
-	world._object_origin = object_origin
-	world._object_orientation = object_orientation
+	# One record per placed origin tile, expanded back to every footprint tile
+	# by ObjectTable.decode() (it needs the object definitions' footprint/rotatable).
+	world._object_table.decode(state)
 	# Absent for any save written before construction sites existed -- restore()
 	# with an empty array/next_id 1 matches a fresh ConstructionSiteTable's
 	# own starting state exactly.
 	var construction_sites := _decode_construction_sites(state.get("constructionSites", []))
 	world._sites.restore(construction_sites, _next_construction_site_id(construction_sites))
-	world._zones = _decode_zones(state["zones"])
-	world._next_zone_id = int(state["nextZoneId"])
+	world._zone_table.decode(state)
 	world._work_progress = _decode_work_progress(state["workProgress"])
 	var work_progress_owners := _decode_work_progress_owners(state.get("workProgressOwners", []))
 	world._suspended_work_progress = _decode_suspended_work_progress(state.get("suspendedWorkProgress", []))
@@ -245,7 +215,7 @@ static func decode(state: Dictionary) -> WorldState:
 
 	var bounds_max := Vector2i(width - 1, height - 1)
 	world._scheduler.restore_scheduling(_decode_scheduling(scheduling),
-		world._is_passable, Vector2i.ZERO, bounds_max)
+		world._passability.is_passable, Vector2i.ZERO, bounds_max)
 	# rescuer_id -> job_id needs no save data of its own either: every
 	# surviving rescue job's own restrict_to, now available from the just-
 	# restored scheduler, already names its rescuer (the same field a
@@ -314,7 +284,7 @@ static func decode(state: Dictionary) -> WorldState:
 ## its own faction's door permissions, exactly like the live, uninterrupted
 ## search tick()'s own _toil_go_to_passable()/_advance_go_to_or_resubmit()
 ## already are, or a save mid-search could diverge from an uninterrupted run.
-## The two `world._is_passable` branches (haul leg-two, dropping) stay
+## The two `world._passability.is_passable` branches (haul leg-two, dropping) stay
 ## colony-only by construction -- see their own comments above -- and are
 ## untouched.
 static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
@@ -330,14 +300,14 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		var faction_id := String(colonist.get("factionId", "colony"))
 		var cost_fn: Callable
 		if String(job.get("kind", "")) == "haul" and InventoryType.is_carrying(colonist):
-			cost_fn = world._is_passable
+			cost_fn = world._passability.is_passable
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
 			# A carrying build's live second leg searches toward job.site with
 			# the site-tile exception (WorldState._toil_go_to_passable()), never
 			# toward job.target, the wood's own tile.
 			cost_fn = world._routable_to(job["site"], faction_id)
 		elif world._toils.is_dropping_leg(colonist, job_id, job, world._toil_hooks):
-			cost_fn = world._is_passable
+			cost_fn = world._passability.is_passable
 		elif world._toils.needs_fetch_tool(colonist, job, job_id):
 			cost_fn = world._routable_to(snapshot["target"], faction_id)
 		else:
@@ -444,7 +414,7 @@ static func _decode_tool_location(location: Dictionary) -> Dictionary:
 
 # --- zones -------------------------------------------------------------
 
-## world._zones is keyed by zone id; sorted keys give a deterministic
+## ZoneTable.zones is keyed by zone id; sorted keys give a deterministic
 ## encoding order. Zones are a plain array on the wire (like objects); the
 ## next-id counter that keeps a restored world from reusing an id a save
 ## already handed out is carried separately as the top-level "nextZoneId"
@@ -473,12 +443,12 @@ static func _decode_zones(list: Array) -> Dictionary:
 
 # --- objects ---------------------------------------------------------------
 
-## world._objects is keyed by "%d_%d" % [x, y] (see world_state.gd); the
+## ObjectTable.objects is keyed by "%d_%d" % [x, y] (see object_table.gd); the
 ## sorted keys give a deterministic encoding order. object_factions is
-## world._object_factions (the persisted counterpart of the "faction_id"
+## ObjectTable.object_factions (the persisted counterpart of the "faction_id"
 ## runtime field get_objects() adds), a parallel map
 ## keyed the same way as objects rather than a nested value inside it.
-## object_health is world._object_health, the same kind of parallel
+## object_health is ObjectTable.object_health, the same kind of parallel
 ## map: present only for a key whose object kind declares "max_health"
 ## (content/objects.json), so an older save (no key ever had a health
 ## entry) and a bare/non-damageable object both simply omit the "health" wire
@@ -486,13 +456,13 @@ static func _decode_zones(list: Array) -> Dictionary:
 ## so no schema-version bump or migration step is needed (mirrors how
 ## route.rerouting is optional for the same reason, see save_io.gd's
 ## _valid_entity_route()). A save/load that omits it falls back to
-## WorldState._ensure_object_health()'s own backfill, the same recovery an
+## ObjectTable.ensure_object_health()'s own backfill, the same recovery an
 ## object placed by an older fixture already relies on.
-## object_origin/object_orientation are world._object_origin/
-## _object_orientation -- one record is written per placed *object*, not per
+## object_origin/object_orientation are ObjectTable.object_origin/
+## object_orientation -- one record is written per placed *object*, not per
 ## occupied tile: a key present in object_origin names a non-origin footprint
 ## tile of a multi-tile object and is skipped entirely (its origin's own
-## record, plus decode()'s world._object_footprint_tiles() expansion, already
+## record, plus ObjectTable.decode()'s object_footprint_tiles() expansion, already
 ## accounts for it). "orientation" is written only when object_orientation
 ## names this origin (absent, not "", for an unrotated or footprint-[1,1]
 ## object, exactly like game-state.schema.json's optional field).
@@ -517,9 +487,9 @@ static func _encode_objects(objects: Dictionary, object_factions: Dictionary, ob
 	return encoded
 
 ## One raw {origin, kind, factionId, orientation, health?} record
-## per placed object, in wire order -- decode() itself expands each back out
-## to every tile of its footprint (world._object_footprint_tiles(), needing
-## world._object_definitions, which this static function has no access to).
+## per placed object, in wire order -- ObjectTable.decode() expands each back out
+## to every tile of its footprint (object_footprint_tiles(), needing the
+## object definitions, which this static function has no access to).
 ## orientation defaults to "" (no rotation) exactly like a save from before
 ## object orientation existed, which never wrote the field at all.
 static func _decode_objects(objects: Array) -> Array:
@@ -845,7 +815,7 @@ static func _decode_tool_fetch_excluded(list: Array) -> Dictionary:
 ## world._incidents' own cooldown-until-day map, last-processed day, and its
 ## independent seeded RNG stream (ADR 004 "WorldState's diagnostic hash
 ## includes this continuation state") -- read directly off IncidentScheduler's
-## fields since that file exposes no accessor, mirroring how encode() already reads world._random/world._tiles
+## fields since that file exposes no accessor, mirroring how encode() already reads world._random
 ## directly rather than through a getter.
 static func _encode_incident_scheduler(world: WorldState) -> Dictionary:
 	return {

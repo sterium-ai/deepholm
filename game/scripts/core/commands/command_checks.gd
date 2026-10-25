@@ -101,7 +101,7 @@ static func check_target_job_command(world: WorldState, command: Dictionary) -> 
 			if assigned_actor.is_empty():
 				return {"reason": "invalid_target", "message": "Choose an existing actor id for assignee."}
 			var assignee_faction := String(assigned_actor.get("factionId", "colony"))
-			if not world._faction_may_be_ordered(assignee_faction):
+			if not world._passability.faction_may_be_ordered(assignee_faction):
 				return {"reason": WorldState.REASON_NOT_ORDERED_BY_PLAYER, "message": "Choose an actor the player's faction may order."}
 	return {}
 
@@ -172,7 +172,7 @@ static func check_zone_add_command(world: WorldState, command: Dictionary) -> Di
 	var height: int = payload["height"]
 	if (width < 1 or height < 1 or x < 0 or y < 0
 			or x + width > world.get_map_width() or y + height > world.get_map_height()
-			or world._zone_overlaps(x, y, width, height)):
+			or world._zone_table.overlaps(x, y, width, height)):
 		return {"reason": "invalid_target", "message": "Choose a non-degenerate, in-bounds rectangle that does not overlap an existing zone."}
 	return {}
 
@@ -181,7 +181,7 @@ static func check_zone_remove_command(world: WorldState, command: Dictionary) ->
 	var payload: Dictionary = command["payload"]
 	if typeof(payload.get("id")) != TYPE_STRING or String(payload.get("id")).is_empty():
 		return {"reason": "invalid_payload", "message": "zone_remove requires a non-empty string id."}
-	if not world._zones.has(String(payload["id"])):
+	if not world._zone_table.zones.has(String(payload["id"])):
 		return {"reason": "invalid_target", "message": "Choose an existing zone id."}
 	return {}
 

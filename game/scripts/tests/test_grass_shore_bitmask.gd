@@ -137,30 +137,30 @@ func _check_synthetic_map() -> void:
 	var width := 24
 	var height := 24
 	var world := WorldStateType.new(30112, 10, width, height)
-	world._tiles.fill(WorldStateType.TILE_SOIL)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_SOIL)
 
 	# Water edge: a single water tile directly S of the probe.
-	world._tiles[world._tile_index(3, 2)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 2)] = WorldStateType.TILE_WATER
 	var water_edge_probe := Vector2i(3, 1)
 
 	# Water corner: water directly E and S of the probe (two adjacent
 	# orthogonal sides), nothing to its N or W.
-	world._tiles[world._tile_index(7, 7)] = WorldStateType.TILE_WATER
-	world._tiles[world._tile_index(6, 8)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(7, 7)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 8)] = WorldStateType.TILE_WATER
 	var water_corner_probe := Vector2i(6, 7)
 
 	# Water concave: water only on the NE diagonal, both orthogonal
 	# neighbours on that corner (N and E) stay soil.
-	world._tiles[world._tile_index(11, 9)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(11, 9)] = WorldStateType.TILE_WATER
 	var water_concave_probe := Vector2i(10, 10)
 
 	# Rock edge: a single rock tile directly S of the probe (mirrors the
 	# water edge case above, to prove the same grass cell serves both).
-	world._tiles[world._tile_index(3, 12)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 12)] = WorldStateType.TILE_ROCK
 	var rock_edge_probe := Vector2i(3, 11)
 
 	# Rock concave: rock only on the SE diagonal.
-	world._tiles[world._tile_index(16, 16)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(16, 16)] = WorldStateType.TILE_ROCK
 	var rock_concave_probe := Vector2i(15, 15)
 
 	# Mixed-material NE corner: water to the N, rock to the E -- both
@@ -168,14 +168,14 @@ func _check_synthetic_map() -> void:
 	# sides disagree on material. Backing must deterministically pick N
 	# (water) over E (rock), matching grass_shore_selection()'s own N>E
 	# priority for a corner's backing offsets.
-	world._tiles[world._tile_index(20, 4)] = WorldStateType.TILE_WATER
-	world._tiles[world._tile_index(21, 5)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 4)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(21, 5)] = WorldStateType.TILE_ROCK
 	var mixed_ne_probe := Vector2i(20, 5)
 
 	# Mixed-material SE corner: rock to the S, water to the E -- backing
 	# must pick S (rock) over E (water).
-	world._tiles[world._tile_index(20, 14)] = WorldStateType.TILE_ROCK
-	world._tiles[world._tile_index(21, 13)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(20, 14)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(21, 13)] = WorldStateType.TILE_WATER
 	var mixed_se_probe := Vector2i(20, 13)
 
 	var interior_probe := Vector2i(1, 20)
@@ -261,7 +261,7 @@ func _check_incremental_matches_full_rebuild() -> void:
 	var width := 10
 	var height := 10
 	var world := WorldStateType.new(30113, 10, width, height)
-	world._tiles.fill(WorldStateType.TILE_SOIL)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_SOIL)
 
 	var map_view := MapViewType.new()
 	root.add_child(map_view)
@@ -277,16 +277,16 @@ func _check_incremental_matches_full_rebuild() -> void:
 	_expect(not overlay_layer.get_used_cells().has(probe), "probe tile must start with no overlay (fully interior soil)")
 
 	# Orthogonal add: rock directly N of the probe (5,4).
-	world._tiles[world._tile_index(5, 4)] = WorldStateType.TILE_ROCK
-	world._dirty_cells.append(Vector2i(5, 4))
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldStateType.TILE_ROCK
+	world._tile_grid.dirty_cells.append(Vector2i(5, 4))
 	map_view.refresh()
 	_expect(overlay_layer.get_cell_atlas_coords(probe) == EDGE_N, "after an orthogonal neighbour addition, incremental refresh must set the N edge overlay, got %s" % overlay_layer.get_cell_atlas_coords(probe))
 	_expect(base_layer.get_cell_atlas_coords(probe) == rock_coords, "after an orthogonal neighbour addition, incremental refresh must set ROCK's own cell as the base backing, got %s" % base_layer.get_cell_atlas_coords(probe))
 	_assert_matches_fresh_rebuild(world, probe, base_layer, overlay_layer, "after orthogonal addition")
 
 	# Orthogonal removal: revert (5,4) back to soil.
-	world._tiles[world._tile_index(5, 4)] = WorldStateType.TILE_SOIL
-	world._dirty_cells.append(Vector2i(5, 4))
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldStateType.TILE_SOIL
+	world._tile_grid.dirty_cells.append(Vector2i(5, 4))
 	map_view.refresh()
 	_expect(not overlay_layer.get_used_cells().has(probe), "after reverting the orthogonal neighbour, the probe must have no overlay cell again")
 	_expect(base_layer.get_cell_atlas_coords(probe) != rock_coords and base_layer.get_cell_atlas_coords(probe) != water_coords,
@@ -294,16 +294,16 @@ func _check_incremental_matches_full_rebuild() -> void:
 	_assert_matches_fresh_rebuild(world, probe, base_layer, overlay_layer, "after orthogonal removal")
 
 	# Diagonal-only add: water at the probe's NE diagonal (6,4).
-	world._tiles[world._tile_index(6, 4)] = WorldStateType.TILE_WATER
-	world._dirty_cells.append(Vector2i(6, 4))
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 4)] = WorldStateType.TILE_WATER
+	world._tile_grid.dirty_cells.append(Vector2i(6, 4))
 	map_view.refresh()
 	_expect(overlay_layer.get_cell_atlas_coords(probe) == CONCAVE_NE, "after a diagonal-only neighbour addition, incremental refresh must set the NE concave overlay, got %s" % overlay_layer.get_cell_atlas_coords(probe))
 	_expect(base_layer.get_cell_atlas_coords(probe) == water_coords, "after a diagonal-only neighbour addition, incremental refresh must set WATER's own cell as the base backing, got %s" % base_layer.get_cell_atlas_coords(probe))
 	_assert_matches_fresh_rebuild(world, probe, base_layer, overlay_layer, "after diagonal addition")
 
 	# Diagonal-only removal: revert (6,4) back to soil.
-	world._tiles[world._tile_index(6, 4)] = WorldStateType.TILE_SOIL
-	world._dirty_cells.append(Vector2i(6, 4))
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 4)] = WorldStateType.TILE_SOIL
+	world._tile_grid.dirty_cells.append(Vector2i(6, 4))
 	map_view.refresh()
 	_expect(not overlay_layer.get_used_cells().has(probe), "after reverting the diagonal neighbour, the probe must have no overlay cell again")
 	_expect(base_layer.get_cell_atlas_coords(probe) != rock_coords and base_layer.get_cell_atlas_coords(probe) != water_coords,

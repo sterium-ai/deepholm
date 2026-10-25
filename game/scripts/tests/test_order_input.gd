@@ -211,9 +211,9 @@ func _check_wall_gesture(boot) -> void:
 	if boot._map_view == null:
 		boot._build_ui()
 	var world := preload("res://scripts/core/world_state.gd").new(452, 10)
-	world._tiles.fill("floor")
+	world._tile_grid.tiles.fill("floor")
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	world._item_table.items.clear()
 	boot._replace_world(world)
 	var view = boot._map_view
@@ -270,9 +270,9 @@ func _check_wall_gesture(boot) -> void:
 	view.preview_validity = boot._preview_validity
 	# Only the complete north row seals this room; per-tile previews miss it.
 	var enclosed := preload("res://scripts/core/world_state.gd").new(4521, 10)
-	enclosed._tiles.fill("floor")
+	enclosed._tile_grid.tiles.fill("floor")
 	enclosed._colonists.clear()
-	enclosed._objects.clear()
+	enclosed._object_table.objects.clear()
 	enclosed._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	boot._replace_world(enclosed)

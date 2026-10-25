@@ -67,7 +67,7 @@ func _labour_table_with_two(kind_a: String, level_a: int, kind_b: String, level_
 ## _single_colonist_world()).
 func _single_colonist_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -91,7 +91,7 @@ func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
 ## tile mutation in the test) and leave the target tile plowed_soil.
 func _check_till_completes_and_plows_tile() -> void:
 	var world := _single_colonist_world(268001)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	var result := _command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "till submission on a soil tile must be accepted")
 
@@ -107,7 +107,7 @@ func _check_till_completes_and_plows_tile() -> void:
 ## consume that seed item, and leave the target tile planted.
 func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 	var world := _single_colonist_world(268002)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 2
 	var result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
@@ -128,7 +128,7 @@ func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 ## item state.
 func _check_sow_rejected_when_no_seed_anywhere() -> void:
 	var world := _single_colonist_world(268003)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	var tile_before := world.get_tile(1, 0)
 	var items_before := world.get_items()
 
@@ -146,9 +146,9 @@ func _check_sow_rejected_when_no_seed_anywhere() -> void:
 ## rather than let it plant without ever consuming an input.
 func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -> void:
 	var world := WorldStateType.new(268006, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._tiles[world._tile_index(11, 10)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(11, 10)] = WorldStateType.TILE_PLOWED_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -202,8 +202,8 @@ func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -
 ## blocked_missing_input instead of later placing an emptied stack.
 func _check_sow_counts_a_seed_mid_haul() -> void:
 	var world := WorldStateType.new(268007, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "hauler", "kind": "colonist", "x": 20, "y": 20,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -256,7 +256,7 @@ func _check_sow_counts_a_seed_mid_haul() -> void:
 ## against haul independently, rather than accepting either for colonist A.
 func _mixed_labour_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._calendar = CalendarServiceType.new("", {"day_length_ticks": 1000, "windows": []})
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
@@ -292,7 +292,7 @@ func _first_activated_kinds(world: WorldStateType) -> Dictionary:
 ## till specifically.
 func _check_labour_priority_till_before_haul() -> void:
 	var world := _mixed_labour_world(268004)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
 	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
 	world._item_table.next_item_id = 3
@@ -312,7 +312,7 @@ func _check_labour_priority_till_before_haul() -> void:
 ## rather than piggy-backing on till's result.
 func _check_labour_priority_sow_before_haul() -> void:
 	var world := _mixed_labour_world(268009)
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
 	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
@@ -347,10 +347,10 @@ func _check_labour_priority_sow_before_haul() -> void:
 func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	var world := _single_colonist_world(268005)
 	var colonist_id: String = world.get_colonists()[0]["id"]
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._tiles[world._tile_index(9, 9)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(9, 9)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
 	world._item_table.next_item_id = 2
@@ -413,9 +413,9 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 ## the same schemaVersion (till/sow add no persisted field or version bump).
 func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 	var world := WorldStateType.new(268010, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -466,8 +466,8 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 ## _check_save_state_includes_new_tile_and_job_kinds() above.
 func _check_save_state_passes_runtime_validator() -> void:
 	var world := WorldStateType.new(268011, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -507,8 +507,8 @@ func _check_save_state_passes_runtime_validator() -> void:
 ## _cancel_haul_job_carrying_consumed_item() must also cover.
 func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	var world := WorldStateType.new(268012, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(41, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(41, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "hauler", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": [], "labourTable": _default_labour_table()})
@@ -598,7 +598,7 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 ## of overwriting the tile changed by whatever else set it.
 func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() -> void:
 	var world := _single_colonist_world(268013)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	var result := _command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "till submission on a soil tile must be accepted")
 	var job_id := String(result["job_id"])
@@ -611,7 +611,7 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 			break
 	_expect(became_active, "setup: the till job must become active before this test changes its target underneath it")
 
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_FLOOR
 
 	var terminal := false
 	for _i in TICK_BUDGET:
@@ -635,7 +635,7 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 ## re-planting an already-planted tile for a wasted second seed.
 func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> void:
 	var world := _single_colonist_world(268014)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 3
@@ -681,7 +681,7 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 ## for an item that no longer exists.
 func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void:
 	var world := _single_colonist_world(268015)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 2
 
@@ -720,8 +720,8 @@ func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void
 ## reused by _check_replay_determinism().
 func _deterministic_farm_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})

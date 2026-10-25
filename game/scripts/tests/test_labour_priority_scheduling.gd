@@ -298,13 +298,13 @@ func _check_replay_determinism() -> void:
 ## as hard as possible in work's favor; the need job must still win.
 func _check_committed_need_job_precedes_work_with_labour_and_calendar_boost() -> void:
 	var world := _needs_isolated_world(700)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	# Water placed far enough away (distance 10, move_ticks_per_tile 4) that
 	# travel spans many ticks -- long enough to observe the committed need job
 	# still pending (not yet completed) across several scheduler ticks, rather
 	# than the whole commit-travel-consume cycle collapsing into a single
 	# tick the way an adjacent source would.
-	world._tiles[world._tile_index(0, 10)] = WorldStateType.TILE_WATER
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 10)] = WorldStateType.TILE_WATER
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
@@ -380,7 +380,7 @@ func _labour_table_with(kind: String, level: int) -> Dictionary:
 
 func _needs_isolated_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	for kind in world._need_definitions.keys():
 		world._need_definitions[kind]["rate_per_day"] = 0
 	return world
@@ -399,8 +399,8 @@ func _needs_isolated_world(seed_value: int) -> WorldStateType:
 func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	# (a) the colony's only mine-enabled colonist is mid-search.
 	var only_enabled_searching := _needs_isolated_world(701)
-	only_enabled_searching._tiles[only_enabled_searching._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	only_enabled_searching._tiles[only_enabled_searching._tile_index(0, 1)] = WorldStateType.TILE_WATER
+	only_enabled_searching._tile_grid.tiles[only_enabled_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	only_enabled_searching._tile_grid.tiles[only_enabled_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
 	only_enabled_searching._colonists.clear()
 	only_enabled_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
@@ -419,8 +419,8 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 
 	# (b) every colonist has mine off and is mid-search at once.
 	var all_searching := _needs_isolated_world(702)
-	all_searching._tiles[all_searching._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	all_searching._tiles[all_searching._tile_index(0, 1)] = WorldStateType.TILE_WATER
+	all_searching._tile_grid.tiles[all_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	all_searching._tile_grid.tiles[all_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
 	all_searching._colonists.clear()
 	all_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
@@ -440,8 +440,8 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	# (c) re-enabling labour on a colonist the very tick it starts a fresh
 	# search must still clear the reason on that same scan.
 	var reenable_while_searching := _needs_isolated_world(703)
-	reenable_while_searching._tiles[reenable_while_searching._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	reenable_while_searching._tiles[reenable_while_searching._tile_index(0, 1)] = WorldStateType.TILE_WATER
+	reenable_while_searching._tile_grid.tiles[reenable_while_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	reenable_while_searching._tile_grid.tiles[reenable_while_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
 	reenable_while_searching._colonists.clear()
 	reenable_while_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
@@ -863,9 +863,9 @@ func _default_labour_table() -> Dictionary:
 ## in a single tick.
 func _single_colonist_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
@@ -875,10 +875,10 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 
 func _deterministic_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_FLOOR
-	world._tiles[world._tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tiles[world._tile_index(0, 1)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_FLOOR
+	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})

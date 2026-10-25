@@ -238,7 +238,7 @@ func _check_world_state_alert_fires_once_when_conditions_met() -> void:
 		return
 	var window_id := "fires_once_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 2
 	for _i in 80:
@@ -266,7 +266,7 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 		return
 	var window_id := "labour_suppresses_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 2
 	for _i in 10:
@@ -301,7 +301,7 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 		return
 	var window_id := "carried_seed_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	var colonists := world.get_colonists()
 	_expect(not colonists.is_empty(), "expected at least one colonist")
 	if colonists.is_empty():
@@ -343,7 +343,7 @@ func _check_fired_alert_survives_save_restore() -> void:
 		return
 	var window_id := "save_restore_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tiles[world._tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
 	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
 	world._item_table.next_item_id = 2
 	for _i in 60:

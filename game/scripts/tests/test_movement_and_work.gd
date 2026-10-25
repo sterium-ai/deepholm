@@ -46,10 +46,10 @@ func _expect(condition: bool, message: String) -> void:
 ## still treats trench as ordinary passable terrain; only arrival traps).
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	for x in range(0, 5):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
-	world._tiles[world._tile_index(4, 0)] = WorldType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 0)] = WorldType.TILE_TREE
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -81,7 +81,7 @@ func _jobs_done(world: WorldType) -> bool:
 			completed += 1
 	return completed == 2
 
-## Matches WorldState._is_passable() exactly, with no exception for the chop
+## Matches WorldState._passability.is_passable() exactly, with no exception for the chop
 ## target: a colonist works a tree from the adjacent tile it stopped on, and
 ## must never occupy the tree tile itself (see global_assignment.gd's path
 ## trim in its "chosen" loop). TILE_TRENCH is included since a colonist digs
@@ -197,8 +197,8 @@ func _real_colonist_by_id(world: WorldType, colonist_id: String) -> Dictionary:
 ## bounded, keeping the scenario deterministic within a small tick budget.
 func _build_interrupt_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_FLOOR)
-	world._tiles[world._tile_index(3, 0)] = WorldType.TILE_SOIL
+	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	_isolate_need(world, "food")
 	# "needs" keys are listed alphabetically (food, rest, water) to match
@@ -301,7 +301,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 ## up despite a critical need, unlike dig/chop's `work` toil above.
 func _check_critical_need_does_not_interrupt_pick_up() -> void:
 	var world := WorldType.new(555002, 10)
-	world._tiles.fill(WorldType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
 	world._colonists.clear()
 	_isolate_need(world, "food")
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
@@ -398,8 +398,8 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 	# a real one. No need source is required here either way, since this test
 	# never lets any real need job run.
 	var live := WorldType.new(555003)
-	live._tiles.fill(WorldType.TILE_FLOOR)
-	live._tiles[live._tile_index(3, 0)] = WorldType.TILE_SOIL
+	live._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
+	live._tile_grid.tiles[live._tile_grid.tile_index(3, 0)] = WorldType.TILE_SOIL
 	live._colonists.clear()
 	live._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
@@ -455,9 +455,9 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 ## or staging a second find roll -- and must not leave its tile reservation behind once terminal.
 func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 	var world := WorldType.new(358001)
-	world._tiles.fill(WorldType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
 	var target := Vector2i(2, 0)
-	world._tiles[world._tile_index(target.x, target.y)] = WorldType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -545,7 +545,7 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 
 	# Stand in for a second dig job completing on this same tile while colonist_0's job sits
 	# paused: exactly the effect world_state.gd's own "dig" branch would have produced.
-	world._tiles[world._tile_index(3, 0)] = WorldType.TILE_TRENCH
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldType.TILE_TRENCH
 	world._item_table.spawn_item("sand", 4, 0)
 
 	world._resume_interrupted_job("colonist_0")

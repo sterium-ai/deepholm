@@ -190,13 +190,13 @@ func _build_single_wall(world: WorldStateType, x: int, door_y: int, gap_y: int) 
 ## leave them stale.
 func _build_controlled_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	# A freshly generated world can now place berry_bush objects
 	# (ADR 020); a leftover one would make _is_bare_tile() false
 	# for whichever tile it landed on, breaking this fixture's "fully
 	# determined" spawn/target selection.
-	world._objects.clear()
-	world._object_factions.clear()
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	return world
 
@@ -206,11 +206,11 @@ func _build_controlled_world(seed_value: int) -> WorldStateType:
 ## remaining tiles are the only candidate targets.
 func _build_pocket_world(seed_value: int, floor_tiles: Array) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	for tile in floor_tiles:
-		world._tiles[world._tile_index(tile.x, tile.y)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(tile.x, tile.y)] = WorldStateType.TILE_FLOOR
 	world._colonists.clear()
 	return world
 
@@ -371,7 +371,7 @@ func _check_initial_route_avoids_door_via_alternate_route() -> void:
 	_build_single_wall(world, WALL_X, DOOR_Y, GAP_Y)
 	var wolf_target := Vector2i(WALL_X + 2, DOOR_Y)
 	var till_target := Vector2i(WALL_X + 2, DOOR_Y + 1)
-	world._tiles[world._tile_index(till_target.x, till_target.y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(till_target.x, till_target.y)] = WorldStateType.TILE_SOIL
 	world._colonists.append(_colonist("door_colonist", 0, DOOR_Y + 1))
 	var job_id := world._incidents.propose(_make_wolf(world, "gap_wolf", 0, DOOR_Y), wolf_target, 5)
 	_expect(not job_id.is_empty(), "the wolf's job must be accepted")
@@ -550,7 +550,7 @@ func _check_reserved_by_colonist_job_defers_spawn() -> void:
 	var spawn := Vector2i(0, 10)
 	var target := Vector2i(1, 10)
 	var world := _build_pocket_world(919, [spawn, target])
-	world._tiles[world._tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
 	world._colonists.append(_colonist("tiller", target.x, target.y))
 	_expect(world.apply({"actor": "test", "command_id": "till_pocket", "tick": world.get_tick(),
 		"type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}}).get("ok", false), "the till order must be accepted")
@@ -615,7 +615,7 @@ func _check_cleanup_on_every_terminal_transition() -> void:
 	var spawn := Vector2i(0, 10)
 	var target := Vector2i(1, 10)
 	var pocket := _build_pocket_world(929, [spawn, target])
-	pocket._tiles[pocket._tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
+	pocket._tile_grid.tiles[pocket._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
 	pocket._colonists.append(_colonist("tiller", target.x, target.y))
 	pocket.apply({"actor": "test", "command_id": "till_hold", "tick": 0, "type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}})
 	pocket.tick()
@@ -660,7 +660,7 @@ func _check_unreachable_travel_clears_progress_for_next_job() -> void:
 	if _failed: return
 	var world := _build_controlled_world(949)
 	var target := Vector2i(WALL_X + 10, DOOR_Y)
-	world._tiles[world._tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
 	var job_id := world._incidents.propose(_make_wolf(world, "cut_wolf", 0, DOOR_Y), target, 40)
 	_expect(_tick_until(world, _in_world("cut_wolf")) >= 0, "the wolf must spawn")
 	_expect(int(world._get_work_progress(target)) == 40, "the active incident job must have stamped its wait on the target")
@@ -1065,13 +1065,13 @@ func _check_incidents_enabled_after_new_game_and_survive_save_load() -> void:
 ## target once ApproachGiver takes over. Mirrors test_wolf_attack.gd's _build_wolf_attack_world().
 func _build_lingering_arena(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	for y in range(LINGER_SPAWN.y, LINGER_DOOR_TILE.y + 1):
-		world._tiles[world._tile_index(LINGER_SPAWN.x, y)] = WorldStateType.TILE_FLOOR
-	world._set_object(LINGER_DOOR_TILE.x, LINGER_DOOR_TILE.y, "door")
+		world._tile_grid.tiles[world._tile_grid.tile_index(LINGER_SPAWN.x, y)] = WorldStateType.TILE_FLOOR
+	world._object_table.set_object(LINGER_DOOR_TILE.x, LINGER_DOOR_TILE.y, "door")
 	return world
 
 ## Ticks to one tick before raider_incursion's own min_day boundary, seals
@@ -1084,9 +1084,9 @@ func _build_lingering_arena(seed_value: int) -> WorldStateType:
 func _draw_lingering_incident(world: WorldStateType) -> Array:
 	var draw_tick := (LINGER_MIN_DAY - 1) * DAY_LENGTH_TICKS
 	_tick_to(world, draw_tick - 1)
-	world._set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "bed")
+	world._object_table.set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "bed")
 	world.tick()
-	world._set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "")
+	world._object_table.set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "")
 	var events := _incident_started_events(world, LINGER_INCIDENT_ID)
 	if events.size() != 1:
 		return []

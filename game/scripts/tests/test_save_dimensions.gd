@@ -248,10 +248,10 @@ func _carve_land_corridor(world: WorldStateType, from: Vector2i, to: Vector2i) -
 		_clear_land_tile(world, x, y)
 
 func _clear_land_tile(world: WorldStateType, x: int, y: int) -> void:
-	world._tiles[world._tile_index(x, y)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(x, y)] = WorldStateType.TILE_SOIL
 	var key := "%d_%d" % [x, y]
-	world._objects.erase(key)
-	world._object_factions.erase(key)
+	world._object_table.objects.erase(key)
+	world._object_table.object_factions.erase(key)
 
 ## Expanding Chebyshev-ring search for the nearest soil tile to `origin`,
 ## mirroring debug_scenario.gd's own _nearest_matching_tile().

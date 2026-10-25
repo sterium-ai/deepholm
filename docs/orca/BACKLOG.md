@@ -72,7 +72,7 @@ Orca helper scripts, this backlog.
   sequence identical for the same seed (`test_dig_finds` or the equivalent existing test).
 - **Non-goals:** item stacking rules, new item kinds.
 
-### R3 — Extract `TileGrid`, `ObjectTable`, `ZoneTable`, `Passability` · `todo`
+### R3 — Extract `TileGrid`, `ObjectTable`, `ZoneTable`, `Passability` · `review (antonelmejor50-hub/r3-extract-tilegrid-objecttable-zonetable)`
 
 - **Goal:** four modules under `map/` and `objects/` own tiles + water cache + dirty cells,
   placed objects + footprints + origin/orientation/health/factions, zones, and the

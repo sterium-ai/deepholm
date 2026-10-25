@@ -7,7 +7,7 @@ var _failed := false
 
 func _init() -> void:
 	var world := WorldStateType.new(408, 10)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
 	var boot := BootType.new()
 	root.add_child(boot)

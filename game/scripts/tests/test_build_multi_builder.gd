@@ -41,9 +41,9 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	return world
 
 func _colonist(id: String, x: int, y: int) -> Dictionary:

@@ -93,14 +93,14 @@ func _check_add_and_query_per_tile() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(2, 10)
-	world._set_object(3, 4, "chair")
+	world._object_table.set_object(3, 4, "chair")
 	_expect(world.get_object(3, 4) == "chair", "get_object() must report the added object's kind")
 	_expect(world.get_object(0, 0) == "", "an untouched tile must still report \"\"")
 
-	world._set_object(3, 4, "door")
+	world._object_table.set_object(3, 4, "door")
 	_expect(world.get_object(3, 4) == "door", "setting a new kind on the same tile must replace it")
 
-	world._set_object(3, 4, "")
+	world._object_table.set_object(3, 4, "")
 	_expect(world.get_object(3, 4) == "", "setting an empty kind must clear the object")
 
 ## get_objects() returns every occupied tile as {x, y, kind}.
@@ -113,8 +113,8 @@ func _check_get_objects_snapshot() -> void:
 	# total count is exactly these two.
 	var world := WorldStateType.new(3, 10)
 	var before_count := world.get_objects().size()
-	world._set_object(1, 1, "wooden_wall")
-	world._set_object(2, 5, "table")
+	world._object_table.set_object(1, 1, "wooden_wall")
+	world._object_table.set_object(2, 5, "table")
 	var objects := world.get_objects()
 	_expect(objects.size() == before_count + 2, "get_objects() must report exactly the placed objects, plus whatever generation already placed")
 	var by_kind: Dictionary = {}
@@ -130,7 +130,7 @@ func _check_detached_copies() -> void:
 		return
 	var world := WorldStateType.new(4, 10)
 	var before_count := world.get_objects().size()
-	world._set_object(6, 6, "chair")
+	world._object_table.set_object(6, 6, "chair")
 
 	var objects := world.get_objects()
 	objects.append({"x": 9, "y": 9, "kind": "bogus"})
@@ -146,7 +146,7 @@ func _check_state_hash_changes_on_add() -> void:
 		return
 	var world := WorldStateType.new(5, 10)
 	var before := world.state_hash()
-	world._set_object(10, 10, "door")
+	world._object_table.set_object(10, 10, "door")
 	var after := world.state_hash()
 	_expect(before != after, "state_hash() must change when an object is added")
 
@@ -159,7 +159,7 @@ func _check_footprint_object_occupies_every_tile() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(6, 10)
-	world._set_object(20, 20, "test_footprint_crate", "colony", "horizontal")
+	world._object_table.set_object(20, 20, "test_footprint_crate", "colony", "horizontal")
 	_expect(world.get_object(20, 20) == "test_footprint_crate", "the origin footprint tile must report the placed kind")
 	_expect(world.get_object(21, 20) == "test_footprint_crate", "the second footprint tile must report the same kind")
 	_expect(not bool(world.passability(20, 20)["passable"]), "the origin footprint tile must be impassable")
@@ -178,7 +178,7 @@ func _check_footprint_object_rotates_with_orientation() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(7, 10)
-	world._set_object(25, 25, "test_footprint_crate", "colony", "vertical")
+	world._object_table.set_object(25, 25, "test_footprint_crate", "colony", "vertical")
 	_expect(world.get_object(25, 25) == "test_footprint_crate", "the origin footprint tile must report the placed kind")
 	_expect(world.get_object(25, 26) == "test_footprint_crate", "vertical orientation must occupy the +y neighbour")
 	_expect(world.get_object(26, 25) == "", "vertical orientation must not occupy the +x neighbour")
@@ -189,8 +189,8 @@ func _check_clearing_any_footprint_tile_clears_the_whole_object() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(8, 10)
-	world._set_object(30, 30, "test_footprint_crate", "colony", "horizontal")
-	world._set_object(31, 30, "")
+	world._object_table.set_object(30, 30, "test_footprint_crate", "colony", "horizontal")
+	world._object_table.set_object(31, 30, "")
 	_expect(world.get_object(30, 30) == "", "clearing via a non-origin footprint tile must clear the origin tile too")
 	_expect(world.get_object(31, 30) == "", "clearing via a non-origin footprint tile must clear that tile")
 
@@ -204,18 +204,18 @@ func _check_footprint_object_shares_one_health_pool() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(9, 10)
-	world._set_object(40, 40, "test_footprint_crate", "colony", "horizontal")
-	var origin_hp := int(world._object_health_at(40, 40)["hp"])
-	var second_hp := int(world._object_health_at(41, 40)["hp"])
+	world._object_table.set_object(40, 40, "test_footprint_crate", "colony", "horizontal")
+	var origin_hp := int(world._object_table.object_health_at(40, 40)["hp"])
+	var second_hp := int(world._object_table.object_health_at(41, 40)["hp"])
 	_expect(origin_hp == 20 and second_hp == 20, "both footprint tiles must start at the kind's full health")
 
-	world._damage_object(41, 40, 5)
-	origin_hp = int(world._object_health_at(40, 40)["hp"])
-	second_hp = int(world._object_health_at(41, 40)["hp"])
+	world._object_table.damage_object(41, 40, 5)
+	origin_hp = int(world._object_table.object_health_at(40, 40)["hp"])
+	second_hp = int(world._object_table.object_health_at(41, 40)["hp"])
 	_expect(origin_hp == 15, "damage applied via the non-origin tile must reduce the shared pool, visible from the origin tile")
 	_expect(second_hp == 15, "damage applied via the non-origin tile must be visible from that same tile")
 	_expect(origin_hp == second_hp, "every footprint tile must report the same hp: one shared pool, not one per tile")
 
-	world._damage_object(41, 40, 100)
+	world._object_table.damage_object(41, 40, 100)
 	_expect(world.get_object(40, 40) == "", "destroying the object via a non-origin tile must clear the whole footprint, including the origin")
 	_expect(world.get_object(41, 40) == "", "destroying the object via a non-origin tile must clear that tile too")

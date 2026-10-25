@@ -115,9 +115,9 @@ func _assert_no_orphaned_reservations(world: WorldStateType, context: String) ->
 ## already guard against.
 func _build_arena(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	return world
 
@@ -197,15 +197,15 @@ func _check_wall_destroyed_at_zero_hp() -> void:
 	if _failed: return
 	var world := _build_arena(3)
 	_spawn_actor(world, "raiders", "wall_attacker", 5, 5)
-	world._set_object(6, 5, "wooden_wall")
+	world._object_table.set_object(6, 5, "wooden_wall")
 	world.tick()
-	_expect(not world._object_health_at(6, 5).is_empty(), "a freshly placed wall must carry per-instance health")
+	_expect(not world._object_table.object_health_at(6, 5).is_empty(), "a freshly placed wall must carry per-instance health")
 	var attacker := world._find_colonist("wall_attacker")
 	attacker["combat"]["damage"] = 999
 	attacker["combat"]["cooldown_remaining"] = 0
 	world.tick()
 	_expect(world.get_object(6, 5) == "", "a wall reduced to 0 hp must clear to no object (floor underneath)")
-	_expect(world._object_health_at(6, 5).is_empty(), "a destroyed object's health entry must be cleared")
+	_expect(world._object_table.object_health_at(6, 5).is_empty(), "a destroyed object's health entry must be cleared")
 
 func _check_flee_below_threshold() -> void:
 	if _failed: return
@@ -436,7 +436,7 @@ func _check_flee_target_avoids_blocked_direction() -> void:
 	_spawn_actor(world, "colony", "prey", 11, 10) # threat directly west -- the prey's own "away" ray points due east
 	# Wall off the entire due-east ray so the single-ray approach has no candidate.
 	for x in range(12, 17):
-		world._set_object(x, 10, "wooden_wall")
+		world._object_table.set_object(x, 10, "wooden_wall")
 	world.tick() # backfills "combat" (ActorTable's spawn path does not add it) before this test mutates it
 	var prey := world._find_colonist("prey")
 	prey["health"]["hp"] = 25
@@ -461,9 +461,9 @@ func _check_flee_target_requires_separation_improvement() -> void:
 	_spawn_actor(world, "raiders", "hunter", 0, 10) # far west; nearest_hostile_actor() is unbounded
 	_spawn_actor(world, "colony", "prey", 10, 10)
 	for pos in [Vector2i(16, 10), Vector2i(10, 4), Vector2i(10, 16), Vector2i(16, 4), Vector2i(16, 16), Vector2i(4, 4), Vector2i(4, 16)]:
-		world._set_object(pos.x, pos.y, "wooden_wall")
+		world._object_table.set_object(pos.x, pos.y, "wooden_wall")
 	for x in [12, 13, 14, 15]:
-		world._set_object(x, 10, "wooden_wall")
+		world._object_table.set_object(x, 10, "wooden_wall")
 	world.tick() # backfills "combat" before this test mutates it
 	var prey := world._find_colonist("prey")
 	prey["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
@@ -514,15 +514,15 @@ func _check_targeting_prefers_hostile_among_multiple_occupants() -> void:
 func _check_object_health_survives_save_load() -> void:
 	if _failed: return
 	var world := _build_arena(10)
-	world._set_object(6, 5, "wooden_wall")
-	world._set_object(7, 5, "door")
+	world._object_table.set_object(6, 5, "wooden_wall")
+	world._object_table.set_object(7, 5, "door")
 	world.tick()
-	var wall_max := int(world._object_health_at(6, 5)["maxHp"])
-	var door_max := int(world._object_health_at(7, 5)["maxHp"])
-	world._damage_object(6, 5, 30)
-	world._damage_object(7, 5, 15)
-	var wall_hp_before := int(world._object_health_at(6, 5)["hp"])
-	var door_hp_before := int(world._object_health_at(7, 5)["hp"])
+	var wall_max := int(world._object_table.object_health_at(6, 5)["maxHp"])
+	var door_max := int(world._object_table.object_health_at(7, 5)["maxHp"])
+	world._object_table.damage_object(6, 5, 30)
+	world._object_table.damage_object(7, 5, 15)
+	var wall_hp_before := int(world._object_table.object_health_at(6, 5)["hp"])
+	var door_hp_before := int(world._object_table.object_health_at(7, 5)["hp"])
 	_expect(wall_hp_before == wall_max - 30, "a damaged wall must carry its exact damaged hp before save")
 	_expect(door_hp_before == door_max - 15, "a damaged door must carry its exact damaged hp before save")
 	_expect(wall_hp_before != wall_max and door_hp_before != door_max,
@@ -531,15 +531,15 @@ func _check_object_health_survives_save_load() -> void:
 	var loaded := StateCodecType.decode(StateCodecType.encode(world))
 	_expect(loaded.get_object(6, 5) == "wooden_wall", "a wall must survive a save/load round trip")
 	_expect(loaded.get_object(7, 5) == "door", "a door must survive a save/load round trip")
-	_expect(int(loaded._object_health_at(6, 5).get("hp", -1)) == wall_hp_before,
+	_expect(int(loaded._object_table.object_health_at(6, 5).get("hp", -1)) == wall_hp_before,
 		"a damaged wall's exact hp must survive save/load, not reset to full")
-	_expect(int(loaded._object_health_at(7, 5).get("hp", -1)) == door_hp_before,
+	_expect(int(loaded._object_table.object_health_at(7, 5).get("hp", -1)) == door_hp_before,
 		"a damaged door's exact hp must survive save/load, not reset to full")
 
-	loaded._damage_object(6, 5, wall_hp_before)
+	loaded._object_table.damage_object(6, 5, wall_hp_before)
 	_expect(loaded.get_object(6, 5) == "", "a wall already damaged before save must clear to floor once its persisted hp (not a reset full hp) reaches 0 after load")
-	loaded._damage_object(7, 5, door_hp_before - 1)
-	_expect(int(loaded._object_health_at(7, 5).get("hp", -1)) == 1,
+	loaded._object_table.damage_object(7, 5, door_hp_before - 1)
+	_expect(int(loaded._object_table.object_health_at(7, 5).get("hp", -1)) == 1,
 		"further damage after load must land relative to the persisted hp, not a reset full hp")
 
 ## CombatGiver's own `_fleeing` association is never
@@ -716,7 +716,7 @@ func _build_combat_world(seed_value: int) -> WorldStateType:
 	var world := _build_arena(seed_value)
 	_spawn_actor(world, "colony", "det_a", 5, 5)
 	_spawn_actor(world, "raiders", "det_b", 6, 5)
-	world._set_object(7, 5, "wooden_wall")
+	world._object_table.set_object(7, 5, "wooden_wall")
 	return world
 
 func _check_determinism_same_seed() -> void:
@@ -859,8 +859,8 @@ func _build_faction_blocked_door_world(seed_value: int) -> WorldStateType:
 	for y in WorldStateType.MAP_HEIGHT:
 		if y == 10:
 			continue
-		world._set_object(14, y, "wooden_wall")
-	world._set_object(14, 10, "door")
+		world._object_table.set_object(14, y, "wooden_wall")
+	world._object_table.set_object(14, 10, "door")
 	world.tick() # backfills "combat" before a caller mutates it
 	return world
 
@@ -1159,7 +1159,7 @@ func _check_flee_interrupted_incident_job_survives_save_load() -> void:
 func _check_object_health_validation() -> void:
 	if _failed: return
 	var world := _build_arena(38)
-	world._set_object(6, 5, "wooden_wall")
+	world._object_table.set_object(6, 5, "wooden_wall")
 	world.tick()
 	var state: Dictionary = StateCodecType.encode(world)
 	var objects: Array = state["objects"]
@@ -1395,10 +1395,10 @@ func _check_flee_recovery_after_destination_exhaustion() -> void:
 	if _failed: return
 	var world := _build_arena(49)
 	for x in range(9, 14):
-		world._set_object(x, 9, "wooden_wall")
-		world._set_object(x, 11, "wooden_wall")
-	world._set_object(9, 10, "wooden_wall")
-	world._set_object(13, 10, "door")
+		world._object_table.set_object(x, 9, "wooden_wall")
+		world._object_table.set_object(x, 11, "wooden_wall")
+	world._object_table.set_object(9, 10, "wooden_wall")
+	world._object_table.set_object(13, 10, "door")
 	_spawn_actor(world, "colony", "hunter", 10, 10)
 	_spawn_actor(world, "raiders", "prey", 11, 10)
 	world.tick() # backfills "combat"/"health"
@@ -1487,8 +1487,8 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	attacker["combat"]["cooldown_remaining"] = 100000
 	_spawn_actor(world, "colony", "lumberjack", 20, 5)
 	_spawn_actor(world, "colony", "miner", 6, 20)
-	world._tiles[world._tile_index(22, 5)] = WorldStateType.TILE_TREE
-	world._tiles[world._tile_index(6, 22)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(22, 5)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(6, 22)] = WorldStateType.TILE_SOIL
 	var chop := world.apply({"actor": "test", "command_id": "chop_1", "tick": world.get_tick(), "type": "chop", "payload": {"x": 22, "y": 5, "priority": 1}})
 	var dig := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(), "type": "dig", "payload": {"x": 6, "y": 22, "priority": 1}})
 	_expect(chop.get("ok", false) and dig.get("ok", false), "chop and dig orders must be accepted: %s / %s" % [chop, dig])
@@ -1540,12 +1540,12 @@ func _check_need_search_survives_flee_activation() -> void:
 	_spawn_actor(world, "colony", "worker", 15, 15)
 	_spawn_actor(world, "raiders", "reaper", 0, 0) # far away; nearest_hostile_actor() is unbounded, never lands a hit
 	for x in range(7, 24):
-		world._set_object(x, 7, "wooden_wall")
-		world._set_object(x, 23, "wooden_wall")
+		world._object_table.set_object(x, 7, "wooden_wall")
+		world._object_table.set_object(x, 23, "wooden_wall")
 	for y in range(7, 24):
-		world._set_object(7, y, "wooden_wall")
-		world._set_object(23, y, "wooden_wall")
-	world._tiles[world._tile_index(25, 15)] = WorldStateType.TILE_WATER
+		world._object_table.set_object(7, y, "wooden_wall")
+		world._object_table.set_object(23, y, "wooden_wall")
+	world._tile_grid.tiles[world._tile_grid.tile_index(25, 15)] = WorldStateType.TILE_WATER
 	world.tick() # backfills "combat"/"health" before this test mutates them
 
 	var work_result: Dictionary = world._scheduler.submit(Vector2i(16, 15), 1, world.get_tick(), "till")
@@ -1710,15 +1710,15 @@ func _check_flee_pending_search_survives_save_load_faction_aware() -> void:
 ## than one tick.
 func _build_flee_racetrack_door_world(seed_value: int) -> WorldStateType:
 	var world := _build_arena(seed_value)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(10, 16):
-		world._tiles[world._tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
 	for y in range(0, WorldStateType.MAP_HEIGHT):
-		world._tiles[world._tile_index(10, y)] = WorldStateType.TILE_FLOOR
-		world._tiles[world._tile_index(15, y)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(10, y)] = WorldStateType.TILE_FLOOR
+		world._tile_grid.tiles[world._tile_grid.tile_index(15, y)] = WorldStateType.TILE_FLOOR
 	for x in range(10, 16):
-		world._tiles[world._tile_index(x, WorldStateType.MAP_HEIGHT - 1)] = WorldStateType.TILE_FLOOR
-	world._set_object(15, 1, "door")
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, WorldStateType.MAP_HEIGHT - 1)] = WorldStateType.TILE_FLOOR
+	world._object_table.set_object(15, 1, "door")
 	_spawn_actor(world, "colony", "hunter", 10, 0)
 	_spawn_actor(world, "raiders", "prey", 11, 0)
 	world.tick() # backfills "combat" before a caller mutates it
@@ -1749,8 +1749,8 @@ func _check_flee_active_reroute_survives_save_load_faction_aware() -> void:
 		if not walled:
 			var prey := live._find_colonist("prey")
 			if int(prey["x"]) == 12 and int(prey["y"]) == 0:
-				live._set_object(13, 0, "wooden_wall")
-				uninterrupted._set_object(13, 0, "wooden_wall")
+				live._object_table.set_object(13, 0, "wooden_wall")
+				uninterrupted._object_table.set_object(13, 0, "wooden_wall")
 				walled = true
 		var route = live._find_colonist("prey").get("route")
 		if route != null and route.get("rerouting") != null and String(route["rerouting"].get("status", "")) == "searching":
@@ -1917,11 +1917,11 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	if _failed: return
 	var world := _build_arena(61)
 	for x in range(4, 13):
-		world._set_object(x, 4, "wooden_wall")
-		world._set_object(x, 10, "wooden_wall")
+		world._object_table.set_object(x, 4, "wooden_wall")
+		world._object_table.set_object(x, 10, "wooden_wall")
 	for y in range(5, 10):
-		world._set_object(4, y, "wooden_wall")
-		world._set_object(12, y, "wooden_wall")
+		world._object_table.set_object(4, y, "wooden_wall")
+		world._object_table.set_object(12, y, "wooden_wall")
 	var actor_id := "incident_trapped"
 	var job_id := world._incidents.propose(_make_incident_actor(world, actor_id, 6, 7), Vector2i(10, 7), 5)
 	_expect(not job_id.is_empty(), "the incident proposal must be accepted")
@@ -1942,10 +1942,10 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	# Disconnect the incident job's own target: wall off its four orthogonal
 	# neighbors, so the destination stays a bare floor tile but nothing can
 	# ever reach it.
-	world._set_object(9, 7, "wooden_wall")
-	world._set_object(11, 7, "wooden_wall")
-	world._set_object(10, 6, "wooden_wall")
-	world._set_object(10, 8, "wooden_wall")
+	world._object_table.set_object(9, 7, "wooden_wall")
+	world._object_table.set_object(11, 7, "wooden_wall")
+	world._object_table.set_object(10, 6, "wooden_wall")
+	world._object_table.set_object(10, 8, "wooden_wall")
 	world._route_budget.erase(actor_id) # guarantees the recovery's own fresh search actually resumes this tick, not deferred by a stale per-tick routing allowance
 
 	world.tick() # CombatGiver.advance() sees no reason to flee (default full hp), closes the episode, and calls the shared recovery boundary
@@ -2101,8 +2101,8 @@ func _build_wolf_door_world(seed_value: int) -> WorldStateType:
 	for y in WorldStateType.MAP_HEIGHT:
 		if y == 24:
 			continue
-		world._set_object(10, y, "wooden_wall")
-	world._set_object(10, 24, "door")
+		world._object_table.set_object(10, y, "wooden_wall")
+	world._object_table.set_object(10, 24, "door")
 	var wolf := ActorTableType.spawn("wolf", 0, 24, world._content, "wolf_1")
 	wolf["factionId"] = "wildlife"
 	world._append_colonist(wolf)
@@ -2319,8 +2319,8 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 	if _failed: return
 	var world := _build_arena(111)
 	_spawn_actor(world, "raiders", "wrecker", 0, 5)
-	world._set_object(10, 5, "wooden_wall") # nearer object target (defaults to colony faction, hostile to raiders)
-	world._set_object(30, 5, "wooden_wall") # farther object target
+	world._object_table.set_object(10, 5, "wooden_wall") # nearer object target (defaults to colony faction, hostile to raiders)
+	world._object_table.set_object(30, 5, "wooden_wall") # farther object target
 	world.tick() # backfills "combat"/"health" before this test mutates it
 
 	var approach_job_id := ""
@@ -2340,7 +2340,7 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 	_expect(String(world._get_job(approach_job_id).get("status", "")) in ["queued", "active"],
 		"the approach job must still be in flight when its target is destroyed for this check to be meaningful")
 
-	world._set_object(10, 5, "") # simulates the current object target being destroyed/cleared
+	world._object_table.set_object(10, 5, "") # simulates the current object target being destroyed/cleared
 	_assert_no_orphaned_reservations(world, "immediately after the object's destruction")
 
 	var retargeted := false
@@ -2461,9 +2461,9 @@ func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> voi
 	# hostile target (mirrors _check_approach_falls_back_to_incident_when_fully_walled_off()'s
 	# own trick).
 	for y in WorldStateType.MAP_HEIGHT:
-		world._set_object(15, y, "wooden_wall", "raiders")
+		world._object_table.set_object(15, y, "wooden_wall", "raiders")
 	var hunter := world._find_colonist("hunter")
-	_expect(not world._region_reachable(Vector2i(int(hunter["x"]), int(hunter["y"])), target),
+	_expect(not world._passability.region_reachable(Vector2i(int(hunter["x"]), int(hunter["y"])), target),
 		"the tracked job's own target must actually become unreachable once the corridor is sealed, for this check to be meaningful")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
@@ -2529,7 +2529,7 @@ func _check_approach_falls_back_to_incident_when_fully_walled_off() -> void:
 			var ny := wy + dy
 			if nx < 0 or ny < 0 or nx >= WorldStateType.MAP_WIDTH or ny >= WorldStateType.MAP_HEIGHT:
 				continue
-			world._set_object(nx, ny, "wooden_wall", "wildlife")
+			world._object_table.set_object(nx, ny, "wooden_wall", "wildlife")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the wolf in")
 
 	var stopped_pursuing := false
@@ -2599,7 +2599,7 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
 	for y in WorldStateType.MAP_HEIGHT:
-		world._set_object(15, y, "wooden_wall", "raiders")
+		world._object_table.set_object(15, y, "wooden_wall", "raiders")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
 	var incident_completed := false
@@ -2675,7 +2675,7 @@ func _check_approach_fallback_resumes_same_actors_own_incident_job() -> void:
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
 	for y in WorldStateType.MAP_HEIGHT:
-		world._set_object(15, y, "wooden_wall", "raiders")
+		world._object_table.set_object(15, y, "wooden_wall", "raiders")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
 	var approach_cancelled := false

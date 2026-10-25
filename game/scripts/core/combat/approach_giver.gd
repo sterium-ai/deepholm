@@ -180,10 +180,10 @@ var _job_actor: Dictionary = {}
 ## be WorldState._job_restricted_to (the same raw-waiting-queue fallback
 ## CombatGiver uses, so a save/load mid-search still finds its own actor's
 ## restriction). passable_for_actor(actor_id,x,y)->Dictionary must be a
-## faction-aware WorldState passability wrapper (WorldState._passable_for_flee,
+## faction-aware WorldState passability wrapper (Passability.passable_for_flee,
 ## shared with CombatGiver -- generic despite the name). may_reserve_target
 ## (actor_id,target)->bool must be WorldState._actor_may_reserve_target.
-## reachable(from,target)->bool must be WorldState._region_reachable.
+## reachable(from,target)->bool must be Passability.region_reachable.
 ## is_target_reserved(x,y)->bool must be WorldState._flee_target_reserved
 ## (shared with CombatGiver -- generic despite the name). routable_to(target,
 ## faction_id)->Callable must be WorldState._routable_to. content/relations
@@ -191,7 +191,7 @@ var _job_actor: Dictionary = {}
 ## route_budget must be WorldState._route_budget itself (shared by reference).
 ## combat_owns(actor_id)->bool must be CombatGiver.owns. list_objects()->Array
 ## must be WorldState.get_objects. object_at/object_health_at/object_faction_at
-## must be WorldState.get_object/_object_health_at/get_object_faction_id.
+## must be WorldState.get_object/ObjectTable.object_health_at/get_object_faction_id.
 ## cancel_job(job_id)->void must be WorldState._cancel_autonomous_job.
 func _init(submit_job: Callable, get_job: Callable, list_jobs: Callable, restrict_to_for: Callable,
 		passable_for_actor: Callable, may_reserve_target: Callable, reachable: Callable,

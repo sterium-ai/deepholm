@@ -47,10 +47,10 @@ const LOAD_MAX_TICKS := 1500
 ## not run a separate reachability search.
 func _build_load_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	for y in LOAD_AREA_HEIGHT:
 		for x in LOAD_AREA_WIDTH:
-			world._tiles[world._tile_index(x, y)] = WorldType.TILE_SOIL
+			world._tile_grid.tiles[world._tile_grid.tile_index(x, y)] = WorldType.TILE_SOIL
 	# The 12 "dig"-labour targets below are mine, not dig, and
 	# left as rock (mine's own precondition) here -- mine's completion turns
 	# rock into floor, never trench, so nothing this open, unrestricted,
@@ -60,7 +60,7 @@ func _build_load_world(seed_value: int) -> WorldType:
 	# scenario does not rely on ADR 026's rescue, so a single trapped
 	# colonist here would idle for the rest of the run.
 	for target in _load_mine_targets():
-		world._tiles[world._tile_index(target.x, target.y)] = WorldType.TILE_ROCK
+		world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldType.TILE_ROCK
 	world._colonists.clear()
 	for i in 3:
 		world._colonists.append({"id": "colonist_%d" % i, "kind": "colonist", "x": i, "y": 0, "route": null, "work": null, "carrying": null})
@@ -115,7 +115,7 @@ func _submit_load_orders(world: WorldType) -> int:
 	_add_stockpile_zone(world)
 	var order_index := 0
 	for target in _load_tree_targets():
-		world._tiles[world._tile_index(target.x, target.y)] = WorldType.TILE_TREE
+		world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldType.TILE_TREE
 	for target in _load_tree_targets():
 		var result := _command(world, "chop_%d" % order_index, "chop", {"x": target.x, "y": target.y, "priority": 1})
 		_expect(result["ok"], "chop order %d must be accepted: %s" % [order_index, result])
@@ -277,7 +277,7 @@ func _check_no_idle_while_work_available() -> void:
 ## colonist_1's own wait end and its fetch route begin.
 func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 	var world := WorldType.new(9002)
-	world._tiles.fill(WorldType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
@@ -302,7 +302,7 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 			break
 	_expect(forage_a_busy, "colonist_0 must be busy on forage_a before dig_b (and its reservation) ever exists")
 
-	world._tiles[world._tile_index(10, 9)] = WorldType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldType.TILE_SOIL
 	var dig_b := _command(world, "dig_b", "dig", {"x": 10, "y": 9, "priority": 1})
 	_expect(dig_b["ok"], "dig_b must be accepted")
 	var dig_b_id := String(dig_b["job_id"])
@@ -358,9 +358,9 @@ func _find_colonist_in(world: WorldType, colonist_id: String) -> Dictionary:
 ## still walking, never arrived.
 func _build_corridor_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tiles.fill(WorldType.TILE_ROCK)
+	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
 	for x in range(0, 10):
-		world._tiles[world._tile_index(x, 0)] = WorldType.TILE_SOIL
+		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	# Already held: this scenario's exact one-tick-precision assertions leave

@@ -132,9 +132,9 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tiles.fill(WorldStateType.TILE_FLOOR)
+	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._colonists.clear()
-	world._objects.clear()
+	world._object_table.objects.clear()
 	return world
 
 func _colonist(id: String, x: int, y: int) -> Dictionary:
@@ -357,7 +357,7 @@ func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
 	_expect(builder_tile != site, "(%s) an object built from several tiles away must not appear under its own builder" % kind)
 	_expect(bool(world.passability(builder_tile.x, builder_tile.y)["passable"]),
 		"(%s) the builder must end up on a tile it can still move from" % kind)
-	world._tiles[world._tile_index(0, 5)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(0, 5)] = WorldStateType.TILE_SOIL
 	world.spawn_ground_tool_item("pick", 0, 0)
 	var dig_result := _command_ok(world, "dig_after_build_%s" % kind, "dig", {"x": 0, "y": 5, "priority": 1})
 	var dig_terminal := ""
@@ -392,8 +392,8 @@ func _check_invalid_payload_rejections() -> void:
 func _check_invalid_target_rejections() -> void:
 	var world := _build_world(310300)
 	world._colonists.append(_colonist("colonist_0", 3, 3))
-	world._tiles[world._tile_index(4, 4)] = WorldStateType.TILE_TREE
-	world._tiles[world._tile_index(5, 5)] = WorldStateType.TILE_ROCK
+	world._tile_grid.tiles[world._tile_grid.tile_index(4, 4)] = WorldStateType.TILE_TREE
+	world._tile_grid.tiles[world._tile_grid.tile_index(5, 5)] = WorldStateType.TILE_ROCK
 	_command_ok(world, "wall1", "build", {"kind": "wooden_wall", "x": 6, "y": 6})
 	_expect(_reason_of(_command(world, "on_colonist", "build", {"kind": "wooden_wall", "x": 3, "y": 3})) == "invalid_target",
 		"a colonist's own tile must be rejected invalid_target")
@@ -440,7 +440,7 @@ func _room_with_north_gap(seed_value: int) -> WorldStateType:
 	var world := _build_world(seed_value)
 	for cell in [Vector2i(3, 3), Vector2i(5, 3), Vector2i(3, 4), Vector2i(5, 4),
 			Vector2i(3, 5), Vector2i(4, 5), Vector2i(5, 5)]:
-		world._set_object(cell.x, cell.y, "wooden_wall")
+		world._object_table.set_object(cell.x, cell.y, "wooden_wall")
 	return world
 
 ## The enclosure rule (_would_enclose_tiles(), footprint-aware generalization
@@ -466,11 +466,11 @@ func _check_enclosing_wall_rejected_unreachable() -> void:
 	var world_door := _build_world(310701)
 	world_door._colonists.append(_colonist("colonist_0", 5, 5))
 	for x in range(4, 8):
-		world_door._set_object(x, 4, "wooden_wall")
-		world_door._set_object(x, 7, "wooden_wall")
+		world_door._object_table.set_object(x, 4, "wooden_wall")
+		world_door._object_table.set_object(x, 7, "wooden_wall")
 	for y in range(5, 7):
-		world_door._set_object(4, y, "wooden_wall")
-	world_door._set_object(7, 6, "wooden_wall")
+		world_door._object_table.set_object(4, y, "wooden_wall")
+	world_door._object_table.set_object(7, 6, "wooden_wall")
 	var door_result := _command(world_door, "build_door_in_gap", "build", {"kind": "door", "x": 7, "y": 5})
 	_expect(door_result.get("ok", false), "a passable object (door) must never trigger the enclosure check: %s" % [door_result])
 
@@ -479,7 +479,7 @@ func _check_enclosing_wall_rejected_unreachable() -> void:
 ## first, still pending, already counts as blocking.
 func _check_two_pending_openings_reject_the_second_wall() -> void:
 	var world := _room_with_north_gap(310750)
-	world._set_object(4, 5, "")  # a second opening, south
+	world._object_table.set_object(4, 5, "")  # a second opening, south
 	world._colonists.append(_colonist("colonist_0", 4, 1))
 	var north := _command(world, "close_north", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
 	_expect(north.get("ok", false), "the first of two openings may be walled: %s" % [north])
@@ -496,7 +496,7 @@ func _check_enclosure_seen_from_every_colony_component() -> void:
 	# Split the map: a full wall column at x=20 puts colonist_0 (east) in a
 	# component that never contains the room's gap at (4,3).
 	for y in world.get_map_height():
-		world._set_object(20, y, "wooden_wall")
+		world._object_table.set_object(20, y, "wooden_wall")
 	world._colonists.append(_colonist("colonist_0", 30, 30))
 	world._colonists.append(_colonist("colonist_1", 4, 1))
 	var sealed := _command(world, "seal_other_component", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
@@ -504,7 +504,7 @@ func _check_enclosure_seen_from_every_colony_component() -> void:
 		"an enclosure reachable only by a later colonist must still be refused: %s" % [sealed])
 
 	var trapped_world := _room_with_north_gap(310761)
-	trapped_world._tiles[trapped_world._tile_index(30, 30)] = WorldStateType.TILE_ROCK
+	trapped_world._tile_grid.tiles[trapped_world._tile_grid.tile_index(30, 30)] = WorldStateType.TILE_ROCK
 	trapped_world._colonists.append(_colonist("colonist_0", 30, 30))
 	trapped_world._colonists.append(_colonist("colonist_1", 4, 1))
 	var hidden := _command(trapped_world, "seal_with_first_actor_on_rock", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
@@ -877,7 +877,7 @@ func _check_stack_larger_than_cost_keeps_remainder() -> void:
 ## currently active/queued job id ("" on setup failure).
 func _prime_site_phase(world: WorldStateType, phase: String, site: Vector2i) -> String:
 	for x in range(0, 40):
-		world._set_object(x, 6, "wooden_wall")
+		world._object_table.set_object(x, 6, "wooden_wall")
 	world._colonists.append(_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", 5, 0)
 	world._item_table.next_item_id = 2
@@ -975,7 +975,7 @@ func _check_save_io_rejects_site_job_missing_site_field() -> void:
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	if job_id.is_empty():
 		return
-	world._tiles[world._tile_index(3, 3)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 3)] = WorldStateType.TILE_SOIL
 	_command_ok(world, "dig_legacy_shape", "dig", {"x": 3, "y": 3, "priority": 1})
 	var state := world.to_save_state()
 	_expect(SaveIOType._validate_state(state).get("ok", false),
@@ -1192,10 +1192,10 @@ func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
 	# 2..4 x 2..4 box is a wall with no gap, so nothing outside can ever
 	# reach (3,3) or step adjacent to it.
 	for x in range(2, 5):
-		world._set_object(x, 2, "wooden_wall")
-		world._set_object(x, 4, "wooden_wall")
-	world._set_object(2, 3, "wooden_wall")
-	world._set_object(4, 3, "wooden_wall")
+		world._object_table.set_object(x, 2, "wooden_wall")
+		world._object_table.set_object(x, 4, "wooden_wall")
+	world._object_table.set_object(2, 3, "wooden_wall")
+	world._object_table.set_object(4, 3, "wooden_wall")
 	_add_zone(world, "zone_setup", 0, 0, 11, 6)
 	var result := _command_ok(world, "build_wall_behind_obstacle", "build", {"kind": "wooden_wall", "x": site.x, "y": site.y})
 	_expect(result.get("ok", false), "the build order must be accepted")

@@ -89,14 +89,14 @@ func _expect(condition: bool, message: String) -> void:
 ## that door is reachable only through it.
 func _build_wolf_attack_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tiles.fill(WorldStateType.TILE_ROCK)
-	world._objects.clear()
-	world._object_factions.clear()
+	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	world._object_table.objects.clear()
+	world._object_table.object_factions.clear()
 	world._colonists.clear()
 	for y in range(GUARD_TILE.y, SPAWN_TILE.y + 1):
-		world._tiles[world._tile_index(SPAWN_TILE.x, y)] = WorldStateType.TILE_FLOOR
-	world._set_object(DOOR_TILE.x, DOOR_TILE.y, "door") # defaults to faction "colony"
-	world._set_object(GUARD_TILE.x, GUARD_TILE.y, "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
+		world._tile_grid.tiles[world._tile_grid.tile_index(SPAWN_TILE.x, y)] = WorldStateType.TILE_FLOOR
+	world._object_table.set_object(DOOR_TILE.x, DOOR_TILE.y, "door") # defaults to faction "colony"
+	world._object_table.set_object(GUARD_TILE.x, GUARD_TILE.y, "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
 	var guard := ActorTableType.spawn("colonist", GUARD_TILE.x, GUARD_TILE.y, world._content, GUARD_ID)
 	guard.erase("carrying")
 	guard["hands"] = []
@@ -133,9 +133,9 @@ func _advance_to_eve_of_day6(world: WorldStateType) -> void:
 ## incident_started event's own actor_ids ([] if the draw did not fire).
 func _draw_wolf_attack_naturally_away_from_door(world: WorldStateType) -> Array:
 	_advance_to_eve_of_day6(world)
-	world._set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "bed")
+	world._object_table.set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "bed")
 	world.tick()
-	world._set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "")
+	world._object_table.set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "")
 	var events := _incident_started_events(world, "wolf_attack")
 	if events.is_empty():
 		return []
