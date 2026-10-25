@@ -24,7 +24,12 @@ answers one question: **is this change safe to merge as it is?** It never edits 
    file above 800 lines and no function above 80.
 6. **Save format.** If any persisted field name, nesting or value format changed, the
    change must declare a schema bump, a migration and a fixture; otherwise it is blocking.
-7. **Report honesty.** Every claim in the handoff report is checkable in the diff or the
+7. **Owner confirmation is post-merge.** An acceptance line that says "the owner confirms on
+   the native build" is checked by the owner after the merge, through the desktop shortcut
+   (`tools/play.cmd`). The reviewer verifies the automated evidence (tests, screenshots from
+   the capture tools) and records "owner confirmation pending" as *non-blocking*; a failed
+   owner check becomes a new `B*` task.
+8. **Report honesty.** Every claim in the handoff report is checkable in the diff or the
    test output. "Should work", "not tested here" or numbers that do not match
    `tools/measure_core.ps1` are findings.
 
