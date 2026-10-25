@@ -192,7 +192,7 @@ func _job_by_id(world: WorldStateType, job_id: String) -> Dictionary:
 ## True when a get_construction_site()-shaped record's own held_materials
 ## already meets every entry of its required_materials (ConstructionSiteTable.
 ## materials_met()'s own rule, read from the public view instead of reaching
-## into world._sites directly -- the public record is not guaranteed to still
+## into world._construction.site_table directly -- the public record is not guaranteed to still
 ## resolve to a live internal site by the time a caller gets around to
 ## checking it).
 func _public_site_materials_met(site_record: Dictionary) -> bool:
@@ -218,7 +218,7 @@ func _ground_kind_total(world: WorldStateType, kind: String) -> int:
 func _assert_no_orphaned_reservations(world: WorldStateType, context: String) -> void:
 	var extra_owners: Array[String] = []
 	for site in world.get_construction_sites():
-		extra_owners.append(world._sites.owner_key(String(site["id"])))
+		extra_owners.append(world._construction.site_table.owner_key(String(site["id"])))
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(
 		world._scheduler.queue.get_reservation_table(), world.get_jobs(), extra_owners)
 	_expect(orphans.is_empty(), "no reservation may outlive its job (%s): orphans=%s" % [context, orphans])

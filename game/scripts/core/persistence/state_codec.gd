@@ -61,7 +61,7 @@ static func encode(world: WorldState) -> Dictionary:
 		# wire like "combatBlockedTargets"/"digFindRng" above -- an older save
 		# predating construction sites simply has none, matching decode()'s own
 		# constructor default (a fresh, empty ConstructionSiteTable).
-		"constructionSites": _encode_construction_sites(world._sites.list()),
+		"constructionSites": world._construction.encode()["constructionSites"],
 		"zones": zone_table["zones"],
 		"nextZoneId": zone_table["nextZoneId"],
 		"groundBerries": item_table["groundBerries"],
@@ -147,9 +147,8 @@ static func decode(state: Dictionary) -> WorldState:
 	world._object_table.decode(state)
 	# Absent for any save written before construction sites existed -- restore()
 	# with an empty array/next_id 1 matches a fresh ConstructionSiteTable's
-	# own starting state exactly.
-	var construction_sites := _decode_construction_sites(state.get("constructionSites", []))
-	world._sites.restore(construction_sites, _next_construction_site_id(construction_sites))
+	# own starting state exactly (ConstructionSystem.decode()).
+	world._construction.decode(state)
 	world._zone_table.decode(state)
 	# "workProgress" and the optional "suspendedWorkProgress"; the persisted owners
 	# are applied by restore_owners() below, once jobs are restored.

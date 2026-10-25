@@ -4,7 +4,7 @@ extends RefCounted
 ## Job-giver for construction sites (ADR 040): decides
 ## when a site's next fetch or work job should exist. A `build` command
 ## creates the site record and reserves its footprint immediately
-## (WorldState); this module tops up `site_fetch` jobs while materials are
+## (ConstructionSystem); this module tops up `site_fetch` jobs while materials are
 ## still short, and tops up `site_work` jobs once every required material is
 ## fully held, both up to the site's own max_builders (a site
 ## with max_builders 2 may hold up to two colonists fetching, working, or one
@@ -28,16 +28,14 @@ var _submit_work: Callable
 var _materials_met: Callable
 var _remaining: Callable
 
-## get_sites must be ConstructionSiteTable.list (the raw internal records,
-## not WorldState's own colonist-id-translated public view). get_jobs/
-## get_items must be WorldState's own public methods of the same name;
-## is_in_any_zone must be its like-named private method. reservation_owner(
-## item_id: String) -> String must resolve the shared ReservationTable's own
-## "item:" key owner. submit_fetch(origin, item_id, item_tile, tick) ->
-## Dictionary and submit_work(origin, tick) -> Dictionary must be WorldState's
-## own submit-and-attach wrappers (_submit_site_fetch()/_submit_site_work()).
-## materials_met/remaining must be ConstructionSiteTable.materials_met/
-## remaining.
+## Every dependency comes from ConstructionSystem or a sibling module, never
+## WorldState: get_sites is ConstructionSystem.site_table.list (the raw records, not
+## the colonist-id-translated public view); get_jobs is JobQueue.get_jobs;
+## get_items is ItemTable.get_items; is_in_any_zone is ZoneTable.is_in_any_zone.
+## reservation_owner(item_id: String) -> String, submit_fetch(origin, item_id,
+## item_tile, tick) -> Dictionary and submit_work(origin, tick) -> Dictionary are
+## ConstructionSystem's construction_item_reservation_owner()/submit_site_fetch()/
+## submit_site_work(). materials_met/remaining are ConstructionSiteTable's.
 func _init(get_sites: Callable, get_jobs: Callable, get_items: Callable, is_in_any_zone: Callable,
 		reservation_owner: Callable, submit_fetch: Callable, submit_work: Callable,
 		materials_met: Callable, remaining: Callable) -> void:
@@ -62,20 +60,20 @@ func _site_key(origin) -> String:
 ## GlobalAssignment to route/score an idle colonist toward -- no colonist is
 ## chosen yet at submission time, so "nearest to the builder" cannot be
 ## evaluated here (see _choose_source() below). The instant that job actually
-## (re)activates with a real colonist known, WorldState swaps the seed for
+## (re)activates with a real colonist known, ConstructionSystem swaps the seed for
 ## the true nearest-reachable source from the colonist's own position
 ## (_resolve_freshly_activated_site_fetch_sources()), and re-runs the same
 ## search after every pick_up to decide whether to keep filling hands from a
 ## further source or deliver the (possibly partial) load already held,
-## whichever is nearer (_toil_on_pick_up_success()) -- both in world_state.gd,
-## since only WorldState has a colonist's live position and a route search.
+## whichever is nearer (WorldState._toil_on_pick_up_success()) -- both outside
+## this giver, which never sees a colonist's live position or a route search.
 ##
 ## Runs once per tick (WorldState.tick(), alongside HaulGiver's own advance()):
 ## for every site still short of materials, tops its own fetch+work job count
 ## up to max_builders with fresh site_fetch jobs (two builders on a
 ## max_builders-2 site may fetch concurrently, each getting its own
 ## nearest-unclaimed source via the per-builder rule, resolved once a real
-## colonist activates it -- see _next_site_fetch_source()); for every site
+## colonist activates it -- see ConstructionSystem.next_site_fetch_source()); for every site
 ## with every material fully held, tops its active/queued site_work count up
 ## to the same max_builders cap.
 func advance(tick: int) -> void:
@@ -124,7 +122,7 @@ func advance(tick: int) -> void:
 
 ## Lowest-id, position-agnostic seed (no colonist is chosen yet at
 ## submission, ADR 038's own precedent for the superseded `build`
-## job's seed -- WorldState corrects it to the true nearest-reachable source
+## job's seed -- ConstructionSystem corrects it to the true nearest-reachable source
 ## the instant a colonist actually activates the job, per the hands-filling
 ## rules) ground item covering some still-needed required material,
 ## stockpiled, unreserved, and not already committed to another in-flight
