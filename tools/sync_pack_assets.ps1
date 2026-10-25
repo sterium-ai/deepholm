@@ -42,13 +42,27 @@ foreach ($relative in $manifest.files) {
 
 foreach ($relative in $missing) { Write-Output "sync_pack_assets: MISSING $relative" }
 
-if ($copied -gt 0 -and -not $SkipImport) {
+# Also re-import when a sheet has no .import yet (a previous import failed or was skipped).
+$notImported = @($manifest.files | Where-Object {
+    (Test-Path -LiteralPath (Join-Path $destRoot $_) -PathType Leaf) -and
+    -not (Test-Path -LiteralPath ((Join-Path $destRoot $_) + ".import") -PathType Leaf) })
+if (($copied -gt 0 -or $notImported.Count -gt 0) -and -not $SkipImport) {
     $godot = $env:GODOT
     if ($godot -and (Get-Command $godot -ErrorAction SilentlyContinue)) {
         # Imports the new sheets so load() finds them (the loader also reads raw PNGs, but
-        # an exported build only carries imported textures).
+        # an exported build only carries imported textures). The output is kept in a log
+        # next to the sheets (git-ignored) and a failed import fails the sync.
         $ErrorActionPreference = "Continue"
-        & $godot --headless --path $gameRoot --import 2>&1 | Out-Null
+        $importLog = Join-Path $destRoot "import.log"
+        & $godot --headless --path $gameRoot --import 2>&1 | ForEach-Object { "$_" } | Set-Content -LiteralPath $importLog -Encoding utf8
+        $importExit = $LASTEXITCODE
+        $ErrorActionPreference = "Stop"
+        if ($importExit -ne 0) {
+            Get-Content -LiteralPath $importLog -Tail 20 | ForEach-Object { Write-Output "  $_" }
+            Write-Output "sync_pack_assets: Godot import FAILED (exit code $importExit); full output in $importLog"
+            exit 1
+        }
+        Write-Output "sync_pack_assets: import OK (output in $importLog)"
     } else {
         Write-Output "sync_pack_assets: `$env:GODOT not set; run 'godot --headless --path game --import' before exporting"
     }

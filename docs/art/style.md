@@ -135,10 +135,18 @@ repository is public, so:
 
 ### Colonists (`colonist_pack.json`)
 
-`Entities/Characters/Body_A` frames are 64x64 with the feet on row 47, the
-same grounding as the placeholder, displayed at native 1.0 scale (the figure
-is 30 px tall, rows 18-47). `side` sheets face right; the renderer flips them
-for left as before.
+**Scale rule (owner, 2026-10-25):** "colonos a la escala nativa de las hojas
+Body_A del pack (30 px de alto en celda de 32), props ≤ 1 casilla salvo
+árboles". Colonists are therefore never scaled to a target height: the
+earlier 24 px colonist target is replaced, because scaling pixel art to it
+would ruin it. The props half of the rule applies when props move to the
+pack (B3); the placeholder prop table under "Prop scale rule" is unchanged
+until then.
+
+As measured, `Entities/Characters/Body_A` frames are 64x64 sheet cells (the
+30 px figure occupies rows 18-47 of each cell) with the feet on row 47, the
+same grounding as the placeholder, displayed at native 1.0 scale. `side`
+sheets face right; the renderer flips them for left as before.
 
 | Viewer animation | Pack sheet | Frames | fps |
 | --- | --- | --- | --- |
