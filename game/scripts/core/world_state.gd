@@ -363,12 +363,12 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		"on_pick_up_success": _toil_on_pick_up_success,
 	}
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
-	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs, get_items, _zone_table.is_in_any_zone, _scheduler.submit,
+	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	# The queue's own get_jobs: get_jobs()'s tool-handover overlay never touches a
+	# The queue's own kind-filtered read: get_jobs()'s tool-handover overlay never touches a
 	# site_fetch/site_work job (neither kind needs a tool), the only kinds the giver reads.
-	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs, _item_table.get_items,
+	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
 		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
 	# Live _tile_grid.tiles by reference: the giver only scans it per tick, and get_tiles() would copy 65536 Strings.
@@ -913,13 +913,22 @@ func get_actors_with_health() -> Array[Dictionary]:
 func get_pending_trade_offers() -> Array[Dictionary]:
 	return _trade.get_pending_trade_offers()
 
-## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state.
-func get_jobs() -> Array[Dictionary]:
-	var jobs := _scheduler.queue.get_jobs()
+## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state; a non-empty `kinds` keeps only those kinds, costing only the jobs returned (B1).
+func get_jobs(kinds: Array = []) -> Array[Dictionary]:
+	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
 	for job in jobs:
 		ToolHandoverType.apply(job, assignments, _toils)
 	return jobs
+
+## One job as get_jobs() shows it, {} when unknown (B1: costs one job, not all).
+func get_job(job_id: String) -> Dictionary:
+	var job := _scheduler.queue.get_job(job_id)
+	ToolHandoverType.apply(job, _scheduler.get_assignments(), _toils)
+	return job
+
+func get_queued_job_summary() -> Dictionary:
+	return _scheduler.queue.get_queued_summary()
 
 func get_reservations() -> Dictionary:
 	return _scheduler.queue.get_reservations()
@@ -2019,21 +2028,16 @@ func _cancel_job_for_death(job_id: String) -> void:
 		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association(job_id, String(job.get("kind", "")))
 
-## restrict_to_for()'s own restriction, falling back to the raw waiting-queue
-## entry (GlobalAssignment.get_waiting()) for a job that has never yet been
-## activated: restrict_to_for() only reads _activated_entries, "" by its own
-## documented contract for a not-yet-activated job_id, which would otherwise
-## let a freshly submitted, still-queued job restricted to a just-killed
-## actor (a flee job submitted the same tick it died, say) survive
+## restrict_to_for()'s own restriction, falling back to the waiting-queue
+## entry for a job never yet activated (restrict_to_for() reads only
+## _activated_entries), so a still-queued job restricted to a just-killed actor
+## (a flee job submitted the same tick it died) cannot survive
 ## _apply_actor_death()'s cleanup below.
 func _job_restricted_to(job_id: String) -> String:
 	var restrict_to := _scheduler.restrict_to_for(job_id)
 	if not restrict_to.is_empty():
 		return restrict_to
-	for entry in _scheduler.get_waiting():
-		if String(entry.get("id", "")) == job_id:
-			return String(entry.get("restrict_to", ""))
-	return ""
+	return _scheduler.waiting_restrict_to(job_id)
 
 ## Drops whatever `actor` is holding as loose ground items at its own tile:
 ## a colonist's hands contents (one fresh item per distinct kind held), a
@@ -2418,8 +2422,8 @@ func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void
 			_reroutes.erase(colonist_id)
 			return
 
-func get_events() -> Array[Dictionary]:
-	return _event_log.get_events()
+func get_events(types: Array = []) -> Array[Dictionary]:
+	return _event_log.get_events(types)
 
 ## record=false (preview() only) builds every rejection through _event_log.pure_rejection() instead of
 ## _event_log.rejection(), so an invalid envelope, a malformed payload or a tick mismatch previewed on an

@@ -42,7 +42,7 @@ static func need_alerts_text(world: WorldStateType, text_table: TextTableType) -
 			continue
 		var kind_text := text_table.get_string("status.need.%s" % kind)
 		lines.append(text_table.format(label_key, [colonist_id, kind_text]))
-	for event in world.get_events():
+	for event in world.get_events(["incident_started"]):
 		if String(event.get("type", "")) != "incident_started":
 			continue
 		lines.append(_incident_started_alert_line(event))

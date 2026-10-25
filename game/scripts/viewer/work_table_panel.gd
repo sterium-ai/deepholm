@@ -225,7 +225,7 @@ func _find_colonist(colonist_id: String) -> Dictionary:
 ## fired yet.
 func _most_recent_calendar_alert() -> Dictionary:
 	var best: Dictionary = {}
-	for event in world.get_events():
+	for event in world.get_events(["calendar_alert"]):
 		if String(event.get("type", "")) != "calendar_alert":
 			continue
 		if best.is_empty() or int(event["tick"]) >= int(best["tick"]):

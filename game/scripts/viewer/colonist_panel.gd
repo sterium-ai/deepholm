@@ -272,13 +272,14 @@ func _status_for(colonist: Dictionary) -> Dictionary:
 			return {"idle": false, "job_kind": job["kind"], "toil": _toil_for(colonist, job), "reason": reason, "remedy": remedy,
 				"target": job["target"], "route_length": route_length}
 
-	var queued := _queued_jobs()
-	if queued.is_empty():
+	# The lowest-id blocked queued job's reason, summarised by the core
+	# without copying every job (B1; get_queued_job_summary()).
+	var summary := world.get_queued_job_summary()
+	if int(summary["queued"]) == 0:
 		return {"idle": true, "job_kind": "", "reason": "no_work_queued", "remedy": "await_scenario_orders"}
-	queued.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["id"]) < String(b["id"]))
-	for job in queued:
-		if not String(job["reason"]).is_empty():
-			return {"idle": true, "job_kind": "", "reason": job["reason"], "remedy": job["remedy"]}
+	var blocked: Dictionary = summary["first_blocked"]
+	if not blocked.is_empty():
+		return {"idle": true, "job_kind": "", "reason": blocked["reason"], "remedy": blocked["remedy"]}
 	return {"idle": true, "job_kind": "", "reason": "awaiting_scheduling", "remedy": "wait_for_next_tick"}
 
 ## A committed need job (colonist-ai.md 3.1/3.4: eat_food/drink_water/sleep)
@@ -339,15 +340,5 @@ func _toil_for(colonist: Dictionary, job: Dictionary) -> String:
 		return "consume"
 	return "work" if colonist.get("work") != null else "go_to"
 
-func _queued_jobs() -> Array[Dictionary]:
-	var result: Array[Dictionary] = []
-	for job in world.get_jobs():
-		if job["status"] == "queued":
-			result.append(job)
-	return result
-
 func _find_job(job_id: String) -> Dictionary:
-	for job in world.get_jobs():
-		if job["id"] == job_id:
-			return job
-	return {}
+	return world.get_job(job_id)

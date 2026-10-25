@@ -12,11 +12,7 @@ func _selected_reachable(target: Vector2i) -> bool:
 func advance_selection(selected: Array[String], reachable_targets: Dictionary) -> void:
 	_reachable_targets = reachable_targets
 	var all_jobs: Array[Dictionary] = _jobs
-	var selected_jobs: Array[Dictionary] = []
-	for job in all_jobs:
-		if job["id"] in selected:
-			selected_jobs.append(job)
-	_jobs = selected_jobs
+	_jobs = _index.with_ids(all_jobs, selected)
 	super.tick()
 	_jobs = all_jobs
 	_reachable_targets = {}
