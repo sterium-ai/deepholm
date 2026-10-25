@@ -19,6 +19,13 @@ extends RefCounted
 ##   dropped as reservations() reads.
 ## - _labour_disabled holds exactly the jobs whose reason is labour_disabled
 ##   (JobQueue._set_reason() is the only reason writer).
+## - _designations[tile] counts the pending (queued or active) jobs targeting
+##   tile, site_fetch excepted (its target moves between sources): a job is
+##   pending from its job_queued event until its terminal one, and on_event()
+##   sees every JobQueue event. Each count change appends its tile to
+##   _designation_log, append-only like WorldState.get_dirty_cells(); a
+##   restored index logs every pending tile once, so reading the log from 0
+##   always yields the full current picture.
 
 var _jobs: Array[Dictionary]
 var _labour_disabled_reason: String
@@ -28,6 +35,8 @@ var _kinds: Dictionary = {}
 var _by_kind: Dictionary = {}
 var _watched: Dictionary = {}
 var _labour_disabled: Dictionary = {}
+var _designations: Dictionary = {}
+var _designation_log: Array[Vector2i] = []
 
 ## Indexes `jobs` (restored or empty) as it stands.
 func _init(jobs: Array[Dictionary], labour_disabled_reason: String) -> void:
@@ -39,6 +48,8 @@ func _init(jobs: Array[Dictionary], labour_disabled_reason: String) -> void:
 		if job["status"] == "active" or int(job.get("retry_at", 0)) > 0:
 			watch(job)
 		note_reason(job)
+		if job["status"] in ["queued", "active"]:
+			_designate(job, 1)
 
 func covers(jobs: Array[Dictionary]) -> bool:
 	return is_same(jobs, _jobs)
@@ -109,6 +120,41 @@ func with_ids(jobs: Array[Dictionary], job_ids: Array[String]) -> Array[Dictiona
 		result.append(_by_id[job_id])
 	result.sort_custom(_before)
 	return result
+
+## JobQueue._emit()'s hook, with the event's job ({} for none).
+func on_event(event_type: String, job: Dictionary) -> void:
+	if job.is_empty():
+		return
+	match event_type:
+		# Every activation emits job_active right away; every haul destination
+		# backoff (a new retry_at) follows a haul_destination_attempt.
+		"job_active", "haul_destination_attempt":
+			watch(job)
+		"job_queued":
+			_designate(job, 1)
+		"job_completed", "job_cancelled", "job_failed":
+			_designate(job, -1)
+
+## {"next": the log position to read from next time, "tiles": tile -> pending
+## job count for every tile whose count changed since log position `from`}.
+## A negative `from` reads nothing (just "next").
+func designation_changes(from: int) -> Dictionary:
+	var tiles: Dictionary = {}
+	for index in range(maxi(from, 0) if from >= 0 else _designation_log.size(), _designation_log.size()):
+		var tile := _designation_log[index]
+		tiles[tile] = int(_designations.get(tile, 0))
+	return {"next": _designation_log.size(), "tiles": tiles}
+
+func _designate(job: Dictionary, delta: int) -> void:
+	if String(job.get("kind", "")) == "site_fetch":
+		return
+	var tile: Vector2i = job["target"]
+	var count := int(_designations.get(tile, 0)) + delta
+	if count > 0:
+		_designations[tile] = count
+	else:
+		_designations.erase(tile)
+	_designation_log.append(tile)
 
 func watch(job: Dictionary) -> void:
 	_watched[job["id"]] = job

@@ -23,6 +23,12 @@ var rotate_build_button: Button
 ## The last tile an order rectangle ended on; boot.gd's room label reads it.
 var inspected_tile: Vector2i = Vector2i(-1, -1)
 var has_inspected_tile: bool = false
+## Cancel's tile -> pending jobs map (_pending_jobs_by_tile()) and the
+## (world, tick, designation cursor) it was read at: no job can appear without
+## advancing one of those, and every use re-reads its candidates' live status,
+## so a preview drag reuses one get_jobs() read instead of one per call (B1).
+var _cancel_jobs_by_tile: Dictionary = {}
+var _cancel_jobs_key: Array = []
 
 ## Runs the exact same command rules apply() would (WorldState.preview()) without
 ## mutating state or round-tripping through StateCodec: a read-only dry run per tile, in exactly
@@ -56,12 +62,29 @@ func preview_validity(world: WorldStateType, preview: Callable, map_view: MapVie
 			for tile in tiles:
 				result.append(valid)
 		else:
+			var pending_by_tile = _cancel_candidates(world) if selected_tool == Tool.CANCEL else null
 			for tile in tiles:
-				var command := command_for_tile(world, map_view, selected_tool, tile)
+				var command := command_for_tile(world, map_view, selected_tool, tile, pending_by_tile)
 				result.append(not command.is_empty() and preview.call(command).get("ok", false))
 	return result
 
-static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool: int, tile: Vector2i) -> Dictionary:
+## Tools whose preview validity is per tile, independent of the rest of the
+## rectangle: MapView may then preview a drag incrementally (B1). Wall and zone
+## judge the whole rectangle at once; the build tools preview one footprint.
+static func previews_per_tile(tool: int) -> bool:
+	return tool in [Tool.DIG, Tool.CHOP, Tool.FORAGE, Tool.CANCEL, Tool.REMOVE_OBJECT, Tool.TILL, Tool.SOW, Tool.MINE]
+
+func _cancel_candidates(world: WorldStateType) -> Dictionary:
+	var key := [world, world.get_tick(), int(world.get_designation_changes(-1)["next"])]
+	if key != _cancel_jobs_key:
+		_cancel_jobs_key = key
+		_cancel_jobs_by_tile = _pending_jobs_by_tile(world)
+	return _cancel_jobs_by_tile
+
+## `pending_by_tile` (Cancel only, optional): a _pending_jobs_by_tile() map to
+## pick the job from instead of reading every job for this one tile.
+static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool: int, tile: Vector2i,
+		pending_by_tile = null) -> Dictionary:
 	if tool == Tool.CANCEL:
 		var site := world.get_construction_site(tile.x, tile.y)
 		if not site.is_empty():
@@ -70,7 +93,7 @@ static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool:
 				"tick": world.get_tick(), "type": "cancel_site",
 				"payload": {"x": int(site["origin"].x), "y": int(site["origin"].y)},
 			}
-		var candidate := _cancel_job_for_tile(world, tile)
+		var candidate := _cancel_job_for_tile(world, tile, pending_by_tile)
 		if candidate.is_empty():
 			return {}
 		return {
@@ -135,10 +158,16 @@ static func _order_tile(job: Dictionary) -> Vector2i:
 ## back to the site record itself, keyed by any of its footprint tiles
 ## (get_construction_site()) -- WorldState._apply_cancel_job_command()
 ## recognises the same site id standing in for a job id.
-static func _cancel_job_for_tile(world: WorldStateType, tile: Vector2i) -> Dictionary:
+## With `pending_by_tile`, the candidates are that map's jobs for this tile,
+## each re-read live (world.get_job()) so one cancelled or re-activated since
+## the map was built is judged by its current status, exactly as a fresh
+## get_jobs() scan would.
+static func _cancel_job_for_tile(world: WorldStateType, tile: Vector2i, pending_by_tile = null) -> Dictionary:
 	var best := {}
-	for job in world.get_jobs():
-		if job["status"] not in ["queued", "active"] or _order_tile(job) != tile:
+	var candidates: Array = world.get_jobs() if pending_by_tile == null else pending_by_tile.get(tile, [])
+	for candidate in candidates:
+		var job: Dictionary = candidate if pending_by_tile == null else world.get_job(String(candidate["id"]))
+		if job.is_empty() or job["status"] not in ["queued", "active"] or _order_tile(job) != tile:
 			continue
 		if best.is_empty() or _cancel_job_before(job, best):
 			best = job
@@ -148,6 +177,19 @@ static func _cancel_job_for_tile(world: WorldStateType, tile: Vector2i) -> Dicti
 	if not site.is_empty():
 		return {"id": site["id"]}
 	return {}
+
+## tile -> every queued/active job whose _order_tile() it is, in get_jobs()
+## order, from a single get_jobs() read.
+static func _pending_jobs_by_tile(world: WorldStateType) -> Dictionary:
+	var by_tile := {}
+	for job in world.get_jobs():
+		if job["status"] not in ["queued", "active"]:
+			continue
+		var tile := _order_tile(job)
+		if not by_tile.has(tile):
+			by_tile[tile] = []
+		by_tile[tile].append(job)
+	return by_tile
 
 static func _cancel_job_before(candidate: Dictionary, current: Dictionary) -> bool:
 	var candidate_status := 0 if candidate["status"] == "queued" else 1
@@ -176,8 +218,9 @@ func commit_rectangle(world: WorldStateType, map_view: MapViewType, tiles: Array
 			for entry in result.get("skipped", []):
 				rejected.append({"tile": Vector2i(entry["x"], entry["y"]), "reason": entry["reason"]})
 	else:
+		var pending_by_tile = _pending_jobs_by_tile(world) if selected_tool == Tool.CANCEL else null
 		for tile in tiles:
-			var command := command_for_tile(world, map_view, selected_tool, tile)
+			var command := command_for_tile(world, map_view, selected_tool, tile, pending_by_tile)
 			if command.is_empty():
 				continue
 			var result: Dictionary = world.apply(command)
@@ -223,6 +266,7 @@ func select_tool(world: WorldStateType, map_view: MapViewType, tool: int) -> voi
 		tool_buttons[key].set_pressed_no_signal(key == tool)
 	if map_view != null:
 		map_view.set_tool_enabled(tool >= 0)
+		map_view.set_preview_per_tile(previews_per_tile(tool))
 		map_view.set_zone_tool_enabled(tool == Tool.ZONE)
 		var build_kind := build_kind_for_tool(tool)
 		map_view.set_build_tool_enabled(not build_kind.is_empty())

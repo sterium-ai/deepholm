@@ -1,0 +1,207 @@
+extends SceneTree
+
+## B1 viewer: every incremental replacement must show what the full recompute
+## it replaces showed.
+## 1) MapView's per-tile drag preview (drag_preview.gd), grown tile by tile,
+##    ends with exactly tiles_in_rectangle() and OrderInput.preview_validity()
+##    over the whole rectangle -- also after a tick made it stale -- and a
+##    one-column move validates only the newly covered column;
+## 2) the designation overlay's pixel per tile equals the colour of one
+##    OUTLINE_COLOR rect per pending non-site_fetch job on that tile, through
+##    orders, cancels, ticks and a save/load world swap;
+## 3) a Cancel rectangle committed with the one-read candidate map leaves the
+##    same jobs and reports the same rejections as the former per-tile scan;
+## 4) the stockpile draw visits the same cells, in the same order, as the
+##    former walk of every zone cell.
+
+const WorldStateType = preload("res://scripts/core/world_state.gd")
+const MapViewType = preload("res://scripts/viewer/map_view.gd")
+const OrderInputType = preload("res://scripts/viewer/order_input.gd")
+const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay.gd")
+
+var _failures: Array[String] = []
+var _n := 0
+
+func _init() -> void:
+	_check_drag_preview()
+	_check_designation_overlay()
+	_check_cancel_candidates()
+	_check_stockpile_cells()
+	if not _failures.is_empty():
+		for failure in _failures:
+			push_error(failure)
+		quit(1)
+		return
+	print("test_incremental_order_views: PASS")
+	quit(0)
+
+func _check_drag_preview() -> void:
+	var world := WorldStateType.new(4242, 10, 64, 64)
+	var orders := OrderInputType.new()
+	var view := MapViewType.new()
+	view.set_world(world)
+	var validated: Array[int] = [0]
+	view.preview_validity = func(tiles: Array[Vector2i]) -> Array[bool]:
+		validated[0] += tiles.size()
+		return orders.preview_validity(world, world.preview, view, tiles)
+	for tool in [OrderInputType.Tool.DIG, OrderInputType.Tool.CHOP, OrderInputType.Tool.MINE]:
+		orders.select_tool(world, view, tool)
+		_expect(view._preview_per_tile, "tool %d must preview per tile" % tool)
+		_mouse(view, Vector2i(3, 2), true)
+		for step in range(1, 30):
+			_motion(view, Vector2i(3 + step, 2 + step / 2))
+		view.finish_preview_work()
+		var expected := MapViewType.tiles_in_rectangle(Vector2i(3, 2), Vector2i(32, 16))
+		_expect(view._preview_tiles == expected, "tool %d: the drag must preview exactly its rectangle" % tool)
+		_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, expected),
+			"tool %d: the incremental preview must equal a whole-rectangle preview" % tool)
+		validated[0] = 0
+		_motion(view, Vector2i(33, 16))
+		_expect(validated[0] == 15, "a one-column move must validate only its 15 new tiles, validated %d" % validated[0])
+		_mouse(view, Vector2i(33, 16), false)
+		_expect(view._preview_tiles.is_empty(), "release must clear the preview")
+	# Stale after a tick: a dig order lands on some previewed tiles; once the
+	# deferred work runs, validity matches a fresh whole-rectangle preview.
+	orders.select_tool(world, view, OrderInputType.Tool.CHOP)
+	_mouse(view, Vector2i(0, 0), true)
+	_motion(view, Vector2i(40, 40))
+	view.finish_preview_work()
+	var trees: Array[Vector2i] = []
+	for tile in view._preview_tiles:
+		if world.get_tile(tile.x, tile.y) == "tree":
+			trees.append(tile)
+	for tile in trees.slice(0, 5):
+		world._tiles[tile.y * world.get_map_width() + tile.x] = "soil"
+	world.tick()
+	view.refresh()
+	view.finish_preview_work()
+	var all_tiles := MapViewType.tiles_in_rectangle(Vector2i(0, 0), Vector2i(40, 40))
+	_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, all_tiles),
+		"after a tick the refreshed preview must equal a fresh whole-rectangle preview")
+	view.cancel_selection()
+	# Whole-rectangle tools keep the one-call preview.
+	orders.select_tool(world, view, OrderInputType.Tool.ZONE)
+	_expect(not view._preview_per_tile, "zone must preview the whole rectangle at once")
+	view.free()
+
+func _check_designation_overlay() -> void:
+	var world := WorldStateType.new(4242, 10, 64, 64)
+	var overlay := DesignationOverlayType.new()
+	overlay.set_world(world)
+	_rect(world, "dig", Vector2i(10, 10), Vector2i(20, 20))
+	_rect(world, "dig", Vector2i(15, 15), Vector2i(4, 4)) # duplicates stack
+	_rect(world, "chop", Vector2i(0, 0), Vector2i(64, 10))
+	overlay.refresh()
+	_expect_overlay(overlay, world, "after orders")
+	var i := 0
+	for job in world.get_jobs():
+		if i % 4 == 0:
+			_apply(world, "cancel_job", {"job_id": String(job["id"])})
+		i += 1
+	for t in 30:
+		world.tick()
+	overlay.refresh()
+	_expect_overlay(overlay, world, "after cancels and ticks")
+	var loaded = WorldStateType.from_save_state(JSON.parse_string(JSON.stringify(world.to_save_state())))
+	overlay.set_world(loaded)
+	_expect_overlay(overlay, loaded, "after a save/load world swap")
+	_rect(loaded, "mine", Vector2i(0, 50), Vector2i(64, 14))
+	overlay.refresh()
+	_expect_overlay(overlay, loaded, "after orders on the loaded world")
+	overlay.free()
+
+func _expect_overlay(overlay, world, label: String) -> void:
+	var counts := {}
+	for job in world.get_jobs():
+		if String(job["status"]) in ["queued", "active"] and String(job["kind"]) != "site_fetch":
+			counts[job["target"]] = int(counts.get(job["target"], 0)) + 1
+	var image: Image = overlay._image
+	var wrong := 0
+	for y in world.get_map_height():
+		for x in world.get_map_width():
+			var expected: Color = DesignationOverlayType.fill_color(int(counts.get(Vector2i(x, y), 0)))
+			if not _same_rgba8(image.get_pixel(x, y), expected):
+				wrong += 1
+	_expect(wrong == 0, "%s: %d overlay pixels must match the pending jobs" % [label, wrong])
+
+## Equal once stored as RGBA8 (the image truncates, Color.r8 rounds).
+static func _same_rgba8(a: Color, b: Color) -> bool:
+	return (absi(a.r8 - b.r8) <= 1 and absi(a.g8 - b.g8) <= 1
+		and absi(a.b8 - b.b8) <= 1 and absi(a.a8 - b.a8) <= 1)
+
+func _check_cancel_candidates() -> void:
+	var world := WorldStateType.new(4242, 10, 64, 64)
+	_rect(world, "dig", Vector2i(5, 5), Vector2i(30, 30))
+	_rect(world, "dig", Vector2i(10, 10), Vector2i(5, 5))
+	for t in 20:
+		world.tick()
+	# Both sides start from the same load, so only the Cancel path differs.
+	var saved := JSON.stringify(world.to_save_state())
+	world = WorldStateType.from_save_state(JSON.parse_string(saved))
+	var twin = WorldStateType.from_save_state(JSON.parse_string(saved))
+	var orders := OrderInputType.new()
+	orders.selected_tool = OrderInputType.Tool.CANCEL
+	var tiles := MapViewType.tiles_in_rectangle(Vector2i(0, 0), Vector2i(40, 40))
+	var previewed := orders.preview_validity(world, world.preview, null, tiles)
+	var rejected := orders.commit_rectangle(world, null, tiles)
+	# The former path: every tile scans every job (no candidate map).
+	var expected_preview: Array[bool] = []
+	for tile in tiles:
+		var command := OrderInputType.command_for_tile(twin, null, OrderInputType.Tool.CANCEL, tile)
+		expected_preview.append(not command.is_empty() and twin.preview(command).get("ok", false))
+	var expected_rejected: Array[Dictionary] = []
+	for tile in tiles:
+		var command := OrderInputType.command_for_tile(twin, null, OrderInputType.Tool.CANCEL, tile)
+		if command.is_empty():
+			continue
+		var result: Dictionary = twin.apply(command)
+		if not result.get("ok", false):
+			expected_rejected.append({"tile": tile, "reason": String(result["rejection"]["reason"])})
+	_expect(previewed == expected_preview, "the Cancel preview must match the per-tile scan")
+	_expect(rejected == expected_rejected, "Cancel must report the same rejections as the per-tile scan")
+	_expect(world.get_jobs() == twin.get_jobs(), "Cancel must leave the same jobs as the per-tile scan")
+	_expect(world.state_hash() == twin.state_hash(), "Cancel must leave the same state as the per-tile scan")
+
+func _check_stockpile_cells() -> void:
+	var world := WorldStateType.new(4242, 10, 64, 64)
+	var view := MapViewType.new()
+	view.set_world(world)
+	_apply(world, "zone_add", {"x": 20, "y": 20, "width": 6, "height": 4})
+	_apply(world, "zone_add", {"x": 2, "y": 40, "width": 3, "height": 3})
+	var counts := {}
+	for cell in [Vector2i(21, 21), Vector2i(3, 41), Vector2i(25, 23), Vector2i(20, 20), Vector2i(50, 50), Vector2i(2, 42)]:
+		counts[cell] = {"wood": 1}
+	var expected: Array[Vector2i] = []
+	for zone in world.get_zones():
+		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
+			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
+				if counts.has(Vector2i(x, y)):
+					expected.append(Vector2i(x, y))
+	_expect(view._zoned_cells_in_draw_order(counts) == expected,
+		"the stockpile draw must visit the zoned item cells in zone, then row-major order")
+	view.free()
+
+func _apply(world, type: String, payload: Dictionary) -> Dictionary:
+	_n += 1
+	return world.apply({"actor": "player", "command_id": "v%d" % _n, "tick": world.get_tick(), "type": type, "payload": payload})
+
+func _rect(world, type: String, origin: Vector2i, size: Vector2i) -> void:
+	for y in range(origin.y, origin.y + size.y):
+		for x in range(origin.x, origin.x + size.x):
+			_apply(world, type, {"x": x, "y": y, "priority": 1})
+
+func _mouse(view, tile: Vector2i, pressed: bool) -> void:
+	var event := InputEventMouseButton.new()
+	event.button_index = MOUSE_BUTTON_LEFT
+	event.pressed = pressed
+	event.position = (Vector2(tile) + Vector2(0.5, 0.5)) * MapViewType.TILE_SIZE
+	view._gui_input(event)
+
+func _motion(view, tile: Vector2i) -> void:
+	var event := InputEventMouseMotion.new()
+	event.position = (Vector2(tile) + Vector2(0.5, 0.5)) * MapViewType.TILE_SIZE
+	view._gui_input(event)
+
+func _expect(condition: bool, message: String) -> void:
+	if not condition:
+		_failures.append(message)

@@ -914,6 +914,7 @@ func get_pending_trade_offers() -> Array[Dictionary]:
 	return _trade.get_pending_trade_offers()
 
 ## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state; a non-empty `kinds` keeps only those kinds, costing only the jobs returned (B1).
+## get_job(): one job as get_jobs() shows it, {} when unknown. The two summaries below: see JobIndex (B1).
 func get_jobs(kinds: Array = []) -> Array[Dictionary]:
 	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
@@ -921,7 +922,6 @@ func get_jobs(kinds: Array = []) -> Array[Dictionary]:
 		ToolHandoverType.apply(job, assignments, _toils)
 	return jobs
 
-## One job as get_jobs() shows it, {} when unknown (B1: costs one job, not all).
 func get_job(job_id: String) -> Dictionary:
 	var job := _scheduler.queue.get_job(job_id)
 	ToolHandoverType.apply(job, _scheduler.get_assignments(), _toils)
@@ -929,6 +929,9 @@ func get_job(job_id: String) -> Dictionary:
 
 func get_queued_job_summary() -> Dictionary:
 	return _scheduler.queue.get_queued_summary()
+
+func get_designation_changes(from: int) -> Dictionary:
+	return _scheduler.queue.get_designation_changes(from)
 
 func get_reservations() -> Dictionary:
 	return _scheduler.queue.get_reservations()
@@ -2028,11 +2031,8 @@ func _cancel_job_for_death(job_id: String) -> void:
 		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association(job_id, String(job.get("kind", "")))
 
-## restrict_to_for()'s own restriction, falling back to the waiting-queue
-## entry for a job never yet activated (restrict_to_for() reads only
-## _activated_entries), so a still-queued job restricted to a just-killed actor
-## (a flee job submitted the same tick it died) cannot survive
-## _apply_actor_death()'s cleanup below.
+## restrict_to_for(), else the waiting entry's restriction for a never-activated job, so a still-queued job
+## restricted to a just-killed actor (a flee job submitted the same tick it died) cannot survive _apply_actor_death()'s cleanup below.
 func _job_restricted_to(job_id: String) -> String:
 	var restrict_to := _scheduler.restrict_to_for(job_id)
 	if not restrict_to.is_empty():

@@ -397,7 +397,6 @@ func _tick_haul(job: Dictionary) -> void:
 		backoff = _haul_retry_base_ticks if backoff == 0 else mini(backoff * 2, _haul_retry_cap_ticks)
 		job["backoff_ticks"] = backoff
 		job["retry_at"] = _tick + backoff
-		_index.watch(job)
 		_block(job, BLOCKED_DESTINATION_FULL, "wait_for_free_destination")
 		return
 	if not _table.acquire(item_key, job["id"]):
@@ -648,9 +647,11 @@ func get_job_kinds() -> Dictionary:
 func get_labour_disabled_job_ids() -> Array:
 	return _index.labour_disabled_ids()
 
-## The colonist panel's idle-status read (JobIndex.queued_summary()).
 func get_queued_summary() -> Dictionary:
 	return _index.queued_summary(_jobs)
+
+func get_designation_changes(from: int) -> Dictionary:
+	return _index.designation_changes(from)
 
 ## Vector2i target -> owning job id, for every active job, plus every queued
 ## haul job still within its destination backoff (colonist-ai.md 3.4,
@@ -786,5 +787,4 @@ func _emit(event_type: String, job_id: String, data: Dictionary) -> void:
 		"entity_id": job_id, "sequence": _sequence, "data": data.duplicate(true),
 	})
 	_sequence += 1
-	if event_type == "job_active": # every activation emits it right away
-		_index.watch(_find_job(job_id))
+	_index.on_event(event_type, _find_job(job_id))

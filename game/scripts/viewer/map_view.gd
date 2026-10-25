@@ -13,6 +13,7 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TileAtlasMapType = preload("res://scripts/viewer/tile_atlas_map.gd")
 const ColonistSpritesType = preload("res://scripts/viewer/colonist_sprites.gd")
 const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay.gd")
+const DragPreviewType = preload("res://scripts/viewer/drag_preview.gd")
 
 const TILE_SIZE := 16.0
 const GROUND_ITEM_ICON_SIZE := TILE_SIZE * 0.6
@@ -81,8 +82,20 @@ signal tool_left
 var tool_enabled := false
 var preview_validity: Callable
 var _hover := Vector2i(-1, -1)
-var _preview_tiles: Array[Vector2i] = []
-var _preview_valid: Array[bool] = []
+## The previewed tiles (row-major) and whether each is valid: the incremental
+## per-tile drag preview's while one is active, else _list_tiles/_list_valid
+## (hover, footprint and whole-rectangle previews, computed in one call).
+var _preview_tiles: Array[Vector2i]:
+	get: return _drag_preview.tiles() if _drag_preview.is_active() else _list_tiles
+var _preview_valid: Array[bool]:
+	get: return _drag_preview.valid() if _drag_preview.is_active() else _list_valid
+var _list_tiles: Array[Vector2i] = []
+var _list_valid: Array[bool] = []
+## B1: OrderInput.select_tool() turns this on for tools whose validity is per
+## tile, so a drag previews incrementally through _drag_preview (see
+## drag_preview.gd) instead of re-validating the whole rectangle per move.
+var _preview_per_tile := false
+var _drag_preview := DragPreviewType.new()
 var _suppress_hover := false
 var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
@@ -141,6 +154,7 @@ func _init() -> void:
 		WorldStateType.MAP_HEIGHT * TILE_SIZE
 	)
 	size = custom_minimum_size
+	_drag_preview.resize(WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT)
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
 		_item_atlas_textures[kind] = load(TileAtlasMapType.ITEM_ATLAS_MAP[kind]["texture_path"])
 	var tile_set_resource: TileSet = load(TILE_SET_PATH)
@@ -220,6 +234,7 @@ func _resize_for_world() -> void:
 	var height: int = world.get_map_height() if world != null else WorldStateType.MAP_HEIGHT
 	custom_minimum_size = Vector2(width * TILE_SIZE, height * TILE_SIZE)
 	size = custom_minimum_size
+	_drag_preview.resize(width, height)
 
 ## Re-syncs both draw paths with the current world state. boot.gd calls this
 ## once per tick instead of queue_redraw() directly so the TileMapLayer picks
@@ -323,6 +338,11 @@ static func tiles_in_rectangle(start: Vector2i, end: Vector2i) -> Array[Vector2i
 			tiles.append(Vector2i(x, y))
 	return tiles
 
+func set_preview_per_tile(enabled: bool) -> void:
+	_preview_per_tile = enabled
+	_drag_preview.clear()
+	_preview_cache_key = []
+
 func set_tool_enabled(enabled: bool) -> void:
 	cancel_selection()
 	tool_enabled = enabled
@@ -340,8 +360,9 @@ func clear_hover() -> void:
 func cancel_selection() -> void:
 	_dragging = false
 	_hover = Vector2i(-1, -1)
-	_preview_tiles.clear()
-	_preview_valid.clear()
+	_list_tiles.clear()
+	_list_valid.clear()
+	_drag_preview.clear()
 	_suppress_hover = true
 	# Cleared directly above rather than through _update_preview(), so drop the cache key too:
 	# an unrelated later key that happens to match the pre-cancel one (e.g. after set_world()
@@ -368,8 +389,14 @@ func _update_preview() -> void:
 	if key == _preview_cache_key:
 		return
 	_preview_cache_key = key
-	_preview_tiles.clear()
-	_preview_valid.clear()
+	_list_tiles.clear()
+	_list_valid.clear()
+	if tool_enabled and _dragging and _preview_per_tile:
+		_drag_preview.update(_rectangle(_drag_start, _drag_current), world.get_tick() if world != null else -1, preview_validity)
+		queue_redraw()
+		return
+	if _drag_preview.is_active():
+		_drag_preview.clear()
 	if tool_enabled:
 		var next_preview_tiles: Array[Vector2i] = []
 		if _dragging:
@@ -379,10 +406,34 @@ func _update_preview() -> void:
 				next_preview_tiles = _build_footprint_tiles(_hover)
 			else:
 				next_preview_tiles.append(_hover)
-		_preview_tiles = next_preview_tiles
-	if not _preview_tiles.is_empty() and preview_validity.is_valid():
-		_preview_valid = preview_validity.call(_preview_tiles)
+		_list_tiles = next_preview_tiles
+	if not _list_tiles.is_empty() and preview_validity.is_valid():
+		_list_valid = preview_validity.call(_list_tiles)
 	queue_redraw()
+
+## Continues the per-tile drag preview's stale/unknown tiles, a budget per frame.
+func _process(_delta: float) -> void:
+	if _drag_preview.has_work():
+		_drag_preview.step(preview_validity)
+		queue_redraw()
+
+## Runs the drag preview's remaining work now (tests and benchmarks).
+func finish_preview_work() -> void:
+	while _drag_preview.has_work():
+		_drag_preview.step(preview_validity)
+	queue_redraw()
+
+## The tile rectangle with corners start and end, both inclusive.
+static func _rectangle(start: Vector2i, end: Vector2i) -> Rect2i:
+	var top_left := Vector2i(mini(start.x, end.x), mini(start.y, end.y))
+	return Rect2i(top_left, Vector2i(absi(end.x - start.x) + 1, absi(end.y - start.y) + 1))
+
+## The tiles at least partly on screen, so per-tile drawing stays bounded by
+## the screen, not by the selection.
+func _visible_tile_rect() -> Rect2i:
+	var view := get_global_transform_with_canvas().affine_inverse() * get_viewport_rect()
+	var top_left := Vector2i((view.position / TILE_SIZE).floor())
+	return Rect2i(top_left, Vector2i((view.end / TILE_SIZE).ceil()) - top_left)
 
 ## The inputs that determine _preview_tiles/_preview_valid: tool_enabled, the hover/drag
 ## rectangle, and the world's tick (a command's validity can depend on state a tick just
@@ -417,6 +468,7 @@ func _gui_input(event: InputEvent) -> void:
 			_dragging = true
 			_drag_start = tile
 			_drag_current = tile
+			_drag_preview.clear()
 			_update_preview()
 		elif _dragging:
 			_drag_current = _bounded(tile_at_local(event.position))
@@ -711,9 +763,10 @@ func _draw() -> void:
 				), GROUND_ITEM_COLORS.get(String(colonist["carrying"]["kind"]), Color.MAGENTA), true)
 	_draw_stockpile_counts()
 	_draw_construction_sites()
-	for i in _preview_tiles.size():
-		var tile := _preview_tiles[i]
-		var valid := i < _preview_valid.size() and _preview_valid[i]
+	_drag_preview.draw(self, TILE_SIZE, _visible_tile_rect())
+	for i in _list_tiles.size():
+		var tile := _list_tiles[i]
+		var valid := i < _list_valid.size() and _list_valid[i]
 		var color := Color(0.3, 1.0, 0.55) if valid else Color(1.0, 0.3, 0.3)
 		var rect := Rect2(Vector2(tile) * TILE_SIZE, Vector2.ONE * TILE_SIZE)
 		draw_rect(rect, Color(color, 0.22), true)
@@ -792,30 +845,44 @@ func _ground_item_counts() -> Dictionary:
 
 ## Wood retains its original icon, dimensions, origin and count baseline in
 ## both modes. Additional kinds occupy subsequent rows only on mixed cells.
+## Visits only the zoned cells that hold items (B1: walking every cell of every
+## zone on each redraw cost a whole-map zone 65,536 cells per frame), in the
+## zone-then-row-major order the full walk drew them in.
 func _draw_stockpile_counts() -> void:
 	var counts := _ground_item_counts()
 	var font := ThemeDB.fallback_font
 	var icon_size := GROUND_ITEM_ICON_SIZE
-	for zone in world.get_zones():
-		var zx: int = zone["x"]
-		var zy: int = zone["y"]
-		var zw: int = zone["width"]
-		var zh: int = zone["height"]
-		for y in range(zy, zy + zh):
-			for x in range(zx, zx + zw):
-				var cell_counts: Dictionary = counts.get(Vector2i(x, y), {})
-				var row := 0
-				for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
-					var count := int(cell_counts.get(kind, 0))
-					if count <= 0:
-						continue
-					var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
-					var origin := Vector2(x * TILE_SIZE, y * TILE_SIZE + row * TILE_SIZE)
-					var icon_rect := Rect2(origin, Vector2(icon_size, icon_size))
-					if _art_enabled or kind == "wood":
-						draw_texture_rect_region(_item_atlas_textures[kind], icon_rect, atlas["rect"])
-					else:
-						draw_rect(icon_rect, GROUND_ITEM_COLORS.get(kind, Color.MAGENTA), true)
-					draw_string(font, origin + Vector2(icon_size + 1.0, TILE_SIZE - 2.0), str(count),
-						HORIZONTAL_ALIGNMENT_LEFT, -1, STOCKPILE_COUNT_FONT_SIZE, STOCKPILE_COUNT_TEXT_COLOR)
-					row += 1
+	for cell in _zoned_cells_in_draw_order(counts):
+		var cell_counts: Dictionary = counts[cell]
+		var row := 0
+		for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
+			var count := int(cell_counts.get(kind, 0))
+			if count <= 0:
+				continue
+			var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
+			var origin := Vector2(cell.x * TILE_SIZE, cell.y * TILE_SIZE + row * TILE_SIZE)
+			var icon_rect := Rect2(origin, Vector2(icon_size, icon_size))
+			if _art_enabled or kind == "wood":
+				draw_texture_rect_region(_item_atlas_textures[kind], icon_rect, atlas["rect"])
+			else:
+				draw_rect(icon_rect, GROUND_ITEM_COLORS.get(kind, Color.MAGENTA), true)
+			draw_string(font, origin + Vector2(icon_size + 1.0, TILE_SIZE - 2.0), str(count),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, STOCKPILE_COUNT_FONT_SIZE, STOCKPILE_COUNT_TEXT_COLOR)
+			row += 1
+
+## The cells of `counts` inside a zone, ordered by zone (get_zones() order),
+## then row-major -- each cell once, under the first zone containing it.
+func _zoned_cells_in_draw_order(counts: Dictionary) -> Array[Vector2i]:
+	var zones := world.get_zones()
+	var keyed: Array = []
+	for cell in counts:
+		for zone_index in zones.size():
+			var zone: Dictionary = zones[zone_index]
+			if Rect2i(int(zone["x"]), int(zone["y"]), int(zone["width"]), int(zone["height"])).has_point(cell):
+				keyed.append([zone_index, cell.y, cell.x, cell])
+				break
+	keyed.sort()
+	var cells: Array[Vector2i] = []
+	for entry in keyed:
+		cells.append(entry[3])
+	return cells

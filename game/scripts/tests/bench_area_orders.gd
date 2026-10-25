@@ -11,7 +11,8 @@ extends SceneTree
 ## Run: godot --headless --path game --script res://scripts/tests/bench_area_orders.gd
 ## Optional user args (after "--"): max_seconds=<n> skips a size whose cost,
 ## extrapolated quadratically from the previous size, would exceed n seconds
-## (default 120), so a pathological baseline still finishes.
+## (default 120), so a pathological baseline still finishes; only=<a,b,...>
+## runs just those sections (ticks, preview, drag, apply, cancel, zone).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
@@ -24,6 +25,7 @@ const SEED := 42
 const SIZES := [Vector2i(10, 10), Vector2i(40, 25), Vector2i(100, 100), Vector2i(256, 256)]
 
 var _max_seconds := 120.0
+var _only: Array = []
 
 func _init() -> void:
 	call_deferred("_run")
@@ -32,13 +34,21 @@ func _run() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("max_seconds="):
 			_max_seconds = float(arg.trim_prefix("max_seconds="))
+		if arg.begins_with("only="):
+			_only = Array(arg.trim_prefix("only=").split(","))
 	print("bench_area_orders: %dx%d seed=%d commit=%s max_seconds=%.0f" % [WIDTH, HEIGHT, SEED, _commit_hash(), _max_seconds])
-	_bench_reference_ticks()
-	_bench_preview("dig", OrderInputType.Tool.DIG)
-	_bench_drag("dig", OrderInputType.Tool.DIG)
-	await _bench_apply("dig", OrderInputType.Tool.DIG)
-	_bench_cancel()
-	await _bench_zone()
+	if _runs("ticks"):
+		_bench_reference_ticks()
+	if _runs("preview"):
+		_bench_preview("dig", OrderInputType.Tool.DIG)
+	if _runs("drag"):
+		_bench_drag("dig", OrderInputType.Tool.DIG)
+	if _runs("apply"):
+		await _bench_apply("dig", OrderInputType.Tool.DIG)
+	if _runs("cancel"):
+		_bench_cancel()
+	if _runs("zone"):
+		await _bench_zone()
 	print("bench_area_orders: done")
 	quit()
 
@@ -167,23 +177,36 @@ func _bench_after(world: WorldStateType, map_view: MapViewType, label: String, n
 	print("    after %s N=%d: first tick %.2f ms, steady tick %.2f ms, map_view.refresh %.2f ms, map redraw frame %.2f ms, full get_jobs %.2f ms (%d), full get_events %.2f ms (%d)"
 		% [label, n, tick_ms, steady_ms, refresh_ms, redraw_ms, jobs_ms, job_count, events_ms, event_count])
 
-## One headless frame that redraws map_view (its _draw() and its overlay's),
-## minus an idle frame: the CPU side of drawing the map, designations included.
+## The CPU time of map_view's draw callbacks (its _draw(), its overlay's and
+## its other children's) in one headless frame: siblings draw in tree order and
+## children after their parent, so a marker drawn just before map_view and one
+## just after it bracket exactly that work. Cheapest of 3 redraws.
 func _redraw_ms(map_view: MapViewType) -> float:
-	if not map_view.is_inside_tree():
-		root.add_child(map_view)
+	var stamps := {}
+	var before := Node2D.new()
+	var after := Node2D.new()
+	before.draw.connect(func() -> void: stamps["before"] = Time.get_ticks_usec())
+	after.draw.connect(func() -> void: stamps["after"] = Time.get_ticks_usec())
+	root.add_child(before)
+	root.add_child(map_view)
+	root.add_child(after)
 	await process_frame
-	await process_frame
-	var idle_start := Time.get_ticks_usec()
-	await process_frame
-	var idle_ms := (Time.get_ticks_usec() - idle_start) / 1000.0
-	var start := Time.get_ticks_usec()
-	map_view.queue_redraw()
-	map_view._designation_overlay.queue_redraw()
-	await process_frame
-	var ms := (Time.get_ticks_usec() - start) / 1000.0 - idle_ms
+	var best := INF
+	for i in 3:
+		stamps.clear()
+		before.queue_redraw()
+		map_view.queue_redraw()
+		map_view._designation_overlay.queue_redraw()
+		after.queue_redraw()
+		await process_frame
+		if stamps.has("before") and stamps.has("after"):
+			best = minf(best, (int(stamps["after"]) - int(stamps["before"])) / 1000.0)
+	root.remove_child(before)
 	root.remove_child(map_view)
-	return ms
+	root.remove_child(after)
+	before.free()
+	after.free()
+	return best
 
 ## Cancel over a rectangle full of queued dig jobs: preview, then apply.
 func _bench_cancel() -> void:
@@ -241,6 +264,9 @@ func _bench_zone() -> void:
 		print("  zone N=%d: preview %.2f ms (%d valid), apply %.2f ms (ok=%s), map redraw frame %.2f ms"
 			% [tiles.size(), preview_ms, valid.count(true), apply_ms, str(result.get("ok", false)), redraw_ms])
 		map_view.free()
+
+func _runs(section: String) -> bool:
+	return _only.is_empty() or section in _only
 
 func _skip(previous_ms: float, previous_n: int, n: int, label: String) -> bool:
 	if previous_ms < 0.0:
