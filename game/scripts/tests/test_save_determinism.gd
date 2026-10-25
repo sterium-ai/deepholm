@@ -367,10 +367,10 @@ func _check_pending_chop_save_load() -> void:
 		_expect(restored_jobs[job_id]["status"] == "completed",
 			"NEAR/FAR must also complete after a pending-chop save/load, proving the restored FAR search still reaches its own tree target (job %s)" % job_id)
 
-	_expect(world.get_tile(near_target.x, near_target.y) == WorldStateType.TILE_FLOOR, "NEAR target must become floor")
-	_expect(world.get_tile(far_target.x, far_target.y) == WorldStateType.TILE_FLOOR, "FAR target must become floor")
-	_expect(restored.get_tile(near_target.x, near_target.y) == WorldStateType.TILE_FLOOR, "restored NEAR target must become floor")
-	_expect(restored.get_tile(far_target.x, far_target.y) == WorldStateType.TILE_FLOOR, "restored FAR target must become floor")
+	_expect(world.get_tile(near_target.x, near_target.y) == WorldStateType.TILE_SOIL, "NEAR target must become soil (B4: chop leaves soil)")
+	_expect(world.get_tile(far_target.x, far_target.y) == WorldStateType.TILE_SOIL, "FAR target must become soil (B4: chop leaves soil)")
+	_expect(restored.get_tile(near_target.x, near_target.y) == WorldStateType.TILE_SOIL, "restored NEAR target must become soil (B4: chop leaves soil)")
+	_expect(restored.get_tile(far_target.x, far_target.y) == WorldStateType.TILE_SOIL, "restored FAR target must become soil (B4: chop leaves soil)")
 
 	_expect(world.state_hash() == restored.state_hash(),
 		"advancing the source and its pending-chop restore identically must keep matching state_hash()")

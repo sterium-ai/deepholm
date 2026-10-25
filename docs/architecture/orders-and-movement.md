@@ -302,7 +302,9 @@ work timer completes:
   right after that tick's colonist-advance pass) and consumes them in
   ascending job-id order, so the find sequence never depends on
   `_advance_colonists()`'s own colonist-id iteration order.
-- `chop` — the target tile changes `tree -> floor`, and one ground-wood item
+- `chop` — the target tile changes `tree -> soil` (trees only generate on
+  `soil`, so the tile gets back the terrain it grew on; `floor` is built floor
+  and draws as stone bricks), and one ground-wood item
   is added at that tile (`get_ground_wood(x, y)` increments by one, tracked
   in `WorldState`'s internal ground-items map).
 - `mine` — the target tile changes `rock -> floor`, and one ground-stone item

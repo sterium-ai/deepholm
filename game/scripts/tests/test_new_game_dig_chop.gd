@@ -60,13 +60,13 @@ func _run() -> void:
 	if dig_target != Vector2i(-1, -1):
 		_run_and_verify(world, "dig", dig_target, "trench")
 	if chop_target != Vector2i(-1, -1):
-		_run_and_verify(world, "chop", chop_target, "floor")
+		_run_and_verify(world, "chop", chop_target, "soil")
 
 	_finish(boot_node)
 
 ## expected_tile: dig's own completion effect turns its target into "trench"
 ## (ADR 026, docs/decisions/026-trench-trapped-actor-and-rescue.md), never
-## "floor"; chop is unaffected and still produces "floor".
+## "floor"; chop turns its tree back into "soil" (B4).
 func _run_and_verify(world, job_type: String, target: Vector2i, expected_tile: String) -> void:
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "%s_new_game" % job_type, "tick": world.get_tick(),

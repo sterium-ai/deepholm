@@ -2140,7 +2140,7 @@ func _toil_on_work_complete(job_id: String) -> void:
 			_item_table.spawn_item("sand", sand_at.x, sand_at.y)
 			_item_table.stage_dig_find(job_id, target.x, target.y)
 		"chop":
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
+			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_SOIL  # trees only grow on soil
 			_item_table.spawn_wood_item(target.x, target.y)
 		"mine":
 			if get_tile(target.x, target.y) != TILE_ROCK:

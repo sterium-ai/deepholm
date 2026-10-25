@@ -51,9 +51,10 @@ func _init() -> void:
 	_assert_tile_cell_matches(map_view, dig_target, "trench")
 
 	_run_job_to_completion(world, "chop", chop_target)
-	_expect(world.get_tile(chop_target.x, chop_target.y) == "floor", "a completed chop must turn its target to floor")
+	_expect(world.get_tile(chop_target.x, chop_target.y) == "soil", "a completed chop must turn its target back to soil")
 	map_view.refresh()
-	_assert_tile_cell_matches(map_view, chop_target, "floor")
+	# B4: the chopped tile shows grass like its neighbours, not the built-floor cell.
+	_assert_tile_cell_matches(map_view, chop_target, "soil")
 
 	# Content/objects.json's "wall" row (this test's own former
 	# build target) was replaced by "wooden_wall"/"stone_wall";
@@ -103,8 +104,9 @@ func _run_job_to_completion(world: WorldStateType, job_type: String, target: Vec
 		"type": job_type, "payload": {"x": target.x, "y": target.y, "priority": 1},
 	})
 	_expect(result.get("ok", false), "%s command must be accepted: %s" % [job_type, result])
+	var start_kind := world.get_tile(target.x, target.y)
 	var ticks := 0
-	while ticks < TICK_BUDGET and world.get_tile(target.x, target.y) not in ["floor", "trench"]:
+	while ticks < TICK_BUDGET and world.get_tile(target.x, target.y) == start_kind:
 		# Keeps needs topped up so this stays a test of rendered cell content,
 		# not of need-decay pressure: with real decay, colonists spend so much
 		# time servicing recurring eat/drink/sleep jobs that an ordinary

@@ -53,7 +53,7 @@ the foreign neighbour shows through:
 | concave corner NE / NW / SE / SW | (1,4) / (3,4) / (1,0) / (3,0) | everywhere except a small rounded bite at the named corner |
 | unused | every other cell in rows 0-4 | fully transparent |
 | grass variants 0 / 1 / 2 | (0,5) / (1,5) / (2,5) | full, opaque |
-| trench, built floor | (3,5), (4,5) | full, opaque |
+| trench, built floor | (3,5), (4,5) | full, opaque (built floor is stone bricks: the `floor` tile kind, e.g. the starting clearing; a chopped tree goes back to `soil`, never `floor`) |
 | plowed soil, planted base, hazard base, forest floor | (0,6), (1,6), (2,6), (3,6) | full, opaque |
 
 Water and rock are separate opaque 16x16 files (`water.png`, `rock.png`).

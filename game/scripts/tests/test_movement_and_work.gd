@@ -129,7 +129,7 @@ func _check_walk_and_work_trace() -> void:
 	var dig := _dig_target()
 	_expect(world.get_tile(dig.x, dig.y) == WorldType.TILE_TRENCH, "dig target must become trench")
 	_expect(_has_sand_near(world, dig), "dig target must leave a sand item on or adjacent to the trench")
-	_expect(world.get_tile(chop.x, chop.y) == WorldType.TILE_FLOOR, "chop target must become floor")
+	_expect(world.get_tile(chop.x, chop.y) == WorldType.TILE_SOIL, "chop target must become soil")
 	_expect(world.get_ground_wood(chop.x, chop.y) == 1, "chop target must leave exactly one ground wood")
 
 ## Two independent runs with the same seed and the same command sequence must
