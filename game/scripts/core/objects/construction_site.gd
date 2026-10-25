@@ -3,7 +3,7 @@ extends RefCounted
 
 ## One record per active construction site (ADR 040):
 ## a persistent, multi-tick `build` order that exists independently of any
-## job. WorldState is the only mutator; ConstructionGiver and the toil hooks
+## job. ConstructionSystem is the only mutator; ConstructionGiver and the toil hooks
 ## read/write through the methods below rather than indexing a site
 ## Dictionary directly, mirroring ReservationTable's own "generic ledger,
 ## callers own the keyspace" discipline. Plain data plus pure helpers, no

@@ -96,7 +96,7 @@ Orca helper scripts, this backlog.
   `core-budgets.json`, affected tests.
 - **Acceptance:** as R1; `test_save_migration` and the suspend/resume tests unchanged.
 
-### R5 — Extract `ConstructionSystem` · `todo`
+### R5 — Extract `ConstructionSystem` · `review (antonelmejor50-hub/r5-extract-constructionsystem)`
 
 - **Goal:** `objects/construction_system.gd` owns sites and the whole construction flow
   (submission, footprint/terrain checks, site fetch source selection, site work, finalize,

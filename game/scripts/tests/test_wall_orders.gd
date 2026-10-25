@@ -316,7 +316,7 @@ func _check_overlapping_footprints_within_one_batch_skip_the_later_origin_horizo
 	var site: Dictionary = sites[0]
 	_expect(int(site["x"]) == 10 and int(site["y"]) == 10, "the surviving site must be at the first origin (10, 10): %s" % site)
 	var table := world._scheduler.queue.get_reservation_table()
-	var owner := world._sites.owner_key(String(site["id"]))
+	var owner := world._construction.site_table.owner_key(String(site["id"]))
 	_expect(table.owner("tile:10,10") == owner and table.owner("tile:11,10") == owner,
 		"the single surviving site must hold the reservation for both of its own footprint tiles")
 	_expect(String(world.get_construction_site(11, 10).get("id", "")) == String(site["id"]),
@@ -343,7 +343,7 @@ func _check_overlapping_footprints_within_one_batch_skip_the_later_origin_vertic
 	if sites.is_empty():
 		return
 	var table := world._scheduler.queue.get_reservation_table()
-	var owner := world._sites.owner_key(String(sites[0]["id"]))
+	var owner := world._construction.site_table.owner_key(String(sites[0]["id"]))
 	_expect(table.owner("tile:20,20") == owner and table.owner("tile:20,21") == owner,
 		"the single surviving vertical site must hold the reservation for both of its own footprint tiles")
 
@@ -734,7 +734,7 @@ func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -
 	# Occupies site B's own single max_builders slot with an unrelated fetch
 	# job before colonist_0 ever delivers to A -- mirrors a second colonist
 	# already committed to B by the time this chain would otherwise reach it.
-	world._submit_site_fetch(pos_b, "stub_competing_item", Vector2i(0, 0), world.get_tick())
+	world._construction.submit_site_fetch(pos_b, "stub_competing_item", Vector2i(0, 0), world.get_tick())
 	var job_id := _active_site_fetch_job_id(world)
 	_expect(not job_id.is_empty(), "colonist_0's own active site_fetch job must be found before it delivers")
 	var completed := false
@@ -812,7 +812,7 @@ func _check_competing_deliveries_that_satisfy_remaining_sites_drop_leftover_and_
 	_expect(not job_id.is_empty(), "colonist_0's own active site_fetch job must be found before the competing deliveries land")
 	for i in range(1, 4):
 		var site_id := String(world.get_construction_site(positions[i].x, positions[i].y)["id"])
-		_expect(world._sites.deposit(site_id, "wood", 1) == 1, "the competing delivery to site %d must be accepted" % i)
+		_expect(world._construction.site_table.deposit(site_id, "wood", 1) == 1, "the competing delivery to site %d must be accepted" % i)
 	var completed := false
 	for _i in MAX_TICKS:
 		world.tick()

@@ -31,7 +31,7 @@ const RelationsType = preload("res://scripts/core/relations/relations.gd")
 const CombatResolverType = preload("res://scripts/core/combat/combat_resolver.gd")
 const CombatGiverType = preload("res://scripts/core/combat/combat_giver.gd")
 const ApproachGiverType = preload("res://scripts/core/combat/approach_giver.gd")
-const ConstructionSiteTableType = preload("res://scripts/core/objects/construction_site.gd")
+const ConstructionSystemType = preload("res://scripts/core/objects/construction_system.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
 const ZoneTableType = preload("res://scripts/core/objects/zone_table.gd")
 const ConstructionGiverType = preload("res://scripts/core/jobs/givers/construction_giver.gd")
@@ -223,46 +223,10 @@ var _approach_giver: ApproachGiverType
 ## The advancing colonist's tile at the start of its _toils.advance() call:
 ## scratch for _toil_on_work_complete()'s trap pre-check. Never saved.
 var _trap_tile_before: Vector2i = Vector2i.ZERO
-## job_id -> true, once a site_fetch job's own item_id/target has ever been
-## retargeted away from GlobalAssignment's own precomputed assignment_path
-## destination -- either by _resolve_freshly_activated_site_fetch_sources()'s
-## own seed-swap or by an ordinary on-demand hop (_toil_on_pick_up_success()),
-## both part of the hands-filling rules. Consulted by
-## _toil_go_to_skip_assignment_path(): once true, assignment_path is
-## permanently stale for the rest of this job's life (it only ever led to the
-## submission-time seed's own tile, never any later hop's), so every further
-## leg -- not only the tick of the retarget itself -- must run a fresh bounded
-## search instead of blindly walking that now-irrelevant precomputed path.
-## Erased on job termination (_finish_job()) so this never grows unbounded;
-## never saved (a reloaded job's own item_id already reflects its real current
-## source, and _toil_is_first_leg()'s "cell == null" already tells a resumed
-## job it is still fetching -- this dict only decides which go_to mechanism to
-## use, never job behaviour).
-var _site_fetch_source_retargeted: Dictionary = {}
-## job_id -> the item kind _toil_pick_up_count_for() resolved right before
-## this job's most recent pick_up toil: a source
-## item whose entire remaining count a pick_up exactly exhausts is removed
-## from the item table by that same pick_up (ToilExecutor.pick_up()'s own
-## _remove_item call), so _toil_on_pick_up_success() -- which fires
-## immediately afterward -- can no longer resolve the picked kind by looking
-## job["item_id"] back up in the item table; it would silently read "" instead and
-## mistake "the site needs 0 more of nothing" for "hands already cover the
-## site's own need," delivering a partial load after a single hop even when
-## further eligible sources sit right next to the one just visited (test_
-## multi_source_crate: a 1-unit-stack wood source several tiles from two more
-## unvisited wood units and the site itself). Cached here -- the same
-## "erased on job termination, never saved" discipline _site_fetch_source_
-## retargeted's own doc comment establishes, since a resumed job's own
-## "cell == null" already tells it whether it is still fetching -- and read
-## by _toil_on_pick_up_success(); overwritten on every further hop the same
-## way job["item_id"] itself is (retarget_site_fetch_source()).
-var _site_fetch_picked_kind: Dictionary = {}
-## One record per active construction site (ADR 040):
-## replaces the single-worker `build` job's own submission-time item
-## resolution. WorldState is the only mutator; ConstructionGiver decides when
-## a site's next fetch/work job should exist, through the same job_queue.gd
-## entry point any order-driven job uses.
-var _sites := ConstructionSiteTableType.new()
+## Construction sites, their fetch/work flow and the two site-fetch runtime
+## caches (objects/construction_system.gd).
+var _construction: ConstructionSystemType
+## Decides when a site's next fetch/work job should exist (ADR 040).
 var _construction_giver: ConstructionGiverType
 
 ## incidents_enabled defaults false so every pre-existing caller keeps ticking byte-identically.
@@ -332,6 +296,9 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_calendar = CalendarServiceType.new("", _content.document("calendar"))
 	_work_ticks = _load_work_ticks()
 	_progress_table = WorkProgressType.new(_scheduler.queue, _work_ticks, _tile_key, _work_target_for)
+	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
+		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
+		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -355,7 +322,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		set_tool_item_held, set_tool_item_ground, get_colonists, _route_budget,
 		get_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
-		_work_target_for, _construction_site_exists, _construction_site_deposit)
+		_work_target_for, _construction.construction_site_exists, _construction.construction_site_deposit)
 	_scheduler.set_route_budget(_route_budget)
 	_scheduler.queue.set_tool_requirement(_tool_requirement_for_kind, _tool_exists)
 	_toil_hooks = {
@@ -389,8 +356,11 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs, get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	_construction_giver = ConstructionGiverType.new(_sites.list, get_jobs, get_items, _zone_table.is_in_any_zone,
-		_construction_item_reservation_owner, _submit_site_fetch, _submit_site_work, _sites.materials_met, _sites.remaining)
+	# The queue's own get_jobs: get_jobs()'s tool-handover overlay never touches a
+	# site_fetch/site_work job (neither kind needs a tool), the only kinds the giver reads.
+	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs, _item_table.get_items,
+		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
+		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
 	# Live _tile_grid.tiles by reference: the giver only scans it per tick, and get_tiles() would copy 65536 Strings.
 	_calendar_alert_giver = CalendarAlertGiverType.new(get_colonists, func() -> Array[String]: return _tile_grid.tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
 	_build_dimension_services(incidents_enabled)
@@ -450,21 +420,21 @@ func preview(command) -> Dictionary:
 	var validation := _validate_command(command, false)
 	if not validation["ok"]:
 		return validation
-	# build keeps its read-only rules in _check_construction_command()
-	# below -- the exact same function _apply_construction_submission() runs --
+	# build keeps its read-only rules in ConstructionSystem.check_construction_command()
+	# -- the exact same function apply_construction_submission() runs --
 	# so a hover preview and apply() always agree; cancel_site mirrors it via
 	# _check_cancel_site_command(). place_object calls _check_place_object_command()
 	# directly for the same reason; CommandChecks.check_place_object_command()
 	# delegates to this same function, so either path runs
 	# identical, current rules.
 	if command["type"] == "build_line":
-		var classification := _classify_build_line_command(command["payload"])
+		var classification := _construction.classify_build_line_command(command["payload"])
 		if classification.has("reason"):
 			return _event_log.pure_rejection(command["command_id"], command["actor"], classification["reason"], classification["message"])
 		return {"ok": true, "skipped": classification["skipped"]}
 	var check: Dictionary
 	if command["type"] == "build":
-		check = _check_construction_command(command["payload"])
+		check = _construction.check_construction_command(command["payload"])
 	elif command["type"] == "cancel_site":
 		check = _check_cancel_site_command(command["payload"])
 	elif command["type"] == "place_object":
@@ -488,9 +458,9 @@ func apply(command) -> Dictionary:
 		"cancel_job":
 			return _apply_cancel_job_command(command)
 		"build":
-			return _apply_construction_submission(command)
+			return _construction.apply_construction_submission(command)
 		"build_line":
-			return _apply_build_line_command(command)
+			return _construction.apply_build_line_command(command)
 		"cancel_site":
 			return _apply_cancel_site_command(command)
 		"place_object":
@@ -523,7 +493,7 @@ func tick() -> void:
 	_haul_giver.advance(_clock.tick)
 	_construction_giver.advance(_clock.tick)
 	_apply_combat(_clock.tick)
-	var active_site_fetch_jobs_before := _active_site_fetch_job_ids()
+	var active_site_fetch_jobs_before := _construction.active_site_fetch_job_ids()
 	_scheduler.tick(_clock.tick, _scheduler_workers(), _passability.is_passable, Vector2i.ZERO,
 		Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _toils.get_labour, _calendar.active_boost, _colonists,
 		_committed_jobs(), _tile_grid.get_regions().reachable)
@@ -532,8 +502,8 @@ func tick() -> void:
 	# submission); the instant one really (re)activates with a colonist
 	# known, swap it for the true nearest-to-builder source before
 	# _advance_colonists() ever drives it -- see
-	# _resolve_freshly_activated_site_fetch_sources() below.
-	_resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
+	# ConstructionSystem.resolve_freshly_activated_site_fetch_sources().
+	_construction.resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
 	# RescueGiver's own route searches
 	# share _route_budget (the per-colonist, per-tick ledger ADR 004 bounds)
 	# with the scheduler's activation searches above and the toil executor's
@@ -759,20 +729,16 @@ func state_hash(include_incidents: bool = true) -> int:
 		# affects the next commit/adjacency decision, so two states that
 		# differ only here must not hash equal.
 		"approach_job_targets": StateCodec._encode_approach_job_targets(_approach_giver.get_job_targets()),
-		# A site's own held_materials/progress/builder_ids affect
-		# what happens next (a fetch/work job the giver submits, or what
-		# cancel_site drops), so two states differing only here must not hash
-		# equal. list() is already sorted by site id for determinism.
-		"construction_sites": _sites.list(),
 	}
 	# Each module adds its own keys (JSON.stringify sorts keys, so insertion order is irrelevant):
 	# "width"/"height"/"tiles", "objects"/"object_health", "zones"/"next_zone_id",
-	# "items"/"next_item_id"/"dig_find_rng", "suspended_work_progress".
+	# "items"/"next_item_id"/"dig_find_rng", "suspended_work_progress", "construction_sites".
 	_tile_grid.hash_into(snapshot)
 	_object_table.hash_into(snapshot)
 	_zone_table.hash_into(snapshot)
 	_item_table.hash_into(snapshot)
 	_progress_table.hash_into(snapshot)
+	_construction.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 
@@ -886,8 +852,8 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 	var result := _scheduler.finish(job_id, status)
 	if result.get("ok", false):
 		_tool_store.release_all(job_id)
-		_site_fetch_source_retargeted.erase(job_id)
-		_site_fetch_picked_kind.erase(job_id)
+		_construction.site_fetch_source_retargeted.erase(job_id)
+		_construction.site_fetch_picked_kind.erase(job_id)
 		if String(job.get("kind", "")) == "incident":
 			_incidents.on_job_finished(job_id)
 			if not incident_actor.is_empty():
@@ -927,6 +893,14 @@ func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
 
 func get_objects() -> Array[Dictionary]:
 	return _object_table.get_objects()
+
+## Every active construction site, builder_ids as colonist ids (ConstructionSystem).
+func get_construction_sites() -> Array[Dictionary]:
+	return _construction.get_construction_sites()
+
+## {} for a tile no site's footprint covers.
+func get_construction_site(x: int, y: int) -> Dictionary:
+	return _construction.get_construction_site(x, y)
 
 func get_zones() -> Array[Dictionary]:
 	return _zone_table.get_zones()
@@ -1240,11 +1214,7 @@ func _cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
 func _resume_work_progress(target: Vector2i, job_id: String):
 	var job := _get_job(job_id)
 	if String(job.get("kind", "")) == "site_work":
-		var site_id := _sites.find_at_origin(job.get("site", target))
-		if site_id.is_empty():
-			return 0
-		var site := _sites.get_site(site_id)
-		return maxi(0, int(site["build_ticks"]) - int(site["progress"]))
+		return _construction.site_work_ticks_remaining(job, target)
 	return _progress_table.resume(target, job_id)
 
 ## Called every tick for every work-toil job kind. For an active
@@ -1259,15 +1229,11 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 	# case: with more than one builder, combined contributions can cross
 	# build_ticks before any single job's own locally-seeded countdown would,
 	# so this non-final tick must finalize immediately for genuine N-builder
-	# speedup -- "" matches no real job id, so _finalize_construction_site()
+	# speedup -- "" matches no real job id, so finalizing the site
 	# finishes every builder here, including this one (nothing else will).
 	if not job_id.is_empty() and String(_scheduler.queue.get_job(job_id).get("kind", "")) == "site_work":
 		var job := _get_job(job_id)
-		var site_id := _sites.find_at_origin(job.get("site", target))
-		if not site_id.is_empty():
-			var progress := _sites.add_progress(site_id, 1)
-			if progress >= int(_sites.get_site(site_id)["build_ticks"]):
-				_finalize_construction_site(site_id, "")
+		_construction.add_site_work(job.get("site", target), "")
 		return
 	_progress_table.record(target, ticks_remaining, job_id)
 	var escaping := _escaping_actor_at(target)
@@ -1873,16 +1839,16 @@ func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
 ## own delivery leg already does, never on the tile about to become an object.
 ## A site_fetch job's own fetch leg may visit more than one source before
 ## delivering (the hands-filling rules), so a job this
-## tick's or an earlier hop's _resolve_freshly_activated_site_fetch_sources()/
+## tick's or an earlier hop's resolve_freshly_activated_site_fetch_sources()/
 ## _toil_on_pick_up_success() has ever retargeted away from
-## GlobalAssignment's own precomputed path (_site_fetch_source_retargeted)
+## GlobalAssignment's own precomputed path (site_fetch_source_retargeted)
 ## must also run the same fresh bounded search every later hop already uses,
 ## rather than walking a path toward a target this leg no longer targets.
 func _toil_go_to_skip_assignment_path(job: Dictionary) -> bool:
 	var kind := String(job.get("kind", ""))
 	if kind == "site_work":
 		return true
-	return kind == "site_fetch" and _site_fetch_source_retargeted.has(String(job.get("id", "")))
+	return kind == "site_fetch" and _construction.site_fetch_source_retargeted.has(String(job.get("id", "")))
 
 ## on_unreachable hook: a first-leg target may still be reachable elsewhere, so
 ## it is cancelled and resubmitted; a second-leg haul destination fails outright.
@@ -1940,18 +1906,18 @@ func _toil_cell_for(job: Dictionary) -> Vector2i:
 func _toil_site_id_for(job: Dictionary) -> String:
 	if job.get("site") == null:
 		return ""
-	return _sites.find_at_origin(job["site"])
+	return _construction.site_table.find_at_origin(job["site"])
 
 ## pick_up_count_for hook (construction sites, extended for the hands-filling
 ## rules and chained delivery): clamps a site_fetch pick_up to what the
 ## current target site still needs of that source's own kind
 ## (ConstructionSiteTable.remaining()), plus every other reachable,
 ## still-short, not-already-at-capacity sibling site's own remaining need of
-## the same kind (_reachable_short_sibling_sites(): sized so a hands-load can
+## the same kind (reachable_short_sibling_sites(): sized so a hands-load can
 ## actually carry enough to chain onto more than one block, not just the site
 ## job["site"] currently names -- see _toil_on_deposit_success() below, the
 ## other half of this design; a sibling already holding its own max_builders
-## worth of queued-or-active fetch-plus-work jobs, per _site_fetch_work_busy(),
+## worth of queued-or-active fetch-plus-work jobs, per ConstructionSystem._site_fetch_work_busy(),
 ## is excluded from this sum too, since it could never actually accept a
 ## chained delivery), minus whatever of that same kind colonist's
 ## hands already hold from an earlier hop this same job -- taking a generous
@@ -1976,12 +1942,12 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 	# pick_up this count gates for may exhaust and delete item's own entry
 	# from the item table entirely, so that hook cannot re-derive kind the same way
 	# once it runs.
-	_site_fetch_picked_kind[String(job.get("id", ""))] = kind
-	var site := _sites.get_site(site_id)
-	var need := _sites.remaining(site, kind)
+	_construction.site_fetch_picked_kind[String(job.get("id", ""))] = kind
+	var site := _construction.site_table.get_site(site_id)
+	var need := _construction.site_table.remaining(site, kind)
 	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	for sibling in _reachable_short_sibling_sites(colonist, kind, current, site_id):
-		need += _sites.remaining(sibling, kind)
+	for sibling in _construction.reachable_short_sibling_sites(colonist, kind, current, site_id):
+		need += _construction.site_table.remaining(sibling, kind)
 	need -= InventoryType.count_of_kind(colonist, kind)
 	return need if need > 0 else -1
 
@@ -2013,19 +1979,19 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 	if site_id.is_empty():
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
-	var site := _sites.get_site(site_id)
+	var site := _construction.site_table.get_site(site_id)
 	# Not _item_table.item_lookup(job["item_id"]): a pick_up that exactly
 	# exhausts its source's remaining count deletes that item from the item table
 	# before this hook ever runs (ToilExecutor.pick_up()'s own _remove_item
 	# call), which would silently resolve kind as "" here instead -- see
-	# _site_fetch_picked_kind's own doc comment.
-	var kind := String(_site_fetch_picked_kind.get(job_id, ""))
+	# ConstructionSystem.site_fetch_picked_kind's own doc comment.
+	var kind := String(_construction.site_fetch_picked_kind.get(job_id, ""))
 	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	if (InventoryType.count_of_kind(colonist, kind) >= _sites.remaining(site, kind)
+	if (InventoryType.count_of_kind(colonist, kind) >= _construction.site_table.remaining(site, kind)
 			or InventoryType.free_capacity(colonist) <= 0):
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
-	var next_id := _next_site_fetch_source(colonist, job, kind, current)
+	var next_id := _construction.next_site_fetch_source(colonist, job, kind, current)
 	if next_id.is_empty():
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
@@ -2041,7 +2007,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 		return
 	_scheduler.queue.get_reservation_table().acquire(JobQueueType.ITEM_KEY_PREFIX + next_id, job_id)
 	_scheduler.queue.retarget_site_fetch_source(job_id, next_id, next_tile)
-	_site_fetch_source_retargeted[job_id] = true
+	_construction.site_fetch_source_retargeted[job_id] = true
 
 ## on_toil_fail hook: pick_up/place/deposit are haul-shaped (haul, site_fetch),
 ## so a failed one always permanently fails the job. A failed consume belongs
@@ -2069,8 +2035,8 @@ func _toil_on_place_success(job_id: String) -> void:
 ## kind (the deposit toil itself already clamped to what the just-delivered
 ## site still needed, so any leftover means that site is now fully served for
 ## this kind) and a reachable, still-short, same-kind, not-already-at-capacity
-## sibling site exists (_next_site_fetch_site(), the same deterministic
-## route-cost search _next_site_fetch_source() uses for sources, applied to
+## sibling site exists (next_site_fetch_site(), the same deterministic
+## route-cost search next_site_fetch_source() uses for sources, applied to
 ## sites): retarget the same job onto it (JobQueue.retarget_site_fetch_site())
 ## and let the ordinary per-tick advance() drive a fresh go_to/deposit pair
 ## there instead of completing, rather than ending the job and forcing a fresh
@@ -2081,7 +2047,7 @@ func _toil_on_place_success(job_id: String) -> void:
 ## `kind` is read straight off the colonist's own (persisted) hands rather
 ## than a runtime cache: a source item a pick_up exhausted and deleted, or a
 ## save/load between hops, can never leave it unresolved (the
-## `_site_fetch_picked_kind` cache is never saved and is empty right after a
+## `site_fetch_picked_kind` cache is never saved and is empty right after a
 ## load, which would silently end a chain early). When leftover exists but no
 ## sibling qualifies, it is dropped through the same live-assignment
 ## terminal-drop path cancel_job/cancel_site already use
@@ -2096,7 +2062,7 @@ func _toil_on_deposit_success(job_id: String) -> void:
 		var kind := String((InventoryType.hands_snapshot(colonist)[0] as Dictionary)["kind"])
 		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
 		var delivered_site_id := _toil_site_id_for(job)
-		var next_site := _next_site_fetch_site(colonist, kind, current, delivered_site_id)
+		var next_site := _construction.next_site_fetch_site(colonist, kind, current, delivered_site_id)
 		if not next_site.is_empty():
 			_scheduler.queue.retarget_site_fetch_site(job_id, next_site["origin"])
 			return
@@ -2178,15 +2144,10 @@ func _toil_on_work_complete(job_id: String) -> void:
 			# so the mechanism already sums correctly for more than one
 			# concurrent builder.
 			# Once accumulated progress meets the site's own declared
-			# build_ticks, _finalize_construction_site() places the declared
-			# object, releases the site's footprint reservation, and removes
-			# the site record.
-			var site_id := _sites.find_at_origin(target)
-			if not site_id.is_empty():
-				var progress := _sites.add_progress(site_id, 1)
-				var site := _sites.get_site(site_id)
-				if progress >= int(site["build_ticks"]):
-					_finalize_construction_site(site_id, job_id)
+			# build_ticks, ConstructionSystem finalizes the site: places the
+			# declared object, releases the site's footprint reservation, and
+			# removes the site record.
+			_construction.add_site_work(target, job_id)
 		"sleep":
 			var colonist := _find_job_colonist(job_id)
 			if not colonist.is_empty():
@@ -2257,7 +2218,7 @@ func _resolve_giver_association(job_id: String, kind: String) -> void:
 	elif kind == "rescue":
 		_rescue_giver.resolve_job(job_id)
 	elif kind == "site_work":
-		_release_site_builder(job_id)
+		_construction.release_site_builder(job_id)
 
 ## on_consume_success hook (eat_food/drink_water): restores the need,
 ## finishes the job, and tells NeedGiver this resolved so a paused colonist
@@ -2953,207 +2914,10 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 	applied["job_id"] = result["job_id"]
 	return applied
 
-## build {kind, x, y, orientation} submission (ADR 040, superseding ADR
-## 028/038's single-worker `build` job): validates against
-## _check_construction_command() -- no stock check at all, unlike the
-## superseded job model, since a site is a standing commitment that waits for
-## materials rather than a one-shot order requiring them up front (ordering a
-## workbench creates its site immediately, before any material arrives)
-## -- then creates the site record and reserves every footprint tile
-## directly on the shared ReservationTable, owner "site:<id>" (never a job
-## id), the instant the order is accepted. No job is submitted here at all:
-## ConstructionGiver (world_state.gd's _construction_giver) decides on its own
-## per-tick schedule when the site's next fetch/work job should exist.
-func _apply_construction_submission(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command["payload"]
-	var check := _check_construction_command(payload)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var kind: String = payload["kind"]
-	var orientation := String(payload.get("orientation", ""))
-	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
-	var definition: Dictionary = _object_definitions[kind]
-	var site := _sites.create(kind, origin, orientation, definition["build_cost"] as Array,
-		int(definition["build_ticks"]), int(definition["max_builders"]))
-	var owner := _sites.owner_key(String(site["id"]))
-	var table := _scheduler.queue.get_reservation_table()
-	for tile in _object_table.object_footprint_tiles(kind, origin, orientation):
-		table.acquire(_build_site_key(tile), owner)
-	var applied := _event_log.applied(command)
-	applied["site_id"] = site["id"]
-	# job_id mirrors site_id (test_order_input.gd): boot.gd's
-	# Cancel tool still names a pending order by "job_id" (there is no job to
-	# rewire it to yet; see ADR 040), so a site's own
-	# id doubles as the value that identifier carries until then. See
-	# _apply_cancel_job_command()'s matching fallback below.
-	applied["job_id"] = site["id"]
-	return applied
-
-## build's complete read-only rule, shared verbatim by apply() (via
-## _apply_construction_submission()) and preview(): a non-empty string kind,
-## integer x/y and an optional string orientation ("horizontal"/"vertical"),
-## no other payload field (invalid_payload); every footprint tile in-bounds,
-## passable, empty, non-colonist, non-tree, and not already claimed by another
-## site's own footprint reservation (invalid_target -- a site's footprint is
-## reserved the instant it is created, so unlike the superseded per-job model
-## there is no separate "queued but not yet reserved" commitment to check);
-## for a kind whose object definition is itself impassable (a wall or a
-## workbench), the existing blocked_target_unreachable reason
-## (docs/architecture/orders-and-movement.md) when placing it would strand a
-## currently-reachable tile -- never a new reason string. No stock check: a
-## site is created regardless of what materials are currently on hand.
-func _check_construction_command(payload: Dictionary) -> Dictionary:
-	for key in payload.keys():
-		if not (key == "kind" or key == "x" or key == "y" or key == "orientation"):
-			return {"reason": "invalid_payload", "message": "build accepts only kind, x, y and orientation."}
-	if (typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty()
-			or typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
-			or typeof(payload.get("orientation", "")) != TYPE_STRING):
-		return {"reason": "invalid_payload", "message": "build requires a non-empty string kind, integer x, y and an optional string orientation."}
-	var kind: String = payload["kind"]
-	if not _object_definitions.has(kind) or (_object_definitions[kind].get("build_cost", []) as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "Unknown or non-buildable object kind '%s'." % kind}
-	var orientation := String(payload.get("orientation", ""))
-	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
-	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
-	var footprint_tiles := _object_table.object_footprint_tiles(kind, origin, orientation)
-	var occupancy_check := _construction_footprint_check(footprint_tiles)
-	if not occupancy_check.is_empty():
-		return occupancy_check
-	if not bool(_object_definitions[kind].get("passable", true)) and _would_enclose_tiles(footprint_tiles):
-		return {"reason": "blocked_target_unreachable", "message": "Building here would seal off part of the colony."}
-	return {}
-
-## Shared footprint/occupancy rule for one candidate placement's footprint
-## tiles -- in-bounds, passable-for-kind, no colonist, no tree, not already an
-## object, not already claimed by another order's own footprint reservation.
-## Excludes the enclosure check, which a single `build` runs immediately after
-## (above) and `build_line` runs once across a whole surviving
-## batch instead (_classify_build_line_command()) -- both callers share this
-## function so a wall placed one tile at a time and dragged as a line always
-## agree on which tiles are occupancy-valid, and on the exact reason string
-## returned for one that is not.
-func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictionary:
-	var table := _scheduler.queue.get_reservation_table()
-	for tile in footprint_tiles:
-		if (_colonist_at(tile.x, tile.y) or not get_object(tile.x, tile.y).is_empty()
-				or not _build_site_terrain_valid(tile)):
-			return {"reason": "invalid_target", "message": "Choose an empty, passable, in-bounds tile with no colonist or tree."}
-		if not table.owner(_build_site_key(tile)).is_empty():
-			return {"reason": "invalid_target", "message": "Another order already claims this tile."}
-	return {}
-
-## build_line's complete read-only classification (ADR 042): shared verbatim
-## by apply() (via _apply_build_line_command()) and
-## preview() so a drag preview and the actually-applied command always agree
-## on which tiles will be skipped and whether the whole batch is rejected.
-## Returns {"reason", "message"} to reject the whole command (invalid_payload,
-## or blocked_target_unreachable once the enclosure check below runs), or
-## {"kind", "orientation", "surviving", "skipped"} otherwise. `tiles` is
-## canonicalized into row-major order (lowest y, then lowest x) here --
-## never trusting caller order -- and de-duplicated, since two entries naming
-## the same tile could otherwise both "survive" (neither one's own footprint
-## reservation exists yet during classification) and go on to create two
-## overlapping sites in step 5. Each canonical tile is then classified with
-## the exact single-tile _construction_footprint_check() rule above (step 3),
-## plus a provisional-occupancy check against every earlier surviving tile's
-## own footprint in this same batch (`claimed_footprint` below): a kind wider
-## than one tile (e.g. workbench's [2,1]) can otherwise have two candidate
-## origins whose footprints overlap -- (10,10) and (11,10) both individually
-## pass _construction_footprint_check() since neither one's reservation
-## exists in the table yet, and without this check both would "survive" and
-## _apply_build_line_command() would create two sites sharing tile (11,10)
-## with only one of them able to actually acquire it. A later candidate whose
-## footprint touches an earlier survivor's claimed footprint is skipped
-## invalid_target instead, the same reason a real reservation conflict would
-## give. Once every tile is classified, _would_enclose_tiles() runs once
-## across the whole surviving set (step 4, only meaningful for an impassable
-## kind) -- a hit there discards "skipped" and rejects the entire command.
-func _classify_build_line_command(payload: Dictionary) -> Dictionary:
-	if typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty():
-		return {"reason": "invalid_payload", "message": "build_line requires a non-empty string kind."}
-	var kind: String = payload["kind"]
-	if not _object_definitions.has(kind) or (_object_definitions[kind].get("build_cost", []) as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "Unknown or non-buildable object kind '%s'." % kind}
-	if typeof(payload.get("orientation", "")) != TYPE_STRING:
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
-	var orientation := String(payload.get("orientation", ""))
-	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
-	if typeof(payload.get("tiles")) != TYPE_ARRAY or (payload["tiles"] as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "build_line requires a non-empty array of tiles."}
-	var seen := {}
-	var canonical: Array[Vector2i] = []
-	for entry in (payload["tiles"] as Array):
-		if typeof(entry) != TYPE_DICTIONARY or typeof(entry.get("x")) != TYPE_INT or typeof(entry.get("y")) != TYPE_INT:
-			return {"reason": "invalid_payload", "message": "Every build_line tile requires integer x and y."}
-		var tile := Vector2i(int(entry["x"]), int(entry["y"]))
-		if not seen.has(tile):
-			seen[tile] = true
-			canonical.append(tile)
-	canonical.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		return a.y < b.y or (a.y == b.y and a.x < b.x))
-	var surviving: Array[Vector2i] = []
-	var skipped: Array[Dictionary] = []
-	var claimed_footprint := {}
-	for tile in canonical:
-		var footprint := _object_table.object_footprint_tiles(kind, tile, orientation)
-		var occupancy_check := _construction_footprint_check(footprint)
-		if not occupancy_check.is_empty():
-			skipped.append({"x": tile.x, "y": tile.y, "reason": occupancy_check["reason"]})
-			continue
-		var overlaps_earlier_survivor := false
-		for footprint_tile in footprint:
-			if claimed_footprint.has(footprint_tile):
-				overlaps_earlier_survivor = true
-				break
-		if overlaps_earlier_survivor:
-			skipped.append({"x": tile.x, "y": tile.y, "reason": "invalid_target"})
-			continue
-		for footprint_tile in footprint:
-			claimed_footprint[footprint_tile] = true
-		surviving.append(tile)
-	if not surviving.is_empty() and not bool(_object_definitions[kind].get("passable", true)):
-		var combined_footprint: Array[Vector2i] = []
-		for tile in surviving:
-			combined_footprint.append_array(_object_table.object_footprint_tiles(kind, tile, orientation))
-		if _would_enclose_tiles(combined_footprint):
-			return {"reason": "blocked_target_unreachable", "message": "Building this line would seal off part of the colony."}
-	return {"kind": kind, "orientation": orientation, "surviving": surviving, "skipped": skipped}
-
-## Applies build_line (ADR 042): creates one
-## construction site per _classify_build_line_command()'s surviving tile, in
-## the same row-major order, exactly as _apply_construction_submission() does
-## for a single tile (footprint reservation, ConstructionSiteTable.create()) --
-## atomic at the whole-batch level, since classification (including the one
-## enclosure check across the whole surviving set) already ran to completion
-## before this loop takes a single reservation.
-func _apply_build_line_command(command: Dictionary) -> Dictionary:
-	var classification := _classify_build_line_command(command["payload"])
-	if classification.has("reason"):
-		return _event_log.rejection(command["command_id"], command["actor"], classification["reason"], classification["message"])
-	var kind: String = classification["kind"]
-	var orientation: String = classification["orientation"]
-	var definition: Dictionary = _object_definitions[kind]
-	var table := _scheduler.queue.get_reservation_table()
-	var sites: Array[Dictionary] = []
-	for tile in (classification["surviving"] as Array[Vector2i]):
-		var site := _sites.create(kind, tile, orientation, definition["build_cost"] as Array,
-			int(definition["build_ticks"]), int(definition["max_builders"]))
-		var owner := _sites.owner_key(String(site["id"]))
-		for footprint_tile in _object_table.object_footprint_tiles(kind, tile, orientation):
-			table.acquire(_build_site_key(footprint_tile), owner)
-		sites.append({"id": site["id"], "x": tile.x, "y": tile.y})
-	var applied := _event_log.applied(command)
-	applied["sites"] = sites
-	applied["skipped"] = classification["skipped"]
-	return applied
-
 ## place_object's complete read-only rule, shared verbatim by
 ## apply() (via _apply_place_object_command()), preview() and
 ## CommandChecks.check_place_object_command() (which delegates here rather
-## than keeping its own copy) -- mirrors _check_construction_command()'s
+## than keeping its own copy) -- mirrors check_construction_command()'s
 ## shape above. x/y/kind are exactly as strict as the old CommandChecks.
 ## check_place_object_command(): integer x, y, a non-empty string kind naming
 ## a declared object kind. orientation is new and optional: when present it
@@ -3162,13 +2926,13 @@ func _apply_build_line_command(command: Dictionary) -> Dictionary:
 ## it for a non-rotatable kind. Every tile of kind's footprint (default [1,1]
 ## -- every existing kind today) is checked in bounds, no colonist, no
 ## existing object, and neither TILE_TREE nor TILE_WATER (the strict,
-## build-only _build_site_terrain_valid() would also reject
+## build-only ConstructionSystem._build_site_terrain_valid() would also reject
 ## TILE_ROCK/TILE_TRENCH/TILE_HAZARD, breaking test_debug_scenario_
 ## objects.gd, test_faction_doors.gd, test_tool_items.gd and existing
 ## test_water_cache_invalidation.gd fixtures that all place objects on rock
 ## through this exact command -- this remains the permissive debug/map-gen
 ## path _apply_place_object_command()'s own doc comment always described;
-## `build` keeps its own separate, stricter _build_site_terrain_valid() call
+## `build` keeps its own separate, stricter ConstructionSystem._build_site_terrain_valid() call
 ## untouched) -- so a footprint >1 kind is rejected the instant any one of
 ## its tiles would have been.
 func _check_place_object_command(payload: Dictionary) -> Dictionary:
@@ -3192,84 +2956,6 @@ func _check_place_object_command(payload: Dictionary) -> Dictionary:
 			return {"reason": "invalid_target", "message": "Choose an empty, in-bounds tile with no colonist or tree."}
 	return {}
 
-## Terrain a construction site may occupy, checked per footprint tile by
-## _construction_footprint_check() (shared by build and build_line):
-## in-bounds, passable, and neither TILE_TREE nor TILE_TRENCH. Trench is
-## passable=true (ADR 026's own trap-on-entry mechanic needs a colonist able
-## to walk onto one), but a freshly dug pit is not valid ground for a
-## foundation. place_object deliberately keeps its own, more permissive rule
-## (see _check_place_object_command()).
-func _build_site_terrain_valid(site: Vector2i) -> bool:
-	if site.x < 0 or site.x >= _tile_grid.width or site.y < 0 or site.y >= _tile_grid.height:
-		return false
-	var tile_kind := get_tile(site.x, site.y)
-	if tile_kind == TILE_TREE or tile_kind == TILE_TRENCH:
-		return false
-	return bool(passability(site.x, site.y)["passable"])
-
-## Namespaces build_target on the same shared ReservationTable a dig/chop/mine/
-## till/sow job's own target already uses (JobQueue.TARGET_KEY_PREFIX, "tile:"),
-## so a build order and any other job kind correctly contend for the same tile
-## through the one existing reservation ledger instead of a second one.
-func _build_site_key(build_target: Vector2i) -> String:
-	return "%s%d,%d" % [JobQueueType.TARGET_KEY_PREFIX, build_target.x, build_target.y]
-
-## get_construction_sites()/get_construction_site(): every
-## currently active site, mirroring get_objects()/get_object() -- detached
-## copies, "builder_ids" translated from the internal job-id bookkeeping
-## (ConstructionSiteTable.add_builder()/remove_builder() key sites on the
-## contributing job's own id, resolvable at every terminal transition even
-## after the colonist's own assignment is gone) to the live colonist id
-## currently driving each job, for a caller that only cares who is building,
-## not which job. A job whose colonist can no longer be found (mid-termination)
-## is simply omitted from the translated list.
-func _public_site_view(site: Dictionary) -> Dictionary:
-	var view := site.duplicate(true)
-	var colonist_ids: Array[String] = []
-	for job_id in (site["builder_ids"] as Array):
-		var colonist := _find_job_colonist(String(job_id))
-		if not colonist.is_empty():
-			colonist_ids.append(String(colonist["id"]))
-	view["builder_ids"] = colonist_ids
-	return view
-
-func get_construction_sites() -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	for site in _sites.list():
-		out.append(_public_site_view(site))
-	return out
-
-## {} for a tile no site's footprint covers; the whole site record otherwise
-## (any of its footprint tiles resolves to the same site, mirroring
-## get_object()'s own origin-agnostic per-tile lookup).
-func get_construction_site(x: int, y: int) -> Dictionary:
-	var id := _construction_site_id_at(x, y)
-	if id.is_empty():
-		return {}
-	return _public_site_view(_sites.get_site(id))
-
-func _construction_site_id_at(x: int, y: int) -> String:
-	var tile := Vector2i(x, y)
-	for site in _sites.list():
-		if _object_table.object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])).has(tile):
-			return String(site["id"])
-	return ""
-
-## site_exists callable for _toils's deposit toil.
-func _construction_site_exists(site_id: String) -> bool:
-	return _sites.has(site_id)
-
-## site_deposit callable for _toils's deposit toil: forwards straight to
-## ConstructionSiteTable.deposit(), which already clamps to what the site
-## still needs and returns the amount actually accepted.
-func _construction_site_deposit(site_id: String, item_kind: String, count: int) -> int:
-	return _sites.deposit(site_id, item_kind, count)
-
-## reservation_owner callable for ConstructionGiver's own source-selection
-## (mirrors the superseded _find_available_build_item()'s reservation check).
-func _construction_item_reservation_owner(item_id: String) -> String:
-	return _scheduler.queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + item_id)
-
 ## Comparison-only stand-in for "unreachable" (hands-filling rules):
 ## _route_cost() itself returns -1; call sites substitute this instead where
 ## they need a total order against a real cost.
@@ -3289,285 +2975,13 @@ func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
 	if route.get_status() != RerouteType.STATUS_FOUND: return -1
 	return route.get_path().size() - 1
 
-## Every queued/active site_fetch job except `exclude_job_id` (hands-filling
-## rules): the orders whose source item is committed but, while
-## still queued, not yet reserved -- a still-queued site_fetch job holds no
-## live reservation yet (_tick_site_fetch() only acquires one on activation),
-## so without this exclusion an already-active job's own on-demand search
-## could freely retarget onto the exact item a queued sibling submitted
-## against.
-func _pending_site_fetch_jobs(exclude_job_id: String = "") -> Array[Dictionary]:
-	var pending: Array[Dictionary] = []
-	for job in _scheduler.queue.get_jobs():
-		if String(job.get("kind", "")) != "site_fetch" or String(job.get("status", "")) not in ["queued", "active"]:
-			continue
-		if String(job["id"]) != exclude_job_id:
-			pending.append(job)
-	return pending
-
-## The next unclaimed ground-item source of `kind` a site_fetch job should
-## visit from colonist's current position `from` (hands-filling
-## rules): among every zone-stockpiled item of that kind, either unreserved
-## or already reserved to job itself, and not another still-queued/active
-## site_fetch job's own committed item (_pending_site_fetch_jobs(), excluding
-## job itself), the one with the lowest deterministic route cost from `from`
-## via _route_cost() (not open-field Chebyshev -- a close source behind a
-## wall must lose to a farther-but-reachable one), unreachable candidates
-## skipped, ties broken by lowest item id -- "" when nothing qualifies. A
-## pure query: never reserves anything itself (the caller does, once it
-## commits to the id returned).
-func _next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String, from: Vector2i) -> String:
-	var table := _scheduler.queue.get_reservation_table()
-	var job_id := String(job["id"])
-	var faction_id := String(colonist.get("factionId", "colony"))
-	var committed := {}
-	for other in _pending_site_fetch_jobs(job_id):
-		committed[String(other.get("item_id", ""))] = true
-	var best_id := ""
-	var best_cost := 0
-	var ids := _item_table.items.keys()
-	ids.sort()
-	for id in ids:
-		var item: Dictionary = _item_table.items[id]
-		if String(item["kind"]) != kind:
-			continue
-		if not _zone_table.is_in_any_zone(int(item["x"]), int(item["y"])):
-			continue
-		if committed.has(String(id)):
-			continue
-		var owner := table.owner(JobQueueType.ITEM_KEY_PREFIX + String(id))
-		if not owner.is_empty() and owner != job_id:
-			continue
-		var tile := Vector2i(int(item["x"]), int(item["y"]))
-		var cost := _route_cost(from, tile, faction_id)
-		if cost < 0:
-			continue
-		if not best_id.is_empty():
-			if cost > best_cost:
-				continue
-			if cost == best_cost and String(id) >= best_id:
-				continue
-		best_id = String(id)
-		best_cost = cost
-	return best_id
-
-## Every other active construction site still short of `kind`, reachable from
-## `from`, and not already holding its own max_builders' worth of committed
-## fetch+work jobs (chained delivery: a colonist whose hands still hold units of
-## `kind` after delivering to `exclude_site_id` may chain onward to a further
-## block instead of completing) -- mirrors _next_site_fetch_source()'s own
-## deterministic route-cost ranking (_route_cost(), not open-field Chebyshev),
-## applied to sibling sites instead of ground-item sources: sorted by
-## ascending cost, ties by lowest site id, unreachable candidates dropped.
-## Has no separate item-level exclusion for a site already named by another
-## pending (merely-queued) site_fetch job the way _next_site_fetch_source()
-## excludes a committed item: eligibility here is already capacity-gated
-## below, and that gate is the one that matters. For a max_builders 1 site
-## (every wall block), a single queued-or-active job already saturates
-## _site_fetch_work_busy() and gets excluded below with no extra rule needed;
-## for a max_builders > 1 site, an existing job leaves real spare capacity a
-## retarget can legitimately use. (A single stockpile stack backing a whole
-## build_line row does not routinely leave every sibling holding a job of its
-## own either -- ConstructionGiver._choose_source() commits that stack's item
-## id to only the first site whose submission claims it, so most siblings are
-## typically job-less, not merely-queued.) ConstructionSiteTable.deposit()'s
-## own clamp to remaining() makes two jobs reaching the same site safe either
-## way. It does exclude a site already at its own busy cap (a
-## retarget bypasses ConstructionGiver.advance()'s own submission-time count
-## entirely, so without this check a retarget could push an already-full site
-## over max_builders) via _site_fetch_work_busy(), the same fetch-plus-work
-## count the giver itself uses.
-func _reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vector2i, exclude_site_id: String) -> Array[Dictionary]:
-	var faction_id := String(colonist.get("factionId", "colony"))
-	var scored: Array = []
-	for site in _sites.list():
-		var site_id := String(site["id"])
-		if site_id == exclude_site_id or _sites.remaining(site, kind) <= 0:
-			continue
-		if _site_fetch_work_busy(site["origin"]) >= int(site["max_builders"]):
-			continue
-		var cost := _route_cost(from, site["origin"], faction_id)
-		if cost < 0:
-			continue
-		scored.append({"site": site, "cost": cost})
-	scored.sort_custom(func(a, b):
-		if int(a["cost"]) != int(b["cost"]): return int(a["cost"]) < int(b["cost"])
-		return String(a["site"]["id"]) < String(b["site"]["id"]))
-	var out: Array[Dictionary] = []
-	for entry in scored:
-		out.append(entry["site"])
-	return out
-
-## Every currently queued/active site_fetch or site_work job already
-## committed to `origin`: the identical
-## fetch-plus-work "busy" count ConstructionGiver.advance() sums per site
-## before topping it up, mirrored here since a chain-onward retarget never
-## goes through the giver's own submission path and so is never checked
-## against it otherwise.
-func _site_fetch_work_busy(origin: Vector2i) -> int:
-	var busy := 0
-	for job in _scheduler.queue.get_jobs():
-		var kind := String(job.get("kind", ""))
-		if kind != "site_fetch" and kind != "site_work":
-			continue
-		if String(job.get("status", "")) in ["queued", "active"] and job.get("site") == origin:
-			busy += 1
-	return busy
-
-## The single nearest candidate _reachable_short_sibling_sites() returns, or
-## {} when none qualifies -- _toil_on_deposit_success()'s own chain-onward
-## query.
-func _next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector2i, exclude_site_id: String) -> Dictionary:
-	var candidates := _reachable_short_sibling_sites(colonist, kind, from, exclude_site_id)
-	return candidates[0] if not candidates.is_empty() else {}
-
-## Every currently-active site_fetch job's id (hands-filling rules):
-## tick()'s own before/after snapshot around _scheduler.tick(), so
-## _resolve_freshly_activated_site_fetch_sources() below can tell which
-## site_fetch jobs just (re)activated this tick from the ones that were
-## already active and mid-route -- an already-active job is never touched by
-## _tick_site_fetch() again (JobQueue.tick() only advances "queued" jobs), so
-## this diff is exact.
-func _active_site_fetch_job_ids() -> Dictionary:
-	var ids: Dictionary = {}
-	for job in _scheduler.queue.get_jobs():
-		if String(job.get("kind", "")) == "site_fetch" and String(job.get("status", "")) == "active":
-			ids[String(job["id"])] = true
-	return ids
-
-## Hands-filling rules: ConstructionGiver's own submission-time source
-## choice (ConstructionGiver._choose_source()) is a position-agnostic
-## placeholder -- no colonist is chosen yet at submission, so it cannot be
-## "nearest to the builder" itself; it exists only so GlobalAssignment has a
-## concrete tile to score/route idle colonists against. The instant a
-## site_fetch job actually (re)activates with a real colonist known --
-## caught by `before` naming every site_fetch job already active before this
-## tick's _scheduler.tick() call, so only a job that just (re)activated this
-## tick is considered -- this re-runs the exact nearest-source search every
-## later hop already uses (_next_site_fetch_source()) from the colonist's
-## real, current position, and swaps away from the placeholder when a
-## genuinely nearer source exists: releases its reservation and reserves the
-## replacement before the colonist ever takes a step toward it. Restricted to
-## job.get("cell") == null (still fetching): once delivering, item_id no
-## longer drives movement (_toil_go_to_target() already redirects a
-## delivering leg at the site), so re-checking it would be inert. Never
-## re-evaluated for a job that was already active before this tick (mid-route
-## toward its current source): `before`'s membership test excludes it,
-## matching _toil_on_pick_up_success()'s own "decide once, act until the next
-## discrete boundary" discipline -- a (re)activation is one such boundary, an
-## ordinary continuing tick never is.
-func _resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
-	for job in _scheduler.queue.get_jobs():
-		if (String(job.get("kind", "")) != "site_fetch" or String(job.get("status", "")) != "active"
-				or job.get("cell") != null):
-			continue
-		var job_id := String(job["id"])
-		if before.has(job_id):
-			continue
-		var colonist := _find_job_colonist(job_id)
-		if colonist.is_empty():
-			continue
-		var current_item_id := String(job.get("item_id", ""))
-		var kind := String(_item_table.item_lookup(current_item_id).get("kind", ""))
-		if kind.is_empty():
-			continue
-		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		var best_id := _next_site_fetch_source(colonist, job, kind, current)
-		if best_id.is_empty() or best_id == current_item_id:
-			continue
-		var table := _scheduler.queue.get_reservation_table()
-		table.release(JobQueueType.ITEM_KEY_PREFIX + current_item_id, job_id)
-		table.acquire(JobQueueType.ITEM_KEY_PREFIX + best_id, job_id)
-		var best_item := _item_table.item_lookup(best_id)
-		_scheduler.queue.retarget_site_fetch_source(job_id, best_id, Vector2i(int(best_item["x"]), int(best_item["y"])))
-		_site_fetch_source_retargeted[job_id] = true
-
-## submit_fetch callable for ConstructionGiver: submits a site_fetch job
-## targeting item_tile (leg one), then attaches item_id and the site's own
-## origin (leg two's destination, read by _toil_go_to_target()).
-func _submit_site_fetch(origin: Vector2i, item_id: String, item_tile: Vector2i, tick: int) -> Dictionary:
-	var result := _scheduler.submit(item_tile, JobQueueType.Priority.NORMAL, tick, "site_fetch", "")
-	if result.get("ok", false):
-		var job_id: String = result["job_id"]
-		_scheduler.queue.attach_item(job_id, item_id)
-		_scheduler.queue.attach_site(job_id, origin)
-	return result
-
-## submit_work callable for ConstructionGiver: submits a site_work job
-## targeting the site's own origin tile directly (its only leg), and records
-## the contributing job on the site record itself (ConstructionSiteTable.
-## add_builder(), capped at the site's own max_builders -- ConstructionGiver
-## never calls this past that cap, but the table enforces it defensively too).
-func _submit_site_work(origin: Vector2i, tick: int) -> Dictionary:
-	var result := _scheduler.submit(origin, JobQueueType.Priority.NORMAL, tick, "site_work", "")
-	if result.get("ok", false):
-		var job_id: String = result["job_id"]
-		_scheduler.queue.attach_site(job_id, origin)
-		_sites.add_builder(_sites.find_at_origin(origin), job_id)
-	return result
-
-## The first passable, non-trench tile adjacent to any of `tiles` (a site's own
-## footprint) and not itself one of `tiles` or already in `exclude` -- checked
-## in the same north/west/east/south-per-tile order ItemTable.dig_item_placement()
-## already uses for a single tile (cancel_site's "nearest free tiles
-## adjacent to the site" rule). Falls back to tiles[0] when nothing
-## qualifies, mirroring ItemTable.dig_item_placement()'s own "no adjacent tile
-## qualifies" fallback.
-func _nearest_free_adjacent_to_footprint(tiles: Array[Vector2i], exclude: Dictionary = {}) -> Vector2i:
-	var footprint := {}
-	for tile in tiles:
-		footprint[tile] = true
-	for tile in tiles:
-		for neighbor in [Vector2i(tile.x, tile.y - 1), Vector2i(tile.x - 1, tile.y),
-				Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]:
-			if footprint.has(neighbor) or exclude.has(neighbor):
-				continue
-			if bool(passability(neighbor.x, neighbor.y)["passable"]) and get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
-				return neighbor
-	return tiles[0]
-
-## cancel_site {x, y}: terminates every in-flight site_fetch/
-## site_work job on the site (dropping a mid-fetch builder's own carried hands
-## through the existing _drop_carried_haul_item() terminal path),
-## drops every held material on the nearest free tile adjacent to the site
-## (one distinct tile per kind where possible), releases the site's own
-## footprint reservation, and removes the site record -- there is no separate
-## "ghost" to erase: it is whatever a future presentation layer draws from
-## get_construction_sites(), which this call already empties.
-func _cancel_construction_site(site_id: String) -> void:
-	var site := _sites.get_site(site_id)
-	if site.is_empty():
-		return
-	var origin: Vector2i = site["origin"]
-	for job in _scheduler.queue.get_jobs():
-		if job.get("site") != origin or not (String(job.get("status", "")) in ["queued", "active"]):
-			continue
-		var kind := String(job.get("kind", ""))
-		if kind != "site_fetch" and kind != "site_work":
-			continue
-		var job_id := String(job["id"])
-		if kind == "site_fetch":
-			_drop_carried_haul_item(job_id)
-		_finish_job(job_id, "cancel_job")
-	var footprint := _object_table.object_footprint_tiles(String(site["kind"]), origin, String(site["orientation"]))
-	var used := {}
-	for entry in (site["held_materials"] as Array):
-		var quantity := int(entry["quantity"])
-		if quantity <= 0:
-			continue
-		var drop_at := _nearest_free_adjacent_to_footprint(footprint, used)
-		used[drop_at] = true
-		_item_table.place_new_ground_item(String(entry["item"]), quantity, drop_at.x, drop_at.y)
-	_scheduler.queue.get_reservation_table().release_all(_sites.owner_key(site_id))
-	_sites.remove(site_id)
-
 func _check_cancel_site_command(payload: Dictionary) -> Dictionary:
 	for key in payload.keys():
 		if key != "x" and key != "y":
 			return {"reason": "invalid_payload", "message": "cancel_site accepts only x and y."}
 	if typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT:
 		return {"reason": "invalid_payload", "message": "cancel_site requires integer x and y."}
-	if _construction_site_id_at(int(payload["x"]), int(payload["y"])).is_empty():
+	if _construction.construction_site_id_at(int(payload["x"]), int(payload["y"])).is_empty():
 		return {"reason": "invalid_target", "message": "No construction site occupies this tile."}
 	return {}
 
@@ -3575,17 +2989,17 @@ func _check_cancel_site_command(payload: Dictionary) -> Dictionary:
 ## resolves a pending build order by "job_id" (test_order_input.gd; the
 ## toolbar has not yet been rewired onto the dedicated cancel_site {x,y}
 ## command). A site has no job at order time
-## (ADR 040), so _apply_construction_submission() hands its own id back as
+## (ADR 040), so apply_construction_submission() hands its own id back as
 ## both site_id and job_id; recognising that id here and tearing the site
-## down through the exact same _cancel_construction_site() cancel_site
+## down through the exact same cancel_construction_site() cancel_site
 ## {x,y} uses keeps the two entry points equivalent rather than adding a
 ## second cancellation path. Any id that does not name a live site is an
 ## ordinary job id and goes to _apply_job_command() unchanged.
 func _apply_cancel_job_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command.get("payload", {})
 	var site_id := String(payload.get("job_id", ""))
-	if not site_id.is_empty() and _sites.has(site_id):
-		_cancel_construction_site(site_id)
+	if not site_id.is_empty() and _construction.site_table.has(site_id):
+		_construction.cancel_construction_site(site_id)
 		_event_log.collect_queue_events()
 		var applied := _event_log.applied(command)
 		applied["site_id"] = site_id
@@ -3598,141 +3012,18 @@ func _apply_cancel_site_command(command: Dictionary) -> Dictionary:
 	var check := _check_cancel_site_command(payload)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var site_id := _construction_site_id_at(int(payload["x"]), int(payload["y"]))
-	_cancel_construction_site(site_id)
+	var site_id := _construction.construction_site_id_at(int(payload["x"]), int(payload["y"]))
+	_construction.cancel_construction_site(site_id)
 	_event_log.collect_queue_events()
 	var applied := _event_log.applied(command)
 	applied["site_id"] = site_id
 	return applied
 
-## Placement/completion effect once a site's own accumulated progress meets
-## its declared build_ticks: places the declared object via
-## the footprint-aware _object_table.set_object() (clears/re-marks every footprint tile,
-## invalidates regions/rooms, stamps health when the kind declares one),
-## releases the site's own footprint reservation (the placed object's own
-## passability governs the tiles from here on, not a placeholder reservation),
-## completes any other still-active builder job on the site (best-effort: the
-## mechanism must not strand a second builder mid-work once the structure
-## already exists), and removes the
-## site record -- which also discards held_materials, already fully spent by
-## definition (ConstructionGiver never submits a site_work job before
-## materials_met()).
-func _finalize_construction_site(site_id: String, completing_job_id: String) -> void:
-	var site := _sites.get_site(site_id)
-	if site.is_empty():
-		return
-	for other_job_id in (site["builder_ids"] as Array):
-		if String(other_job_id) != completing_job_id:
-			_finish_job(String(other_job_id), "complete_job")
-	_scheduler.queue.get_reservation_table().release_all(_sites.owner_key(site_id))
-	var origin: Vector2i = site["origin"]
-	_object_table.set_object(origin.x, origin.y, String(site["kind"]), "colony", String(site["orientation"]))
-	_sites.remove(site_id)
-
-## _resolve_giver_association()'s site_work branch: releases
-## job_id's own builder slot on whichever site it belongs to, on every
-## terminal transition that is not the site's own completion (that path
-## already removes the whole record via _finalize_construction_site()).
-## job.site names the site's origin tile, resolvable even after termination
-## since JobQueue never deletes a terminal job from its own list.
-func _release_site_builder(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
-	if job.is_empty() or job.get("site") == null:
-		return
-	var site_id := _sites.find_at_origin(job["site"])
-	if not site_id.is_empty():
-		_sites.remove_builder(site_id, job_id)
-
-## True when treating every one of `tiles` (a candidate site's own footprint)
-## as impassable simultaneously would strand a tile that is currently
-## reachable by some colony actor (docs/architecture/orders-and-movement.md's
-## blocked_target_unreachable) -- the only object-placement rule construction
-## adds beyond dig/chop's own target validation, generalized from the
-## superseded single-tile _would_enclose() to a whole footprint.
-## Every existing impassable site's own footprint (except `exclude_site_id`'s
-## own) already counts as blocked, so the second of two walls ordered into a
-## room's two remaining openings is refused. Each colony actor's own reachable
-## component is checked once (a 4-connected flood fill of passable("colony")
-## tiles, with and without every tile in `tiles`; actors sharing an
-## already-visited component are skipped, and one standing on an impassable
-## tile anchors nothing), so a trapped or disconnected first actor never hides
-## an enclosure elsewhere. Every tile in `tiles` always drops out of its own
-## "after" set and is never mistaken for a stranded neighbour; the "how many
-## disappeared besides the candidate itself" baseline is tiles.size() instead
-## of the single-tile version's literal 1 -- but counted per reachable
-## component (`candidates_in_before` below), not over the whole of `tiles`:
-## build_line can submit candidate tiles spanning components that
-## were never connected to begin with (e.g. a wall tile beside one colonist
-## and an isolated one-tile pocket nobody can reach), and a candidate tile
-## that this component's flood fill never reached is not "lost" by blocking
-## it, so it must not be subtracted from this component's own baseline.
-func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") -> bool:
-	var blocked := {}
-	for site in _sites.list():
-		if String(site["id"]) == exclude_site_id:
-			continue
-		if bool(_object_definitions.get(String(site["kind"]), {}).get("passable", true)):
-			continue
-		for tile in _object_table.object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])):
-			blocked[tile] = true
-	var seen := {}
-	for colonist in _colonists:
-		if String(colonist.get("factionId", "colony")) != "colony":
-			continue
-		var reference := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		if tiles.has(reference) or seen.has(reference) or blocked.has(reference):
-			continue
-		var before := _flood_fill_passable(reference, blocked)
-		seen.merge(before)
-		var touches_candidate := false
-		for tile in tiles:
-			if before.has(tile):
-				touches_candidate = true
-				break
-		if not touches_candidate:
-			continue
-		for tile in tiles:
-			blocked[tile] = true
-		var after := _flood_fill_passable(reference, blocked)
-		for tile in tiles:
-			blocked.erase(tile)
-		var candidates_in_before := 0
-		for tile in tiles:
-			if before.has(tile):
-				candidates_in_before += 1
-		if after.size() < before.size() - candidates_in_before:
-			return true
-	return false
-
-## 4-connected BFS over passable(faction "colony") tiles reachable from `start`,
-## treating every key of `blocked` as impassable regardless of its own real
-## passability -- _would_enclose_tiles()'s only use, so kept private and
-## untyped-simple rather than a general pathfinder.
-func _flood_fill_passable(start: Vector2i, blocked: Dictionary) -> Dictionary:
-	var visited := {}
-	if blocked.has(start) or not bool(passability(start.x, start.y)["passable"]):
-		return visited
-	visited[start] = true
-	var frontier: Array[Vector2i] = [start]
-	while not frontier.is_empty():
-		var current: Vector2i = frontier.pop_back()
-		for offset in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
-			var next: Vector2i = current + offset
-			if blocked.has(next) or visited.has(next):
-				continue
-			if next.x < 0 or next.x >= _tile_grid.width or next.y < 0 or next.y >= _tile_grid.height:
-				continue
-			if not bool(passability(next.x, next.y)["passable"]):
-				continue
-			visited[next] = true
-			frontier.append(next)
-	return visited
-
 ## Applies immediately, no job queue involved. Rejected invalid_target for an
 ## out-of-bounds/occupied/tree/water tile on any footprint tile;
 ## rejected invalid_payload for an unknown kind or a malformed orientation.
 ## This is the debug/map-gen placement path only (ADR 039) -- the
-## player-facing `build` order flow is _apply_construction_submission() above.
+## player-facing `build` order flow is ConstructionSystem.apply_construction_submission().
 func _apply_place_object_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var check := _check_place_object_command(payload)
