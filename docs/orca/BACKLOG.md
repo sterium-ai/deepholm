@@ -164,6 +164,48 @@ Orca helper scripts, this backlog.
 
 ---
 
+## Phase A — foundation for scale (owner request, 2026-10-25)
+
+The owner's ambition: thousands of things built on this base — NPCs, stories, levels, maps,
+systems — without the base crumbling, with performance and game-development best practices.
+Phase R makes `WorldState` modular; it does not by itself prove the architecture carries that
+load. Phase A finds out, with evidence, and turns the gaps into backlog entries.
+
+### A0 — Foundation audit against the long-term ambition · `todo` · *parallel-safe (docs only)*
+
+- **Goal:** `docs/architecture/foundation-audit.md`: an honest, evidence-based assessment of
+  whether the current architecture (core/viewer split, actors + components, content registry +
+  JSON schemas, job/toil engine, scheduler, routing, regions/rooms, incidents, factions, save
+  system, tests) can grow to: 1,000+ actors on screen-sized maps, several map layers
+  (underground), hundreds of content kinds (items, objects, recipes, creatures, thoughts),
+  scripted stories/events/quests, multiple scenarios/levels, localisation, mods/data packs,
+  and a mobile target. For every axis: what already supports it, what will break first and
+  why (cite files, functions, line counts, complexity, allocation patterns), and the smallest
+  structural change that removes the limit. Measure, do not guess: write and run
+  `game/scripts/tests/bench_*.gd` headless benchmarks (tick time vs. actor count 10/100/500/1000
+  on a 256×256 map; route search cost; save/load size and time; content load time) and quote
+  the numbers; the benchmarks are committed and become the baseline for later tasks.
+- **Also audit** against game-architecture best practice for this genre (data-oriented
+  simulation, fixed-step determinism, event/message bus vs. direct calls, spatial indexing,
+  object pooling, content hot-reload, versioned schemas, replay/debug tooling, headless test
+  coverage) and against Godot 4 best practice (scene/resource use, GDScript performance,
+  typed code, static typing with `--warnings`, export/mobile constraints).
+- **Deliverables:** the audit document; `docs/orca/BACKLOG.md` gains a proposed, ordered set of
+  `A*` entries (each with goal / owned paths / acceptance / non-goals, same format as `R*`)
+  that the owner will accept or reject — the author does NOT implement them; the benchmarks;
+  a one-page summary in plain language (`docs/architecture/foundation-audit-summary.md`, ES)
+  for the owner: what is solid, what is not, what it costs to fix, in what order.
+- **Owned paths:** `docs/architecture/foundation-audit*.md`, `docs/orca/BACKLOG.md` (append
+  only, under Phase A), `game/scripts/tests/bench_*.gd` (new), `docs/orca/handoffs/A0*`.
+- **Acceptance:** every claim about the code cites a path (and a function or line range);
+  every performance claim cites a benchmark number from a committed `bench_*.gd` run on the
+  host, with the command; proposed `A*` entries are concrete and independently reviewable;
+  no production code changed (the diff touches only docs and `bench_*.gd`); the full suite
+  still passes (benchmarks must not be picked up by `run_tests` as `test_*`).
+- **Non-goals:** fixing anything; redesigning for its own sake; changing engine or language.
+
+---
+
 ## Phase F — towards the baseline (after R12; designs to be closed with the owner first)
 
 Order follows `../design/baseline.md` §"Suggested order". Each entry is a placeholder until
