@@ -43,9 +43,11 @@ func _init() -> void:
 	_write_fixture(mapping, FIXTURE_ROOT)
 	_check_fixture_pack(mapping)
 	_check_partial_pack_falls_back(mapping)
+	_check_wrong_size_sheet_falls_back(mapping)
 	_check_work_animations()
 	_remove_dir(FIXTURE_ROOT)
 	_remove_dir("user://pack_partial/")
+	_remove_dir("user://pack_wrong_size/")
 	if _failed:
 		quit(1)
 		return
@@ -120,6 +122,21 @@ func _check_partial_pack_falls_back(mapping: Dictionary) -> void:
 	var first_sheet: String = mapping["animations"]["idle_down"]["sheet"]
 	DirAccess.remove_absolute(root + first_sheet)
 	_expect(PackAssetsType.colonist_frames(64.0, 47.0, root) == null, "a partial pack keeps the placeholder")
+
+## A sheet whose size differs from the measured one (another pack version)
+## also means no pack art at all: every sheet present, one a frame short.
+func _check_wrong_size_sheet_falls_back(mapping: Dictionary) -> void:
+	var root := "user://pack_wrong_size/"
+	_write_fixture(mapping, root)
+	var entry: Dictionary = mapping["animations"]["walk_side"]
+	var short := Image.create(int(entry["sheet_size"][0]) - int(entry["sheet_size"][1]),
+		int(entry["sheet_size"][1]), false, Image.FORMAT_RGBA8)
+	_expect(short.save_png(root + String(entry["sheet"])) == OK, "wrong-size fixture sheet written")
+	_expect(PackAssetsType.load_texture(String(entry["sheet"]), root) != null, "the wrong-size sheet itself loads")
+	_expect(PackAssetsType.colonist_frames(64.0, 47.0, root) == null, "a wrong-size sheet keeps the placeholder")
+	var sprites := ColonistSpritesType.new(root)
+	_expect(sprites._frames == ColonistSpritesType.FRAMES, "wrong-size sheet -> placeholder FRAMES")
+	sprites.free()
 
 ## Through the real refresh()/advance() path: a colonist in a chop/mine/dig
 ## work toil shows that work animation with the pack and loops it; with the
