@@ -12,7 +12,8 @@ extends SceneTree
 ## Optional user args (after "--"): max_seconds=<n> skips a size whose cost,
 ## extrapolated quadratically from the previous size, would exceed n seconds
 ## (default 120), so a pathological baseline still finishes; only=<a,b,...>
-## runs just those sections (ticks, preview, drag, apply, cancel, zone).
+## runs just those sections (ticks, preview, drag, drag_cancel, drag_zone,
+## apply, cancel, zone).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
@@ -42,7 +43,11 @@ func _run() -> void:
 	if _runs("preview"):
 		_bench_preview("dig", OrderInputType.Tool.DIG)
 	if _runs("drag"):
-		_bench_drag("dig", OrderInputType.Tool.DIG)
+		await _bench_drag("dig", OrderInputType.Tool.DIG)
+	if _runs("drag_cancel"):
+		await _bench_drag("cancel", OrderInputType.Tool.CANCEL, true, 8)
+	if _runs("drag_zone"):
+		await _bench_drag("zone", OrderInputType.Tool.ZONE, false, 8)
 	if _runs("apply"):
 		await _bench_apply("dig", OrderInputType.Tool.DIG)
 	if _runs("cancel"):
@@ -94,12 +99,20 @@ func _bench_preview(label: String, tool: int) -> void:
 ## mouse-move along the diagonal, through MapView's real _gui_input path:
 ## reports the worst single mouse-move (one frame's work) and the total, plus
 ## any preview work MapView left for later frames (finish_preview_work(),
-## where it exists).
-func _bench_drag(label: String, tool: int) -> void:
+## where it exists). With `dig_first`, the whole map is dug first (Cancel then
+## has a pending job on every diggable tile); with `tick_every` > 0, the world
+## ticks every that many moves and the frame after it is timed too: refresh()
+## plus one deferred preview step (MapView._process()). Last, the map's draw
+## frame with the full selection still held (_redraw_ms()).
+func _bench_drag(label: String, tool: int, dig_first := false, tick_every := 0) -> void:
 	var world := WorldStateType.new(SEED, 10, WIDTH, HEIGHT)
 	var orders := OrderInputType.new()
 	var map_view := MapViewType.new()
 	map_view.set_world(world)
+	if dig_first:
+		orders.selected_tool = OrderInputType.Tool.DIG
+		orders.commit_rectangle(world, map_view, MapViewType.tiles_in_rectangle(Vector2i.ZERO, Vector2i(WIDTH - 1, HEIGHT - 1)))
+		_drain_area_orders(world)
 	map_view.preview_validity = func(tiles: Array[Vector2i]) -> Array[bool]:
 		return orders.preview_validity(world, world.preview, map_view, tiles)
 	orders.select_tool(world, map_view, tool)
@@ -111,6 +124,8 @@ func _bench_drag(label: String, tool: int) -> void:
 			continue
 		_mouse(map_view, Vector2i.ZERO, true, true)
 		var worst := 0.0
+		var worst_tick_frame := 0.0
+		var tick_ms := 0.0
 		var total_start := Time.get_ticks_usec()
 		var steps := maxi(size.x, size.y)
 		for step in range(1, steps):
@@ -118,15 +133,28 @@ func _bench_drag(label: String, tool: int) -> void:
 			var start := Time.get_ticks_usec()
 			_motion(map_view, corner)
 			worst = maxf(worst, (Time.get_ticks_usec() - start) / 1000.0)
-		var total_ms := (Time.get_ticks_usec() - total_start) / 1000.0
+			if tick_every > 0 and step % tick_every == 0:
+				var tick_start := Time.get_ticks_usec()
+				world.tick()
+				tick_ms += (Time.get_ticks_usec() - tick_start) / 1000.0
+				start = Time.get_ticks_usec()
+				map_view.refresh()
+				map_view._process(0.0)
+				worst_tick_frame = maxf(worst_tick_frame, (Time.get_ticks_usec() - start) / 1000.0)
+		var total_ms := (Time.get_ticks_usec() - total_start) / 1000.0 - tick_ms
 		var rest_start := Time.get_ticks_usec()
 		if map_view.has_method("finish_preview_work"):
 			map_view.finish_preview_work()
 		var rest_ms := (Time.get_ticks_usec() - rest_start) / 1000.0
 		var shown: int = map_view._preview_tiles.size()
+		var redraw_ms: float = await _redraw_ms(map_view)
 		map_view.cancel_selection()
 		print("  drag %s to N=%d: worst mouse-move %.2f ms, %d moves, total %.2f ms, deferred preview work %.2f ms (%d tiles shown)"
 			% [label, n, worst, steps - 1, total_ms, rest_ms, shown])
+		print("    map draw frame with the selection held: %.2f ms" % redraw_ms)
+		if tick_every > 0:
+			print("    with a tick every %d moves: worst frame after a tick (refresh + one preview step) %.2f ms"
+				% [tick_every, worst_tick_frame])
 		previous_ms = total_ms
 		previous_n = n
 	map_view.free()

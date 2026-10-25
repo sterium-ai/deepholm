@@ -1834,7 +1834,7 @@ func _check_v25_fixture_migrates_to_v26() -> void:
 	var state: Dictionary = result["state"]
 	_expect(state["schemaVersion"] == 26, "v25 fixture must migrate to schemaVersion 26")
 	_expect(not raw_state.has("areaOrders"), "sanity: the v25 fixture must not already carry areaOrders")
-	_expect(state.get("areaOrders") == {"nextId": 1, "list": []}, "migration must backfill an empty areaOrders queue")
+	_expect(state.get("areaOrders") == {"nextId": 1, "list": [], "created": []}, "migration must backfill an empty areaOrders queue")
 	for key in raw_state.keys():
 		if key != "schemaVersion":
 			_expect(state[key] == raw_state[key], "migration must preserve v25 fixture field '%s'" % key)
@@ -1854,7 +1854,7 @@ func _check_v25_fixture_loads_through_save_io() -> void:
 	var state: Dictionary = result["state"]
 	_expect(state["schemaVersion"] == StateCodecType.SCHEMA_VERSION, "SaveIO-loaded v25 fixture must report the current schemaVersion")
 	var world := WorldStateType.from_save_state(state)
-	_expect(world.to_save_state()["areaOrders"] == {"nextId": 1, "list": []},
+	_expect(world.to_save_state()["areaOrders"] == {"nextId": 1, "list": [], "created": []},
 		"a world loaded from a v25 save must start with no pending area orders")
 
 ## Proves the dig-find RNG's own continuation --

@@ -395,6 +395,16 @@ func _update_preview() -> void:
 		_drag_preview.update(_rectangle(_drag_start, _drag_current), world.get_tick() if world != null else -1, preview_validity)
 		queue_redraw()
 		return
+	# Zone judges the whole rectangle with one zone_add preview, which reads
+	# only its corners (OrderInput.preview_validity()): one fill, no per-tile
+	# list or draw, however large the drag (B1).
+	if tool_enabled and _dragging and _zone_tool_enabled and preview_validity.is_valid():
+		var rect := _rectangle(_drag_start, _drag_current)
+		var corners: Array[Vector2i] = [rect.position, rect.end - Vector2i.ONE]
+		var corner_valid: Array = preview_validity.call(corners)
+		_drag_preview.show_uniform(rect, not corner_valid.is_empty() and bool(corner_valid[0]))
+		queue_redraw()
+		return
 	if _drag_preview.is_active():
 		_drag_preview.clear()
 	if tool_enabled:

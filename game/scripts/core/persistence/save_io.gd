@@ -2225,20 +2225,29 @@ static func _replace_target(temporary: String, target: String) -> Dictionary:
 static func _error(code: String, message: String, file: String) -> Dictionary:
 	return {"ok": false, "code": code, "message": message, "file": file}
 
-## "areaOrders" (ADR 044, schemaVersion 26): {nextId, list}, each entry one
-## pending area_order expansion as AreaOrders.encode() writes it -- a known
-## order kind, a non-empty in-map rectangle, and a next tile index inside it.
+## "areaOrders" (ADR 044, schemaVersion 26): {nextId, list, created}, each
+## list entry one pending area_order expansion as AreaOrders.encode() writes
+## it -- a known order kind, a non-empty in-map rectangle, a next tile index
+## inside it and distinct "done" indexes from next on; each "created" entry a
+## [first, end, order id] job-number range, ascending and disjoint.
 static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid areaOrders type")
-	if not _keys_allowed(value, ["nextId", "list"]):
+	if not _keys_allowed(value, ["nextId", "list", "created"]):
 		return _fail("unexpected areaOrders field")
-	for key in ["nextId", "list"]:
+	for key in ["nextId", "list", "created"]:
 		if not value.has(key):
 			return _fail_missing("missing areaOrders field '%s'" % key)
-	if not _is_int_min(value["nextId"], 1) or not (value["list"] is Array):
-		return _fail("invalid areaOrders nextId or list")
-	var fields := ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "jobLimit", "siteLimit"]
+	if not _is_int_min(value["nextId"], 1) or not (value["list"] is Array) or not (value["created"] is Array):
+		return _fail("invalid areaOrders nextId, list or created")
+	var range_end := 0
+	for created in value["created"]:
+		if not (created is Array) or created.size() != 3 or not _is_int(created[0]) or not _is_int(created[1]) or not _is_int(created[2]):
+			return _fail("invalid areaOrders created range")
+		if int(created[0]) < range_end or int(created[1]) <= int(created[0]) or int(created[2]) < 1 or int(created[2]) >= int(value["nextId"]):
+			return _fail("invalid areaOrders created range")
+		range_end = int(created[1])
+	var fields := ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"]
 	for entry in value["list"]:
 		if not (entry is Dictionary) or not _keys_allowed(entry, fields):
 			return _fail("invalid areaOrders entry")
@@ -2258,4 +2267,11 @@ static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictio
 			return _fail("invalid areaOrders entry rectangle")
 		if int(entry["next"]) < 0 or int(entry["next"]) >= rect.get_area() or int(entry["id"]) >= int(value["nextId"]):
 			return _fail("invalid areaOrders entry next or id")
+		if not (entry["done"] is Array):
+			return _fail("invalid areaOrders entry done")
+		var seen := {}
+		for index in entry["done"]:
+			if not _is_int(index) or int(index) < int(entry["next"]) or int(index) >= rect.get_area() or seen.has(int(index)):
+				return _fail("invalid areaOrders entry done")
+			seen[int(index)] = true
 	return {"ok": true}

@@ -940,6 +940,10 @@ func get_queued_job_summary() -> Dictionary:
 func get_designation_changes(from: int) -> Dictionary:
 	return _scheduler.queue.get_index().designation_changes(from)
 
+## Ids of the pending jobs targeting `tile`, site jobs excepted (the viewer's Cancel candidates).
+func get_pending_job_ids_at(tile: Vector2i) -> Array[String]:
+	return _scheduler.queue.get_index().pending_ids_at(tile)
+
 func get_reservations() -> Dictionary:
 	return _scheduler.queue.get_reservations()
 

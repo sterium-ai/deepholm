@@ -157,6 +157,13 @@ func designation_changes(from: int) -> Dictionary:
 func pending_at(tile: Vector2i) -> Array:
 	return _pending_by_target.get(tile, [])
 
+## The ids of pending_at(tile), in list order.
+func pending_ids_at(tile: Vector2i) -> Array[String]:
+	var ids: Array[String] = []
+	for job in pending_at(tile):
+		ids.append(String(job["id"]))
+	return ids
+
 func _track_pending(job: Dictionary, pending: bool) -> void:
 	if String(job.get("kind", "")) in ["site_fetch", "site_work"]:
 		return

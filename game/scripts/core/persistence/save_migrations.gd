@@ -1276,7 +1276,7 @@ static func _is_schema_v25_state(state: Dictionary) -> bool:
 static func _migrate_v25_to_v26(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 26
-	migrated["areaOrders"] = {"nextId": 1, "list": []}
+	migrated["areaOrders"] = {"nextId": 1, "list": [], "created": []}
 	return migrated
 
 static func _backfill_restrict_to(entries: Array) -> Array:

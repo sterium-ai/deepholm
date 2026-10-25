@@ -5,13 +5,15 @@ extends SceneTree
 ## 1) MapView's per-tile drag preview (drag_preview.gd), grown tile by tile,
 ##    ends with exactly tiles_in_rectangle() and OrderInput.preview_validity()
 ##    over the whole rectangle -- also after a tick made it stale -- and a
-##    one-column move validates only the newly covered column;
+##    one-column move validates only the newly covered column; a Zone drag
+##    previews one corner pair per move, keeps no per-tile list, and shows the
+##    whole-rectangle zone_add validity;
 ## 2) the designation overlay's pixel per tile equals the colour of one
 ##    OUTLINE_COLOR rect per pending non-site_fetch job on that tile, through
 ##    orders, cancels, ticks and a save/load world swap;
-## 3) a Cancel rectangle previewed with the one-read candidate map, and
+## 3) a Cancel rectangle previewed through the core's tile index, and
 ##    committed as an area order, leaves the same jobs and reports the same
-##    rejections as the former per-tile scan;
+##    rejections as the former per-tile scan of every job;
 ## 4) the stockpile draw visits the same cells, in the same order, as the
 ##    former walk of every zone cell.
 
@@ -84,6 +86,19 @@ func _check_drag_preview() -> void:
 	# Whole-rectangle tools keep the one-call preview.
 	orders.select_tool(world, view, OrderInputType.Tool.ZONE)
 	_expect(not view._preview_per_tile, "zone must preview the whole rectangle at once")
+	for corner in [Vector2i(63, 63), Vector2i(12, 9)]:
+		validated[0] = 0
+		_mouse(view, Vector2i(0, 0), true)
+		for step in range(1, 64):
+			_motion(view, Vector2i(mini(step, corner.x), mini(step, corner.y)))
+		_expect(validated[0] <= 2 * 64, "a zone drag must preview only the corners per move, validated %d" % validated[0])
+		var whole := MapViewType.tiles_in_rectangle(Vector2i.ZERO, corner)
+		_expect(view._list_tiles.is_empty(), "a zone drag must keep no per-tile list")
+		_expect(view._preview_tiles == whole, "a zone drag must preview exactly its rectangle")
+		_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, whole),
+			"a zone drag must show the whole-rectangle zone_add validity")
+		view.cancel_selection()
+		_expect(view._preview_tiles.is_empty(), "cancelling must clear the zone preview")
 	view.free()
 
 func _check_designation_overlay() -> void:
@@ -151,14 +166,14 @@ func _check_cancel_candidates() -> void:
 	while world._area_orders.remaining_tiles(1) > 0:
 		for entry in world._area_orders.advance():
 			rejected.append({"tile": Vector2i(entry["x"], entry["y"]), "reason": entry["reason"]})
-	# The former path: every tile scans every job (no candidate map).
+	# The former path: every tile scans every job (no tile index).
 	var expected_preview: Array[bool] = []
 	for tile in tiles:
-		var command := OrderInputType.command_for_tile(twin, null, OrderInputType.Tool.CANCEL, tile)
+		var command := _scan_cancel_command(twin, tile)
 		expected_preview.append(not command.is_empty() and twin.preview(command).get("ok", false))
 	var expected_rejected: Array[Dictionary] = []
 	for tile in tiles:
-		var command := OrderInputType.command_for_tile(twin, null, OrderInputType.Tool.CANCEL, tile)
+		var command := _scan_cancel_command(twin, tile)
 		if command.is_empty():
 			continue
 		var result: Dictionary = twin.apply(command)
@@ -168,6 +183,27 @@ func _check_cancel_candidates() -> void:
 	_expect(rejected == expected_rejected, "Cancel must report the same rejections as the per-tile scan")
 	_expect(world.get_jobs() == twin.get_jobs(), "Cancel must leave the same jobs as the per-tile scan")
 	_expect(world.get_construction_sites() == twin.get_construction_sites(), "Cancel must leave the same sites as the per-tile scan")
+
+## The former Cancel lookup (before B1): a site on the tile, else the best
+## pending job among every job whose order tile it is.
+func _scan_cancel_command(world, tile: Vector2i) -> Dictionary:
+	var command := {"actor": "player", "command_id": "scan_cancel_%d_%d" % [tile.x, tile.y], "tick": world.get_tick()}
+	var site: Dictionary = world.get_construction_site(tile.x, tile.y)
+	if not site.is_empty():
+		command["type"] = "cancel_site"
+		command["payload"] = {"x": int(site["origin"].x), "y": int(site["origin"].y)}
+		return command
+	var best := {}
+	for job in world.get_jobs():
+		if job["status"] not in ["queued", "active"] or OrderInputType._order_tile(job) != tile:
+			continue
+		if best.is_empty() or AreaOrders.cancel_before(job, best):
+			best = job
+	if best.is_empty():
+		return {}
+	command["type"] = "cancel_job"
+	command["payload"] = {"job_id": best["id"]}
+	return command
 
 func _check_stockpile_cells() -> void:
 	var world := WorldStateType.new(4242, 10, 64, 64)

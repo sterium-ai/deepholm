@@ -14,6 +14,9 @@ extends RefCounted
 ## - the fill is one RGBA8 pixel per map cell in a texture drawn scaled, not
 ##   three draw calls per tile; outlines and invalid crosses are drawn only for
 ##   on-screen tiles, and only while there are few enough of them.
+## A tool that judges the whole rectangle at once (Zone) shows it through
+## show_uniform() instead: one validity for every tile, two native fills per
+## change.
 ## Presentation only: never mutates the world, holds no world reference.
 
 const TILE_BUDGET := 1024
@@ -36,6 +39,8 @@ var _rect := Rect2i()
 ## Row-major index into _rect from which step() still looks for stale or
 ## unknown tiles; -1 when every tile in _rect is current.
 var _cursor := -1
+## The State every tile of _rect shows under show_uniform(); -1 otherwise.
+var _uniform := -1
 var _image: Image
 var _texture: ImageTexture
 
@@ -65,6 +70,7 @@ func clear() -> void:
 	_rect = Rect2i()
 	_cursor = -1
 	_tick = -1
+	_uniform = -1
 	if _image != null:
 		_image.fill(Color(0, 0, 0, 0))
 		_texture.update(_image)
@@ -75,6 +81,8 @@ func clear() -> void:
 func update(rect: Rect2i, tick: int, validity: Callable) -> void:
 	if _image == null:
 		return
+	if _uniform >= 0:
+		clear()
 	rect = rect.intersection(Rect2i(0, 0, _width, _height))
 	if tick != _tick:
 		_tick = tick
@@ -93,6 +101,20 @@ func update(rect: Rect2i, tick: int, validity: Callable) -> void:
 			elif _cursor < 0:
 				_cursor = 0
 	_validate(todo, validity)
+	_texture.update(_image)
+
+## Shows `rect` with one validity for all of its tiles: clears the previous
+## rectangle's fill and fills the new one, no per-tile work.
+func show_uniform(rect: Rect2i, valid: bool) -> void:
+	if _image == null:
+		return
+	if _uniform < 0:
+		clear()
+	elif _rect.has_area():
+		_image.fill_rect(_rect, Color(0, 0, 0, 0))
+	_rect = rect.intersection(Rect2i(0, 0, _width, _height))
+	_uniform = State.VALID if valid else State.INVALID
+	_image.fill_rect(_rect, Color(_color(_uniform), FILL_ALPHA))
 	_texture.update(_image)
 
 ## Re-validates up to TILE_BUDGET stale or unknown tiles of the rectangle.
@@ -127,7 +149,7 @@ func tiles() -> Array[Vector2i]:
 func valid() -> Array[bool]:
 	var result: Array[bool] = []
 	for tile in tiles():
-		result.append(_state[tile.y * _width + tile.x] == State.VALID)
+		result.append(_state_at(tile.y * _width + tile.x) == State.VALID)
 	return result
 
 ## Draws onto `canvas` (inside its _draw()): the fill texture, then outlines
@@ -141,7 +163,7 @@ func draw(canvas: CanvasItem, tile_size: float, visible: Rect2i) -> void:
 		return
 	for y in range(shown.position.y, shown.end.y):
 		for x in range(shown.position.x, shown.end.x):
-			var state := _state[y * _width + x]
+			var state := _state_at(y * _width + x)
 			var color := _color(state)
 			var cell := Rect2(Vector2(x, y) * tile_size, Vector2.ONE * tile_size)
 			canvas.draw_rect(cell, color, false, 1.0)
@@ -159,6 +181,9 @@ func _validate(tiles: Array[Vector2i], validity: Callable) -> void:
 		_generation_of[index] = _generation
 		if _rect.has_point(tile):
 			_paint(tile, index)
+
+func _state_at(index: int) -> int:
+	return _uniform if _uniform >= 0 else _state[index]
 
 func _paint(tile: Vector2i, index: int) -> void:
 	_image.set_pixelv(tile, Color(_color(_state[index]), FILL_ALPHA))

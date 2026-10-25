@@ -33,7 +33,7 @@ height, priority}`, `order` one of `dig`, `chop`, `forage`, `till`, `sow`,
 a non-integer field or an extra key is `invalid_payload`; an empty rectangle
 or one not inside the map, `invalid_target`.
 
-**Expansion reuses the single-tile command.** An accepted order joins a FIFO
+**Expansion reuses the single-tile command.** An accepted order joins a
 queue (`game/scripts/core/commands/area_orders.gd`). Each tile, in row-major
 order, becomes exactly the command a click on that tile submits and goes
 through `apply()` itself: same rules, same `command_applied` /
@@ -46,23 +46,37 @@ calls too). Pending jobs per tile come from `JobIndex.pending_at()`, kept from
 JobQueue's own events.
 
 **Paced per tick, never by wall-clock.** `AreaOrders.TILES_PER_STEP` (128)
-tiles are expanded when the order is accepted, and 128 more at the start of
-every `tick()`, before the clock advances (the same tick a player command
-issued just before that tick would carry). Orders are served strictly in
-order. A rectangle of up to 128 tiles behaves exactly as before: every job
-exists when the release returns, with its rejections in the envelope's
-`skipped` list.
+of the order's own tiles are expanded when it is accepted -- even behind a
+backlog of earlier orders -- and 128 tiles at the start of every `tick()`,
+before the clock advances (the same tick a player command issued just before
+that tick would carry), for the pending orders first-in first-out. A
+rectangle of up to 128 tiles behaves exactly as before: every job exists when
+the release returns, with its own rejections (never an earlier order's) in
+the envelope's `skipped` list.
+
+**Per tile, acceptance order.** Before an order expands a tile, every earlier
+pending order whose rectangle holds that tile and has not reached it yet
+expands it first ("pulled forward": the index joins that order's `done` list
+and is skipped when its row-major cursor gets there). An order therefore acts
+on each tile exactly as if every earlier order had already finished there --
+a Cancel dragged over a Dig still filling in cancels the Dig's jobs, and a
+Dig dragged after that Cancel is not cancelled by it.
 
 **Judged when expanded.** Each tile is checked against the world at the
 moment it is expanded, as a click at that moment would be. `cancel` records
 the next job and site numbers at acceptance (`jobLimit`, `siteLimit`) and
-never touches a job or site created after the order.
+never touches a job or site created after the order -- except the jobs an
+earlier area order created since: while a later cancel is pending, each
+expansion records the job numbers it created as `[first, end, order id]`
+ranges (`created`), dropped once no cancel is pending. Area orders never
+create construction sites.
 
 **Saved and hashed.** A pending queue is part of `state_hash()` (an idle one
 is left out, so a world that never used an area order hashes exactly as
 before; its next order id is not observable outside the save), and the queue
 is part of the save as
-`areaOrders` (`{nextId, list}`, each entry carrying the next tile index):
+`areaOrders` (`{nextId, list, created}`, each entry carrying the next tile
+index and its pulled-forward `done` indexes):
 schemaVersion 25 -> 26, with an explicit migration that backfills an empty
 queue. A save taken mid-expansion resumes at the same tile
 (`test_area_orders.gd`).
@@ -87,7 +101,8 @@ queue. A save taken mid-expansion resumes at the same tile
 
 ## Consequences
 
-- Releasing any drag costs at most one 128-tile step in that frame.
+- Releasing any drag costs at most one 128-tile step in that frame, plus at
+  most one pulled-forward tile per earlier pending order for each of them.
 - A large order's designations fill in row by row over the next ticks; the
   viewer's rejected-tiles text only lists tiles rejected at release, later
   rejections are their `command_rejected` events.
