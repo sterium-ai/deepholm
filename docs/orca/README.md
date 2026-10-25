@@ -39,6 +39,12 @@ de Orca que tú abres y cierras.
    nueva): `new-task.ps1` contesta "Yes, I trust this folder" por ti; si lo lanzas desde la app,
    baja con la flecha y pulsa Enter.
 
+## Probar el juego
+
+Acceso directo **"Deepholm (última versión)"** en el escritorio → ejecuta `tools\play.cmd`: trae
+el `main` más reciente de GitHub, reimporta y abre el juego en ventana. Lo que está en `main` es
+lo fusionado; lo que los agentes tienen a medias en sus worktrees no aparece hasta fusionarse.
+
 ## Ciclo de una tarea
 
 ### 1. Abrir la tarea
