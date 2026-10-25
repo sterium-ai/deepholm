@@ -234,6 +234,14 @@ Orca helper scripts, this backlog.
   over ticks) reloads and completes identically; the owner reproduces the drag on the native
   build and confirms no freeze and no lag.
 - **Non-goals:** changing which tiles are valid for an order; new order kinds; UI redesign.
+- **Scope extension approved by the owner (2026-10-25 13:40):** the measured root causes are
+  quadratic structures in `core/jobs/job_queue.gd`, `core/world/event_log.gd`,
+  `core/scheduling/global_assignment.gd` (+ `assignment_queue.gd`) and per-tick deep copies.
+  B1 may change those files (complexity only, behaviour byte-identical), add job index/log
+  modules under `core/jobs/`, and — only if a whole-map apply still blocks > ~100 ms after
+  that — add a deterministic, persisted per-tick expansion queue for area orders (schema bump
+  + migration + fixture + ADR). Work-progress functions stay R4's. Order of work and
+  coordination notes: `docs/orca/handoffs/B1.md`.
 
 ---
 
