@@ -204,6 +204,39 @@ Orca helper scripts, this backlog.
 
 ---
 
+### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `todo` · *parallel-safe (viewer + assets only)*
+
+- **Owner (2026-10-25):** "el pixelart de los colonos no es muy bonito, se debería parecer más
+  al pixelart del pack que descargamos". Visual target stays Dwarf Fortress-like flat top-down
+  16 px tiles (`docs/art/style.md`); colonists 24 px tall as decided earlier.
+- **Licence constraint (pack `Terms.txt`, Anokolisa):** free for commercial use, must not be
+  redistributed as assets. This repository is public, so **the pack's PNGs are never
+  committed**. Design: `game/assets/pack/` is git-ignored; `tools/sync_pack_assets.ps1` copies
+  the exact sheets the game needs from the local pack root (`$env:DEEPHOLM_PACK`, default
+  `C:\dev\assets\pixel-crawler`) into `game/assets/pack/` with a manifest of expected files;
+  the viewer loads a sprite from the pack when the file exists and falls back to the generated
+  placeholder otherwise, so CI, tests and clones without the pack keep working unchanged.
+- **Goal of this task:** colonists use the pack's `Entities/Characters/Body_A` sheets (Idle,
+  Walk, Carry_Idle, Carry_Walk, and the work animations already mapped in the private notes:
+  Slice for chop, Crush for mine/dig) for all four facings, with the glide/animation timing the
+  viewer already has; the frame-mapping lives in a JSON next to the sheets
+  (`game/data/sprite_frames/colonist_pack.json`), measured from the real sheets (alpha
+  bounding boxes), never from memory. Trees, rock, walls, workbench, berries and tools follow
+  in a later task (B3) using the same mechanism.
+- **Owned paths:** `game/scripts/viewer/colonist_sprites.gd` (+ a small
+  `viewer/pack_assets.gd` loader), `game/data/sprite_frames/`, `tools/sync_pack_assets.ps1`,
+  `.gitignore`, `game/assets/CREDITS.md` (credit Anokolisa as the terms allow),
+  `docs/art/style.md` (a section on pack vs placeholder), tests for the loader fallback.
+- **Acceptance:** `tools\sync_pack_assets.ps1` copies the sheets and reports any missing one;
+  with the pack present the native build shows pack colonists in all facings and states
+  (screenshots in the handoff); without it (`git clean -fdx game/assets/pack`) the game and
+  the full suite run exactly as before; `git status` never shows a pack PNG; the owner
+  confirms on the native build.
+- **Non-goals:** touching the core; changing tile size or colonist size; redrawing anything by
+  hand or with AI (owner rule: art comes from the pack or PixelLab, never agent pixels).
+
+---
+
 ## Phase A — foundation for scale (owner request, 2026-10-25)
 
 The owner's ambition: thousands of things built on this base — NPCs, stories, levels, maps,
