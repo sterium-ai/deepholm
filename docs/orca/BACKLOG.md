@@ -72,7 +72,7 @@ Orca helper scripts, this backlog.
   sequence identical for the same seed (`test_dig_finds` or the equivalent existing test).
 - **Non-goals:** item stacking rules, new item kinds.
 
-### R3 — Extract `TileGrid`, `ObjectTable`, `ZoneTable`, `Passability` · `review (antonelmejor50-hub/r3-extract-tilegrid-objecttable-zonetable)`
+### R3 — Extract `TileGrid`, `ObjectTable`, `ZoneTable`, `Passability` · `done (PR #5)`
 
 - **Goal:** four modules under `map/` and `objects/` own tiles + water cache + dirty cells,
   placed objects + footprints + origin/orientation/health/factions, zones, and the
@@ -161,6 +161,39 @@ Orca helper scripts, this backlog.
 - **Goal:** `game/scripts/boot.gd` becomes scene composition only; new-game setup, save
   wiring and input wiring move to `viewer/` modules. Under 300 lines.
 - **Acceptance:** headless boot check passes; manual run shows the same screen and tools.
+
+### R14 — Reset the save schema to v1 (after R12, before any public release) · `todo`
+
+- **Why (owner, 2026-10-25):** 24 chained migrations and 14 frozen fixtures exist for saves
+  nobody has; `save_io.gd` is 2,200 lines with a 300-line validator. Pure legacy weight.
+- **Goal:** one schema, `deepholm-save-v1` = today's shape after R12 (whatever the composed
+  core persists), with its JSON Schema regenerated; `save_migrations.gd` reduced to the empty
+  chain plus the mechanism (kept, it will be needed after release); old fixtures deleted;
+  `save_io.gd` validator split per module (each module validates what it persists) and under
+  the 800-line cap; `save-system.md` rewritten to match.
+- **Acceptance:** a save written on `main` before the task fails to load with a clear
+  "unsupported pre-release save" message (tested); fresh save → load → identical
+  `state_hash` (tested); full suite passes; `measure_core` shows no persistence file above
+  800 lines.
+- **Non-goals:** changing what is persisted.
+
+### R15 — Test hygiene (after R12) · `todo`
+
+- **Goal:** tests stop reaching into private fields: each module exposes the small read-only
+  test surface it needs (`debug_*` getters or a `TestAccess` helper), tests use it; shared
+  scenario builders deduplicated into `tests/support/`; the 3 largest test files split by
+  subject; `tools/run_tests.ps1 -Filter` documented per subject in `game/README.md`.
+- **Acceptance:** `git grep "_world\._\|world\._" game/scripts/tests` returns 0; assertion
+  count unchanged (quote before/after); suite time not worse than before by more than 5 %.
+
+### R16 — Comment and doc pass on the composed core (after R12) · `todo`
+
+- **Goal:** every core file's comments are the *why* in ≤3 lines per function; invariants that
+  were prose become `assert`s or tests; `docs/architecture/*.md` and the ADR index updated to
+  the module names (R2 and R3 listed the stale references in their handoffs); duplicate ADR
+  numbers renumbered with redirects noted in the index.
+- **Acceptance:** `measure_core` comment lines in `game/scripts/core/` below 25 % of total;
+  `git grep` finds no `_events`, `_items`, `_tiles`, `_objects` field names in docs; suite passes.
 
 ---
 
