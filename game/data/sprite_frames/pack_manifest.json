@@ -1,0 +1,23 @@
+{
+ "comment": "Pack files tools/sync_pack_assets.ps1 copies from the local Pixel Crawler root into game/assets/pack/ (git-ignored). Every sheet a *_pack.json names must be listed here.",
+ "files": [
+  "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Up-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Up-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Up-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Up-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Down-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Side-Sheet.png",
+  "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Up-Sheet.png"
+ ]
+}

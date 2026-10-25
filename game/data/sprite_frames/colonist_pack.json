@@ -1,0 +1,357 @@
+{
+ "source": "Pixel Crawler by Anokolisa; local pack, never committed (tools/sync_pack_assets.ps1)",
+ "measured_by": "docs/orca/handoffs/B2-measure_pack_frames.py",
+ "frame_size": [64, 64],
+ "feet_y": 47,
+ "side_faces": "right",
+ "animations": {
+  "idle_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Down-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [24, 19, 40, 48],
+    [24, 20, 40, 48],
+    [24, 19, 40, 48]
+   ]
+  },
+  "idle_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Up-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [24, 19, 40, 48],
+    [24, 20, 40, 48],
+    [24, 19, 40, 48]
+   ]
+  },
+  "idle_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Idle_Base/Idle_Side-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [25, 18, 40, 48],
+    [25, 19, 40, 48],
+    [25, 20, 40, 48],
+    [25, 19, 40, 48]
+   ]
+  },
+  "walk_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Down-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [25, 18, 39, 48],
+    [24, 19, 40, 47],
+    [24, 18, 40, 48],
+    [25, 18, 39, 48],
+    [24, 19, 40, 47],
+    [24, 18, 40, 48]
+   ]
+  },
+  "walk_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Up-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [24, 18, 39, 47],
+    [24, 19, 39, 47],
+    [25, 18, 40, 48],
+    [25, 18, 40, 47],
+    [25, 19, 40, 47],
+    [24, 18, 39, 48]
+   ]
+  },
+  "walk_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Side-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [25, 18, 39, 48],
+    [25, 19, 38, 48],
+    [25, 18, 38, 48],
+    [25, 18, 38, 47],
+    [25, 19, 39, 48],
+    [24, 18, 40, 48]
+   ]
+  },
+  "carry_idle_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Down-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [24, 19, 40, 48],
+    [24, 20, 40, 48],
+    [24, 19, 40, 48]
+   ]
+  },
+  "carry_idle_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Up-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [23, 18, 41, 48],
+    [23, 19, 41, 48],
+    [23, 20, 41, 48],
+    [23, 19, 41, 48]
+   ]
+  },
+  "carry_idle_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Idle/Carry_Idle_Side-Sheet.png",
+   "sheet_size": [256, 64],
+   "frames": 4,
+   "fps": 2.0,
+   "alpha_bboxes": [
+    [23, 18, 41, 48],
+    [23, 19, 41, 48],
+    [23, 20, 41, 48],
+    [23, 19, 41, 48]
+   ]
+  },
+  "carry_walk_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Down-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [24, 19, 40, 47],
+    [24, 18, 40, 48],
+    [24, 18, 40, 48],
+    [24, 19, 40, 47],
+    [24, 18, 40, 48]
+   ]
+  },
+  "carry_walk_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Up-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [23, 18, 41, 47],
+    [23, 19, 41, 47],
+    [23, 18, 41, 48],
+    [23, 18, 41, 47],
+    [23, 19, 41, 47],
+    [23, 18, 41, 48]
+   ]
+  },
+  "carry_walk_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Carry_Walk/Carry_Walk_Side-Sheet.png",
+   "sheet_size": [384, 64],
+   "frames": 6,
+   "fps": 3.0,
+   "alpha_bboxes": [
+    [23, 18, 41, 48],
+    [23, 19, 41, 48],
+    [23, 18, 41, 48],
+    [23, 18, 41, 47],
+    [23, 19, 41, 48],
+    [23, 18, 41, 48]
+   ]
+  },
+  "chop_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Down-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [19, 1, 36, 48],
+    [20, 0, 36, 48],
+    [21, 0, 36, 48],
+    [7, 7, 44, 63],
+    [24, 23, 44, 63],
+    [25, 22, 43, 57],
+    [21, 21, 41, 50],
+    [20, 9, 38, 48]
+   ]
+  },
+  "chop_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Up-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [24, 20, 41, 58],
+    [25, 20, 40, 58],
+    [26, 20, 39, 58],
+    [12, 4, 49, 64],
+    [20, 5, 39, 48],
+    [21, 10, 39, 48],
+    [22, 17, 46, 48],
+    [23, 20, 46, 48]
+   ]
+  },
+  "chop_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Side-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [9, 13, 42, 48],
+    [8, 12, 41, 48],
+    [7, 11, 39, 48],
+    [2, 21, 64, 58],
+    [23, 22, 64, 48],
+    [24, 22, 60, 48],
+    [24, 20, 49, 48],
+    [23, 20, 44, 48]
+   ]
+  },
+  "mine_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [17, 7, 38, 48],
+    [17, 6, 38, 48],
+    [17, 4, 38, 48],
+    [26, 25, 38, 62],
+    [26, 26, 38, 62],
+    [22, 23, 38, 60],
+    [9, 21, 38, 48],
+    [17, 14, 38, 48]
+   ]
+  },
+  "mine_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [26, 18, 45, 48],
+    [26, 17, 45, 48],
+    [26, 16, 45, 48],
+    [26, 15, 41, 48],
+    [26, 17, 41, 48],
+    [26, 14, 41, 48],
+    [26, 11, 41, 48],
+    [26, 8, 41, 48]
+   ]
+  },
+  "mine_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [10, 19, 38, 48],
+    [8, 18, 38, 48],
+    [5, 18, 38, 48],
+    [27, 28, 57, 51],
+    [27, 29, 57, 52],
+    [27, 26, 56, 51],
+    [27, 23, 53, 48],
+    [26, 20, 44, 48]
+   ]
+  },
+  "dig_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [17, 7, 38, 48],
+    [17, 6, 38, 48],
+    [17, 4, 38, 48],
+    [26, 25, 38, 62],
+    [26, 26, 38, 62],
+    [22, 23, 38, 60],
+    [9, 21, 38, 48],
+    [17, 14, 38, 48]
+   ]
+  },
+  "dig_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [26, 18, 45, 48],
+    [26, 17, 45, 48],
+    [26, 16, 45, 48],
+    [26, 15, 41, 48],
+    [26, 17, 41, 48],
+    [26, 14, 41, 48],
+    [26, 11, 41, 48],
+    [26, 8, 41, 48]
+   ]
+  },
+  "dig_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [10, 19, 38, 48],
+    [8, 18, 38, 48],
+    [5, 18, 38, 48],
+    [27, 28, 57, 51],
+    [27, 29, 57, 52],
+    [27, 26, 56, 51],
+    [27, 23, 53, 48],
+    [26, 20, 44, 48]
+   ]
+  },
+  "build_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [17, 7, 38, 48],
+    [17, 6, 38, 48],
+    [17, 4, 38, 48],
+    [26, 25, 38, 62],
+    [26, 26, 38, 62],
+    [22, 23, 38, 60],
+    [9, 21, 38, 48],
+    [17, 14, 38, 48]
+   ]
+  },
+  "build_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [26, 18, 45, 48],
+    [26, 17, 45, 48],
+    [26, 16, 45, 48],
+    [26, 15, 41, 48],
+    [26, 17, 41, 48],
+    [26, 14, 41, 48],
+    [26, 11, 41, 48],
+    [26, 8, 41, 48]
+   ]
+  },
+  "build_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [10, 19, 38, 48],
+    [8, 18, 38, 48],
+    [5, 18, 38, 48],
+    [27, 28, 57, 51],
+    [27, 29, 57, 52],
+    [27, 26, 56, 51],
+    [27, 23, 53, 48],
+    [26, 20, 44, 48]
+   ]
+  }
+ }
+}

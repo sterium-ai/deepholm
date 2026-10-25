@@ -237,7 +237,7 @@ Orca helper scripts, this backlog.
 
 ---
 
-### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `todo` · *parallel-safe (viewer + assets only)*
+### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `review` (branch `antonelmejor50-hub/b2-colonists-and-later-everything`) · *parallel-safe (viewer + assets only)*
 
 - **Owner (2026-10-25):** "el pixelart de los colonos no es muy bonito, se debería parecer más
   al pixelart del pack que descargamos". Visual target stays Dwarf Fortress-like flat top-down

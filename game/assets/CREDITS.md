@@ -1,6 +1,6 @@
 # Asset credits
 
-> **In short:** Every image in the game is simple placeholder art drawn by a script in this repository, so it is all original and covered by the same licence as the code.
+> **In short:** Every image stored in this repository is simple placeholder art drawn by a script, so it is all original and covered by the same licence as the code. When the owner's copy of the Pixel Crawler pack by Anokolisa is present, the game draws its colonists with that pack instead; those files are never stored here.
 
 All art currently shipped in this repository is **original placeholder pixel
 art generated from code** by [`tools/generate_placeholder_art.py`](../../tools/generate_placeholder_art.py).
@@ -26,5 +26,19 @@ godot --headless --path game --import
 godot --headless --path game --script res://scripts/tools/build_terrain_tileset.gd
 godot --headless --path game --script res://scripts/tools/build_colonist_frames.gd
 ```
+
+## Pixel Crawler pack (not in this repository)
+
+Colonist sprites, when available, come from **Pixel Crawler** by
+**Anokolisa** (https://www.patreon.com/Anokolisa), used under the pack's
+terms: free for commercial projects, not to be sold or redistributed as
+assets. For that reason none of its files are committed: `game/assets/pack/`
+is git-ignored and filled locally by `tools/sync_pack_assets.ps1` from the
+owner's licensed copy. Credit is not required by the terms but is given
+here gladly.
+
+| Local path (git-ignored) | What it is | Author | Licence |
+| --- | --- | --- | --- |
+| `pack/Entities/Characters/Body_A/Animations/**` | Colonist idle, walk, carry, Slice (chop) and Crush (mine, dig, build) sheets, 64x64 frames, feet on y = 47 (list: `game/data/sprite_frames/pack_manifest.json`) | Anokolisa | Pixel Crawler terms (`Terms.txt` in the pack) |
 
 Fonts: the viewer uses Godot's built-in default font (part of the engine, MIT).
