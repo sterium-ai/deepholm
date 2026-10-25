@@ -6,7 +6,8 @@
 param(
     [ValidateSet("codex", "claude")][string]$Agent = "codex",
     [string]$Base = "origin/main",
-    [switch]$NoSend
+    [switch]$NoSend,
+    [ValidateSet("low", "medium", "high", "xhigh")][string]$Effort = "medium"   # codex reasoning effort; use high for core/scheduler/persistence changes
 )
 
 $ErrorActionPreference = "Stop"
@@ -38,7 +39,7 @@ if ($Agent -eq "codex") {
     # `codex review --base` does not accept custom instructions, so run a read-only exec with the
     # diff command spelled out; the sandbox forbids writes, so the reviewer cannot edit anything.
     $instructions += "`nThe diff to review: run 'git diff $Base...HEAD' (and 'git log $Base..HEAD') yourself."
-    $text = "" | & codex exec --sandbox read-only --skip-git-repo-check $instructions 2>&1 | Out-String   # empty stdin: exec reads stdin when not a TTY
+    $text = "" | & codex exec --sandbox read-only --skip-git-repo-check -c "model_reasoning_effort=`"$Effort`"" $instructions 2>&1 | Out-String   # empty stdin: exec reads stdin when not a TTY
 } else {
     $text = & claude -p --permission-mode plan "$instructions`n`nThe diff to review is: git diff $Base...HEAD" 2>&1 | Out-String
 }
