@@ -16,6 +16,8 @@ const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay
 
 const TILE_SIZE := 16.0
 const GROUND_ITEM_ICON_SIZE := TILE_SIZE * 0.6
+const CONSTRUCTION_BAR_HEIGHT := 3.0
+const CONSTRUCTION_BAR_GAP := 1.0
 
 const TILE_SET_PATH := "res://data/tilesets/terrain_tileset.tres"
 
@@ -721,11 +723,9 @@ func _draw() -> void:
 
 func _draw_construction_sites() -> void:
 	for site in world.get_construction_sites():
-		var origin := Vector2i(site["origin"])
 		var orientation := String(site.get("orientation", "horizontal"))
 		var kind := String(site["kind"])
-		var size := Vector2i(2, 1) if kind == "workbench" and orientation != "vertical" else Vector2i(1, 2) if kind == "workbench" else Vector2i.ONE
-		var footprint_rect := Rect2(Vector2(origin) * TILE_SIZE, Vector2(size) * TILE_SIZE)
+		var footprint_rect := construction_site_footprint_rect(site)
 		# A vertical-orientation kind with its own dedicated atlas
 		# entry (e.g. "workbench_vertical") draws that real art directly, at
 		# its own real size/grounding -- no synthetic 90-degree rotation of
@@ -745,11 +745,25 @@ func _draw_construction_sites() -> void:
 		var footprint_center := footprint_rect.get_center()
 		var sprite_rect := Rect2(footprint_center - sprite_size / 2.0 - texture_origin, sprite_size)
 		draw_texture_rect_region(texture, sprite_rect, region, Color(1.0, 1.0, 1.0, 0.5))
-		var sprite_top := sprite_rect.position.y
 		var progress := clampf(float(site.get("progress", 0)) / maxf(1.0, float(site.get("build_ticks", 1))), 0.0, 1.0)
-		var bar_rect := Rect2(Vector2(footprint_center.x - 16.0, sprite_top - TILE_SIZE), Vector2(32.0, 3.0))
+		var bar_rect := construction_bar_rect(footprint_rect)
 		draw_rect(bar_rect, Color(0.18, 0.12, 0.12, 0.9), true)
 		draw_rect(Rect2(bar_rect.position, Vector2(bar_rect.size.x * progress, bar_rect.size.y)), Color(0.35, 0.95, 0.45, 0.95), true)
+
+## The map-local pixel rect of a construction site's footprint tiles.
+static func construction_site_footprint_rect(site: Dictionary) -> Rect2:
+	var origin := Vector2i(site["origin"])
+	var orientation := String(site.get("orientation", "horizontal"))
+	var kind := String(site["kind"])
+	var size := Vector2i(2, 1) if kind == "workbench" and orientation != "vertical" else Vector2i(1, 2) if kind == "workbench" else Vector2i.ONE
+	return Rect2(Vector2(origin) * TILE_SIZE, Vector2(size) * TILE_SIZE)
+
+## A construction site's progress bar: as wide as the footprint and glued just above its
+## top edge. It is placed from the footprint (the tiles), never from the ghost sprite, so
+## every kind and orientation shows it at the same offset whatever the sprite's height.
+static func construction_bar_rect(footprint_rect: Rect2) -> Rect2:
+	return Rect2(footprint_rect.position.x, footprint_rect.position.y - CONSTRUCTION_BAR_GAP - CONSTRUCTION_BAR_HEIGHT,
+		footprint_rect.size.x, CONSTRUCTION_BAR_HEIGHT)
 
 ## Sum the generic ground-item snapshot once, never scan all items per cell.
 ## Carried cargo is absent from get_items() and cannot inflate these counts.

@@ -194,7 +194,7 @@ func _run() -> void:
 				forage_done["%d_%d" % [bush.x, bush.y]] = true
 		for colonist_id in tree_targets.keys():
 			var tree: Vector2i = tree_targets[colonist_id]
-			if world.get_tile(tree.x, tree.y) == "floor":
+			if world.get_tile(tree.x, tree.y) == "soil":
 				chop_done[colonist_id] = true
 		for colonist in world.get_colonists():
 			var colonist_id: String = colonist["id"]

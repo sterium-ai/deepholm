@@ -280,7 +280,7 @@ Orca helper scripts, this backlog.
 - **Non-goals:** touching the core; changing tile size or colonist size; redrawing anything by
   hand or with AI (owner rule: art comes from the pack or PixelLab, never agent pixels).
 
-### B4 — Two visual bugs from the owner's playtest: progress bar offset, chopped tree shows wall art · `todo` · *parallel-safe (viewer/tileset only)*
+### B4 — Two visual bugs from the owner's playtest: progress bar offset, chopped tree shows wall art · `review (antonelmejor50-hub/b4-two-visual-bugs-from)` · *parallel-safe (viewer/tileset only)*
 
 - **Owner (2026-10-25, main `052d8c4`, native build):**
   1. The construction progress bar is drawn "a bit above where it should be" for every
