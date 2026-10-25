@@ -313,7 +313,7 @@ systems — without the base crumbling, with performance and game-development be
 Phase R makes `WorldState` modular; it does not by itself prove the architecture carries that
 load. Phase A finds out, with evidence, and turns the gaps into backlog entries.
 
-### A0 — Foundation audit against the long-term ambition · `todo` · *parallel-safe (docs only)*
+### A0 — Foundation audit against the long-term ambition · `review (antonelmejor50-hub/a0-foundation-audit-against-the)` · *parallel-safe (docs only)*
 
 - **Goal:** `docs/architecture/foundation-audit.md`: an honest, evidence-based assessment of
   whether the current architecture (core/viewer split, actors + components, content registry +
@@ -345,6 +345,267 @@ load. Phase A finds out, with evidence, and turns the gaps into backlog entries.
   no production code changed (the diff touches only docs and `bench_*.gd`); the full suite
   still passes (benchmarks must not be picked up by `run_tests` as `test_*`).
 - **Non-goals:** fixing anything; redesigning for its own sake; changing engine or language.
+
+### Proposed by A0 — for the owner to accept or reject (none started)
+
+The entries below come from `docs/architecture/foundation-audit.md` (evidence, file and line
+citations) and its summary `foundation-audit-summary.md`. They are proposals, status
+`proposed`, until the owner accepts each one (then `todo`). Ordered by what breaks first.
+"Baseline" means the A0 number quoted in `foundation-audit.md` §2. Every benchmark
+target is measured with the same `bench_*.gd` on the same host and quoted before/after in
+the handoff. Entries that edit `world_state.gd` run between R steps, never in parallel with
+one.
+
+#### A1 — Benchmark runner and baseline report · `proposed` · *parallel-safe (tools/docs only)*
+
+- **Goal:** `tools/run_benches.ps1` (promoted from `docs/orca/handoffs/A0-run-benches.ps1`)
+  runs every `bench_*.gd` and writes `docs/architecture/bench-baseline.md` (one table per
+  benchmark, commit and host in the header). Every later A-task quotes its before/after
+  lines from it.
+- **Owned paths:** `tools/run_benches.ps1` (new), `docs/architecture/bench-baseline.md` (new),
+  `docs/orca/README.md` (one paragraph), `game/scripts/tests/bench_*.gd` (output format only).
+- **Acceptance:** the runner reproduces the A0 lines on the host; `run_tests` still ignores
+  `bench_*`; no CI gate is added (timings are host-dependent).
+- **Non-goals:** performance thresholds in CI; changing what the benchmarks measure.
+
+#### A2 — Allocation-free map queries (cost grid and integer tile keys) · `proposed` · R3 done; coordinate with R4 on `world_state.gd`
+
+- **Goal:** `map/passability.gd` (R3) keeps per-tile movement cost and door flags in packed
+  arrays, and objects are indexed by integer tile index instead of `"%d_%d"` Strings. The
+  route cost callables, regions and rooms read integers. `passability(x, y, faction)` keeps
+  its Dictionary signature for callers outside the core. Arrays are updated at the existing
+  tile/object mutation points (`_mark_dirty()` call sites). No rule, cost or save field
+  changes.
+- **Owned paths:** `map/passability.gd`, `map/tile_grid.gd`, `objects/object_table.gd`,
+  `map/regions.gd`, `map/rooms.gd`, `world_state.gd` (delegation only), `core-budgets.json`,
+  affected tests.
+- **Acceptance:** suite PASS; R1/R2-style scenario dump gives byte-identical saves, event logs
+  and `state_hash()` against `main`; `bench_route_search` µs/expansion on the generated map
+  ≤ 2 (baseline ~8); region full build ≤ 50 ms (baseline 345 ms); rooms no longer re-flood
+  when a tile's passability did not change (bench line `rooms on_passability_changed ...
+  no passability change` ≤ 1 ms).
+- **Non-goals:** changing passability rules or door semantics; layers.
+
+#### A3 — `RouteSearch` with a binary heap and no per-step allocation · `proposed` · *parallel-safe (routing only)*
+
+- **Goal:** `routing/route_search.gd` pops the frontier from a binary heap keyed by
+  (cost, insertion order), so the order of expansion is exactly today's, and
+  `_ordered_neighbors()` uses a constant row-major offset table instead of an allocated,
+  lambda-sorted array. `snapshot()`/`restore()` keep their shape. The toil executor stops
+  storing a fresh `snapshot()` on every reroute tick (`_begin_go_to_reroute()`,
+  `_resume_go_to_reroute()`) and snapshots only when a save encodes.
+- **Owned paths:** `routing/route_search.gd`, `scheduling/measured_route.gd`,
+  `jobs/toil_executor.gd`, `persistence/state_codec.gd` (only if the snapshot moves to encode
+  time), affected tests.
+- **Acceptance:** identical paths, statuses and expansion counts for every A0 route case
+  (test compares against recorded paths); `test_routing_budget`, `test_reroute`,
+  `test_save_reproducibility` unchanged; open-grid d=256 search ≤ 60 ms (baseline 365 ms).
+- **Non-goals:** A* or any change to which path is chosen (that is A8).
+
+#### A4 — Spatial occupancy index for actors and items · `proposed` · combat part after R9
+
+- **Goal:** one per-tile index of actor ids and ground-item ids, owned by `ActorTable` and
+  `ItemTable` and updated wherever an actor moves or an item is placed or removed, plus an
+  actor id → actor map. `combat_targeting.gd` `nearest_adjacent_hostile()`,
+  `_is_cell_occupied()`, `_colonist_at()`, `_find_colonist()`, `ItemTable.has_item_at()` and
+  `get_ground_wood()` use it. Iteration order where it decides a tie stays the same.
+- **Owned paths:** `actors/actor_table.gd`, `items/item_table.gd`, `combat/combat_targeting.gd`,
+  `combat/combat_resolver.gd`, `combat/approach_giver.gd`, `world_state.gd` (delegation),
+  `core-budgets.json`, affected tests.
+- **Acceptance:** scenario dump identical to `main`; `test_combat`, `test_wolf_attack`,
+  `test_incidents` unchanged; `bench_tick_scaling` idle, 1000 actors: the `combat` phase
+  ≤ 5% of its baseline.
+- **Non-goals:** exclusive tile occupancy (a rule change); new combat behaviour.
+
+#### A5 — Job storage: id index, retired jobs, read-only views inside the core · `proposed` · after R4/R5 (cheaper after R14)
+
+- **Goal:** `JobQueue` indexes live jobs by id. Terminal jobs move to a bounded history (size
+  decided in an ADR) instead of staying in `_jobs`. Core callers that only read
+  (`HaulGiver`, `ConstructionGiver`, `GlobalAssignment.tick()`, `_advance_colonists()`,
+  `_active_site_fetch_job_ids()`, the tool toils) get read-only views instead of
+  `get_jobs()`/`get_colonists()` deep copies. `JobQueue._emit()` appends in order instead of
+  re-sorting the whole list on every event. Public getters used by the viewer keep returning
+  copies.
+- **Owned paths:** `jobs/job_queue.gd`, `scheduling/global_assignment.gd`,
+  `jobs/givers/*.gd`, `jobs/tool_*.gd`, `world_state.gd`, `state_codec.gd`, `save_io.gd`,
+  `save_migrations.gd`, `docs/architecture/save-system.md`, an ADR, `core-budgets.json`,
+  affected tests and fixtures.
+- **Acceptance:** save format: after R14, the new shape goes into v1; before it, a schema bump with
+  migration and fixture (terminal jobs leave the save);
+  `bench_long_session` retention: the 6,000-tick window within 20% of the 1,000-tick window;
+  backlog 2,000 open orders: mean tick ≤ 25% of baseline (235 ms); `test_job_queue`,
+  `test_scheduling_fairness` unchanged.
+- **Non-goals:** changing the fairness policy (ADR 004) or job states.
+
+#### A6 — Bounded event and dirty-cell streams · `proposed` · *parallel-safe (no save change)*
+
+- **Goal:** `EventLog` and `JobQueue` events, and `_dirty_cells`, become cursor-based streams
+  (`get_events_since(sequence)`, `get_dirty_cells_since(cursor)`) with bounded retention. The
+  viewer consumes them incrementally instead of deep-copying the whole log each refresh.
+  Events stay unpersisted, as today.
+- **Owned paths:** `world/event_log.gd`, `jobs/job_queue.gd` (events only), `world_state.gd`
+  (getters), `viewer/map_view.gd`, `viewer/status_text.gd`, `viewer/work_table_panel.gd`,
+  `test_architecture_rules.gd` (allow the new getters), affected tests.
+- **Acceptance:** event order and content identical for the R1 scenario; event and dirty
+  logs stay below their bound in `bench_long_session`; the viewer tests pass.
+- **Non-goals:** persisting events; an event bus for module-to-module calls.
+
+#### A7 — Save pipeline: one registry, one pass, compact tiles and routes, off the main thread · `proposed` · after A5, best right after R14
+
+- **Goal:** one `ContentRegistry` per session, injected into `StateCodec`/`SaveIO` instead of
+  rebuilt from disk per save and per validation. `write_atomic()` stringifies and hashes
+  once. Tiles are saved as a palette plus run-length encoding. In-flight route searches are
+  saved as `{start, target, expansions}` and replayed to the same point on load. The file
+  write and read-back run on a worker thread after `encode()`. `WorldState` gets `dispose()`
+  so a replaced world is freed.
+- **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (replay helper),
+  `world_state.gd`, `viewer/save_wiring.gd`, `docs/architecture/save-system.md`,
+  `contracts/game-state.schema.json`, an ADR, fixtures, affected tests.
+- **Acceptance:** save format as in A5 (straight into v1 after R14, else bump + migration +
+  fixture); `test_save_*` unchanged;
+  `bench_save_load` 1,000 actors: main-thread save ≤ 150 ms (baseline 1,976 ms total), file
+  ≤ 50% of baseline (1,408 KB), `hash_match=true`; leak check delta 0.
+- **Non-goals:** changing what is saved (beyond encoding); cloud saves.
+
+#### A8 — A* and region-aware routing · `proposed` · after A3 · ADR (paths may change)
+
+- **Goal:** `RouteSearch` uses an admissible heuristic (Manhattan × minimum tile cost), so
+  expansions grow with distance instead of distance squared. Unreachable targets are refused
+  by the region check before a search starts, everywhere (not only in the scheduler). The ADR
+  records the new deterministic tie-break and accepts that equal-cost paths may differ from
+  today's.
+- **Owned paths:** `routing/route_search.gd`, callers that start searches, an ADR,
+  `docs/architecture/orders-and-movement.md`, affected tests.
+- **Acceptance:** path lengths equal to Dijkstra's on every A0 case; d=256 on the generated
+  map ≤ 1,500 expansions (baseline 15,462) and ≤ 25 ticks to route (baseline 242);
+  determinism tests updated with the ADR quoted.
+- **Non-goals:** hierarchical pathfinding (only if A8's numbers are not enough).
+
+#### A9 — Viewer at 1,000 actors · `proposed` · after A5/A6
+
+- **Goal:** the viewer reads one read-only snapshot per tick instead of several deep-copying
+  getters. Actors are drawn batched (one `MultiMeshInstance2D` or one `_draw()` per layer
+  rather than 4–6 nodes each). `colonist_panel`/`work_table_panel` update rows instead of
+  rebuilding them every tick. `TickDriver` caps catch-up ticks per frame. The viewer-purity
+  rule also rejects `world._field` access, and the six known reads (including
+  `debug_scenario.gd` writing `world._items`) go through public API or commands.
+- **Owned paths:** `game/scripts/viewer/*.gd`, `boot.gd`, `world_state.gd` (snapshot getter),
+  `test_architecture_rules.gd`, viewer tests, a new `bench_viewer_refresh.gd`.
+- **Acceptance:** `bench_viewer_refresh` (headless refresh of 1,000 actors) ≤ 4 ms per tick;
+  purity test fails on a planted `world._x` read; manual run shows the same screen.
+- **Non-goals:** new art or UI features.
+
+#### A10 — Static typing gate for the core · `proposed` · *parallel-safe*
+
+- **Goal:** `project.godot` enables `untyped_declaration`, `inferred_declaration` (off),
+  `unsafe_property_access`, `unsafe_method_access` and `unsafe_call_argument` as warnings. A
+  CI step counts warnings under `game/scripts/core` against a committed baseline file and
+  fails when the count rises. The 102 untyped `var x =` in core are typed where it is
+  mechanical.
+- **Owned paths:** `game/project.godot` (`[debug]` only), `.github/workflows/ci.yml`,
+  `tools/` (counter script), `docs/architecture/warnings-baseline.txt`, core files (type
+  annotations only, no logic).
+- **Acceptance:** CI fails on a planted untyped declaration in core; scenario dump identical;
+  suite PASS.
+- **Non-goals:** typed entity classes (a data-model change, not a gate).
+
+#### A11 — Command recording and headless replay · `proposed` · *parallel-safe*
+
+- **Goal:** the viewer can record a session's seed, content version and command stream to a
+  file. `tools/replay.ps1` replays it headless and checks `state_hash()` checkpoints recorded
+  every N ticks, printing the first diverging tick.
+- **Owned paths:** `game/scripts/core/world/replay_log.gd` (new, plain data),
+  `viewer/save_wiring.gd` or a new viewer module, `tools/replay.ps1`, a test, docs.
+- **Acceptance:** a test records 500 ticks with mixed commands, replays them and matches every
+  checkpoint; a planted nondeterminism is reported at the right tick.
+- **Non-goals:** network play; a replay viewer UI.
+
+#### A12 — Map layers: coordinate model ADR · `proposed` · *parallel-safe (docs only)* · before F4
+
+- **Goal:** an ADR that chooses how a tile is addressed across layers (layer next to
+  `Vector2i`, `Vector3i`, or one flat index with per-layer offsets). It covers how
+  passability, regions, rooms, routing (stairs and ramps as edges), saves (migration from
+  single-layer) and the viewer handle layers, and the inventory of what must change (506
+  `Vector2i` sites and the four String key formats in core).
+- **Owned paths:** `docs/decisions/0xx-map-layers.md`, `docs/architecture/map-experience.md`,
+  `docs/orca/BACKLOG.md` (F4 entry).
+- **Acceptance:** the owner signs off the ADR; F4's Design block can cite it.
+- **Non-goals:** any code.
+
+#### A13 — Content packs: one registry per session, ordered roots, strict ids · `proposed` · after R12
+
+- **Goal:** `ContentRegistry` is built once per session from an ordered list of roots (base,
+  then packs). Each root may append entries or override entries by id, under explicit rules.
+  Duplicate ids within a root are an error (today they silently overwrite). The validator
+  gains `enum`. `SaveIO` validation reads its tile, job and need whitelists from the registry
+  instead of literals. Saves record the pack list.
+- **Owned paths:** `content/content_registry.gd`, `persistence/save_io.gd`,
+  `persistence/state_codec.gd`, `calendar/calendar_service.gd`, `world_state.gd`
+  (injection), `boot.gd`, ADR 010 amendment, schemas, tests.
+- **Acceptance:** a test pack adds an item and overrides a tile, and both load headless; a
+  duplicate id fails with `schema_violation`; a save with a missing pack fails with a typed
+  error; the real bundle loads unchanged.
+- **Non-goals:** script mods; a mod browser UI.
+
+#### A14 — Data-driven work effects · `proposed` · after R11
+
+- **Goal:** `jobs.json` gains an `effects` block (tile transform, always-yields, find table).
+  `_toil_on_work_complete()`'s per-kind `match` for dig, chop, mine, forage, till and sow is
+  replaced by one generic application of that block, so a new work kind is a content entry.
+  The `spawn_wood_item`/`spawn_stone_item`/`spawn_berries_item` special cases fold into one
+  spawn by item id where behaviour allows.
+- **Owned paths:** `jobs/toil_bindings.gd` (R11), `items/item_table.gd`, `content/jobs.json`
+  and schema, `content_registry.gd` (cross-checks), `extension-points.md`, an ADR, tests.
+- **Acceptance:** every existing work kind produces identical results (scenario dump equal to
+  `main`); a test adds a new work kind via content only.
+- **Non-goals:** recipes and workbenches (F2).
+
+#### A15 — Localisation-ready text · `proposed` · *parallel-safe after A9*
+
+- **Goal:** the core returns reason codes and parameters only (the English `message`
+  strings move to `data/text/en.json`). Every visible viewer string is a `TextTable` key, and
+  `TextTable` loads `data/text/<locale>.json` with `en` as the fallback. Content labels
+  become keys.
+- **Owned paths:** `commands/command_checks.gd`, `world_state.gd` (message strings),
+  `viewer/*.gd`, `data/text/*.json`, `content/tiles.json`/`calendar.json` labels and schemas,
+  a lint test.
+- **Acceptance:** a lint finds no user-facing literal in the viewer; a pseudo-locale test shows
+  every key resolves; rejection reason codes are unchanged (grep the tests).
+- **Non-goals:** translations themselves; font and RTL work.
+
+#### A16 — Scenarios as content · `proposed` · after R12
+
+- **Goal:** a `scenarios.json` kind with a schema (map size, seed or fixed map, starting
+  roster, items and objects, enabled incidents, calendar). New game builds a world from a
+  scenario entry, and `debug_scenario.gd` becomes the first entry.
+- **Owned paths:** `content/scenarios.json` and schema, `content_registry.gd`,
+  `world_state.gd` or a new `world/scenario_builder.gd`, `viewer/new_game_dialog.gd`,
+  `viewer/debug_scenario.gd`, an ADR, tests.
+- **Acceptance:** two scenarios build headless with deterministic `state_hash()`; the default
+  new game is byte-identical to today's.
+- **Non-goals:** win/lose conditions (A17); a campaign.
+
+#### A17 — Story and quest layer: design ADR · `proposed` · *parallel-safe (docs only)*
+
+- **Goal:** an ADR for trigger → condition → effect rules evaluated by one story giver (job
+  giver pattern, ADR 011). Effects are ordinary commands. Flags and quest stages are persisted
+  module state. Incidents become one effect kind. It includes a content schema sketch and
+  three worked examples (a migrant chain, a raid warning, a first-winter quest).
+- **Owned paths:** `docs/decisions/0xx-story-layer.md`, `docs/architecture/extension-points.md`.
+- **Acceptance:** the owner signs off the ADR; it names the code tasks it would create.
+- **Non-goals:** any code.
+
+#### A18 — Mobile spike: measure before committing · `proposed` · *parallel-safe*
+
+- **Goal:** an Android export preset, a stretch mode, and touch pan and zoom. The A0
+  benchmarks run on one reference phone to get the real device factor. An ADR decides
+  whether the tick moves to a worker thread with a snapshot handed to the viewer.
+- **Owned paths:** `game/export_presets.cfg`, `game/project.godot` (display/input),
+  `viewer/map_viewport.gd` (touch), an ADR, `foundation-audit.md` (appendix with device
+  numbers).
+- **Acceptance:** the APK runs the game on the reference device; the bench lines from the
+  device are in the appendix; the ADR records the decision.
+- **Non-goals:** store release; iOS.
 
 ---
 
