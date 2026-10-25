@@ -2,7 +2,8 @@ extends RefCounted
 
 ## Shared helpers for the headless bench_*.gd benchmarks (A0 foundation audit,
 ## docs/architecture/foundation-audit.md). Benchmarks are evidence, not a gate:
-## they print numbers and always exit 0. They are named bench_*.gd so
+## they print numbers and exit 0 (bench_tick_scaling exits 1 only if its own
+## profiled/real state_hash() check fails). They are named bench_*.gd so
 ## tools/run_tests.* (which only globs test_*.gd) never runs them.
 ##
 ## Run one with:

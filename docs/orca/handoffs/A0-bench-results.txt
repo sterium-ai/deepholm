@@ -92,21 +92,28 @@ bench_tick_scaling: workload=busy actors=1000 phases[first tick] (ms/tick): need
 bench_tick_scaling: workload=busy actors=1000 setup=3328ms tick[profiled, ticks 2..n] mean=4574.20ms p50=4675.11ms p95=5457.42ms max=5457.42ms n=19
 bench_tick_scaling: workload=busy actors=1000 tick[real, ticks 2..n] mean=4544.30ms p50=4606.81ms p95=5332.08ms max=5332.08ms n=19 first=5648.16ms hash_match=true jobs=1000 active=528 events=3076
 bench_tick_scaling: workload=busy actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=22.25 need_giver=6.16 haul_giver=14.27 construction_giver=12.98 combat=1634.14 scheduler=2186.34 site_fetch_resolve=3.25 rescue_giver=88.78 escapes_activate=5.12 advance_colonists=582.11 approach_giver=2.36 collect_queue_events=3.28 calendar_alerts=13.14
-bench_tick_scaling: workload=needs actors=10 phases[first tick] (ms/tick): needs_decay=0.36 need_giver=338.79 combat=0.54 scheduler=0.22 rescue_giver=0.07 calendar_alerts=0.48
-bench_tick_scaling: workload=needs actors=10 setup=745ms tick[profiled, ticks 2..n] mean=1.61ms p50=1.71ms p95=1.76ms max=1.82ms n=29
-bench_tick_scaling: workload=needs actors=10 tick[real, ticks 2..n] mean=1.32ms p50=1.21ms p95=1.74ms max=1.77ms n=29 first=358.14ms hash_match=true jobs=0 active=0 events=40
-bench_tick_scaling: workload=needs actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.36 need_giver=0.11 combat=0.46 scheduler=0.14 rescue_giver=0.06 calendar_alerts=0.41
-bench_tick_scaling: workload=needs actors=100 phases[first tick] (ms/tick): needs_decay=2.28 need_giver=338.31 combat=24.02 scheduler=2.20 rescue_giver=1.66 advance_colonists=0.48 approach_giver=0.13 calendar_alerts=1.36
-bench_tick_scaling: workload=needs actors=100 setup=735ms tick[profiled, ticks 2..n] mean=27.02ms p50=28.81ms p95=33.82ms max=34.21ms n=29
-bench_tick_scaling: workload=needs actors=100 tick[real, ticks 2..n] mean=23.56ms p50=21.31ms p95=30.78ms max=30.94ms n=29 first=369.98ms hash_match=true jobs=0 active=0 events=130
-bench_tick_scaling: workload=needs actors=100 phases[ticks 2..n] (ms/tick): needs_decay=2.23 need_giver=0.92 combat=19.56 scheduler=1.30 rescue_giver=1.31 advance_colonists=0.47 approach_giver=0.16 calendar_alerts=1.05
-bench_tick_scaling: workload=needs actors=500 phases[first tick] (ms/tick): needs_decay=13.88 need_giver=420.12 combat=436.52 scheduler=8.96 rescue_giver=27.16 advance_colonists=2.79 approach_giver=0.94 calendar_alerts=5.76
-bench_tick_scaling: workload=needs actors=500 setup=631ms tick[profiled, ticks 2..n] mean=494.20ms p50=497.87ms p95=537.40ms max=540.11ms n=29
-bench_tick_scaling: workload=needs actors=500 tick[real, ticks 2..n] mean=468.89ms p50=485.38ms p95=519.31ms max=537.24ms n=29 first=946.02ms hash_match=true jobs=0 active=0 events=530
-bench_tick_scaling: workload=needs actors=500 phases[ticks 2..n] (ms/tick): needs_decay=10.48 need_giver=4.90 combat=439.30 scheduler=8.93 rescue_giver=22.36 advance_colonists=2.36 approach_giver=0.82 calendar_alerts=4.99
-bench_tick_scaling: workload=needs actors=1000 phases[first tick] (ms/tick): needs_decay=27.57 need_giver=453.09 combat=1704.25 scheduler=22.34 rescue_giver=91.73 advance_colonists=7.69 approach_giver=2.47 calendar_alerts=12.88
-bench_tick_scaling: workload=needs actors=1000 setup=656ms tick[profiled, ticks 2..n] mean=1846.18ms p50=1855.15ms p95=1993.55ms max=2006.34ms n=29
-bench_tick_scaling: workload=needs actors=1000 tick[real, ticks 2..n] mean=1834.28ms p50=1831.52ms p95=1947.06ms max=1958.08ms n=29 first=2322.62ms hash_match=true jobs=0 active=0 events=1030
-bench_tick_scaling: workload=needs actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=22.08 need_giver=10.73 combat=1688.23 scheduler=17.68 rescue_giver=87.92 advance_colonists=6.67 approach_giver=2.02 calendar_alerts=10.78
 bench_tick_scaling: done
 bench_tick_scaling: wall=597s exit=0
+# Re-run after review (2026-10-25): the needs workload now sets water to 20 instead of food (a fresh map has no
+# ground berries, so the old food runs never searched). Rosters 10/25/50/100; at 100 the first tick alone exceeded the
+# 90 s run budget, so no later ticks were measured. Command: bench_tick_scaling.gd -- --workloads=needs
+bench_tick_scaling: workload=needs actors=10 phases[first tick] (ms/tick): needs_decay=0.36 need_giver=1627.51 combat=0.50 scheduler=0.12 calendar_alerts=0.46
+bench_tick_scaling: workload=needs actors=10 setup=540ms tick[profiled, ticks 2..n] mean=9.12ms p50=9.19ms p95=10.98ms max=11.40ms n=29
+bench_tick_scaling: workload=needs actors=10 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=10 tick[real, ticks 2..n] mean=9.21ms p50=9.26ms p95=11.20ms max=11.62ms n=29 first=2010.36ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.35 need_giver=7.78 combat=0.44 scheduler=0.07 calendar_alerts=0.39
+bench_tick_scaling: workload=needs actors=25 phases[first tick] (ms/tick): needs_decay=0.72 need_giver=9584.86 combat=2.00 scheduler=0.22 advance_colonists=0.11 approach_giver=0.05 calendar_alerts=0.49
+bench_tick_scaling: workload=needs actors=25 setup=731ms tick[profiled, ticks 2..n] mean=22.56ms p50=21.93ms p95=28.77ms max=28.83ms n=29
+bench_tick_scaling: workload=needs actors=25 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=25 tick[real, ticks 2..n] mean=23.93ms p50=24.06ms p95=28.92ms max=29.56ms n=29 first=9781.56ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=25 phases[ticks 2..n] (ms/tick): needs_decay=0.70 need_giver=19.19 combat=1.72 scheduler=0.17 advance_colonists=0.11 calendar_alerts=0.54
+bench_tick_scaling: workload=needs actors=50 phases[first tick] (ms/tick): needs_decay=1.45 need_giver=38170.26 combat=6.41 scheduler=0.35 advance_colonists=0.16 approach_giver=0.07 calendar_alerts=0.62
+bench_tick_scaling: workload=needs actors=50 setup=701ms tick[profiled, ticks 2..n] mean=54.99ms p50=53.06ms p95=72.19ms max=120.94ms n=29
+bench_tick_scaling: workload=needs actors=50 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=50 tick[real, ticks 2..n] mean=50.91ms p50=53.30ms p95=58.93ms max=61.23ms n=29 first=37793.84ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=50 phases[ticks 2..n] (ms/tick): needs_decay=1.32 need_giver=45.08 combat=6.85 scheduler=0.39 rescue_giver=0.06 advance_colonists=0.24 approach_giver=0.10 calendar_alerts=0.89
+bench_tick_scaling: workload=needs actors=100 phases[first tick] (ms/tick): needs_decay=2.96 need_giver=153395.33 combat=22.66 scheduler=0.75 rescue_giver=0.13 advance_colonists=0.58 approach_giver=0.19 calendar_alerts=1.75
+bench_tick_scaling: workload=needs actors=100 setup=797ms tick[profiled, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0
+bench_tick_scaling: workload=needs actors=100 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=100 tick[real, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0 first=147658.31ms hash_match=true jobs=0 active=0 events=1
+bench_tick_scaling: workload=needs actors=100 phases[ticks 2..n] (ms/tick):

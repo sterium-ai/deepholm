@@ -10,7 +10,8 @@
 > slow down when a large field is designated at once. Several limits are hard-wired: one
 > map layer, one content folder, no scenario, story or translation layer, and
 > a Web-only export. None of this needs a rewrite. Each limit has a bounded
-> fix, listed as a proposed `A*` task in `docs/orca/BACKLOG.md`.
+> fix, listed as an `A*` task in `docs/orca/BACKLOG.md`. The owner accepted all of
+> them on 2026-10-25.
 
 Audit date: 2026-10-25, at `main` `052d8c4` (Phase R through R3; `world_state.gd` is 4,290
 lines). This page is the evidence. A plain-language summary for the owner, in Spanish, is
@@ -22,7 +23,8 @@ lines). This page is the evidence. A plain-language summary for the owner, in Sp
   Line numbers drift; the function name is the stable anchor.
 - **Performance claims** come from the committed headless benchmarks
   `game/scripts/tests/bench_*.gd`. The test runners only glob `test_*.gd`, so the suite never
-  runs them, and they always exit 0: they are evidence, not a gate.
+  runs them. They are evidence, not a performance gate: they exit 0, except that
+  `bench_tick_scaling.gd` exits 1 when its correctness check (below) fails.
 - **Host:** AMD Ryzen 7 9800X3D (8 cores, 16 threads), Windows 11, Godot 4.7.2 headless,
   single-threaded simulation. This is a fast desktop CPU, so a phone will be several times
   slower. That factor is not measured here (see §3.8).
@@ -39,7 +41,7 @@ lines). This page is the evidence. A plain-language summary for the owner, in Sp
 
 | Benchmark | What it measures |
 | --- | --- |
-| `bench_tick_scaling.gd` | `tick()` time against 10/100/500/1000 colonists on a generated 256×256 map, for three workloads (idle; one till order each; everyone hungry at once), with a per-phase split |
+| `bench_tick_scaling.gd` | `tick()` time against 10/100/500/1000 colonists on a generated 256×256 map for idle and busy (one till order each), and 10/25/50/100 for everyone thirsty at once, with a per-phase split |
 | `bench_long_session.gd` | tick time against play time (finished jobs piling up) and against the size of the open order backlog, at 10 colonists |
 | `bench_route_search.gd` | `RouteSearch` cost against path distance on the real map and on an open grid, the unreachable worst case, region build and region update |
 | `bench_save_load.gd` | save/load size and time against actor count, and whether a dropped `WorldState` is freed |
@@ -48,7 +50,8 @@ lines). This page is the evidence. A plain-language summary for the owner, in Sp
 
 **Is the per-phase split trustworthy?** Each `bench_tick_scaling` run advances a twin world
 with the real `tick()` and prints `hash_match`. It was `true` in every run quoted here, so
-`profiled_tick()` executes exactly what `tick()` executes.
+`profiled_tick()` executes exactly what `tick()` executes. A mismatch makes the benchmark
+print `FAILED hash check` and exit 1.
 
 **What is not measured:** rendering and frame time (a headless run has no GPU), memory
 peaks, and phone CPUs. The benchmarks seat N colonists by cloning the generator's
@@ -63,7 +66,7 @@ one frame (about 16 ms) is a visible hitch, and a tick slower than 167 ms cannot
 
 | Axis | Today | Breaks first | Smallest structural change | Tasks |
 | --- | --- | --- | --- | --- |
-| 1,000+ actors | 10 colonists ≈ 1–2.5 ms per tick; 100 ≈ 24–55 ms; 1,000 ≈ 1.8–4.5 s | combat targeting O(A²), then scheduler/route search, per-colonist O(A·J) lookups | spatial index; allocation-free map queries; heap route search; job id index and read-only views | A2–A5, A8 |
+| 1,000+ actors | 10 colonists ≈ 1–2.5 ms per tick; 100 ≈ 28–55 ms; 1,000 ≈ 1.9–4.5 s. A shared thirst onset: 1.6 s at 10 colonists, 153 s at 100 | need-source search O(W·A²), combat targeting O(A²), then scheduler/route search, per-colonist O(A·J) lookups | per-region need candidates and a spatial index; allocation-free map queries; heap route search; job id index and read-only views | A2–A5, A8 |
 | Long sessions | finished jobs, both event logs and dirty cells never shrink; the open backlog drives tick time | `get_jobs()` deep copies over a growing list; per-emit sort | bounded job history; cursor-based streams | A5, A6 |
 | Map layers | single 2D grid, 506 `Vector2i` sites, 4 key formats | everything assumes one layer | coordinate-model ADR before F4; one key helper | A12 (+A2) |
 | Hundreds of content kinds | registry, schemas and components are good; load is linear, about 90 µs per entry | behaviours hard-coded per kind (`_toil_on_work_complete()`); save validator repeats content | data-driven work effects; whitelists from the registry | A13, A14 |
@@ -87,12 +90,25 @@ CPU, so treat every number as ±25%.
 256×256 map, seed 42. The numbers are the real `tick()`: mean over ticks 2–30 (2–20 for
 busy/1,000, where the 90 s budget ended the run), with tick 1 shown separately.
 
-| Colonists | idle: mean (tick 1) | busy: mean (tick 1) | needs: mean (tick 1) |
-| --- | --- | --- | --- |
-| 10 | 1.04 ms (291 ms) | 2.42 ms (349 ms) | 1.32 ms (358 ms) |
-| 100 | 28.4 ms (359 ms) | 55.3 ms (445 ms) | 23.6 ms (370 ms) |
-| 500 | 473 ms (844 ms) | 1,499 ms (2,015 ms) | 469 ms (946 ms) |
-| 1,000 | 1,879 ms (2,377 ms) | 4,544 ms (5,648 ms) | 1,834 ms (2,323 ms) |
+| Colonists | idle: mean (tick 1) | busy: mean (tick 1) |
+| --- | --- | --- |
+| 10 | 1.04 ms (291 ms) | 2.42 ms (349 ms) |
+| 100 | 28.4 ms (359 ms) | 55.3 ms (445 ms) |
+| 500 | 473 ms (844 ms) | 1,499 ms (2,015 ms) |
+| 1,000 | 1,879 ms (2,377 ms) | 4,544 ms (5,648 ms) |
+
+`needs` workload (every colonist's water at 20, below `urgent`, at tick 0; re-run after
+review, see the note in the results file):
+
+| Colonists | tick 1 | of which `need_giver` | mean, ticks 2–30 | `need_giver`, ticks 2–30 |
+| --- | --- | --- | --- | --- |
+| 10 | 2,010 ms | 1,628 ms | 9.2 ms | 7.8 ms |
+| 25 | 9,782 ms | 9,585 ms | 23.9 ms | 19.2 ms |
+| 50 | 37,794 ms | 38,170 ms | 50.9 ms | 45.1 ms |
+| 100 | 147,658 ms | 153,395 ms | not measured (tick 1 exceeded the 90 s run budget) | — |
+
+(Tick 1 is timed separately on the real and profiled worlds, so `need_giver` can exceed the
+real tick by a few percent.)
 
 Largest phases (ms per tick, ticks 2..n, from `profiled_tick()`; `hash_match=true` in every
 run):
@@ -104,12 +120,12 @@ run):
 | busy 100 | 19.0 | 8.0 | **33.7** | 1.3 | 2.3 | haul 1.5, construction 1.5 |
 | busy 500 | 400.3 | 332.6 | **667.5** | 22.5 | 11.1 | haul 13.5, construction 13.1 |
 | busy 1,000 | 1,634.1 | **2,186.3** | 582.1 | 88.8 | 22.3 | haul 14.3, construction 13.0 |
-| needs 1,000 | **1,688.2** | 17.7 | 6.7 | 87.9 | 22.1 | need_giver 10.7 |
 
 Reading: combat grows with A² (18.8 → 1,788 ms for 10× the actors) and dominates as soon as
 there are hundreds of actors, even with no hostiles on the map. With work, the scheduler and
 per-colonist toil advance grow faster than linearly. Tick 1 pays 280–450 ms of lazy
-region building at any actor count.
+region building at any actor count. The needs table is the worst result of the audit: a
+synchronised need onset costs O(W·A²) (§3.1, item 1).
 
 ### 2.2 Tick time against play time and open backlog (`bench_long_session.gd`, 10 colonists)
 
@@ -129,7 +145,7 @@ too, by about 45% over 6,000 ticks (a 50-minute session at ×1), though noisily.
 the steady cost at 10 colonists is `advance_colonists`, which is route searching during
 movement. The backlog matters more: a player designating 2,000 tiles makes 10 colonists
 tick about 145 times slower than an idle colony. The 1-second single ticks are the room re-flood
-in §3.1, item 3.
+in §3.1, item 4.
 
 ### 2.3 Route search (`bench_route_search.gd`)
 
@@ -203,7 +219,7 @@ validation, §3.7).
 ## 3. Axis by axis
 
 Each axis has three parts: what already supports it, what breaks first and why, and the
-smallest structural change that removes the limit. Task ids refer to the proposed entries in
+smallest structural change that removes the limit. Task ids refer to the accepted entries in
 `docs/orca/BACKLOG.md` (Phase A).
 
 ### 3.1 1,000+ actors on screen-sized maps
@@ -220,7 +236,31 @@ before it starts a search.
 
 **Breaks first, in measured order (§2.1):**
 
-1. **No spatial index: combat is O(A²) even when nobody fights.** At 1,000 idle colonists,
+1. **A thirsty colony stops for minutes: need-source search is O(W·A²) per tick.** With
+   water set to 20 on every colonist (§2.1, `needs`), the first tick takes 1.6 s at 10
+   colonists, 9.6 s at 25, 38 s at 50 and 153 s at 100. That is ×4 per doubling, on a map
+   with 2,218 water tiles of which 234 are reachable.
+   - `NeedGiver._start_search()` runs once per colonist whose need crosses its threshold. It
+     calls `WorldState._need_source_candidates("water")`, which hands every water tile to
+     `_reachable_candidates_only()`.
+   - `_reachable_candidates_only()` keeps a tile if `_colonists.any(...)` can reach it, so each
+     unreachable tile is checked against every colonist. That is O(W·A) per searching colonist
+     and O(W·A²) when they all start together.
+   - Then `_start_search()` filters by `_claimed_targets` (a `get_jobs()` deep copy) and by a
+     `"tile:%d,%d"` key per candidate, and sorts all candidates with a lambda.
+   - Synchronised onsets are the normal case, not a contrived one. Every spawned colonist
+     starts with the same needs (`ActorTable._spawn_colonist()` →
+     `NeedsType.build_full_needs()`) and decays at the same rate (`_decay_needs()`).
+   - After the onset, the searches cost 7.8 ms per tick at 10 colonists and 45 ms at 50,
+     because each search resumes once per tick. No colonist reached water within 30 ticks.
+     In a 120-tick run (`bench_tick_scaling.gd -- --workloads=needs --actors=10 --ticks=120`,
+     not in the results file), 2 of 10 had.
+   - Food does not show this on a fresh map only because there are no ground berries yet, so
+     its candidate list is empty and the search fails at once. The first berries put food on
+     the same path.
+   - The fix is A4's: candidates per region, computed once per tick per need kind, not once
+     per colonist against every colonist.
+2. **No spatial index: combat is O(A²) even when nobody fights.** At 1,000 idle colonists,
    the `combat` phase is 1,788 ms of a 1,879 ms tick (95%).
    - `combat/combat_targeting.gd` `nearest_adjacent_hostile()` rebuilds a position Dictionary
      of every actor, with String keys, on every call. `CombatResolver.resolve_tick()` calls it
@@ -233,7 +273,7 @@ before it starts a search.
      actor O(A).
    - `_rescue_candidates()` checks components per actor on every tick: `rescue_giver` costs
      96 ms per tick at 1,000 idle colonists.
-2. **Scheduler and route search, once colonists have work.** With one order per colonist,
+3. **Scheduler and route search, once colonists have work.** With one order per colonist,
    the `scheduler` phase is 333 ms at 500 colonists and 2,186 ms at 1,000. On the first tick
    at 1,000 it is 4,032 ms.
    - `GlobalAssignment.tick()` starts with `colonists.duplicate(true)` and a lambda sort,
@@ -245,7 +285,7 @@ before it starts a search.
    - At the 64-step budget, a route across the 256×256 map needs 242 ticks before the
      colonist moves. At the base speed of 2 ticks per second
      (`viewer/tick_driver.gd` `BASE_TICKS_PER_SECOND := 2.0`), that is about two minutes.
-3. **Per-colonist work is O(A·J) and copies.** `advance_colonists` is 668 ms per tick at 500
+4. **Per-colonist work is O(A·J) and copies.** `advance_colonists` is 668 ms per tick at 500
    busy colonists. At 10 colonists with 100 open orders it averages 36 ms, with single ticks
    of 1.3 s (§2.2).
    - `_advance_colonists()` copies and sorts the roster, then calls
@@ -259,7 +299,7 @@ before it starts a search.
      the whole surrounding area even when passability did not change (`rooms.gd`
      `_rebuild_area()`): 98 ms on the open generated map. The first call also builds rooms
      for the whole map (902 ms). These are the 1.3–1.6 s single-tick spikes.
-4. **Map queries allocate.**
+5. **Map queries allocate.**
    - `Passability.passability()` (`map/passability.gd`; `WorldState.passability()` delegates
      to it) builds and returns a new Dictionary on every call, and `ObjectTable.get_object()`
      builds a `"%d_%d"` String key on every call (`object_key()`).
@@ -268,7 +308,7 @@ before it starts a search.
      expansion on the real map.
    - Tick 1 of every world pays a lazy full-map region build through this path
      (`TileGrid.get_regions()`): 280–450 ms, in whichever phase asks first.
-5. **Whole collections are deep-copied inside the core, every tick.**
+6. **Whole collections are deep-copied inside the core, every tick.**
    - `JobQueue.get_jobs()` is `_jobs.duplicate(true)`. It is called per tick by
      `HaulGiver.advance()`, `ConstructionGiver.advance()`,
      `WorldState._active_site_fetch_job_ids()`,
@@ -279,7 +319,7 @@ before it starts a search.
      (`jobs/tool_drop_toil.gd` `_colonist_busy()`).
    - This is why tick time follows the open backlog: 10 colonists with 2,000 open orders take
      235 ms per tick, 174 ms of it in the scheduler (§2.2).
-6. **Unbounded searches outside the budget (found by reading, not measured).**
+7. **Unbounded searches outside the budget (found by reading, not measured).**
    `WorldState._route_cost()` runs a search to completion
    (`while not route.is_terminal(): route.resume()`). It is called for every candidate item
    in `_next_site_fetch_source()` and for every sibling site in
@@ -287,21 +327,14 @@ before it starts a search.
    can cost several full-map searches in one tick. Separately,
    `NeedGiver._advance_candidate_search()` resumes each searching colonist once per tick
    without consulting the shared ledger.
-7. **Identical needs synchronise (a risk, small today).** Every spawned colonist starts with
-   the same needs (`ActorTable._spawn_colonist()` → `NeedsType.build_full_needs()`) and
-   decays at the same rate (`_decay_needs()`), so they all get hungry on the same tick. The
-   `needs` workload shows that the per-tick cost stays small, because each search is
-   budgeted (`need_giver` 10.7 ms at 1,000). The first tick's 340–450 ms in `need_giver` is
-   the lazy region build of item 4 (plus the water-tile cache), reached through
-   `_need_source_candidates()`.
-
 **Smallest structural change.** None of these needs a new architecture. They need data
 structures under the existing APIs:
 
 - a per-tile cost and object index, kept current at the existing `_mark_dirty()` choke point
   (A2, after R3 creates `map/passability.gd` and `map/tile_grid.gd`);
 - a heap-based search with no per-step allocation (A3, identical results);
-- a per-tile occupancy index owned by `ActorTable`/`ItemTable` (A4);
+- need-source candidates computed once per tick per need kind and per region, and a per-tile
+  occupancy index owned by `ActorTable`/`ItemTable` (A4);
 - read-only views in place of deep copies inside the core, and an id → job index (A5);
 - A* and a region-aware abstraction later (A8; this changes which of several equal paths is
   chosen, so it needs an ADR).
@@ -586,7 +619,7 @@ file write and read-back moved off the main thread after `encode()`.
 
 Phase R stays first: it gives each subsystem one owner file, and most A-tasks land inside
 those owners. A-tasks that touch `world_state.gd` are scheduled between R steps, never in
-parallel with one, because every R step edits that file. The proposed order is:
+parallel with one, because every R step edits that file. The order is:
 
 1. **A1** (benchmark runner and baseline) can go at any time. It touches `tools/` and docs
    only.
@@ -611,9 +644,12 @@ How this relates to entries `main` added while this audit ran:
   single ticks of 1.3–1.6 s. B1's own `bench_area_orders.gd` covers preview and apply. A2's
   rooms fix and A5's job index remove the tick-side causes, so B1 should not reimplement
   them; it can cite these numbers as its "before".
-- **R14** (reset the save schema to v1 after R12). A5 and A7 change the save format. If they
-  land after R14, their shape goes straight into v1 with no migration. If they land before,
-  each needs its own bump and migration. The cheaper order is A5/A7 right after R14.
+- **R14** (reset the save schema to v1 after R12). R14 is a one-time reset, not permission
+  for later unversioned changes. A5 and A7 change the save format, so each ships with a
+  schema bump, a migration from the previous version and a fixture, whenever it lands. After
+  R14 that is a v1 → v2 bump. Before R14, it is one more step in today's chain, which R14
+  will then delete. Landing them after R14 avoids writing a migration that R14 throws away;
+  it does not remove the need for one.
 - **R15** (tests stop reaching into private fields). The benchmarks reach into private
   fields too: `bench_common.gd` `profiled_tick()` and the sizes printed by
   `bench_long_session.gd`. R15 should give them the same test surface.
@@ -622,10 +658,11 @@ How this relates to entries `main` added while this audit ran:
 
 - Benchmarks seat cloned colonists around one clearing and order tilling (no tool needed),
   so they exercise movement, scheduling, needs and combat bookkeeping but not construction,
-  hauling or real combat. Construction's unbounded searches (§3.1, item 5) are found by
+  hauling or real combat. Construction's unbounded searches (§3.1, item 7) are found by
   reading the code, not measured.
 - Timings are single runs on one host. The tick benchmark reports p50/p95 over up to 30
   ticks, and other numbers are single samples. Expect up to ±25% run to run, so compare orders
   of magnitude, not decimals.
 - `profiled_tick()` reaches into private `WorldState` fields and methods. If `tick()` changes,
-  the copy must follow it. The `hash_match` check fails loudly when it does not.
+  the copy must follow it. When it does not, `hash_match=false` is printed and the benchmark
+  exits 1.

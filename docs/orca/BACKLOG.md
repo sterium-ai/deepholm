@@ -346,17 +346,17 @@ load. Phase A finds out, with evidence, and turns the gaps into backlog entries.
   still passes (benchmarks must not be picked up by `run_tests` as `test_*`).
 - **Non-goals:** fixing anything; redesigning for its own sake; changing engine or language.
 
-### Proposed by A0 — for the owner to accept or reject (none started)
+### Accepted by the owner (2026-10-25)
 
 The entries below come from `docs/architecture/foundation-audit.md` (evidence, file and line
-citations) and its summary `foundation-audit-summary.md`. They are proposals, status
-`proposed`, until the owner accepts each one (then `todo`). Ordered by what breaks first.
+citations) and its summary `foundation-audit-summary.md`. The owner accepted all eighteen on
+2026-10-25 (`docs/orca/handoffs/A0.md`), so each is `todo`. Ordered by what breaks first.
 "Baseline" means the A0 number quoted in `foundation-audit.md` §2. Every benchmark
 target is measured with the same `bench_*.gd` on the same host and quoted before/after in
 the handoff. Entries that edit `world_state.gd` run between R steps, never in parallel with
 one.
 
-#### A1 — Benchmark runner and baseline report · `proposed` · *parallel-safe (tools/docs only)*
+#### A1 — Benchmark runner and baseline report · `todo` · *parallel-safe (tools/docs only)*
 
 - **Goal:** `tools/run_benches.ps1` (promoted from `docs/orca/handoffs/A0-run-benches.ps1`)
   runs every `bench_*.gd` and writes `docs/architecture/bench-baseline.md` (one table per
@@ -368,7 +368,7 @@ one.
   `bench_*`; no CI gate is added (timings are host-dependent).
 - **Non-goals:** performance thresholds in CI; changing what the benchmarks measure.
 
-#### A2 — Allocation-free map queries (cost grid and integer tile keys) · `proposed` · R3 done; coordinate with R4 on `world_state.gd`
+#### A2 — Allocation-free map queries (cost grid and integer tile keys) · `todo` · R3 done; coordinate with R4 on `world_state.gd`
 
 - **Goal:** `map/passability.gd` (R3) keeps per-tile movement cost and door flags in packed
   arrays, and objects are indexed by integer tile index instead of `"%d_%d"` Strings. The
@@ -386,7 +386,7 @@ one.
   no passability change` ≤ 1 ms).
 - **Non-goals:** changing passability rules or door semantics; layers.
 
-#### A3 — `RouteSearch` with a binary heap and no per-step allocation · `proposed` · *parallel-safe (routing only)*
+#### A3 — `RouteSearch` with a binary heap and no per-step allocation · `todo` · *parallel-safe (routing only)*
 
 - **Goal:** `routing/route_search.gd` pops the frontier from a binary heap keyed by
   (cost, insertion order), so the order of expansion is exactly today's, and
@@ -402,22 +402,26 @@ one.
   `test_save_reproducibility` unchanged; open-grid d=256 search ≤ 60 ms (baseline 365 ms).
 - **Non-goals:** A* or any change to which path is chosen (that is A8).
 
-#### A4 — Spatial occupancy index for actors and items · `proposed` · combat part after R9
+#### A4 — Need-source candidates per region and a spatial occupancy index · `todo` · combat part after R9
 
-- **Goal:** one per-tile index of actor ids and ground-item ids, owned by `ActorTable` and
-  `ItemTable` and updated wherever an actor moves or an item is placed or removed, plus an
-  actor id → actor map. `combat_targeting.gd` `nearest_adjacent_hostile()`,
+- **Goal:** need-source candidates (`WorldState._need_source_candidates()` /
+  `_reachable_candidates_only()`, used by `NeedGiver._start_search()`) are computed once per
+  tick per need kind and indexed by region, so a colonist's candidates are a lookup by its
+  own region id instead of a pass over every source tile × every colonist. Add one per-tile
+  index of actor ids and ground-item ids, owned by `ActorTable` and `ItemTable` and updated
+  wherever an actor moves or an item is placed or removed, plus an actor id → actor map. `combat_targeting.gd` `nearest_adjacent_hostile()`,
   `_is_cell_occupied()`, `_colonist_at()`, `_find_colonist()`, `ItemTable.has_item_at()` and
   `get_ground_wood()` use it. Iteration order where it decides a tie stays the same.
-- **Owned paths:** `actors/actor_table.gd`, `items/item_table.gd`, `combat/combat_targeting.gd`,
+- **Owned paths:** `jobs/givers/need_giver.gd`, `actors/actor_table.gd`, `items/item_table.gd`, `combat/combat_targeting.gd`,
   `combat/combat_resolver.gd`, `combat/approach_giver.gd`, `world_state.gd` (delegation),
   `core-budgets.json`, affected tests.
 - **Acceptance:** scenario dump identical to `main`; `test_combat`, `test_wolf_attack`,
-  `test_incidents` unchanged; `bench_tick_scaling` idle, 1000 actors: the `combat` phase
-  ≤ 5% of its baseline.
+  `test_incidents`, `test_need_jobs` unchanged; `bench_tick_scaling` idle, 1000 actors: the
+  `combat` phase ≤ 5% of its baseline; `needs` workload, 100 colonists: tick 1 ≤ 1 s
+  (baseline 147,658 ms), and the 10-colonist tick 1 ≤ 100 ms (baseline 2,010 ms).
 - **Non-goals:** exclusive tile occupancy (a rule change); new combat behaviour.
 
-#### A5 — Job storage: id index, retired jobs, read-only views inside the core · `proposed` · after R4/R5 (cheaper after R14)
+#### A5 — Job storage: id index, retired jobs, read-only views inside the core · `todo` · after R4/R5 (best after R14, still with a migration)
 
 - **Goal:** `JobQueue` indexes live jobs by id. Terminal jobs move to a bounded history (size
   decided in an ADR) instead of staying in `_jobs`. Core callers that only read
@@ -430,14 +434,16 @@ one.
   `jobs/givers/*.gd`, `jobs/tool_*.gd`, `world_state.gd`, `state_codec.gd`, `save_io.gd`,
   `save_migrations.gd`, `docs/architecture/save-system.md`, an ADR, `core-budgets.json`,
   affected tests and fixtures.
-- **Acceptance:** save format: after R14, the new shape goes into v1; before it, a schema bump with
-  migration and fixture (terminal jobs leave the save);
+- **Acceptance:** after R14, every schema change carries a version bump, a migration and a
+  fixture, and so does this one (v1 → v2, or the next number). R14's reset is one-time and
+  covers no later change. If it lands before R14, the same applies within today's chain.
+  Terminal jobs leave the save;
   `bench_long_session` retention: the 6,000-tick window within 20% of the 1,000-tick window;
   backlog 2,000 open orders: mean tick ≤ 25% of baseline (235 ms); `test_job_queue`,
   `test_scheduling_fairness` unchanged.
 - **Non-goals:** changing the fairness policy (ADR 004) or job states.
 
-#### A6 — Bounded event and dirty-cell streams · `proposed` · *parallel-safe (no save change)*
+#### A6 — Bounded event and dirty-cell streams · `todo` · *parallel-safe (no save change)*
 
 - **Goal:** `EventLog` and `JobQueue` events, and `_dirty_cells`, become cursor-based streams
   (`get_events_since(sequence)`, `get_dirty_cells_since(cursor)`) with bounded retention. The
@@ -450,7 +456,7 @@ one.
   logs stay below their bound in `bench_long_session`; the viewer tests pass.
 - **Non-goals:** persisting events; an event bus for module-to-module calls.
 
-#### A7 — Save pipeline: one registry, one pass, compact tiles and routes, off the main thread · `proposed` · after A5, best right after R14
+#### A7 — Save pipeline: one registry, one pass, compact tiles and routes, off the main thread · `todo` · after A5 (best after R14, still with a migration)
 
 - **Goal:** one `ContentRegistry` per session, injected into `StateCodec`/`SaveIO` instead of
   rebuilt from disk per save and per validation. `write_atomic()` stringifies and hashes
@@ -461,13 +467,15 @@ one.
 - **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (replay helper),
   `world_state.gd`, `viewer/save_wiring.gd`, `docs/architecture/save-system.md`,
   `contracts/game-state.schema.json`, an ADR, fixtures, affected tests.
-- **Acceptance:** save format as in A5 (straight into v1 after R14, else bump + migration +
-  fixture); `test_save_*` unchanged;
+- **Acceptance:** after R14, every schema change carries a version bump, a migration and a
+  fixture, and so does this one (the next number after A5's, or a shared bump with A5 if they
+  land together). If it lands before R14, the same applies within today's chain.
+  `test_save_*` unchanged;
   `bench_save_load` 1,000 actors: main-thread save ≤ 150 ms (baseline 1,976 ms total), file
   ≤ 50% of baseline (1,408 KB), `hash_match=true`; leak check delta 0.
 - **Non-goals:** changing what is saved (beyond encoding); cloud saves.
 
-#### A8 — A* and region-aware routing · `proposed` · after A3 · ADR (paths may change)
+#### A8 — A* and region-aware routing · `todo` · after A3 · ADR (paths may change)
 
 - **Goal:** `RouteSearch` uses an admissible heuristic (Manhattan × minimum tile cost), so
   expansions grow with distance instead of distance squared. Unreachable targets are refused
@@ -481,7 +489,7 @@ one.
   determinism tests updated with the ADR quoted.
 - **Non-goals:** hierarchical pathfinding (only if A8's numbers are not enough).
 
-#### A9 — Viewer at 1,000 actors · `proposed` · after A5/A6
+#### A9 — Viewer at 1,000 actors · `todo` · after A5/A6
 
 - **Goal:** the viewer reads one read-only snapshot per tick instead of several deep-copying
   getters. Actors are drawn batched (one `MultiMeshInstance2D` or one `_draw()` per layer
@@ -495,7 +503,7 @@ one.
   purity test fails on a planted `world._x` read; manual run shows the same screen.
 - **Non-goals:** new art or UI features.
 
-#### A10 — Static typing gate for the core · `proposed` · *parallel-safe*
+#### A10 — Static typing gate for the core · `todo` · *parallel-safe*
 
 - **Goal:** `project.godot` enables `untyped_declaration`, `inferred_declaration` (off),
   `unsafe_property_access`, `unsafe_method_access` and `unsafe_call_argument` as warnings. A
@@ -509,7 +517,7 @@ one.
   suite PASS.
 - **Non-goals:** typed entity classes (a data-model change, not a gate).
 
-#### A11 — Command recording and headless replay · `proposed` · *parallel-safe*
+#### A11 — Command recording and headless replay · `todo` · *parallel-safe*
 
 - **Goal:** the viewer can record a session's seed, content version and command stream to a
   file. `tools/replay.ps1` replays it headless and checks `state_hash()` checkpoints recorded
@@ -520,7 +528,7 @@ one.
   checkpoint; a planted nondeterminism is reported at the right tick.
 - **Non-goals:** network play; a replay viewer UI.
 
-#### A12 — Map layers: coordinate model ADR · `proposed` · *parallel-safe (docs only)* · before F4
+#### A12 — Map layers: coordinate model ADR · `todo` · *parallel-safe (docs only)* · before F4
 
 - **Goal:** an ADR that chooses how a tile is addressed across layers (layer next to
   `Vector2i`, `Vector3i`, or one flat index with per-layer offsets). It covers how
@@ -532,7 +540,7 @@ one.
 - **Acceptance:** the owner signs off the ADR; F4's Design block can cite it.
 - **Non-goals:** any code.
 
-#### A13 — Content packs: one registry per session, ordered roots, strict ids · `proposed` · after R12
+#### A13 — Content packs: one registry per session, ordered roots, strict ids · `todo` · after R12
 
 - **Goal:** `ContentRegistry` is built once per session from an ordered list of roots (base,
   then packs). Each root may append entries or override entries by id, under explicit rules.
@@ -547,7 +555,7 @@ one.
   error; the real bundle loads unchanged.
 - **Non-goals:** script mods; a mod browser UI.
 
-#### A14 — Data-driven work effects · `proposed` · after R11
+#### A14 — Data-driven work effects · `todo` · after R11
 
 - **Goal:** `jobs.json` gains an `effects` block (tile transform, always-yields, find table).
   `_toil_on_work_complete()`'s per-kind `match` for dig, chop, mine, forage, till and sow is
@@ -560,7 +568,7 @@ one.
   `main`); a test adds a new work kind via content only.
 - **Non-goals:** recipes and workbenches (F2).
 
-#### A15 — Localisation-ready text · `proposed` · *parallel-safe after A9*
+#### A15 — Localisation-ready text · `todo` · *parallel-safe after A9*
 
 - **Goal:** the core returns reason codes and parameters only (the English `message`
   strings move to `data/text/en.json`). Every visible viewer string is a `TextTable` key, and
@@ -573,7 +581,7 @@ one.
   every key resolves; rejection reason codes are unchanged (grep the tests).
 - **Non-goals:** translations themselves; font and RTL work.
 
-#### A16 — Scenarios as content · `proposed` · after R12
+#### A16 — Scenarios as content · `todo` · after R12
 
 - **Goal:** a `scenarios.json` kind with a schema (map size, seed or fixed map, starting
   roster, items and objects, enabled incidents, calendar). New game builds a world from a
@@ -585,7 +593,7 @@ one.
   new game is byte-identical to today's.
 - **Non-goals:** win/lose conditions (A17); a campaign.
 
-#### A17 — Story and quest layer: design ADR · `proposed` · *parallel-safe (docs only)*
+#### A17 — Story and quest layer: design ADR · `todo` · *parallel-safe (docs only)*
 
 - **Goal:** an ADR for trigger → condition → effect rules evaluated by one story giver (job
   giver pattern, ADR 011). Effects are ordinary commands. Flags and quest stages are persisted
@@ -595,7 +603,7 @@ one.
 - **Acceptance:** the owner signs off the ADR; it names the code tasks it would create.
 - **Non-goals:** any code.
 
-#### A18 — Mobile spike: measure before committing · `proposed` · *parallel-safe*
+#### A18 — Mobile spike: measure before committing · `todo` · *parallel-safe*
 
 - **Goal:** an Android export preset, a stretch mode, and touch pan and zoom. The A0
   benchmarks run on one reference phone to get the real device factor. An ADR decides
