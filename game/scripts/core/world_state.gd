@@ -171,8 +171,7 @@ var _toils: ToilExecutorType
 var _toil_hooks: Dictionary = {}
 ## Events, their sequence counter and the command envelopes (world/event_log.gd).
 var _event_log: EventLogType
-## Pending area_order expansions, a budget per tick (commands/area_orders.gd, ADR 044).
-var _area_orders: AreaOrders
+var _area_orders: AreaOrders # pending area_order expansions, a budget per tick (commands/area_orders.gd, ADR 044)
 ## Live in-flight re-route searches, keyed by colonist id, shared by
 ## reference with _toils.
 var _reroutes: Dictionary = {}
@@ -369,8 +368,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	# The queue's own kind-filtered read: get_jobs()'s tool-handover overlay never touches a
-	# site_fetch/site_work job (neither kind needs a tool), the only kinds the giver reads.
+	# The queue's own kind-filtered read: get_jobs()'s tool-handover overlay never touches site_fetch/site_work (no tool).
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
 		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
@@ -921,7 +919,8 @@ func get_pending_trade_offers() -> Array[Dictionary]:
 	return _trade.get_pending_trade_offers()
 
 ## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state; a non-empty `kinds` keeps only those kinds, costing only the jobs returned (B1).
-## get_job(): one job as get_jobs() shows it, {} when unknown. The two summaries below: see JobIndex (B1).
+## get_job(): one job as get_jobs() shows it, {} when unknown. The reads below it: see JobIndex (B1);
+## get_pending_job_ids_at(): pending jobs targeting a tile, site jobs excepted (the viewer's Cancel candidates).
 func get_jobs(kinds: Array = []) -> Array[Dictionary]:
 	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
@@ -940,7 +939,6 @@ func get_queued_job_summary() -> Dictionary:
 func get_designation_changes(from: int) -> Dictionary:
 	return _scheduler.queue.get_index().designation_changes(from)
 
-## Ids of the pending jobs targeting `tile`, site jobs excepted (the viewer's Cancel candidates).
 func get_pending_job_ids_at(tile: Vector2i) -> Array[String]:
 	return _scheduler.queue.get_index().pending_ids_at(tile)
 
