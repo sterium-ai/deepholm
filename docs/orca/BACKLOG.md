@@ -29,7 +29,7 @@ behaviour change in `R*` tasks.
 Windows test runner (`tools/run_tests.ps1`), `tools/measure_core.ps1`, `GODOT` env var,
 Orca helper scripts, this backlog.
 
-### R0b — Stop `godot --import` from dirtying the worktree · `review` · *parallel-safe*
+### R0b — Stop `godot --import` from dirtying the worktree · `done (PR #3)` · *parallel-safe*
 
 - **Goal:** after `godot --headless --path game --import` on a fresh checkout, `git status` is
   clean. Today 31 `game/assets/generated/**/*.png.import` files come back modified by line
@@ -41,7 +41,7 @@ Orca helper scripts, this backlog.
   CI import + boot steps still pass.
 - **Non-goals:** touching `.tres`, `.uid`, scripts or any content.
 
-### R1 — Extract `EventLog` · `review` (branch `antonelmejor50-hub/r1-extract-eventlog`)
+### R1 — Extract `EventLog` · `done (PR #1)`
 
 - **Goal:** `game/scripts/core/world/event_log.gd` owns `_events`, `_event_sequence`,
   `_queue_event_sequence`, event insertion/ordering (`_insert_event`, `_next_sequence`,
@@ -58,7 +58,7 @@ Orca helper scripts, this backlog.
   the report.
 - **Non-goals:** changing event names, order or payloads; touching the viewer.
 
-### R2 — Extract `ItemTable` · `review` (branch `antonelmejor50-hub/r2-extract-itemtable`)
+### R2 — Extract `ItemTable` · `done (PR #4)`
 
 - **Goal:** `game/scripts/core/items/item_table.gd` owns ground items, ground berries, item
   factions, `_next_item_id`, and every spawn/place/remove/consume/lookup function listed in
@@ -156,7 +156,7 @@ Orca helper scripts, this backlog.
   "composed core" supersedes the budget-increase ADRs.
 - **Acceptance:** suite PASS; `tools/measure_core.ps1` shows no core file above 800.
 
-### R13 — Split `boot.gd` · `review` (branch `antonelmejor50-hub/r13-split-boot-gd`, report `handoffs/R13.md`) · *parallel-safe (viewer only, no core files)*
+### R13 — Split `boot.gd` · `done (PR #2)` · *parallel-safe (viewer only, no core files)*
 
 - **Goal:** `game/scripts/boot.gd` becomes scene composition only; new-game setup, save
   wiring and input wiring move to `viewer/` modules. Under 300 lines.
