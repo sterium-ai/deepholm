@@ -134,12 +134,12 @@ static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	t = _lap(totals, "construction_giver", t)
 	world._apply_combat(world._clock.tick)
 	t = _lap(totals, "combat", t)
-	var active_site_fetch_jobs_before: Dictionary = world._active_site_fetch_job_ids()
+	var active_site_fetch_jobs_before: Dictionary = world._construction.active_site_fetch_job_ids()
 	world._scheduler.tick(world._clock.tick, world._scheduler_workers(), world._passability.is_passable, Vector2i.ZERO,
 		Vector2i(world._tile_grid.width - 1, world._tile_grid.height - 1), world._toils.get_labour, world._calendar.active_boost,
 		world._colonists, world._committed_jobs(), world._tile_grid.get_regions().reachable)
 	t = _lap(totals, "scheduler", t)
-	world._resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
+	world._construction.resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
 	t = _lap(totals, "site_fetch_resolve", t)
 	world._rescue_giver.advance(world._rescue_candidates(), world._trapped_rescue_victims(), world._clock.tick)
 	t = _lap(totals, "rescue_giver", t)

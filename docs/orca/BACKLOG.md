@@ -426,12 +426,13 @@ one.
 - **Goal:** `JobQueue` indexes live jobs by id. Terminal jobs move to a bounded history (size
   decided in an ADR) instead of staying in `_jobs`. Core callers that only read
   (`HaulGiver`, `ConstructionGiver`, `GlobalAssignment.tick()`, `_advance_colonists()`,
-  `_active_site_fetch_job_ids()`, the tool toils) get read-only views instead of
+  `ConstructionSystem.active_site_fetch_job_ids()`, the tool toils) get read-only views instead of
   `get_jobs()`/`get_colonists()` deep copies. `JobQueue._emit()` appends in order instead of
   re-sorting the whole list on every event. Public getters used by the viewer keep returning
   copies.
 - **Owned paths:** `jobs/job_queue.gd`, `scheduling/global_assignment.gd`,
-  `jobs/givers/*.gd`, `jobs/tool_*.gd`, `world_state.gd`, `state_codec.gd`, `save_io.gd`,
+  `jobs/givers/*.gd`, `jobs/tool_*.gd`, `objects/construction_system.gd`, `world_state.gd`,
+  `state_codec.gd`, `save_io.gd`,
   `save_migrations.gd`, `docs/architecture/save-system.md`, an ADR, `core-budgets.json`,
   affected tests and fixtures.
 - **Acceptance:** after R14, every schema change carries a version bump, a migration and a

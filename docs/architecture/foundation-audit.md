@@ -14,8 +14,10 @@
 > them on 2026-10-25.
 
 Audit date: 2026-10-25, at `main` `052d8c4` (Phase R through R3; `world_state.gd` is 4,290
-lines). R4 (`95b06b8`) landed afterwards. It moved only the work-progress functions, and
-none of the functions cited here moved. This page is the evidence. A plain-language summary for the owner, in Spanish, is
+lines). R4 (`95b06b8`) landed afterwards and moved only the work-progress functions, none
+of them cited here. R5 (`b9736b3`) then moved the construction flow into
+`objects/construction_system.gd` (`ConstructionSystem`). The four construction functions
+in §3.1 items 6 and 7 are cited at their R5 home (R5 is a reviewed move, not a rewrite). This page is the evidence. A plain-language summary for the owner, in Spanish, is
 [foundation-audit-summary.md](foundation-audit-summary.md).
 
 ## 0. Method and how to reproduce
@@ -312,8 +314,8 @@ before it starts a search.
 6. **Whole collections are deep-copied inside the core, every tick.**
    - `JobQueue.get_jobs()` is `_jobs.duplicate(true)`. It is called per tick by
      `HaulGiver.advance()`, `ConstructionGiver.advance()`,
-     `WorldState._active_site_fetch_job_ids()`,
-     `_resolve_freshly_activated_site_fetch_sources()` and the scheduler. `WorldState.get_jobs()`
+     `ConstructionSystem.active_site_fetch_job_ids()`,
+     `ConstructionSystem.resolve_freshly_activated_site_fetch_sources()` and the scheduler. `WorldState.get_jobs()`
      also runs `ToolHandover.apply()` over every job.
    - `WorldState.get_colonists()` deep-copies every actor. It is injected into `ToilExecutor`
      and `CalendarAlertGiver`, and the tool toils call it to look up one colonist
@@ -323,8 +325,9 @@ before it starts a search.
 7. **Unbounded searches outside the budget (found by reading, not measured).**
    `WorldState._route_cost()` runs a search to completion
    (`while not route.is_terminal(): route.resume()`). It is called for every candidate item
-   in `_next_site_fetch_source()` and for every sibling site in
-   `_reachable_short_sibling_sites()`. With many loose wood items, one construction decision
+   in `ConstructionSystem.next_site_fetch_source()` and for every sibling site in
+   `ConstructionSystem.reachable_short_sibling_sites()`, through the `_route_cost`
+   Callable that `WorldState` injects. With many loose wood items, one construction decision
    can cost several full-map searches in one tick. Separately,
    `NeedGiver._advance_candidate_search()` resumes each searching colonist once per tick
    without consulting the shared ledger.
