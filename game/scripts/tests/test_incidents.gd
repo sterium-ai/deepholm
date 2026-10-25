@@ -418,7 +418,7 @@ func _check_unreachable_candidate_is_never_spawned() -> void:
 	_expect(String(_find_job(world, job_id).get("status", "")) == "cancelled",
 		"the unreachable incident job must be retired (cancelled), not left queued forever")
 	_expect(world._incidents.staged_actors().is_empty(), "a retired proposal must leave nothing staged")
-	_expect(world._get_work_progress(target) == null, "a never-activated incident job must never stamp a work-progress key")
+	_expect(world._progress_table.get_progress(target) == null, "a never-activated incident job must never stamp a work-progress key")
 	_expect(world.get_assignments().is_empty(), "a never-activated incident job must never produce an assignment")
 
 ## Dynamic case: the map is open when the actor starts walking and a wall
@@ -442,7 +442,7 @@ func _check_door_introduced_mid_travel_blocks_wildlife() -> void:
 			"a wildlife actor must never cross a colony door's wall column (tick %d)" % world.get_tick())
 	_expect(world._find_colonist("travel_wolf").is_empty(), "the walled-off wolf must despawn once its target proves unreachable")
 	_expect(String(_find_job(world, job_id).get("status", "")) == "cancelled", "the walled-off wolf's job must be cancelled")
-	_expect(world._get_work_progress(target) == null, "the cancelled incident job must clear its stamped wait")
+	_expect(world._progress_table.get_progress(target) == null, "the cancelled incident job must clear its stamped wait")
 
 ## For both seed incidents, through the real spawn path: the actor waits
 ## exactly its content-declared wait_ticks work steps after arriving (the
@@ -473,7 +473,7 @@ func _check_actor_despawns_after_exact_wait() -> void:
 		var lived := world.get_tick() - arrival_tick
 		_expect(lived == wait_ticks - 1,
 			"%s's actor must despawn exactly wait_ticks (%d) work steps after arrival, lived %d ticks past arrival" % [incident_id, wait_ticks, lived])
-		_expect(world._get_work_progress(target) == null, "a completed incident job must leave no work-progress key")
+		_expect(world._progress_table.get_progress(target) == null, "a completed incident job must leave no work-progress key")
 		_expect(world.get_assignments().get(actor_id, {}).is_empty(), "a despawned actor must leave no assignment (got %s)" % [world.get_assignments()])
 		measured[incident_id] = lived
 	if measured.size() == 2:
@@ -535,12 +535,12 @@ func _check_two_actor_race_spawns_only_the_winner() -> void:
 	_expect(String(loser_jobs[0]["status"]) == "queued" and String(loser_jobs[0]["reason"]) == "blocked_target_reserved",
 		"the losing incident job must stay queued with the ordinary target-reserved reason, got %s" % [loser_jobs[0]])
 	_expect(world._incidents.staged_actors().size() == 1, "the loser must stay staged, not spawned")
-	_expect(int(world._get_work_progress(target)) == _wait_ticks_of(world, "wildlife_wander"),
+	_expect(int(world._progress_table.get_progress(target)) == _wait_ticks_of(world, "wildlife_wander"),
 		"only the winner's own confirmed-active job may stamp the shared target's work-progress key")
 	_expect(_tick_until(world, _gone(winner)) >= 0, "the winner must finish and despawn")
 	_expect(_tick_until(world, _in_world(loser)) >= 0, "the loser must spawn once the target is released")
 	_expect(_tick_until(world, _gone(loser)) >= 0, "the loser must then finish and despawn in turn")
-	_expect(world._colonists.is_empty() and world._incidents.staged_actors().is_empty() and world._get_work_progress(target) == null,
+	_expect(world._colonists.is_empty() and world._incidents.staged_actors().is_empty() and world._progress_table.get_progress(target) == null,
 		"after both runs nothing may remain: no actor, no staged proposal, no work-progress key")
 
 ## Real spawn path against a target already reserved by a colonist's own
@@ -564,7 +564,7 @@ func _check_reserved_by_colonist_job_defers_spawn() -> void:
 	for i in 5:
 		world.tick()
 		_expect(world._colonists.size() == 1, "no wolf may spawn while a colonist's job holds the only target (tick %d)" % world.get_tick())
-	var stamped = world._get_work_progress(target)
+	var stamped = world._progress_table.get_progress(target)
 	_expect(stamped == null or int(stamped) < 40 and String(_find_job(world, till_job_id).get("status", "")) == "active",
 		"the shared target's work-progress key may only hold the till job's own progress, never a staged wolf's wait")
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return String(_find_job(w, till_job_id).get("status", "")) == "completed") >= 0,
@@ -642,12 +642,12 @@ func _check_cleanup_on_every_terminal_transition() -> void:
 			_expect(world._find_colonist("cmd_wolf").get("route") != null, "%s: the wolf must be mid-travel" % command_type)
 		# Mid-travel the key holds the stamped 40; mid-wait the work toil has
 		# already counted it down by one step per tick.
-		var stamped = world._get_work_progress(wolf_target)
+		var stamped = world._progress_table.get_progress(wolf_target)
 		_expect(stamped != null and int(stamped) > 0 and int(stamped) <= 40,
 			"%s: the active incident job must hold its stamped wait on the target (got %s)" % [command_type, stamped])
 		_expect(_job_command(world, "terminal_%s" % command_type, command_type, job_id).get("ok", false), "%s on an active incident job must be accepted" % command_type)
 		_expect(world._find_colonist("cmd_wolf").is_empty(), "%s must despawn the incident actor" % command_type)
-		_expect(world._get_work_progress(wolf_target) == null, "%s must clear the incident's stamped wait" % command_type)
+		_expect(world._progress_table.get_progress(wolf_target) == null, "%s must clear the incident's stamped wait" % command_type)
 		_expect(world.get_assignments().is_empty() and world._incidents.staged_actors().is_empty() and world._incidents._actor_by_job.is_empty(),
 			"%s must leave no assignment or incident bookkeeping behind" % command_type)
 		_expect(String(_find_job(world, job_id).get("status", "")) != "active", "%s must terminate the job" % command_type)
@@ -663,11 +663,11 @@ func _check_unreachable_travel_clears_progress_for_next_job() -> void:
 	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_SOIL
 	var job_id := world._incidents.propose(_make_wolf(world, "cut_wolf", 0, DOOR_Y), target, 40)
 	_expect(_tick_until(world, _in_world("cut_wolf")) >= 0, "the wolf must spawn")
-	_expect(int(world._get_work_progress(target)) == 40, "the active incident job must have stamped its wait on the target")
+	_expect(int(world._progress_table.get_progress(target)) == 40, "the active incident job must have stamped its wait on the target")
 	_build_wall_column(world, WALL_X, DOOR_Y)
 	_expect(_tick_until(world, _gone("cut_wolf")) >= 0, "the walled-off wolf must despawn on unreachable travel")
 	_expect(String(_find_job(world, job_id).get("status", "")) == "cancelled", "the unreachable incident job must be cancelled")
-	_expect(world._get_work_progress(target) == null, "the unreachable hook must clear the incident's stamped wait")
+	_expect(world._progress_table.get_progress(target) == null, "the unreachable hook must clear the incident's stamped wait")
 	world._colonists.append(_colonist("next_worker", target.x + 1, target.y))
 	_expect(world.apply({"actor": "test", "command_id": "till_after", "tick": world.get_tick(),
 		"type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}}).get("ok", false), "a till order on the freed tile must be accepted")
@@ -708,17 +708,17 @@ func _check_queued_competitor_command_preserves_wait(command_type: String) -> vo
 			loser_job_id = String(job["id"])
 	_expect(not loser_job_id.is_empty(), "the loser must carry its own queued incident job")
 	if loser_job_id.is_empty(): return
-	var wait_before = world._get_work_progress(target)
+	var wait_before = world._progress_table.get_progress(target)
 	_expect(wait_before != null, "the winner must have stamped its wait on the shared target")
 	var result := _job_command(world, "finish_loser", command_type, loser_job_id)
 	_expect(bool(result.get("ok", false)) == (command_type != "complete_job"),
 		"%s must accept queued termination but reject completion without activation" % command_type)
-	_expect(world._get_work_progress(target) == wait_before,
-		"%s against the queued competitor must preserve the active winner's wait (before %s, after %s)" % [command_type, wait_before, world._get_work_progress(target)])
+	_expect(world._progress_table.get_progress(target) == wait_before,
+		"%s against the queued competitor must preserve the active winner's wait (before %s, after %s)" % [command_type, wait_before, world._progress_table.get_progress(target)])
 	_expect(not world._find_colonist(winner).is_empty(), "the winner must remain in the world, unaffected by the loser's command")
 	var repeat_result := _job_command(world, "finish_loser_again", command_type, loser_job_id)
 	_expect(not repeat_result.get("ok", true), "repeating a terminal or rejected command must be rejected")
-	_expect(world._get_work_progress(target) == wait_before,
+	_expect(world._progress_table.get_progress(target) == wait_before,
 		"a rejected repeated terminal command must never disturb the active winner's wait either")
 
 ## A door lands on a staged wolf's own
@@ -776,7 +776,7 @@ func _check_door_on_destination_during_travel_is_never_reached() -> void:
 	_expect(world._find_colonist("dest_wolf").is_empty(), "the wolf must despawn once its gated destination proves unreachable")
 	_expect(String(_find_job(world, job_id).get("status", "")) == "cancelled",
 		"an incident whose destination is blocked by a door must cancel, never complete its wait adjacent to it")
-	_expect(world._get_work_progress(target) == null, "the cancelled incident must clear its stamped wait")
+	_expect(world._progress_table.get_progress(target) == null, "the cancelled incident must clear its stamped wait")
 
 ## Terminating an incident actor while
 ## its bounded reroute search is still active (route.rerouting.status ==

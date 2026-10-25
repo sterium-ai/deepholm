@@ -30,6 +30,7 @@ static func encode(world: WorldState) -> Dictionary:
 	var item_table := world._item_table.encode()
 	var object_table := world._object_table.encode()
 	var zone_table := world._zone_table.encode()
+	var work_progress := world._progress_table.encode()
 	return {
 		"schemaVersion": SCHEMA_VERSION,
 		"contentVersion": content_version(),
@@ -64,23 +65,22 @@ static func encode(world: WorldState) -> Dictionary:
 		"zones": zone_table["zones"],
 		"nextZoneId": zone_table["nextZoneId"],
 		"groundBerries": item_table["groundBerries"],
-		"workProgress": _encode_work_progress(world._work_progress),
+		"workProgress": work_progress["workProgress"],
 		# The exact job_id that owns each workProgress
 		# key, so decode() restores real ownership instead of guessing it from
-		# whichever job happens to target that key (see world_state.gd's own
-		# _work_progress_owner doc comment). Optional on the wire like
+		# whichever job happens to target that key (see the WorkProgress
+		# class doc). Optional on the wire like
 		# "digFindRng"/"combatBlockedTargets" -- see SaveIO._validate_state() --
 		# so an older fixture predating this field still validates.
-		"workProgressOwners": _encode_work_progress_owners(world._work_progress_owner),
+		"workProgressOwners": work_progress["workProgressOwners"],
 		# A suspended (still-queued, not
 		# terminated) job's own work-toil ticks, moved out of the live
 		# "workProgress"/"workProgressOwners" tile cache so a different job
 		# that later works the same tile can never inherit or clobber them
-		# (world_state.gd's own _suspend_work_progress()/_resume_work_progress()
-		# doc comments). Optional on the wire like "workProgressOwners" --
+		# (WorkProgress.suspend()/resume()). Optional on the wire like "workProgressOwners" --
 		# an older save predating this field simply restores with no
 		# suspended entries, matching decode()'s own constructor default.
-		"suspendedWorkProgress": _encode_suspended_work_progress(world._suspended_work_progress),
+		"suspendedWorkProgress": work_progress["suspendedWorkProgress"],
 		"pausedJobs": _encode_paused_jobs(world._paused_jobs),
 		"toolItems": _encode_tool_items(world._tool_store.items, world._tool_store.next_id),
 		"toolReservations": world._tool_store.reservations.snapshot(),
@@ -151,9 +151,9 @@ static func decode(state: Dictionary) -> WorldState:
 	var construction_sites := _decode_construction_sites(state.get("constructionSites", []))
 	world._sites.restore(construction_sites, _next_construction_site_id(construction_sites))
 	world._zone_table.decode(state)
-	world._work_progress = _decode_work_progress(state["workProgress"])
-	var work_progress_owners := _decode_work_progress_owners(state.get("workProgressOwners", []))
-	world._suspended_work_progress = _decode_suspended_work_progress(state.get("suspendedWorkProgress", []))
+	# "workProgress" and the optional "suspendedWorkProgress"; the persisted owners
+	# are applied by restore_owners() below, once jobs are restored.
+	var work_progress_owners := world._progress_table.decode(state)
 	world._paused_jobs = _decode_paused_jobs(state["pausedJobs"])
 	var tool_items_data := _decode_tool_items(state["toolItems"])
 	world._tool_store.items = tool_items_data["items"]
@@ -205,13 +205,13 @@ static func decode(state: Dictionary) -> WorldState:
 	# handed it -- otherwise every is_reserved()/owner() peek this giver makes
 	# from now on reads an obsolete, orphaned table.
 	world._rescue_giver.set_reservation_table(world._scheduler.queue.get_reservation_table())
-	# world._work_progress_owner is restored from the persisted job_id above
+	# The work-progress owners are restored from the persisted job_id above
 	# (guessing it from job-target iteration order could hand one job's
 	# progress to another queued at the same tile), right after jobs
 	# restore and before _reconcile_incident_jobs_after_load() below may
 	# cancel one through the shared _finish_job() boundary, so that
 	# cancellation's own ownership-gated work-progress cleanup fires correctly immediately after a load.
-	world._restore_work_progress_owners(work_progress_owners)
+	world._progress_table.restore_owners(work_progress_owners, world._colonists, world._paused_jobs)
 
 	var bounds_max := Vector2i(width - 1, height - 1)
 	world._scheduler.restore_scheduling(_decode_scheduling(scheduling),
@@ -529,9 +529,8 @@ static func _decode_ground_berries(list: Array) -> Dictionary:
 
 # --- work progress (colonist-ai.md 3.6) -------------------------------------
 
-## world._work_progress is keyed by "%d_%d", or by "<jobId>:%d_%d" when the
-## tile's reservation is currently owned by a job (world_state.gd's
-## _work_progress_key(), scoped per-job so two jobs sharing one target tile
+## WorkProgress.progress is keyed by "%d_%d", or by "<jobId>:%d_%d" when the
+## tile's reservation is currently owned by a job (WorkProgress.key(), scoped per-job so two jobs sharing one target tile
 ## never read/clear each other's progress). Job ids never contain ":" (the
 ## `^[a-z0-9_-]+$` id pattern), so splitting on the last ":" losslessly
 ## recovers the owner; the sorted keys give a deterministic encoding order.
@@ -566,11 +565,11 @@ static func _decode_work_progress(list: Array) -> Dictionary:
 		decoded[key] = int(entry["ticksRemaining"])
 	return decoded
 
-## world._work_progress_owner is keyed like _work_progress ("%d_%d") ->
+## WorkProgress.owners is keyed like WorkProgress.progress ("%d_%d") ->
 ## job_id; sorted keys give a deterministic
 ## encoding order matching _encode_work_progress() above. Only keys with a
 ## non-empty owner appear -- an "incident" job's stamped wait never
-## participates in job-id ownership (see WorldState._release_owned_work_progress()'s
+## participates in job-id ownership (see WorkProgress.release_owned()'s
 ## own comment), so it is simply absent here, not encoded with an empty id.
 static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Array:
 	var keys := work_progress_owner.keys()
@@ -582,7 +581,7 @@ static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Arr
 		encoded.append({"target": _encode_tile(tile), "jobId": String(work_progress_owner[key])})
 	return encoded
 
-## Returns the raw key -> job_id map; WorldState._restore_work_progress_owners()
+## Returns the raw key -> job_id map; WorkProgress.restore_owners()
 ## cross-checks each job_id against the just-restored job list before trusting
 ## it (see that function's own doc comment).
 static func _decode_work_progress_owners(list: Array) -> Dictionary:
@@ -592,7 +591,7 @@ static func _decode_work_progress_owners(list: Array) -> Dictionary:
 		decoded["%d_%d" % [tile.x, tile.y]] = String(entry["jobId"])
 	return decoded
 
-## world._suspended_work_progress is keyed by job_id directly: a suspended job's own snapshot, so no tile coordinate
+## WorkProgress.suspended is keyed by job_id directly: a suspended job's own snapshot, so no tile coordinate
 ## participates in the key at all -- sorted job_id keys give a deterministic
 ## encoding order.
 static func _encode_suspended_work_progress(suspended_work_progress: Dictionary) -> Array:
