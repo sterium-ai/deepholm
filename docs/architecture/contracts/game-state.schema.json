@@ -337,7 +337,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 25 },
+    "schemaVersion": { "type": "integer", "const": 26 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },
@@ -707,6 +707,37 @@
           "properties": {
             "seed": { "type": "integer" },
             "state": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "areaOrders": {
+      "description": "ADR 044 (schemaVersion 26): pending area_order expansions, first in first out. Always written by StateCodec.encode() and backfilled empty by the v25->v26 migration; optional on the wire like constructionSites, absent meaning an empty queue.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextId", "list"],
+      "properties": {
+        "nextId": { "type": "integer", "minimum": 1 },
+        "list": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "jobLimit", "siteLimit"],
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "order": { "enum": ["dig", "chop", "forage", "till", "sow", "mine", "cancel", "remove_object"] },
+              "actor": { "type": "string", "minLength": 1 },
+              "commandId": { "type": "string", "minLength": 1 },
+              "x": { "type": "integer", "minimum": 0 },
+              "y": { "type": "integer", "minimum": 0 },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "priority": { "type": "integer" },
+              "next": { "type": "integer", "minimum": 0, "description": "Row-major index of the next tile to expand; below width*height." },
+              "jobLimit": { "type": "integer", "description": "The next job number when the order was accepted: cancel only touches older jobs." },
+              "siteLimit": { "type": "integer", "description": "The next construction site number when the order was accepted." }
+            }
           }
         }
       }

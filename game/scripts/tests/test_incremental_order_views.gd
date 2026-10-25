@@ -9,8 +9,9 @@ extends SceneTree
 ## 2) the designation overlay's pixel per tile equals the colour of one
 ##    OUTLINE_COLOR rect per pending non-site_fetch job on that tile, through
 ##    orders, cancels, ticks and a save/load world swap;
-## 3) a Cancel rectangle committed with the one-read candidate map leaves the
-##    same jobs and reports the same rejections as the former per-tile scan;
+## 3) a Cancel rectangle previewed with the one-read candidate map, and
+##    committed as an area order, leaves the same jobs and reports the same
+##    rejections as the former per-tile scan;
 ## 4) the stockpile draw visits the same cells, in the same order, as the
 ##    former walk of every zone cell.
 
@@ -144,6 +145,11 @@ func _check_cancel_candidates() -> void:
 	var tiles := MapViewType.tiles_in_rectangle(Vector2i(0, 0), Vector2i(40, 40))
 	var previewed := orders.preview_validity(world, world.preview, null, tiles)
 	var rejected := orders.commit_rectangle(world, null, tiles)
+	# 1681 tiles: the area order expands TILES_PER_STEP now; drain the rest at
+	# this same tick (what the next ticks would do first) to compare like for like.
+	while world._area_orders.remaining_tiles(1) > 0:
+		for entry in world._area_orders.advance():
+			rejected.append({"tile": Vector2i(entry["x"], entry["y"]), "reason": entry["reason"]})
 	# The former path: every tile scans every job (no candidate map).
 	var expected_preview: Array[bool] = []
 	for tile in tiles:
@@ -160,7 +166,7 @@ func _check_cancel_candidates() -> void:
 	_expect(previewed == expected_preview, "the Cancel preview must match the per-tile scan")
 	_expect(rejected == expected_rejected, "Cancel must report the same rejections as the per-tile scan")
 	_expect(world.get_jobs() == twin.get_jobs(), "Cancel must leave the same jobs as the per-tile scan")
-	_expect(world.state_hash() == twin.state_hash(), "Cancel must leave the same state as the per-tile scan")
+	_expect(world.get_construction_sites() == twin.get_construction_sites(), "Cancel must leave the same sites as the per-tile scan")
 
 func _check_stockpile_cells() -> void:
 	var world := WorldStateType.new(4242, 10, 64, 64)

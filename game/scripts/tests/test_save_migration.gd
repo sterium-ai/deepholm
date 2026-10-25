@@ -471,6 +471,54 @@ const V24_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 }
 
+## ADR 044: V24_FIXTURE_STATE one version up -- entities carry "hands"
+## (v24->v25) and the optional "constructionSites" is present, but v25 itself
+## predates area orders: no "areaOrders" field yet. Migrating must backfill an
+## empty queue (nextId 1) and touch nothing else.
+const V25_FIXTURE_DIR := "user://test-save-migration-v25-fixture"
+const V25_FIXTURE_STATE := {
+	"schemaVersion": 25, "contentVersion": "1.0.0", "seed": 579246, "tick": 21,
+	"epoch": 0,
+	"map": {"width": 3, "height": 2, "tiles": ["soil", "floor", "soil", "rock", "hazard", "tree"], "generatorVersion": 1},
+	"entities": [
+		{
+			"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+			"factionId": "colony", "health": {"hp": 100, "maxHp": 100, "dead": false},
+			"needs": {"food": 60, "water": 70, "rest": 80},
+			"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
+			"labourTable": {"mine": 0, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
+			"route": null, "work": null, "hands": [], "heldTool": "tool_1", "trapped": null,
+		},
+		{
+			"id": "colonist_1", "kind": "colonist", "x": 1, "y": 0,
+			"factionId": "colony", "health": {"hp": 100, "maxHp": 100, "dead": false},
+			"needs": {"food": 50, "water": 60, "rest": 70},
+			"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
+			"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
+			"route": null, "work": null, "hands": [{"kind": "wood", "count": 3}], "heldTool": "", "trapped": null,
+		},
+	],
+	"inventory": {}, "jobs": [],
+	"scheduling": {
+		"nextJobId": 1, "jobSequence": 0, "jobTick": 21, "queueEventSequence": -1,
+		"eventSequence": 0, "waiting": [], "nextOrdinal": 0, "cursors": {}, "pending": {},
+		"assignments": {}, "activatedEntries": {},
+	},
+	"rng": {"seed": 579246, "state": 61},
+	"items": {"nextId": 2, "list": [{"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 3, "factionId": "colony"}]},
+	"objects": [{"target": {"x": 2, "y": 1}, "kind": "wall", "factionId": "colony"}],
+	"zones": [{"id": "zone_1", "x": 2, "y": 0, "width": 1, "height": 1}], "nextZoneId": 2,
+	"groundBerries": [{"target": {"x": 0, "y": 1}, "berries": 2}],
+	"workProgress": [], "pausedJobs": [],
+	"toolItems": {"nextId": 2, "list": [{"id": "tool_1", "kind": "axe", "location": {"type": "held", "colonistId": "colonist_0"}}]},
+	"toolReservations": {},
+	"needJobAssignments": [],
+	"calendarAlerts": {"fired": []},
+	"toolFetchExcluded": [],
+	"constructionSites": [],
+	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
+}
+
 ## Regression: calendar window ids come from content/calendar.json,
 ## whose own schema (game/content/schemas/calendar.schema.json) allows any
 ## non-empty string, not the stricter ^[a-z0-9_-]+$ pattern _matches_id_pattern()
@@ -511,6 +559,7 @@ var _v21_fixture_path := ""
 var _v22_fixture_path := ""
 var _v23_fixture_path := ""
 var _v24_fixture_path := ""
+var _v25_fixture_path := ""
 
 func _init() -> void:
 	_v13_fixture_path = _write_state_fixture(V13_FIXTURE_DIR, V13_FIXTURE_STATE)
@@ -521,6 +570,7 @@ func _init() -> void:
 	_v22_fixture_path = _write_state_fixture(V22_FIXTURE_DIR, V22_FIXTURE_STATE)
 	_v23_fixture_path = _write_state_fixture(V23_FIXTURE_DIR, V23_FIXTURE_STATE)
 	_v24_fixture_path = _write_state_fixture(V24_FIXTURE_DIR, V24_FIXTURE_STATE)
+	_v25_fixture_path = _write_state_fixture(V25_FIXTURE_DIR, V25_FIXTURE_STATE)
 	_check_v1_fixture_migrates_through_full_chain()
 	_check_v2_fixture_migrates_to_v3()
 	_check_v3_fixture_migrates_to_v4()
@@ -557,6 +607,8 @@ func _init() -> void:
 	_check_v23_state_with_empty_combat_blocked_targets_migrates_and_loads()
 	_check_v24_fixture_migrates_to_v25()
 	_check_v24_fixture_loads_through_save_io()
+	_check_v25_fixture_migrates_to_v26()
+	_check_v25_fixture_loads_through_save_io()
 	_check_dig_find_rng_continuation_survives_save_load_round_trip()
 	_check_multi_tile_object_round_trips_through_save_load()
 	_check_object_without_orientation_field_loads_unchanged()
@@ -622,6 +674,7 @@ func _init() -> void:
 	_cleanup_dir(V22_FIXTURE_DIR)
 	_cleanup_dir(V23_FIXTURE_DIR)
 	_cleanup_dir(V24_FIXTURE_DIR)
+	_cleanup_dir(V25_FIXTURE_DIR)
 	if _failed:
 		quit(1)
 		return
@@ -1770,6 +1823,39 @@ func _check_v24_fixture_loads_through_save_io() -> void:
 		"SaveIO-loaded v24 fixture's null-carrying entity must have empty hands")
 	_expect((entities[1] as Dictionary)["hands"] == [{"kind": "wood", "count": 3}],
 		"SaveIO-loaded v24 fixture's populated-carrying entity must have a one-entry hands array")
+
+## ADR 044: the v25 fixture gains an empty "areaOrders" queue and nothing else.
+func _check_v25_fixture_migrates_to_v26() -> void:
+	var raw_state := _load_fixture_state(_v25_fixture_path)
+	var result := SaveMigrationsType.migrate(raw_state, 25, 26)
+	_expect(result["ok"], "schemaVersion-25 fixture must migrate to schemaVersion 26: %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	_expect(state["schemaVersion"] == 26, "v25 fixture must migrate to schemaVersion 26")
+	_expect(not raw_state.has("areaOrders"), "sanity: the v25 fixture must not already carry areaOrders")
+	_expect(state.get("areaOrders") == {"nextId": 1, "list": []}, "migration must backfill an empty areaOrders queue")
+	for key in raw_state.keys():
+		if key != "schemaVersion":
+			_expect(state[key] == raw_state[key], "migration must preserve v25 fixture field '%s'" % key)
+	_expect(state.size() == raw_state.size() + 1, "migration must add only areaOrders")
+	var advanced := SaveMigrationsType.migrate(state, 26, StateCodecType.SCHEMA_VERSION)
+	_expect(advanced["ok"], "a migrated v25 fixture must further migrate to schemaVersion %d: %s" % [StateCodecType.SCHEMA_VERSION, advanced])
+	if not advanced["ok"]:
+		return
+	var validation := SaveIOType._validate_state(advanced["state"])
+	_expect(validation["ok"], "a migrated v25 fixture must pass SaveIO's current-schema validation: %s" % validation.get("message", ""))
+
+func _check_v25_fixture_loads_through_save_io() -> void:
+	var result := SaveIOType.read(_v25_fixture_path)
+	_expect(result["ok"], "v25 fixture must load through SaveIO.read(): %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	_expect(state["schemaVersion"] == StateCodecType.SCHEMA_VERSION, "SaveIO-loaded v25 fixture must report the current schemaVersion")
+	var world := WorldStateType.from_save_state(state)
+	_expect(world.to_save_state()["areaOrders"] == {"nextId": 1, "list": []},
+		"a world loaded from a v25 save must start with no pending area orders")
 
 ## Proves the dig-find RNG's own continuation --
 ## a non-freshly-seeded stream (distinct seed and state from a brand-new

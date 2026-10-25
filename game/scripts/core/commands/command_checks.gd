@@ -55,6 +55,10 @@ static func check(world: WorldState, command: Dictionary) -> Dictionary:
 			return check_zone_add_command(world, command)
 		"zone_remove":
 			return check_zone_remove_command(world, command)
+		"area_order":
+			# Previews acceptance of the order itself; each expanded tile is
+			# judged later by its own command (commands/area_orders.gd).
+			return AreaOrders.check(command["payload"], world.get_map_width(), world.get_map_height())
 		_:
 			return {"reason": "unknown_command_type", "message": "No handler for command type '%s'." % command["type"]}
 

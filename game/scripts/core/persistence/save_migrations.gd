@@ -126,6 +126,10 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			if not _is_schema_v24_state(state):
 				return no_migration
 			return {"ok": true, "state": _migrate_v24_to_v25(state)}
+		25:
+			if not _is_schema_v25_state(state):
+				return no_migration
+			return {"ok": true, "state": _migrate_v25_to_v26(state)}
 		_:
 			return no_migration
 
@@ -1255,6 +1259,24 @@ static func _migrate_v24_to_v25(state: Dictionary) -> Dictionary:
 			updated.erase("carrying")
 		entities.append(updated)
 	migrated["entities"] = entities
+	return migrated
+
+## The v24 shape one version up: "constructionSites" is accepted too (it was
+## added without a bump), and no "areaOrders" yet.
+static func _is_schema_v25_state(state: Dictionary) -> bool:
+	var probe := state.duplicate()
+	probe.erase("constructionSites")
+	probe["schemaVersion"] = 24
+	if state.has("constructionSites") and typeof(state["constructionSites"]) != TYPE_ARRAY:
+		return false
+	return typeof(state.get("schemaVersion")) == TYPE_INT and int(state["schemaVersion"]) == 25 and _is_schema_v24_state(probe)
+
+## Version 25 predates area orders (ADR 044): nothing was ever pending, so
+## the backfill is an empty queue whose first order will get id 1.
+static func _migrate_v25_to_v26(state: Dictionary) -> Dictionary:
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 26
+	migrated["areaOrders"] = {"nextId": 1, "list": []}
 	return migrated
 
 static func _backfill_restrict_to(entries: Array) -> Array:

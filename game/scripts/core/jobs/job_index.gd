@@ -19,6 +19,10 @@ extends RefCounted
 ##   dropped as reservations() reads.
 ## - _labour_disabled holds exactly the jobs whose reason is labour_disabled
 ##   (JobQueue._set_reason() is the only reason writer).
+## - _pending_by_target[tile] lists, in list order, the live pending jobs
+##   targeting tile other than construction-site jobs (whose target moves
+##   and whose tile Cancel resolves through the site itself), kept by the same
+##   job_queued / terminal events as _designations (AreaOrders' Cancel).
 ## - _designations[tile] counts the pending (queued or active) jobs targeting
 ##   tile, site_fetch excepted (its target moves between sources): a job is
 ##   pending from its job_queued event until its terminal one, and on_event()
@@ -36,6 +40,7 @@ var _by_kind: Dictionary = {}
 var _watched: Dictionary = {}
 var _labour_disabled: Dictionary = {}
 var _designations: Dictionary = {}
+var _pending_by_target: Dictionary = {}
 var _designation_log: Array[Vector2i] = []
 
 ## Indexes `jobs` (restored or empty) as it stands.
@@ -50,6 +55,7 @@ func _init(jobs: Array[Dictionary], labour_disabled_reason: String) -> void:
 		note_reason(job)
 		if job["status"] in ["queued", "active"]:
 			_designate(job, 1)
+			_track_pending(job, true)
 
 func covers(jobs: Array[Dictionary]) -> bool:
 	return is_same(jobs, _jobs)
@@ -132,8 +138,10 @@ func on_event(event_type: String, job: Dictionary) -> void:
 			watch(job)
 		"job_queued":
 			_designate(job, 1)
+			_track_pending(job, true)
 		"job_completed", "job_cancelled", "job_failed":
 			_designate(job, -1)
+			_track_pending(job, false)
 
 ## {"next": the log position to read from next time, "tiles": tile -> pending
 ## job count for every tile whose count changed since log position `from`}.
@@ -144,6 +152,23 @@ func designation_changes(from: int) -> Dictionary:
 		var tile := _designation_log[index]
 		tiles[tile] = int(_designations.get(tile, 0))
 	return {"next": _designation_log.size(), "tiles": tiles}
+
+## The live pending non-site jobs targeting tile (see _pending_by_target).
+func pending_at(tile: Vector2i) -> Array:
+	return _pending_by_target.get(tile, [])
+
+func _track_pending(job: Dictionary, pending: bool) -> void:
+	if String(job.get("kind", "")) in ["site_fetch", "site_work"]:
+		return
+	var tile: Vector2i = job["target"]
+	var jobs: Array = _pending_by_target.get(tile, [])
+	if pending:
+		jobs.append(job)
+		_pending_by_target[tile] = jobs
+		return
+	jobs.erase(job)
+	if jobs.is_empty():
+		_pending_by_target.erase(tile)
 
 func _designate(job: Dictionary, delta: int) -> void:
 	if String(job.get("kind", "")) == "site_fetch":
@@ -196,10 +221,10 @@ func reservations(jobs: Array[Dictionary], tick: int) -> Dictionary:
 ## the queued job with the lowest String id whose reason is non-empty, or {}}:
 ## what ColonistPanel shows an idle colonist, read off the live jobs without
 ## copying them.
-func queued_summary(jobs: Array[Dictionary]) -> Dictionary:
+func queued_summary() -> Dictionary:
 	var queued := 0
 	var first: Dictionary = {}
-	for job in jobs:
+	for job in _jobs:
 		if job["status"] != "queued":
 			continue
 		queued += 1

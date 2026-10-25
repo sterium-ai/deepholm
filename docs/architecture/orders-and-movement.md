@@ -48,6 +48,47 @@ the queue itself refuses the request, e.g. `unknown_job` or
 or has already finished. See `game/scripts/core/world_state.gd`
 (`_apply_job_command`).
 
+### Area orders: `area_order` (ADR 044)
+
+A rectangle dragged with a per-tile tool (Dig, Chop, Forage, Till, Sow, Mine,
+Cancel, Remove Object) is submitted as **one** `area_order` command, not one
+command per tile: `{order: String, x: int, y: int, width: int, height: int,
+priority: int}` (`priority` optional, default `1`), `order` one of `dig`,
+`chop`, `forage`, `till`, `sow`, `mine`, `cancel`, `remove_object`. A rectangle
+that is empty or not entirely inside the map is rejected `invalid_target`; an
+unknown `order`, a non-integer field or any other key, `invalid_payload`
+(`AreaOrders.check()`, shared by `apply()` and `preview()`).
+
+An accepted order joins a FIFO queue (`game/scripts/core/commands/area_orders.gd`)
+and is **expanded** tile by tile in row-major order into exactly the per-tile
+command a single click on that tile submits -- `dig`/`chop`/... with the
+order's priority, `remove_object`, or for `cancel` the construction site's
+`cancel_site` when a site covers the tile, else `cancel_job` for the tile's
+preferred pending job (queued before active, then higher priority, then lower
+id: `AreaOrders.cancel_before()`, which the viewer's preview uses too), else
+nothing (not a rejection, as for a single click). Each tile command goes
+through `apply()` itself, so it emits its own `command_applied` /
+`command_rejected` event and follows every rule a single click follows.
+
+Expansion is paced per tick, never by wall-clock: `AreaOrders.TILES_PER_STEP`
+(128) tiles when the order is accepted, then 128 more at the start of every
+`tick()` (before the clock advances, so those commands carry the same tick a
+player command issued just before that tick would). A rectangle of up to 128
+tiles therefore behaves exactly as before: all its jobs exist when the release
+returns, and the release reports its per-tile rejections (`skipped: [{x, y,
+reason}]`, row-major). A larger one -- a whole 256x256 map is 65,536 tiles, 512
+ticks, about 4 minutes at X1 -- fills in over the next ticks; the envelope's `remaining` says how many
+tiles are left, and rejections of tiles expanded after the release are visible
+only as their `command_rejected` events.
+
+Each tile is judged against the world as it is when the tile is expanded.
+`cancel` only ever cancels a job or a site that already existed when the order
+was accepted (`jobLimit`/`siteLimit`), so an order never cancels work created
+during its own expansion. A pending queue is part of `state_hash()` (an idle
+one is left out: its next order id is not observable), and of the save
+(`areaOrders`, schemaVersion 26, see `save-system.md`): a save taken
+mid-expansion resumes at the same tile.
+
 ### Faction-gated assignment and reservations
 
 An assignee's `may_be_ordered` check at submission (above) only ever guards

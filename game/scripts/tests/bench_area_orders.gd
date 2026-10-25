@@ -151,10 +151,30 @@ func _bench_apply(label: String, tool: int) -> void:
 		var apply_ms := (Time.get_ticks_usec() - start) / 1000.0
 		var jobs := world.get_jobs().size()
 		print("  apply %s N=%d: %.2f ms (%d jobs, %d rejected)" % [label, tiles.size(), apply_ms, jobs, rejected.size()])
+		_bench_expansion(world, label, tiles.size())
 		await _bench_after(world, map_view, label, tiles.size())
 		previous_ms = apply_ms
 		previous_n = tiles.size()
 		map_view.free()
+
+## Where the order is an area_order still expanding (ADR 044): every tick
+## until it is done -- the per-tick cost of the expansion.
+func _bench_expansion(world: WorldStateType, label: String, n: int) -> void:
+	var area_orders = world.get("_area_orders")
+	if area_orders == null or (area_orders.encode()["list"] as Array).is_empty():
+		return
+	var ticks := 0
+	var worst := 0.0
+	var total := 0.0
+	while not (area_orders.encode()["list"] as Array).is_empty():
+		var start := Time.get_ticks_usec()
+		world.tick()
+		var ms := (Time.get_ticks_usec() - start) / 1000.0
+		total += ms
+		worst = maxf(worst, ms) if ticks > 0 else worst # the first tick also builds regions
+		ticks += 1
+	print("    expansion %s N=%d: %d ticks, worst tick %.2f ms (after the first), mean %.2f ms, %d jobs"
+		% [label, n, ticks, worst, total / ticks, world.get_jobs().size()])
 
 ## The first tick after the order and the viewer's refresh (map view +
 ## designation overlay) plus the get_jobs()/get_events() reads the info
@@ -224,6 +244,7 @@ func _bench_cancel() -> void:
 		orders.selected_tool = OrderInputType.Tool.DIG
 		var setup_start := Time.get_ticks_usec()
 		orders.commit_rectangle(world, map_view, tiles)
+		_drain_area_orders(world)
 		var setup_ms := (Time.get_ticks_usec() - setup_start) / 1000.0
 		orders.selected_tool = OrderInputType.Tool.CANCEL
 		var start := Time.get_ticks_usec()
@@ -232,6 +253,7 @@ func _bench_cancel() -> void:
 		start = Time.get_ticks_usec()
 		orders.commit_rectangle(world, map_view, tiles)
 		var apply_ms := (Time.get_ticks_usec() - start) / 1000.0
+		_bench_expansion(world, "cancel", tiles.size())
 		var pending := 0
 		for job in world.get_jobs():
 			if String(job["status"]) in ["queued", "active"]:
@@ -241,6 +263,13 @@ func _bench_cancel() -> void:
 		previous_ms = setup_ms + preview_ms + apply_ms
 		previous_n = tiles.size()
 		map_view.free()
+
+## Expands every pending area order now, at the current tick (setup only:
+## what the next ticks would do first, without the colony working meanwhile).
+func _drain_area_orders(world: WorldStateType) -> void:
+	var area_orders = world.get("_area_orders")
+	while area_orders != null and not (area_orders.encode()["list"] as Array).is_empty():
+		area_orders.advance()
 
 ## Zone: one zone_add per drag; preview, apply, then a map redraw (the
 ## stockpile draw used to walk every zone tile).

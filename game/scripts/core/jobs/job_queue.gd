@@ -644,14 +644,9 @@ func get_jobs_of_kinds(kinds: Array) -> Array[Dictionary]:
 func get_job_kinds() -> Dictionary:
 	return _index.kinds_of(_jobs)
 
-func get_labour_disabled_job_ids() -> Array:
-	return _index.labour_disabled_ids()
-
-func get_queued_summary() -> Dictionary:
-	return _index.queued_summary(_jobs)
-
-func get_designation_changes(from: int) -> Dictionary:
-	return _index.designation_changes(from)
+## The lookup indexes themselves (job_index.gd), for read-only queries.
+func get_index() -> JobIndexType:
+	return _index
 
 ## Vector2i target -> owning job id, for every active job, plus every queued
 ## haul job still within its destination backoff (colonist-ai.md 3.4,

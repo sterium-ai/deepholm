@@ -29,6 +29,7 @@ var has_inspected_tile: bool = false
 ## so a preview drag reuses one get_jobs() read instead of one per call (B1).
 var _cancel_jobs_by_tile: Dictionary = {}
 var _cancel_jobs_key: Array = []
+var _next_area_order := 0
 
 ## Runs the exact same command rules apply() would (WorldState.preview()) without
 ## mutating state or round-tripping through StateCodec: a read-only dry run per tile, in exactly
@@ -124,15 +125,7 @@ static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool:
 			"type": "build",
 			"payload": payload,
 		}
-	var command_type := (
-		"dig" if tool == Tool.DIG
-		else "chop" if tool == Tool.CHOP
-		else "forage" if tool == Tool.FORAGE
-		else "till" if tool == Tool.TILL
-		else "sow" if tool == Tool.SOW
-		else "mine" if tool == Tool.MINE
-		else ""
-	)
+	var command_type := command_type_for_tool(tool)
 	if command_type.is_empty():
 		return {}
 	return {
@@ -191,26 +184,40 @@ static func _pending_jobs_by_tile(world: WorldStateType) -> Dictionary:
 		by_tile[tile].append(job)
 	return by_tile
 
+## The core's own Cancel preference (AreaOrders.cancel_before()), so the
+## preview and an expanded area order always pick the same job.
 static func _cancel_job_before(candidate: Dictionary, current: Dictionary) -> bool:
-	var candidate_status := 0 if candidate["status"] == "queued" else 1
-	var current_status := 0 if current["status"] == "queued" else 1
-	if candidate_status != current_status:
-		return candidate_status < current_status
-	if int(candidate["priority"]) != int(current["priority"]):
-		return int(candidate["priority"]) > int(current["priority"])
-	return String(candidate["id"]) < String(current["id"])
+	return AreaOrders.cancel_before(candidate, current)
 
-## Walls apply one build_line for the complete rectangle. Other tools apply
-## one command per tile, in the given (row-major) order. A tile with
-## no command to build (e.g. Cancel over a tile with no matching job) is
+## Walls apply one build_line for the complete rectangle. The per-tile tools
+## (previews_per_tile()) apply one area_order for a rectangle (ADR 044): the
+## core expands it into the same per-tile commands, row-major, the first
+## AreaOrders.TILES_PER_STEP now and the rest a budget per tick, so releasing
+## a whole-map drag never blocks the frame. A tile list that is not a full
+## rectangle still applies one command per tile, in the given order. A tile
+## with no command to build (e.g. Cancel over a tile with no matching job) is
 ## silently skipped, same as a single click always has been -- it is not a
-## rejection. Every tile whose command world.apply() rejects is returned so
-## the caller (and tests) can inspect the reason without depending on UI.
-## Also records the rectangle's last tile as the inspected tile.
+## rejection. Every tile whose command world.apply() rejects (for an area
+## order: among the tiles expanded at release) is returned so the caller (and
+## tests) can inspect the reason without depending on UI. Also records the
+## rectangle's last tile as the inspected tile.
 func commit_rectangle(world: WorldStateType, map_view: MapViewType, tiles: Array[Vector2i]) -> Array[Dictionary]:
 	var rejected: Array[Dictionary] = []
 	if selected_tool == Tool.WALL and not tiles.is_empty():
 		var result: Dictionary = world.apply(wall_command(world, tiles))
+		if not result.get("ok", false):
+			for tile in tiles:
+				rejected.append({"tile": tile, "reason": String(result["rejection"]["reason"])})
+		else:
+			for entry in result.get("skipped", []):
+				rejected.append({"tile": Vector2i(entry["x"], entry["y"]), "reason": entry["reason"]})
+	elif previews_per_tile(selected_tool) and _rectangle_of(tiles).has_area():
+		var rect := _rectangle_of(tiles)
+		_next_area_order += 1
+		var result: Dictionary = world.apply({"actor": "player",
+			"command_id": "viewer_area_%d_%d" % [world.get_tick(), _next_area_order], "tick": world.get_tick(),
+			"type": "area_order", "payload": {"order": area_order_kind(selected_tool), "x": rect.position.x,
+				"y": rect.position.y, "width": rect.size.x, "height": rect.size.y, "priority": 1}})
 		if not result.get("ok", false):
 			for tile in tiles:
 				rejected.append({"tile": tile, "reason": String(result["rejection"]["reason"])})
@@ -230,6 +237,36 @@ func commit_rectangle(world: WorldStateType, map_view: MapViewType, tiles: Array
 		inspected_tile = tiles[tiles.size() - 1]
 		has_inspected_tile = true
 	return rejected
+
+## The area_order "order" a per-tile tool expands to.
+static func area_order_kind(tool: int) -> String:
+	match tool:
+		Tool.CANCEL: return "cancel"
+		Tool.REMOVE_OBJECT: return "remove_object"
+		_: return command_type_for_tool(tool)
+
+## The job command type of a dig-like tool, "" for any other tool.
+static func command_type_for_tool(tool: int) -> String:
+	match tool:
+		Tool.DIG: return "dig"
+		Tool.CHOP: return "chop"
+		Tool.FORAGE: return "forage"
+		Tool.TILL: return "till"
+		Tool.SOW: return "sow"
+		Tool.MINE: return "mine"
+		_: return ""
+
+## The rectangle `tiles` lists exactly, row-major (MapView.tiles_in_rectangle()
+## of its first and last tile), or an empty Rect2i when it is anything else.
+static func _rectangle_of(tiles: Array[Vector2i]) -> Rect2i:
+	if tiles.is_empty():
+		return Rect2i()
+	var first := tiles[0]
+	var last := tiles[tiles.size() - 1]
+	var rect := Rect2i(first, last - first + Vector2i.ONE)
+	if not rect.has_area() or rect.get_area() != tiles.size() or tiles != MapViewType.tiles_in_rectangle(first, last):
+		return Rect2i()
+	return rect
 
 ## "" for a tool that isn't one of the build buttons, else the
 ## content/objects.json kind that tool builds.

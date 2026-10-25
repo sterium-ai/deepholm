@@ -14,7 +14,7 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
-const SCHEMA_VERSION := 25
+const SCHEMA_VERSION := 26
 
 ## content/manifest.json's version, read fresh through a new ContentRegistry
 ## each call (mirroring how WorldState._init() itself builds one) rather than
@@ -107,6 +107,10 @@ static func encode(world: WorldState) -> Dictionary:
 		# find roll still validates; ItemTable.decode() leaves the constructor's own fresh
 		# seed + WorldState.DIG_FIND_SEED_SALT value in place when this key is absent.
 		"digFindRng": item_table["digFindRng"],
+		# ADR 044 (schemaVersion 26): pending area_order expansions, each with
+		# the next row-major tile to expand, so a save taken mid-expansion
+		# resumes exactly there (AreaOrders.encode()).
+		"areaOrders": world._area_orders.encode(),
 	}
 
 ## Reconstructs a WorldState that ticks identically to the instance that
@@ -164,6 +168,7 @@ static func decode(state: Dictionary) -> WorldState:
 	world._need_giver.restore_pending_assignments(_decode_paused_jobs(state["needJobAssignments"]))
 	world._calendar_alerts_fired = _decode_calendar_alerts(state["calendarAlerts"])
 	world._toils.restore_fetch_tool_excluded(_decode_tool_fetch_excluded(state["toolFetchExcluded"]))
+	world._area_orders.decode(state.get("areaOrders", {}))
 
 	var scheduling: Dictionary = state["scheduling"]
 	world._event_log.decode(scheduling)

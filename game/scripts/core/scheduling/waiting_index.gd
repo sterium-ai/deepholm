@@ -50,7 +50,7 @@ func apply_labour_disabled(queue, waiting: Array[Dictionary], disabled_labours: 
 		job_kinds: Dictionary, get_job_labour: Callable, entry_before: Callable) -> void:
 	if not disabled_labours.values().has(true):
 		var indexes: Array[int] = []
-		for job_id in queue.get_labour_disabled_job_ids():
+		for job_id in queue.get_index().labour_disabled_ids():
 			var index := index_of(waiting, String(job_id), entry_before)
 			if index >= 0:
 				indexes.append(index)
