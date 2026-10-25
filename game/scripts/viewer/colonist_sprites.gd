@@ -11,8 +11,19 @@ extends Node2D
 ## seconds_per_tick() alone -- travel is continuous across tile boundaries).
 
 const TILE_SIZE := 16.0
+## The generated placeholder frames; replaced per instance by the Pixel
+## Crawler pack's frames when the pack is synced (see _init() and
+## docs/art/style.md, "Pack art and placeholders").
 const FRAMES: SpriteFrames = preload("res://data/sprite_frames/colonist_frames.tres")
 const TileAtlasMapType = preload("res://scripts/viewer/tile_atlas_map.gd")
+const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
+
+## Work-toil animation prefix per job kind (+ "_" + facing). An animation the
+## frames do not register falls back as before: "build" to idle, the others to
+## the ordinary idle/walk choice -- the placeholder has only build_*.
+const WORK_ANIMATION_BY_JOB_KIND := {
+	"site_work": "build", "chop": "chop", "mine": "mine", "dig": "dig",
+}
 
 ## Colonists are 64x64 px source frames with empty canvas around the
 ## silhouette: the character's feet sit at local y = 47, not the frame's raw
@@ -78,13 +89,20 @@ var _tick_driver
 var _move_ticks_per_tile: int = 1
 
 ## Per-colonist id: {previous_tile: Vector2i, current_tile: Vector2i,
-## elapsed: float, t: float, facing: "down"|"up"|"side", flip_h: bool,
-## carrying: bool}. `elapsed`/`t` are advance()'s own glide clock, reset to 0
+## elapsed: float, t: float, cycles: float, facing: "down"|"up"|"side",
+## flip_h: bool, carrying: bool, work_animation: String}. `elapsed`/`t`/`cycles`
+## (t unclamped) are advance()'s own glide clock, reset to 0
 ## whenever refresh() records a tile change; `facing`/`flip_h` persist across
 ## an idle stretch (an idle colonist keeps the facing of its last
 ## movement). Cleared wholesale by set_world() so the next refresh() treats
 ## every colonist as freshly spawned (case 1: snap, no glide).
 var _motion: Dictionary = {}
+
+## FRAMES, or the pack's frames. `_loop_work` is true only with the pack: its
+## work strips loop once per tile-crossing duration while the colonist works
+## (the placeholder's build_* keeps its t-driven timing unchanged).
+var _frames: SpriteFrames = FRAMES
+var _loop_work := false
 
 var _sprites: Dictionary = {}
 var _carried_markers: Dictionary = {}
@@ -99,8 +117,14 @@ var _item_atlas_texture: Texture2D
 var _item_region: Rect2
 var _cargo_textures: Dictionary = {}
 
-func _init() -> void:
+## `pack_root` is where the synced pack sheets live; tests pass a fixture
+## root or a missing one.
+func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var pack_frames := PackAssetsType.colonist_frames(FRAME_SOURCE_SIZE, FRAME_FEET_Y, pack_root)
+	if pack_frames != null:
+		_frames = pack_frames
+		_loop_work = true
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
 		_cargo_textures[kind] = load(TileAtlasMapType.ITEM_ATLAS_MAP[kind]["texture_path"])
 	var wood_atlas = TileAtlasMapType.ITEM_ATLAS_MAP.get("wood")
@@ -155,7 +179,8 @@ func advance(delta: float) -> void:
 		var state: Dictionary = _motion[colonist_id]
 		if tick_interval > 0.0:
 			state["elapsed"] = float(state["elapsed"]) + delta
-			state["t"] = clampf(float(state["elapsed"]) / tick_interval, 0.0, 1.0)
+			state["cycles"] = float(state["elapsed"]) / tick_interval
+			state["t"] = clampf(float(state["cycles"]), 0.0, 1.0)
 		_apply_motion_visual(colonist_id, state)
 
 func _refresh() -> void:
@@ -172,7 +197,7 @@ func _refresh() -> void:
 		var sprite: AnimatedSprite2D = _sprites.get(colonist_id)
 		if sprite == null:
 			sprite = AnimatedSprite2D.new()
-			sprite.sprite_frames = FRAMES
+			sprite.sprite_frames = _frames
 			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 			sprite.centered = false
 			sprite.scale = Vector2(DISPLAY_SCALE, DISPLAY_SCALE)
@@ -275,17 +300,17 @@ func _refresh() -> void:
 ## last movement's facing.
 func _update_motion(colonist_id: String, tile: Vector2i, colonist: Dictionary) -> Dictionary:
 	var carrying: bool = colonist.get("carrying") != null
-	var building: bool = _is_building(colonist)
+	var work_animation: String = _work_animation(colonist)
 	if not _motion.has(colonist_id):
 		var fresh_state := {
-			"previous_tile": tile, "current_tile": tile, "elapsed": 0.0, "t": 0.0,
-			"facing": "down", "flip_h": false, "carrying": carrying, "building": building,
+			"previous_tile": tile, "current_tile": tile, "elapsed": 0.0, "t": 0.0, "cycles": 0.0,
+			"facing": "down", "flip_h": false, "carrying": carrying, "work_animation": work_animation,
 		}
 		_motion[colonist_id] = fresh_state
 		return fresh_state
 	var state: Dictionary = _motion[colonist_id]
 	state["carrying"] = carrying
-	state["building"] = building
+	state["work_animation"] = work_animation
 	var previous_current: Vector2i = state["current_tile"]
 	if tile == previous_current:
 		return state
@@ -305,6 +330,7 @@ func _update_motion(colonist_id: String, tile: Vector2i, colonist: Dictionary) -
 		state["current_tile"] = tile
 	state["elapsed"] = 0.0
 	state["t"] = 0.0
+	state["cycles"] = 0.0
 	return state
 
 ## The interpolated, feet-anchored pixel position shared by the
@@ -317,52 +343,58 @@ func _drawn_position(state: Dictionary) -> Vector2:
 	return previous.lerp(current, float(state["t"])) * TILE_SIZE + SPRITE_POSITION_OFFSET
 
 ## "carry_"|"" + "walk"|"idle" + "_" + facing, matching colonist_frames.tres's
-## 12 walk/idle/carry animation names, plus up to 3 "build_"+facing entries
-## (the build work toil's own animation; there is no carry_build variant
-## since a colonist never carries cargo while working a workbench toil).
+## 12 walk/idle/carry animation names, plus the work toil's own animation
+## (WORK_ANIMATION_BY_JOB_KIND prefix + "_" + facing; there is no carry_ work
+## variant since a colonist never carries cargo while working).
 ## Movement is current_tile != previous_tile, independent of t -- a colonist stays in its walk animation for the
-## whole glide, not just while t < 1. A colonist mid-"build" job's work toil
-## (state["building"], resolved in _update_motion()) always shows its build
-## animation regardless of motion/carrying, since the work toil only ever
-## runs while stationary -- unless that facing's build_* animation isn't
-## registered on FRAMES, in which case this falls back to the plain idle
-## pose for that facing rather than erroring on a missing animation name.
+## whole glide, not just while t < 1. A colonist in a work toil
+## (state["work_animation"], resolved in _update_motion()) always shows its
+## work animation regardless of motion/carrying, since the work toil only ever
+## runs while stationary -- unless that facing's animation isn't registered on
+## the frames: then "build" falls back to the plain idle pose for that facing
+## (rather than erroring on a missing animation name) and the other work kinds
+## to the ordinary choice below, exactly as before they had an animation.
 func _animation_name(state: Dictionary) -> String:
-	if state.get("building", false):
-		var build_animation := "build_%s" % state["facing"]
-		if FRAMES.has_animation(build_animation):
-			return build_animation
-		return "idle_%s" % state["facing"]
+	var work: String = state.get("work_animation", "")
+	if not work.is_empty():
+		var work_animation := "%s_%s" % [work, state["facing"]]
+		if _frames.has_animation(work_animation):
+			return work_animation
+		if work == "build":
+			return "idle_%s" % state["facing"]
 	var moving: bool = state["current_tile"] != state["previous_tile"]
 	var prefix := "carry_" if state["carrying"] else ""
 	var motion := "walk" if moving else "idle"
 	return "%s%s_%s" % [prefix, motion, state["facing"]]
 
-## Resolves whether `colonist` is currently in a "build" job's work toil
-## (colonist-ai.md 3.6: colonist.work is populated only by the work toil).
+## The WORK_ANIMATION_BY_JOB_KIND prefix for `colonist`'s current work toil,
+## or "" when it is in none (colonist-ai.md 3.6: colonist.work is populated
+## only by the work toil) or its job kind has no work animation.
 ## `colonist["work"]` carries only {job_id, ticks_remaining} (toil_executor.gd)
 ## -- no job kind -- so this looks the job up the same way colonist_panel.gd's
 ## own `_find_job()` already does (the only other viewer read of world.get_jobs()
 ## by job_id), which test_architecture_rules.gd's viewer-purity check already
 ## permits (any world.get_* call is allowed).
-func _is_building(colonist: Dictionary) -> bool:
+func _work_animation(colonist: Dictionary) -> String:
 	var work = colonist.get("work")
 	if work == null:
-		return false
+		return ""
 	for job in world.get_jobs():
 		if job["id"] == work["job_id"]:
-			# job_queue.gd's SITE_WORK_KIND: the only job kind whose toils
-			# reach "work" under labour "build" (content/jobs.json) -- a
-			# construction site's builder job, not a literal "build" kind.
-			return String(job.get("kind", "")) == "site_work"
-	return false
+			# job_queue.gd's SITE_WORK_KIND ("site_work") is the only job kind
+			# whose toils reach "work" under labour "build" (content/jobs.json)
+			# -- a construction site's builder job, not a literal "build" kind.
+			return String(WORK_ANIMATION_BY_JOB_KIND.get(String(job.get("kind", "")), ""))
+	return ""
 
 ## Applies one colonist's current motion state to its sprite, both item
 ## markers, and the animation frame -- called from refresh() (t as last
 ## computed) and from advance() (t just recomputed from real elapsed time).
-## The frame is set explicitly from floor(t * frame_count), never left to
-## AnimatedSprite2D's own free-running autoplay timer, so it freezes under the
-## paused rule and stays in lock-step with the tick interval at any speed.
+## The frame is set explicitly from floor(t * frame_count) -- or, for a pack
+## work animation, from the unclamped glide clock so the swing loops once per
+## tile-crossing duration -- never left to AnimatedSprite2D's own free-running
+## autoplay timer, so it freezes under the paused rule and stays in lock-step
+## with the tick interval at any speed.
 func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	var sprite: AnimatedSprite2D = _sprites.get(colonist_id)
 	if sprite == null:
@@ -376,7 +408,10 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	if sprite.is_playing():
 		sprite.stop()
 	var frame_count := sprite.sprite_frames.get_frame_count(animation_name)
-	sprite.frame = clampi(int(floor(float(state["t"]) * frame_count)), 0, frame_count - 1)
+	if _loop_work and not String(state["work_animation"]).is_empty():
+		sprite.frame = posmod(int(floor(float(state["cycles"]) * frame_count)), frame_count)
+	else:
+		sprite.frame = clampi(int(floor(float(state["t"]) * frame_count)), 0, frame_count - 1)
 
 	var marker: Sprite2D = _carried_markers.get(colonist_id)
 	if marker != null:

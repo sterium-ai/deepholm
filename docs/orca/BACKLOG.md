@@ -245,11 +245,15 @@ Orca helper scripts, this backlog.
 
 ---
 
-### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `todo` · *parallel-safe (viewer + assets only)*
+### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `review` (branch `antonelmejor50-hub/b2-colonists-and-later-everything`) · *parallel-safe (viewer + assets only)*
 
 - **Owner (2026-10-25):** "el pixelart de los colonos no es muy bonito, se debería parecer más
   al pixelart del pack que descargamos". Visual target stays Dwarf Fortress-like flat top-down
   16 px tiles (`docs/art/style.md`); colonists 24 px tall as decided earlier.
+- **Size revised (owner, 2026-10-25, after the B2 review):** "colonos a la escala nativa de
+  las hojas Body_A del pack (30 px de alto en celda de 32), props ≤ 1 casilla salvo árboles".
+  The 24 px target above is replaced; recorded in `docs/art/style.md`. Native-build check: the
+  owner does it after merging; not blocking.
 - **Licence constraint (pack `Terms.txt`, Anokolisa):** free for commercial use, must not be
   redistributed as assets. This repository is public, so **the pack's PNGs are never
   committed**. Design: `game/assets/pack/` is git-ignored; `tools/sync_pack_assets.ps1` copies
