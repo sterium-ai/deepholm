@@ -359,14 +359,9 @@
     "items": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nextId", "list", "created"],
+      "required": ["nextId", "list"],
       "properties": {
         "nextId": { "type": "integer", "minimum": 1 },
-        "created": {
-          "type": "array",
-          "description": "[first, end, order id]: job numbers first..end-1 were created by that area order's expansion while a later cancel order was pending (a cancel may pick them although they are newer than its jobLimit). Ascending, disjoint.",
-          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } }
-        },
         "list": { "type": "array", "items": { "$ref": "#/$defs/item" } }
       }
     },
@@ -432,14 +427,9 @@
     "toolItems": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["nextId", "list", "created"],
+      "required": ["nextId", "list"],
       "properties": {
         "nextId": { "type": "integer", "minimum": 1 },
-        "created": {
-          "type": "array",
-          "description": "[first, end, order id]: job numbers first..end-1 were created by that area order's expansion while a later cancel order was pending (a cancel may pick them although they are newer than its jobLimit). Ascending, disjoint.",
-          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } }
-        },
         "list": { "type": "array", "items": { "$ref": "#/$defs/toolItem" } }
       }
     },

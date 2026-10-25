@@ -5,7 +5,9 @@ extends SceneTree
 ## 1) MapView's per-tile drag preview (drag_preview.gd), grown tile by tile,
 ##    ends with exactly tiles_in_rectangle() and OrderInput.preview_validity()
 ##    over the whole rectangle -- also after a tick made it stale -- and a
-##    one-column move validates only the newly covered column; a Zone drag
+##    one-column move validates only the newly covered column; jumps,
+##    contractions and a narrower rectangle mid-work stay within the per-call
+##    budget and end equal to a fresh preview; a Zone drag
 ##    previews one corner pair per move, keeps no per-tile list, and shows the
 ##    whole-rectangle zone_add validity;
 ## 2) the designation overlay's pixel per tile equals the colour of one
@@ -21,6 +23,7 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
 const OrderInputType = preload("res://scripts/viewer/order_input.gd")
 const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay.gd")
+const DragPreviewType = preload("res://scripts/viewer/drag_preview.gd")
 
 var _failures: Array[String] = []
 var _n := 0
@@ -82,6 +85,29 @@ func _check_drag_preview() -> void:
 	var all_tiles := MapViewType.tiles_in_rectangle(Vector2i(0, 0), Vector2i(40, 40))
 	_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, all_tiles),
 		"after a tick the refreshed preview must equal a fresh whole-rectangle preview")
+	view.cancel_selection()
+	# Jumps and contractions mid-work: the whole map in one move, one deferred
+	# step, then a narrower rectangle (the pending work must follow the new
+	# shape, not the old width), a contraction to one tile and back, and a
+	# tick in between. Each call validates at most TILE_BUDGET tiles; once the
+	# work is done the preview equals a fresh whole-rectangle preview.
+	orders.select_tool(world, view, OrderInputType.Tool.DIG)
+	_mouse(view, Vector2i(0, 0), true)
+	for corner in [Vector2i(63, 63), Vector2i(31, 63), Vector2i(0, 0), Vector2i(63, 40), Vector2i(10, 63)]:
+		validated[0] = 0
+		_motion(view, corner)
+		_expect(validated[0] <= DragPreviewType.TILE_BUDGET, "a move to %s must validate at most TILE_BUDGET tiles, validated %d" % [corner, validated[0]])
+		if corner == Vector2i(63, 40):
+			world.tick()
+			view.refresh()
+		validated[0] = 0
+		view._process(0.0)
+		_expect(validated[0] <= DragPreviewType.TILE_BUDGET, "one deferred step must validate at most TILE_BUDGET tiles, validated %d" % validated[0])
+	view.finish_preview_work()
+	var final_tiles := MapViewType.tiles_in_rectangle(Vector2i(0, 0), Vector2i(10, 63))
+	_expect(view._preview_tiles == final_tiles, "after jumps the drag must preview exactly its rectangle")
+	_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, final_tiles),
+		"after jumps, a contraction and a tick the preview must equal a fresh whole-rectangle preview")
 	view.cancel_selection()
 	# Whole-rectangle tools keep the one-call preview.
 	orders.select_tool(world, view, OrderInputType.Tool.ZONE)

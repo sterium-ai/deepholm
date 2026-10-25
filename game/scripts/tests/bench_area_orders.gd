@@ -13,7 +13,7 @@ extends SceneTree
 ## extrapolated quadratically from the previous size, would exceed n seconds
 ## (default 120), so a pathological baseline still finishes; only=<a,b,...>
 ## runs just those sections (ticks, preview, drag, drag_cancel, drag_zone,
-## apply, cancel, zone).
+## drag_jump, apply, cancel, zone).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
@@ -48,6 +48,8 @@ func _run() -> void:
 		await _bench_drag("cancel", OrderInputType.Tool.CANCEL, true, 8)
 	if _runs("drag_zone"):
 		await _bench_drag("zone", OrderInputType.Tool.ZONE, false, 8)
+	if _runs("drag_jump"):
+		_bench_drag_jumps()
 	if _runs("apply"):
 		await _bench_apply("dig", OrderInputType.Tool.DIG)
 	if _runs("cancel"):
@@ -157,6 +159,38 @@ func _bench_drag(label: String, tool: int, dig_first := false, tick_every := 0) 
 				% [tick_every, worst_tick_frame])
 		previous_ms = total_ms
 		previous_n = n
+	map_view.free()
+
+## Single mouse moves that jump or contract the Dig drag rectangle a long way
+## (one frame's work each, through MapView._gui_input()), each followed by one
+## deferred preview step, plus the steps left to finish the work.
+func _bench_drag_jumps() -> void:
+	var world := WorldStateType.new(SEED, 10, WIDTH, HEIGHT)
+	var orders := OrderInputType.new()
+	var map_view := MapViewType.new()
+	map_view.set_world(world)
+	map_view.preview_validity = func(tiles: Array[Vector2i]) -> Array[bool]:
+		return orders.preview_validity(world, world.preview, map_view, tiles)
+	orders.select_tool(world, map_view, OrderInputType.Tool.DIG)
+	_mouse(map_view, Vector2i.ZERO, true, true)
+	var last := Vector2i(WIDTH - 1, HEIGHT - 1)
+	for corner in [last, Vector2i(0, 0), last, Vector2i(WIDTH / 2 - 1, HEIGHT - 1), Vector2i(WIDTH - 1, 0), last]:
+		var start := Time.get_ticks_usec()
+		_motion(map_view, corner)
+		var move_ms := (Time.get_ticks_usec() - start) / 1000.0
+		start = Time.get_ticks_usec()
+		map_view._process(0.0)
+		var step_ms := (Time.get_ticks_usec() - start) / 1000.0
+		var steps := 0
+		var worst_step := step_ms
+		while map_view._drag_preview.has_work():
+			start = Time.get_ticks_usec()
+			map_view._process(0.0)
+			worst_step = maxf(worst_step, (Time.get_ticks_usec() - start) / 1000.0)
+			steps += 1
+		print("  drag jump to %s: mouse-move %.2f ms, next frame %.2f ms, %d more frames to finish (worst %.2f ms)"
+			% [corner, move_ms, step_ms, steps, worst_step])
+	map_view.cancel_selection()
 	map_view.free()
 
 ## commit_rectangle() (mouse release) of the rectangle on a fresh world, then
