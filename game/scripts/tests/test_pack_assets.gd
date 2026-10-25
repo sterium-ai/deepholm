@@ -26,6 +26,12 @@ class FakeWorld:
 	var jobs: Array = []
 	func get_colonists() -> Array: return colonists
 	func get_jobs() -> Array: return jobs
+	# WorldState.get_job() (B1): colonist_sprites.gd reads the one job it needs.
+	func get_job(job_id: String) -> Dictionary:
+		for job in jobs:
+			if String(job["id"]) == job_id:
+				return job
+		return {}
 	func get_move_ticks_per_tile() -> int: return 4
 	func get_tool_item(_id: String) -> Dictionary: return {}
 	func get_actors_with_health() -> Array: return []
