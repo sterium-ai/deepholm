@@ -578,14 +578,26 @@ In-flight route state must stay a real continuation. It is tempting to save only
 spans many ticks, and the map can change in between: a wall placed, a tree chopped, a door
 built. Its `visited`, `came_from` and `frontier` record decisions taken against the map as
 it was at each step, which a re-run against the saved (current) map would not reproduce.
-So A7 keeps the same content in a compact form:
+Today's snapshot is not a full continuation either. `RouteSearch.snapshot()`
+(`routing/route_search.gd`) saves `frontier`, `visited` and `came_from` but not `_cost`.
+`RouteSearch.restore()` then calls `_rebuild_costs()`, which walks `came_from` and sums
+`_cost_of(tile)`, which is the *current* `_cost_fn`. If a visited tile's cost changed after
+it was expanded, the rebuilt costs differ from the ones the uninterrupted search holds.
+`_pop_min_index()` orders the frontier by `_cost`, so the resumed search can pop tiles in a
+different order and return a different path from identical snapshots. This defect is read
+from the code, not measured. No current test changes the map between expansion and save.
+
+So A7 saves the whole continuation, accumulated costs included, in a compact form:
 
 - `visited` as a bitset over tile indices;
 - `came_from` as a 2-bit direction per visited tile;
+- `cost` as the accumulated cost per visited tile, in visit order;
 - `frontier` as tile indices in order;
 - all as base64 strings instead of arrays of `{x, y}` dictionaries.
 
-The continuation stays exact at a fraction of the size.
+`restore()` takes the saved costs instead of rebuilding them, and `_rebuild_costs()` remains
+only for migrating older saves that lack them. The continuation stays exact at a fraction
+of the size.
 
 ## 5. Best-practice check
 

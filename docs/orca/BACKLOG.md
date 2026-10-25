@@ -445,12 +445,12 @@ one.
 
 #### A6 — Bounded event and dirty-cell streams · `todo` · *parallel-safe (no save change)*
 
-- **Goal:** `EventLog` and `JobQueue` events, and `_dirty_cells`, become cursor-based streams
+- **Goal:** `EventLog` and `JobQueue` events, and `TileGrid.dirty_cells`, become cursor-based streams
   (`get_events_since(sequence)`, `get_dirty_cells_since(cursor)`) with bounded retention. The
   viewer consumes them incrementally instead of deep-copying the whole log each refresh.
   Events stay unpersisted, as today.
-- **Owned paths:** `world/event_log.gd`, `jobs/job_queue.gd` (events only), `world_state.gd`
-  (getters), `viewer/map_view.gd`, `viewer/status_text.gd`, `viewer/work_table_panel.gd`,
+- **Owned paths:** `world/event_log.gd`, `jobs/job_queue.gd` (events only),
+  `map/tile_grid.gd` (dirty-cell log), `world_state.gd` (getters), `viewer/map_view.gd`, `viewer/status_text.gd`, `viewer/work_table_panel.gd`,
   `test_architecture_rules.gd` (allow the new getters), affected tests.
 - **Acceptance:** event order and content identical for the R1 scenario; event and dirty
   logs stay below their bound in `bench_long_session`; the viewer tests pass.
@@ -461,13 +461,18 @@ one.
 - **Goal:** one `ContentRegistry` per session, injected into `StateCodec`/`SaveIO` instead of
   rebuilt from disk per save and per validation. `write_atomic()` stringifies and hashes
   once. Tiles are saved as a palette plus run-length encoding. In-flight route searches keep their full
-  continuation state (`frontier`, `visited`, `came_from`), because a search can span a map
-  change and a re-run against the saved map would diverge. Only its encoding becomes compact:
-  `visited` as a tile-index bitset, `came_from` as a 2-bit direction per visited tile,
-  `frontier` as ordered tile indices, all base64. The file
+  continuation state (`frontier`, `visited`, `came_from` and the accumulated `_cost` per
+  visited tile), because a search can span a map change. A re-run against the saved map
+  would diverge, and so does today's `restore()`: `_rebuild_costs()` recomputes `_cost` from
+  the current map, which can reorder the frontier (audit §4.4). The saved costs are
+  restored as they were, and `_rebuild_costs()` is kept only to migrate older saves. The
+  encoding becomes compact: `visited` as a tile-index bitset, `came_from` as a 2-bit
+  direction per visited tile, `cost` as floats in visit order, `frontier` as ordered tile
+  indices, all base64. The file
   write and read-back run on a worker thread after `encode()`. `WorldState` gets `dispose()`
   so a replaced world is freed.
-- **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (compact snapshot helpers),
+- **Owned paths:** `persistence/*.gd`, `routing/route_search.gd` (snapshot with costs,
+  compact helpers, `restore()`),
   `world_state.gd`, `viewer/save_wiring.gd`, `docs/architecture/save-system.md`,
   `contracts/game-state.schema.json`, an ADR, fixtures, affected tests.
 - **Acceptance:** after R14, every schema change carries a version bump, a migration and a
@@ -476,11 +481,13 @@ one.
   `test_save_*` unchanged;
   a new test starts a long search, changes passability on a tile the search has already
   visited (and, separately, on a frontier tile) between ticks, saves and loads mid-search,
-  then finishes. It ends with the same path, status, expansion count and `state_hash()` as
+  then finishes. The visited-tile case changes that tile's cost, not only its passability,
+  so it fails on today's cost rebuild. It ends with the same path, status, expansion count and `state_hash()` as
   an uninterrupted run with the same map change. A round trip reproduces `snapshot()` exactly.
   `bench_save_load` 1,000 actors: main-thread save ≤ 150 ms (baseline 1,976 ms total), file
   ≤ 50% of baseline (1,408 KB), `hash_match=true`; leak check delta 0.
-- **Non-goals:** changing what is saved (beyond encoding); cloud saves.
+- **Non-goals:** changing what is saved, beyond the encoding and the accumulated route
+  costs that make the continuation exact; cloud saves.
 
 #### A8 — A* and region-aware routing · `todo` · after A3 · ADR (paths may change)
 
