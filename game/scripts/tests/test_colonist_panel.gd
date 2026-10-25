@@ -116,7 +116,7 @@ func _check_trapped_colonist_shows_rescue_reason_and_remedy() -> void:
 	var world := _build_world(10002)
 	world._colonists.append(_colonist("trapped", 0, 0, _full_needs()))
 	world._colonists[0]["trapped"] = {"tile": Vector2i(0, 0), "ticksRemaining": 40, "fromTile": Vector2i(1, 0)}
-	world._set_rescue_reason("trapped", WorldStateType.REASON_NO_RESCUER_AVAILABLE)
+	world._trench.set_rescue_reason("trapped", WorldStateType.REASON_NO_RESCUER_AVAILABLE)
 	var line := _panel_for(world)._line_for(world._colonists[0])
 	_expect(line.find("trapped in a trench, no one can help") >= 0,
 		"a trapped colonist with no rescuer must show the literal rescue reason (got: %s)" % line)

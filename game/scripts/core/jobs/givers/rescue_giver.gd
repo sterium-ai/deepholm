@@ -45,12 +45,13 @@ extends RefCounted
 ## itself. This module validates the commit-time route only; everything a
 ## committed rescue does after that (its scheduler activation, a resume after
 ## a need interrupt, a mid-travel re-route around a newly blocked corridor)
-## is kept trench-safe by world_state.gd at its own existing boundaries --
-## the go_to toil's passability hook (`_toil_go_to_passable()` hands a rescue
-## job `_rescue_routable_to()`, under which a trench is simply impassable and
+## is kept trench-safe by TrenchSystem (actors/trench_system.gd) at its own
+## existing boundaries -- the go_to toil's passability hook
+## (`_toil_go_to_passable()` hands a rescue job
+## `TrenchSystem.rescue_routable_to()`, under which a trench is simply impassable and
 ## the target gets no impassable-target exception, so a re-route can never
 ## cross a trench nor be trimmed to start work off-target) and the first
-## drive of a fresh activation (`_rescue_activation_safe()`, which scans the
+## drive of a fresh activation (`TrenchSystem.rescue_activation_safe()`, which scans the
 ## scheduler's own already-computed path tile by tile and retires the
 ## commitment when the map changed under it). Nothing here ever runs a route
 ## search to completion synchronously: a resumed rescue re-routes through the
@@ -93,9 +94,9 @@ extends RefCounted
 ## proposal pathway (get_pending_assignments() feeding GlobalAssignment.tick()'s
 ## committed_needs, see world_state.gd's _committed_jobs()) any need job uses,
 ## so it pre-empts ordinary labour identically. It never pre-empts a
-## colonist's own need: the candidate pool WorldState hands to advance() has
+## colonist's own need: the candidate pool TrenchSystem hands to advance() has
 ## already excluded any colonist mid need-search or already committed to a
-## need job (world_state.gd's _rescue_candidates()), so this module never even
+## need job (TrenchSystem.rescue_candidates()), so this module never even
 ## considers such a colonist, let alone interrupts one.
 ##
 ## Reservation-table convention (orders-and-movement.md "ReservationTable key
@@ -174,7 +175,7 @@ var _tick_route_resumes: Dictionary = {}
 ## WorldState._get_job(job_id) -> Dictionary: the live queue entry, read in
 ## advance() for the scheduler's own block reason on a committed rescue.
 var _get_job: Callable
-## WorldState._retire_rescue_job(job_id) -> void: cancels a committed rescue
+## TrenchSystem.retire_rescue_job(job_id) -> void: cancels a committed rescue
 ## through the shared finish boundary and calls resolve_job() below -- the
 ## one path an unreachable commitment leaves by.
 var _retire_job: Callable
@@ -195,9 +196,9 @@ var _pending: Dictionary = {}
 ## job_id -> victim_id: this module's own record of which trapped colonist a
 ## rescue job targets -- the source both extra_keys_for_job() (the "trapped:"
 ## key's own activation-gated acquisition) and victim_for_job()
-## (world_state.gd's own completion-effect lookup)
+## (TrenchSystem.complete_rescue()'s lookup)
 ## read. An unreachable or unsafe committed rescue is never resubmitted under
-## a fresh id (world_state.gd's _retire_rescue_job() cancels it and calls
+## a fresh id (TrenchSystem.retire_rescue_job() cancels it and calls
 ## resolve_job() below so the victim's next search may pick another
 ## rescuer), so nothing ever carries an association from one
 ## job id to another. Rebuilt after a load by restore_victim_assignments()
@@ -213,17 +214,17 @@ var _job_victim: Dictionary = {}
 ## tile_key(x,y) -> String must be WorldState._tile_key. routable_to(target,
 ## faction_id="colony") -> Callable must be WorldState._routable_to.
 ## rescue_target_candidates(victim_tile: Vector2i) -> Array[Vector2i] must be
-## WorldState._rescue_target_candidates (every passable, non-trench neighbour
+## TrenchSystem.rescue_target_candidates (every passable, non-trench neighbour
 ## of victim_tile; empty when none qualify). submit_job(target, priority,
 ## tick, kind, restrict_to) -> Dictionary must be the scheduler's own submit()
 ## (_scheduler.submit), the same entry point every other job-giver and player
-## order uses. set_reason(victim_id, reason) -> void must write WorldState's
-## own exposed rescue-reason cache. interrupt_current_job(colonist: Dictionary)
+## order uses. set_reason(victim_id, reason) -> void must be
+## TrenchSystem.set_rescue_reason (the exposed rescue-reason cache). interrupt_current_job(colonist: Dictionary)
 ## -> void and resume_interrupted_job(colonist_id: String) -> void must be
 ## WorldState's _pause_work_job()/_resume_paused_job() wrappers -- the exact
 ## same callables NeedGiver is constructed with. is_trench(tile: Vector2i)
-## -> bool must be WorldState's own `func(tile): return get_tile(tile.x,
-## tile.y) == TILE_TRENCH`: the real-route
+## -> bool must be TrenchSystem.is_trench_tile (`get_tile(tile.x,
+## tile.y) == TILE_TRENCH`): the real-route
 ## safety check below rejects a path that crosses any trench tile, not merely
 ## the victim's own. route_budget must be WorldState's own `_route_budget`
 ## Dictionary itself (never a copy), the same instance GlobalAssignment and
@@ -277,11 +278,11 @@ func colonist_for_job(job_id: String) -> String:
 ## rescue sits below critical/urgent needs, above ordinary work): a commitment
 ## made here is proposed to the scheduler from the next tick on, and _commit()
 ## suspends the rescuer's current assignment before it is driven. `candidates`
-## is WorldState's own pre-filtered pool of colonists eligible to be proposed
+## is TrenchSystem's pre-filtered pool of colonists eligible to be proposed
 ## a rescue job this tick (never trapped, never mid need-search or already
-## committed to a need -- world_state.gd's _rescue_candidates()); `victims` is
-## every currently-trapped, rescuable colonist (world_state.gd's
-## _trapped_rescue_victims()).
+## committed to a need -- TrenchSystem.rescue_candidates()); `victims` is
+## every currently-trapped, rescuable colonist
+## (TrenchSystem.trapped_rescue_victims()).
 func advance(candidates: Array[Dictionary], victims: Array[Dictionary], tick: int) -> void:
 	_tick_route_resumes = {}
 	# A committed rescue the scheduler itself has
@@ -514,7 +515,7 @@ func _commit(victim_id: String, rescuer: Dictionary, target: Vector2i, tick: int
 	_job_victim[job_id] = victim_id
 	_set_reason.call(victim_id, "")
 
-## Exposes "no one can help" (world_state.gd's get_colonist_rescue_reason(),
+## Exposes "no one can help" (TrenchSystem.get_colonist_rescue_reason(),
 ## mirroring get_colonist_need_reason()'s pattern) whenever this tick's search
 ## for victim_id found no reachable candidate at all -- including the
 ## degenerate case where every other colonist is itself trapped. No
@@ -548,8 +549,8 @@ func extra_keys_for_job(job_id: String) -> Array[String]:
 	return [_trapped_key(victim_id)]
 
 ## The trapped victim's colonist_id job_id is committed to rescuing, or "" if
-## none -- world_state.gd's own completion effect (_toil_on_work_complete()'s
-## "rescue" case) reads this instead of guessing "whichever trapped colonist
+## none -- the rescue completion effect (TrenchSystem.complete_rescue(), the
+## work-complete hook's "rescue" case) reads this instead of guessing "whichever trapped colonist
 ## happens to be adjacent to the target," which is ambiguous whenever two
 ## different victims are each adjacent to the very same target tile.
 func victim_for_job(job_id: String) -> String:

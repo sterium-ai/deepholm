@@ -37,6 +37,7 @@ const ZoneTableType = preload("res://scripts/core/objects/zone_table.gd")
 const ConstructionGiverType = preload("res://scripts/core/jobs/givers/construction_giver.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
+const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
 
 ## Default/fixture map size: every existing test and the debug scenario
 ## construct WorldState with no explicit width/height and must keep getting
@@ -55,7 +56,7 @@ const TILE_TREE := ContentRegistryType.TILE_TREE
 const TILE_WATER := ContentRegistryType.TILE_WATER
 const TILE_TRENCH := ContentRegistryType.TILE_TRENCH
 const COLONIST_COUNT := ContentRegistryType.COLONIST_COUNT
-const DEFAULT_TRENCH_CLIMB_TICKS := 40 ## content/actors.json tunables.wild.trench_climb_ticks default
+const DEFAULT_TRENCH_CLIMB_TICKS := TrenchSystemType.DEFAULT_TRENCH_CLIMB_TICKS
 ## Salts for _generate_map()/_spawn_colonists()'s own local RNGs, distinct
 ## from each other and from incident_scheduler.gd's SEED_SALT (914_827) so no
 ## two of this world's independent streams ever share a draw sequence.
@@ -197,8 +198,8 @@ var _need_status: Dictionary = {}
 var _need_giver: NeedGiverType
 ## Decides when a rescue job exists for a trapped colonist.
 var _rescue_giver: RescueGiverType
-## colonist_id -> last exposed rescue reason ("" when none, colonist-ai.md 3.8), get_colonist_rescue_reason()'s backing store.
-var _rescue_status: Dictionary = {}
+## Trapping, escape_trench climb-out, rescue pools and rescue reasons (actors/trench_system.gd).
+var _trench: TrenchSystemType
 ## Decides when a haul job exists and where it delivers to.
 var _haul_giver: HaulGiverType
 ## The "calendar boost" term in the effective-priority formula (ADR 008).
@@ -220,9 +221,6 @@ var _combat_status: Dictionary = {}
 ## Decides when an `approach` job should exist for a hostile actor not yet
 ## adjacent to a hostile target (ADR 033).
 var _approach_giver: ApproachGiverType
-## The advancing colonist's tile at the start of its _toils.advance() call:
-## scratch for _toil_on_work_complete()'s trap pre-check. Never saved.
-var _trap_tile_before: Vector2i = Vector2i.ZERO
 ## Construction sites, their fetch/work flow and the two site-fetch runtime
 ## caches (objects/construction_system.gd).
 var _construction: ConstructionSystemType
@@ -299,6 +297,14 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
+	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
+	_trench = TrenchSystemType.new(_content, _relations, _tile_grid, _passability, _scheduler, _progress_table, _clock,
+		func() -> Array[Dictionary]: return _colonists, _find_colonist, _find_job_colonist, _finish_job,
+		_drop_carried_haul_item, _resolve_giver_association, _set_work_progress,
+		func() -> Array[String]: return _need_giver.searching_colonist_ids(),
+		func() -> Dictionary: return _need_giver.get_pending_assignments(), _combat_giver.owns,
+		func(job_id: String) -> String: return _rescue_giver.victim_for_job(job_id),
+		func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -385,8 +391,8 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_need_source_candidates, _tile_key, _routable_to, _scheduler.submit, _set_need_reason,
 		_emit_need_unmet_event, _interrupt_current_job, _resume_interrupted_job, _content)
 	_rescue_giver = RescueGiverType.new(RESCUE_JOB_PRIORITY, bounds_max, _scheduler.queue.get_reservation_table(),
-		_tile_key, _routable_to, _rescue_target_candidates, _scheduler.submit, _set_rescue_reason,
-		_interrupt_current_job, _resume_interrupted_job, _is_trench_tile, _route_budget, _get_job, _retire_rescue_job)
+		_tile_key, _routable_to, _trench.rescue_target_candidates, _scheduler.submit, _trench.set_rescue_reason,
+		_interrupt_current_job, _resume_interrupted_job, _trench.is_trench_tile, _route_budget, _get_job, _trench.retire_rescue_job)
 	# The "trapped:<victim_id>" key now moves through
 	# JobQueue's own activation/reactivation boundary like any other job's
 	# reservation, instead of RescueGiver acquiring it directly -- see
@@ -510,12 +516,12 @@ func tick() -> void:
 	# re-routes below, so it runs between them -- after tick() clears that
 	# ledger, before _advance_colonists() honours it. Its commitments reach
 	# the scheduler's committed-proposal path next tick (rescue_giver.gd).
-	_rescue_giver.advance(_rescue_candidates(), _trapped_rescue_victims(), _clock.tick)
+	_rescue_giver.advance(_trench.rescue_candidates(), _trench.trapped_rescue_victims(), _clock.tick)
 	# F5: staged incident actors whose job just activated enter the world now,
 	# before _advance_colonists() drives their first toil (ADR 014 Amendment).
 	_incidents.activate_pending()
 	# Same activation-gated timing as the incident line above (ADR 026).
-	_activate_pending_escapes()
+	_trench.activate_pending_escapes()
 	_advance_colonists()
 	# Runs after _advance_colonists(), not alongside
 	# CombatGiver/RescueGiver above: its own "already adjacent" check (rule 1)
@@ -589,49 +595,6 @@ func _colonists_not_searching_need() -> Array[Dictionary]:
 		filtered.append(colonist)
 	return filtered
 
-## rescue_giver.gd's own candidate pool: every colonist ("worker"
-## component actor, never a wolf/trader) eligible to be proposed a rescue job
-## this tick. Excludes a trapped colonist (obviously cannot rescue anyone),
-## one mid need-search or already committed to a need job (rescue must never
-## pre-empt a colonist's own need, colonist-ai.md 3.1/3.6), and one
-## CombatGiver owns (an open flee episode) -- the same exclusions
-## _colonists_not_combat_owned()/_colonists_not_searching_need() already apply
-## for the analogous need-giver roster, reused here rather than a bespoke
-## filter. A colonist already committed to (or mid-search for) a different
-## rescue is not excluded here: rescue_giver.gd's own `_pending` map already
-## refuses to pick a rescuer twice (see its _start_search()).
-func _rescue_candidates() -> Array[Dictionary]:
-	var searching := _need_giver.searching_colonist_ids()
-	var need_committed: Dictionary = _need_giver.get_pending_assignments()
-	var filtered: Array[Dictionary] = []
-	for colonist in _colonists:
-		var colonist_id: String = String(colonist["id"])
-		if colonist.get("trapped") != null: continue
-		if searching.has(colonist_id) or need_committed.has(colonist_id): continue
-		if _combat_giver.owns(colonist_id): continue
-		if not ActorTableType.has_component(colonist, "worker", _content): continue
-		# F3's own gate, the same one need_giver.gd's _may_be_ordered()
-		# and GlobalAssignment's order-eligibility check consult: a "colonist"-def
-		# actor under a hostile/neutral faction (a raider, ADR 014) still has a
-		# worker component but must never be offered to rescue a colony colonist.
-		if not _passability.colonist_may_be_ordered(colonist_id): continue
-		filtered.append(colonist)
-	return filtered
-
-## rescue_giver.gd's own victim pool: every currently-trapped
-## colonist eligible for rescue. A trapped hostile actor's own trapped dict
-## always carries ticksRemaining/fromTile (_trap_actor()'s hostile branch) and
-## already auto-escapes via escape_trench (ADR 026) -- only the bare
-## {"tile"} shape _trap_actor() gives a non-hostile (colonist) actor ever
-## needs a rescuer.
-func _trapped_rescue_victims() -> Array[Dictionary]:
-	var victims: Array[Dictionary] = []
-	for colonist in _colonists:
-		var trapped = colonist.get("trapped")
-		if trapped == null or (trapped as Dictionary).has("ticksRemaining"): continue
-		victims.append(colonist)
-	return victims
-
 ## GlobalAssignment.tick()'s `committed_needs` param (a historical name: it
 ## now carries more than needs): a worker id -> job id map that skips the ordinary scored candidate
 ## scan entirely and proposes only that job, so it always wins regardless of
@@ -645,7 +608,7 @@ func _trapped_rescue_victims() -> Array[Dictionary]:
 func _committed_jobs() -> Dictionary:
 	# Rescue's commitments are merged first, need's
 	# second, so a need overwrites a rescue for the same actor rather than the
-	# reverse. _rescue_candidates() only excludes a need-committed colonist at
+	# reverse. TrenchSystem.rescue_candidates() only excludes a need-committed colonist at
 	# the moment a rescue is first proposed -- it says nothing about a colonist
 	# already mid-rescue who later develops a critical need of its own (NeedGiver
 	# still considers it, since _colonists_not_combat_owned() does not exclude
@@ -982,13 +945,9 @@ func get_colonist_need_reason(colonist_id: String) -> String:
 func get_active_need_job_id(colonist_id: String) -> String:
 	return _need_giver.get_pending_job(colonist_id)
 
-## Mirroring get_colonist_need_reason()'s own pattern: "" when a
-## trapped colonist has no exposed rescue reason (a rescuer is already
-## committed, or the search has not run yet), REASON_NO_RESCUER_AVAILABLE once
-## a tick's search finds no reachable candidate at all -- the colonist panel's
-## "trapped in a trench, no one can help" message.
+## "" or REASON_NO_RESCUER_AVAILABLE for a trapped colonist (TrenchSystem).
 func get_colonist_rescue_reason(colonist_id: String) -> String:
-	return String(_rescue_status.get(colonist_id, ""))
+	return _trench.get_colonist_rescue_reason(colonist_id)
 
 ## The active calendar boost (ADR 008) for labour at the current tick -- a
 ## read-only getter for presentation; the scheduler queries it directly.
@@ -1131,37 +1090,6 @@ func _is_cell_occupied(x: int, y: int, excluding_colonist_id: String) -> bool:
 		return true
 	return false
 
-## rescue_giver.gd's target-tile candidates: every passable,
-## non-trench tile adjacent to a trapped colonist's own tile, in the same
-## row-major neighbour order ItemTable.dig_item_placement() already uses (ADR 026's own
-## "item placement" convention) -- but, unlike that helper, a rescue target
-## must never be the trench tile itself: a rescue job must never target the
-## trench a rescuer could then fall into. rescue_giver.gd ranks these by real
-## route length from its own chosen rescuer (a route that must also never
-## cross the victim's own trench tile -- see its own doc comment) rather than
-## picking a single one here: an adjacent tile on the far side of a
-## corridor-width trench can be much farther, by real route, than the map's
-## row-major order alone would suggest.
-func _rescue_target_candidates(victim_tile: Vector2i) -> Array[Vector2i]:
-	var candidates: Array[Vector2i] = []
-	for neighbor in [Vector2i(victim_tile.x, victim_tile.y - 1), Vector2i(victim_tile.x - 1, victim_tile.y),
-			Vector2i(victim_tile.x + 1, victim_tile.y), Vector2i(victim_tile.x, victim_tile.y + 1)]:
-		if bool(passability(neighbor.x, neighbor.y)["passable"]) and get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
-			candidates.append(neighbor)
-	return candidates
-
-## escape_trench's exit rule: prefers from_tile (where the actor fell from)
-## when passable for the actor's own faction, else ItemTable.dig_item_placement()'s
-## row-major order. Vector2i(-1, -1) means no exit (caller retries).
-func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) -> Vector2i:
-	if from_tile != tile and bool(passability(from_tile.x, from_tile.y, faction_id)["passable"]) \
-			and get_tile(from_tile.x, from_tile.y) != TILE_TRENCH:
-		return from_tile
-	for neighbor in [Vector2i(tile.x, tile.y - 1), Vector2i(tile.x - 1, tile.y), Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]:
-		if bool(passability(neighbor.x, neighbor.y, faction_id)["passable"]) and get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
-			return neighbor
-	return Vector2i(-1, -1)
-
 ## command_checks.gd's sow precondition reads this name through the world.
 func _has_item_of_kind(kind: String) -> bool:
 	return _item_table.has_item_of_kind(kind)
@@ -1236,9 +1164,7 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 		_construction.add_site_work(job.get("site", target), "")
 		return
 	_progress_table.record(target, ticks_remaining, job_id)
-	var escaping := _escaping_actor_at(target)
-	if not escaping.is_empty() and escaping.get("trapped") != null:
-		(escaping["trapped"] as Dictionary)["ticksRemaining"] = ticks_remaining
+	_trench.mirror_climb_ticks(target, ticks_remaining)
 	# Posted on the trader's own first work-toil tick (this same
 	# call, on arrival), not at the wait's end, so accept_trade has a window
 	# before the trader's unchanged despawn (test_incidents.gd's own
@@ -1364,19 +1290,6 @@ func _remove_trader_offered_item(trader: Dictionary, kind: String) -> void:
 			items.remove_at(i)
 			return
 
-## The colonist with an active escape_trench job targeting `target`, via the
-## scheduler's own assignments (never trapped.tile alone, so two actors
-## trapped on the same tile at different times are never confused).
-func _escaping_actor_at(target: Vector2i) -> Dictionary:
-	var assignments := _scheduler.get_assignments()
-	for worker_id in assignments:
-		var job_id: String = String(assignments[worker_id]["job_id"])
-		var job := _scheduler.queue.get_job(job_id)
-		if String(job.get("kind", "")) == "escape_trench" and String(job.get("status", "")) == "active" \
-				and job.get("target") == target:
-			return _find_colonist(worker_id)
-	return {}
-
 ## F3: terminally resolves every job GlobalAssignment's
 ## may_be_ordered/may_reserve_colony_items gates refused, with the same typed
 ## fail() path zone_remove's blocked_destination_gone already uses -- nothing
@@ -1447,115 +1360,13 @@ func _advance_colonists() -> void:
 		# target, and retire the commitment -- so the victim's next search may
 		# pick another rescuer -- rather than walk a now-unsafe path.
 		if String(job.get("kind", "")) == "rescue" and _route(colonist) == null and colonist.get("work") == null \
-				and not _rescue_activation_safe(colonist, job, assignment.get("path", [])):
-			_retire_rescue_job(job_id, job)
+				and not _trench.rescue_activation_safe(colonist, job, assignment.get("path", [])):
+			_trench.retire_rescue_job(job_id, job)
 			continue
 		var tile_before := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		_trap_tile_before = tile_before
+		_trench.trap_tile_before = tile_before
 		_toils.advance(colonist, job_id, job, assignment.get("path", []), _toil_hooks)
-		_check_trench_arrival(colonist, job_id, tile_before)
-
-## True when a freshly activated rescue assignment may be driven as-is: its
-## target is still a passable non-trench tile (an object placed there since
-## commit would otherwise make the scheduler's route-trim start rescue work
-## one tile off-target) and, when the scheduler's path starts where the
-## rescuer stands (the only case ToilExecutor walks it verbatim; any other
-## path is re-routed under _rescue_routable_to() anyway), that path ends on
-## the target and crosses no trench tile anywhere along it.
-func _rescue_activation_safe(colonist: Dictionary, job: Dictionary, path: Array) -> bool:
-	var target: Vector2i = job["target"]
-	if _is_trench_tile(target) or not bool(passability(target.x, target.y, String(colonist.get("factionId", "colony")))["passable"]):
-		return false
-	if path.is_empty() or path[0] != Vector2i(int(colonist["x"]), int(colonist["y"])):
-		return true
-	if path[path.size() - 1] != target:
-		return false
-	for step in path:
-		if _is_trench_tile(step):
-			return false
-	return true
-
-## Retires a committed rescue whose travel can no longer be completed safely:
-## an unreachable or newly unsafe target, a route that would now cross a
-## trench, or a target no longer passable. Cancelled through the shared
-## finish boundary (never resubmitted under the same rescuer like
-## _resubmit_unreachable_job() does for an ordinary order), its own progress
-## key dropped, and RescueGiver told so the rescuer resumes its own
-## interrupted work and the victim's next search is free to choose any
-## available rescuer, not this one indefinitely.
-func _retire_rescue_job(job_id: String, job: Dictionary = {}) -> void:
-	if job.is_empty():
-		job = _scheduler.queue.get_job(job_id)
-	var was_active := String(job.get("status", "")) == "active"
-	if _finish_job(job_id, "cancel_job").get("ok", false):
-		_progress_table.clear_terminated_job(job_id, job, was_active)
-	_rescue_giver.resolve_job(job_id)
-
-## ADR 026: traps an actor whose route step lands it on trench (the
-## "still routing" case; _toil_on_work_complete()'s own pre-check covers
-## arrival+completion in the same tick, via the same _trap_actor()).
-func _check_trench_arrival(colonist: Dictionary, job_id: String, tile_before: Vector2i) -> void:
-	if colonist.get("trapped") != null: return
-	var tile_after := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	if tile_after == tile_before or get_tile(tile_after.x, tile_after.y) != TILE_TRENCH: return
-	if not _actor_traps_on_trench(colonist): return
-	_trap_actor(colonist, job_id, tile_before)
-
-## Scope: trap-on-entry/hostile climb-out applies only to a colonist (has
-## a worker component, ActorTable/ADR 012) or an actor hostile to the colony
-## (ADR 014 Relations.is_hostile) -- a non-hostile, non-colonist actor (a
-## trader) crosses a trench unaffected, exactly like it always could.
-func _actor_traps_on_trench(actor: Dictionary) -> bool:
-	if ActorTableType.has_component(actor, "worker", _content):
-		return true
-	return _relations.is_hostile({"faction_id": String(actor.get("factionId", "colony"))}, {"faction_id": "colony"})
-
-## Releases job_id exactly like cancel_job (reservations freed, owned
-## work-progress cleared, NeedGiver resolved -- _apply_job_command()'s own
-## path). Records `trapped`, and when hostile (ADR 014) submits escape_trench.
-func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> void:
-	var tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	var hostile: bool = _relations.is_hostile({"faction_id": String(colonist.get("factionId", "colony"))}, {"faction_id": "colony"})
-	# Key order matches StateCodec._decode_trapped_field(): state_hash()
-	# hashes JSON.stringify(), which is insertion-order-sensitive.
-	colonist["trapped"] = ({"tile": tile, "ticksRemaining": _trench_climb_ticks(colonist), "fromTile": from_tile}
-		if hostile else {"tile": tile})
-	var job := _scheduler.queue.get_job(job_id)
-	if String(job.get("status", "")) == "active":
-		var job_kind := String(job.get("kind", ""))
-		if job_kind in ["haul", "site_fetch"]: _drop_carried_haul_item(job_id)
-		if _finish_job(job_id, "cancel_job").get("ok", false):
-			_progress_table.clear_terminated_job(job_id, job, true)
-			_resolve_giver_association(job_id, job_kind)
-	if not hostile: return
-	_submit_trench_escape(colonist, tile)
-
-## Submits (or re-submits, after a blocked climb-out) colonist's own
-## escape_trench job targeting its own tile (self-tile reservation exception).
-func _submit_trench_escape(colonist: Dictionary, tile: Vector2i) -> void:
-	_scheduler.submit_autonomous(tile, 1, _clock.tick, "escape_trench", String(colonist["id"]))
-
-## Once per tick, before _advance_colonists() (mirrors IncidentScheduler's
-## activate_pending()): stamps each newly-active escape_trench job's duration
-## onto its target's work-progress key. Reads the tunable fresh rather than
-## staging it at submission, so a target with existing progress (mid-
-## countdown, or another queued escaper) needs no persisted bookkeeping.
-func _activate_pending_escapes() -> void:
-	var assignments := _scheduler.get_assignments()
-	for worker_id in assignments:
-		var job_id: String = String(assignments[worker_id]["job_id"])
-		var job := _scheduler.queue.get_job(job_id)
-		if String(job.get("kind", "")) != "escape_trench" or String(job.get("status", "")) != "active": continue
-		var target: Vector2i = job["target"]
-		if _progress_table.get_progress(target) != null: continue
-		var actor := _find_colonist(worker_id)
-		if actor.is_empty(): continue
-		_set_work_progress(target, _trench_climb_ticks(actor), job_id)
-
-func _trench_climb_ticks(colonist: Dictionary) -> int: # content/actors.json tunables.wild.trench_climb_ticks
-	var definition: Dictionary = _content.get_entry("actors", String(colonist.get("kind", "")))
-	var wild_tunables: Dictionary = (definition.get("tunables", {}) as Dictionary).get("wild", {})
-	return int(wild_tunables.get("trench_climb_ticks", DEFAULT_TRENCH_CLIMB_TICKS))
+		_trench.check_trench_arrival(colonist, job_id, tile_before)
 
 ## Steps the go_to toil toward target; on "unreachable", routes through the
 ## same kind-aware _toil_on_unreachable() boundary every other first-leg
@@ -1632,27 +1443,6 @@ func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
 		if tile == target and cost <= 0.0:
 			return 1.0
 		return cost
-
-## A rescue job's own route cost: every
-## trench tile is impassable (a rescuer must never be routed into the very
-## hazard it is relieving, whichever trench it is), and the target gets none
-## of _routable_to()'s impassable-target exception -- a rescue target is an
-## ordinary passable tile the rescuer must actually stand on, so a target
-## made impassable since commit must read as unreachable (and retire the
-## commitment) rather than let the executor trim the last step and start
-## work one tile off. Used by every re-route of an active rescue
-## (_toil_go_to_passable()) and by a resume after an interrupt
-## (_resume_paused_rescue()); the giver's own commit-time search stays on the
-## unrestricted _routable_to() so it validates the exact path the
-## scheduler's activation will compute. `target` is unused on purpose (kept
-## for hook-signature symmetry with _routable_to()).
-func _rescue_routable_to(_target: Vector2i, faction_id: String = "colony") -> Callable:
-	return func(tile: Vector2i) -> float:
-		return 0.0 if _is_trench_tile(tile) else _passability.passable_for_faction(tile, faction_id)
-
-## is_trench callable for RescueGiver.
-func _is_trench_tile(tile: Vector2i) -> bool:
-	return get_tile(tile.x, tile.y) == TILE_TRENCH
 
 ## Chebyshev-adjacency check matching ToilExecutor.pick_up()/place()'s "on or
 ## adjacent to" precondition.
@@ -1747,7 +1537,7 @@ func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -
 ## directly -- a site_work job's "target" is the site's own origin tile (its
 ## only leg, attach_site()) -- so this is a plain passthrough today; kept as
 ## its own function since _toil_on_work_complete() and every other
-## work-in-progress-key reader (_trap_actor(), _apply_job_command()'s
+## work-in-progress-key reader (TrenchSystem._trap_actor(), _apply_job_command()'s
 ## terminal-command cleanup) call it rather than reading job["target"]
 ## themselves, so a future kind needing a second destination has one place to
 ## redirect from.
@@ -1804,7 +1594,7 @@ func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, fac
 	# rescue's own trench-excluding, no-target-exception passability, so it
 	# can never be routed through a trench nor trimmed to start work off-target.
 	if String(job["kind"]) == "rescue":
-		return _rescue_routable_to(target, faction_id)
+		return _trench.rescue_routable_to(target, faction_id)
 	return _routable_to(target, faction_id) if is_first or String(job["kind"]) != "haul" else _passability.is_passable
 
 ## go_to_force_trim_last hook: a site_work job's only leg, and a
@@ -1869,7 +1659,7 @@ func _toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> vo
 	elif String(job["kind"]) == "rescue":
 		# Never resubmitted under the same
 		# rescuer -- retired, so another available rescuer may be chosen.
-		_retire_rescue_job(job_id, job)
+		_trench.retire_rescue_job(job_id, job)
 	elif String(job["kind"]) == "site_fetch":
 		# Never resubmitted (unlike dig/chop/mine's first leg): a fresh fetch
 		# job would need its own source resolution, which
@@ -2081,19 +1871,9 @@ func _toil_on_deposit_success(job_id: String) -> void:
 func _toil_on_work_complete(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
 	var target: Vector2i = _work_target_for(job)
-	# ADR 026: arrival and this work toil's completion can land in the same
-	# tick (a wait_ticks=1 job targeting a trench); trapping must preempt the
-	# completion effect/despawn below, so this runs first. _trap_tile_before
-	# != target excludes an actor already standing on a target that merely
-	# changed kind; requiring its actual position on target too rejects a
-	# stale one (a paused job resumed adjacent). escape_trench falls through.
-	if String(job.get("kind", "")) != "escape_trench" and _trap_tile_before != target and get_tile(target.x, target.y) == TILE_TRENCH:
-		var arriving_actor := _find_job_colonist(job_id)
-		if not arriving_actor.is_empty() and arriving_actor.get("trapped") == null \
-				and Vector2i(int(arriving_actor["x"]), int(arriving_actor["y"])) == target \
-				and _actor_traps_on_trench(arriving_actor):
-			_trap_actor(arriving_actor, job_id, _trap_tile_before)
-			return
+	# ADR 026: trapping on a same-tick arrival pre-empts the completion effect below.
+	if _trench.trap_on_work_complete(job_id, job, target):
+		return
 	var tile_before: String = _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)]
 	match job["kind"]:
 		"dig":
@@ -2153,26 +1933,9 @@ func _toil_on_work_complete(job_id: String) -> void:
 			if not colonist.is_empty():
 				_apply_need_effect(colonist, job)
 		"escape_trench":
-			var actor := _find_job_colonist(job_id)
-			if not actor.is_empty():
-				var trapped_state: Dictionary = actor.get("trapped", {})
-				var from_tile: Vector2i = trapped_state.get("fromTile", target)
-				var actor_faction := String(actor.get("factionId", "colony"))
-				var exit_tile := _trench_exit_tile(target, from_tile, actor_faction)
-				if exit_tile.x >= 0:
-					actor["x"] = exit_tile.x
-					actor["y"] = exit_tile.y
-					actor["trapped"] = null
-				else:
-					# Recoverable blocked-exit outcome: stays trapped, retries.
-					_submit_trench_escape(actor, target)
+			_trench.complete_escape(job_id, target)
 		"rescue":
-			var rescuer := _find_job_colonist(job_id)
-			var victim := _rescue_victim_for_job(job_id)
-			if not rescuer.is_empty() and not victim.is_empty():
-				victim["x"] = rescuer["x"]
-				victim["y"] = rescuer["y"]
-				victim["trapped"] = null
+			_trench.complete_rescue(job_id)
 	if _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] != tile_before:
 		_tile_grid.update_water_tile_cache(target.x, target.y, tile_before == TILE_WATER, _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] == TILE_WATER)
 		_tile_grid.mark_dirty(target.x, target.y)
@@ -2181,35 +1944,9 @@ func _toil_on_work_complete(job_id: String) -> void:
 	_finish_job(job_id, "complete_job")
 	_resolve_giver_association(job_id, String(job["kind"]))
 
-## rescue's on_work_complete effect: the trapped, rescuable
-## colonist this specific job_id was actually committed to rescue, read from
-## RescueGiver's own victim_for_job() -- never
-## guessed by scanning for "the first trapped colonist adjacent to target,"
-## which picks the wrong victim whenever two different trapped colonists are
-## each cardinally adjacent to this same target tile. When the assigned
-## victim no longer exists or is no longer trapped (it
-## died, or something else already freed it), this returns {} rather than
-## falling back to an arbitrary adjacent trapped colonist -- substituting one
-## could steal a different victim's own, already-claimed rescue (that other
-## victim's own job still holds its own "trapped:" key and RescueGiver
-## association untouched). The caller's own unconditional _finish_job()/
-## _resolve_giver_association() below still resolve this job through the
-## ordinary cleanup boundary either way, releasing its reservations and
-## freeing the rescuer to resume its own interrupted work -- an obsolete
-## rescue is simply retired, never redirected onto a victim it was never
-## committed to.
-func _rescue_victim_for_job(job_id: String) -> Dictionary:
-	var victim_id := _rescue_giver.victim_for_job(job_id)
-	if victim_id.is_empty():
-		return {}
-	var victim := _find_colonist(victim_id)
-	if victim.is_empty() or victim.get("trapped") == null:
-		return {}
-	return victim
-
 ## Tells whichever job-giver owns job_id (NeedGiver for a need job, RescueGiver
 ## for a rescue job) that it resolved -- shared by _toil_on_work_complete()'s
-## own completion path, _trap_actor(), _cancel_job_for_death() and
+## own completion path, TrenchSystem._trap_actor(), _cancel_job_for_death() and
 ## _resolve_refused_reservations(), everywhere a job terminates outside its
 ## giver's own advance()/resolve_job() call.
 func _resolve_giver_association(job_id: String, kind: String) -> void:
@@ -2618,7 +2355,7 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 ## bounded, multi-tick re-route (ToilExecutor.advance_go_to(), honouring the
 ## shared per-colonist _route_budget like every other job -- never a
 ## synchronous search run to completion) under rescue's own trench-excluding,
-## no-target-exception _rescue_routable_to(): the rescuer can therefore never
+## no-target-exception TrenchSystem.rescue_routable_to(): the rescuer can therefore never
 ## be sent through a trench, and must reach exactly the target -- never a
 ## merely Chebyshev-adjacent tile like the generic path above -- before work
 ## can start. Never starts the work toil directly here (unlike the generic
@@ -2628,7 +2365,7 @@ func _resume_paused_job(colonist: Dictionary) -> String:
 ## reactivates it) -- deferring to the ordinary tick path is what keeps
 ## WorkProgress.key()'s own reservation-owner scoping correct here. An
 ## unreachable commitment (no trench-free route at all) is retired through
-## _retire_rescue_job() -- immediately when the executor proves it so in
+## TrenchSystem.retire_rescue_job() -- immediately when the executor proves it so in
 ## its first budgeted step, or later through the ordinary on_unreachable
 ## hook once the retained search finishes -- rather than blindly resubmitted,
 ## letting a fresh search propose any rescuer/target for the same victim.
@@ -2637,9 +2374,9 @@ func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary
 	colonist["route"] = null
 	if Vector2i(int(colonist["x"]), int(colonist["y"])) == target:
 		return job_id
-	var passable := _rescue_routable_to(target, String(colonist.get("factionId", "colony")))
+	var passable := _trench.rescue_routable_to(target, String(colonist.get("factionId", "colony")))
 	if _toils.advance_go_to(colonist, job_id, target, passable) == "unreachable":
-		_retire_rescue_job(job_id, job)
+		_trench.retire_rescue_job(job_id, job)
 		return ""
 	return job_id
 
@@ -2704,12 +2441,6 @@ func _resume_interrupted_job(colonist_id: String) -> void:
 ## _need_status directly) keeps working unchanged.
 func _set_need_reason(colonist_id: String, reason: String) -> void:
 	_need_status[colonist_id] = reason
-
-## set_reason callable for RescueGiver: writes WorldState's own
-## exposed rescue-reason cache, keyed by the trapped victim's colonist_id
-## (never the rescuer's), mirroring _set_need_reason() above.
-func _set_rescue_reason(colonist_id: String, reason: String) -> void:
-	_rescue_status[colonist_id] = reason
 
 ## emit_need_unmet callable for NeedGiver (colonist-ai.md 3.1: "the player
 ## sees it in the panel and the alert list").
@@ -2895,7 +2626,7 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
 			_progress_table.clear_terminated_job(String(payload["job_id"]), terminal_job, terminal_was_active)
 		# Shares _resolve_giver_association() with
-		# _toil_on_work_complete()/_trap_actor()/_cancel_job_for_death()/
+		# _toil_on_work_complete()/TrenchSystem._trap_actor()/_cancel_job_for_death()/
 		# _resolve_refused_reservations() rather than only ever telling
 		# NeedGiver -- a command that cancels/fails/invalidates/completes a
 		# rescue job must tell RescueGiver too, or its own _pending/_job_victim
