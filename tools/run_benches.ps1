@@ -4,19 +4,22 @@
 # the header, then one section per benchmark with its tables (built from the "@row"
 # lines each benchmark prints) and its raw lines.
 # Usage: tools\run_benches.ps1 [-Filter <name>] [-Out <file.md>] [-RawOut <file.txt>]
-#                              [-GodotPath <exe>] [-SkipImport]
+#                              [-GodotPath <exe>] [-SkipImport] [-TimeoutMinutes 30]
 # With -Filter and no -Out, nothing is written (the baseline keeps every benchmark).
 # Godot is taken from -GodotPath, then $env:GODOT, then "godot" on PATH.
 # Timings are wall-clock and host-dependent: run nothing else heavy meanwhile, and never
 # gate CI on them. The full set takes about 15-25 min. A benchmark fails (exit 1 overall) when
-# it exits non-zero or prints a SCRIPT ERROR; exit 3 in the report marks the latter.
+# it exits non-zero or prints a SCRIPT ERROR (exit 3 in the report), or when it runs longer
+# than -TimeoutMinutes and is killed (exit 124): an error inside _init() skips its quit() and
+# would otherwise leave Godot idling forever.
 [CmdletBinding()]
 param(
     [string]$Filter = "",
     [string]$Out = "",
     [string]$RawOut = "",
     [string]$GodotPath = "",
-    [switch]$SkipImport
+    [switch]$SkipImport,
+    [int]$TimeoutMinutes = 30
 )
 
 # Godot writes warnings to stderr; "Continue" keeps 2>&1 from turning them into terminating errors.
@@ -57,9 +60,23 @@ $results = @()
 foreach ($bench in $benches) {
     Write-Output "=== Running $($bench.BaseName) ==="
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $output = & $GodotPath --headless --path $gameRoot --script "res://scripts/tests/$($bench.Name)" 2>&1 | ForEach-Object { "$_" }
-    $exitCode = $LASTEXITCODE
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $proc = Start-Process -FilePath $GodotPath -NoNewWindow -PassThru `
+        -ArgumentList @("--headless", "--path", "`"$gameRoot`"", "--script", "res://scripts/tests/$($bench.Name)") `
+        -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+    $null = $proc.Handle # keeps ExitCode readable after the process exits
+    if ($proc.WaitForExit($TimeoutMinutes * 60 * 1000)) {
+        $exitCode = $proc.ExitCode
+    } else {
+        # The console executable starts the real Godot as a child: kill the whole tree.
+        & taskkill /T /F /PID $proc.Id 2>&1 | Out-Null
+        $exitCode = 124
+    }
     $sw.Stop()
+    $output = @(Get-Content -LiteralPath $stdoutFile -Encoding UTF8) + @(Get-Content -LiteralPath $stderrFile -Encoding UTF8) |
+        ForEach-Object { "$_" }
+    Remove-Item -LiteralPath $stdoutFile, $stderrFile -ErrorAction SilentlyContinue
     # A GDScript runtime error aborts only the current function, so a benchmark calling a
     # method that a refactor moved can still exit 0 with wrong numbers: count it as a failure.
     $scriptErrors = @($output | Where-Object { $_ -match 'SCRIPT ERROR' })
@@ -67,6 +84,7 @@ foreach ($bench in $benches) {
     $lines = @($output | Where-Object { $_ -match '^bench_' })
     $rows = @($output | Where-Object { $_.StartsWith("@row ") } | ForEach-Object { $_.Substring(5) | ConvertFrom-Json })
     $lines += ("{0}: wall={1:n0}s exit={2}" -f $bench.BaseName, $sw.Elapsed.TotalSeconds, $exitCode)
+    if ($exitCode -eq 124) { $lines += ("{0}: killed after {1} min (-TimeoutMinutes)" -f $bench.BaseName, $TimeoutMinutes) }
     if ($scriptErrors.Count -gt 0) {
         $lines += ("{0}: {1} SCRIPT ERROR line(s), first: {2}" -f $bench.BaseName, $scriptErrors.Count, $scriptErrors[0].Trim())
     }
@@ -107,7 +125,8 @@ function ConvertTo-MarkdownTable([object[]]$tableRows) {
 }
 
 $allLines = @($results | ForEach-Object { $_.Lines })
-if ($RawOut) { $allLines | Set-Content -Path $RawOut -Encoding utf8 }
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+if ($RawOut) { [System.IO.File]::WriteAllText($RawOut, (($allLines -join "`n") + "`n"), $utf8NoBom) }
 
 if ($Out) {
     # Host fields come from the first benchmark header line ("<bench>: commit=... godot=... os=... cpu=... threads=N").
@@ -154,7 +173,7 @@ if ($Out) {
         $md += ""
         $md += "</details>"
     }
-    [System.IO.File]::WriteAllText($Out, (($md -join "`n") + "`n"), (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllText($Out, (($md -join "`n") + "`n"), $utf8NoBom)
     Write-Output "run_benches: wrote $Out"
 }
 

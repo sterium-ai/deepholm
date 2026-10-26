@@ -356,7 +356,7 @@ target is measured with the same `bench_*.gd` on the same host and quoted before
 the handoff. Entries that edit `world_state.gd` run between R steps, never in parallel with
 one.
 
-#### A1 — Benchmark runner and baseline report · `todo` · *parallel-safe (tools/docs only)*
+#### A1 — Benchmark runner and baseline report · `review (antonelmejor50-hub/a1-benchmark-runner-and-baseline)` · *parallel-safe (tools/docs only)*
 
 - **Goal:** `tools/run_benches.ps1` (promoted from `docs/orca/handoffs/A0-run-benches.ps1`)
   runs every `bench_*.gd` and writes `docs/architecture/bench-baseline.md` (one table per
