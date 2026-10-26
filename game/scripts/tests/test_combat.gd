@@ -1907,7 +1907,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 ## job restricted to the now-removed actor -- a job that can never run.
 ## Seals the incident actor's target inside a small room (well under
 ## RouteSearch.STEP_BUDGET) and walls off its own four orthogonal neighbors
-## (the only directions RouteSearch._ordered_neighbors() ever tries) so
+## (the only directions RouteSearch.NEIGHBOR_OFFSETS ever tries) so
 ## recovery's very first bounded resume() call, not a multi-tick search,
 ## concludes unreachable. Drives the shared interrupt/episode boundary
 ## directly (the same idiom _check_flee_recovery_resume_needs_fresh_route_faction_aware()

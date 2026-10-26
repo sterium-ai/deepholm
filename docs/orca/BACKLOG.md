@@ -388,7 +388,7 @@ one.
   no passability change` ≤ 1 ms).
 - **Non-goals:** changing passability rules or door semantics; layers.
 
-#### A3 — `RouteSearch` with a binary heap and no per-step allocation · `todo` · *parallel-safe (routing only)*
+#### A3 — `RouteSearch` with a binary heap and no per-step allocation · `review (antonelmejor50-hub/a3-routesearch-with-a-binary)` · *parallel-safe (routing only)*
 
 - **Goal:** `routing/route_search.gd` pops the frontier from a binary heap keyed by
   (cost, insertion order), so the order of expansion is exactly today's, and

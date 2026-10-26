@@ -6,14 +6,19 @@ var resume_calls: int = 0
 
 func resume() -> String:
 	resume_calls += 1
-	return super.resume()
-
-func _ordered_neighbors(tile: Vector2i) -> Array[Vector2i]:
-	expansions += 1
-	return super._ordered_neighbors(tile)
+	var status := super.resume()
+	expansions += _last_resume_steps
+	return status
 
 func snapshot() -> Dictionary:
 	var state := super.snapshot()
+	state["expansions"] = expansions
+	state["resume_calls"] = resume_calls
+	return state
+
+## See RouteSearch.summary(): the counters are constant-size too.
+func summary() -> Dictionary:
+	var state := super.summary()
 	state["expansions"] = expansions
 	state["resume_calls"] = resume_calls
 	return state

@@ -1,0 +1,42 @@
+### main 279b42f
+bench_route_search: commit=279b42f godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=79 resume_calls(ticks)=2 time=0.51ms us/expansion=6.46 snapshot_json=3659B
+bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=1728 resume_calls(ticks)=27 time=14.51ms us/expansion=8.40 snapshot_json=60031B
+bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=4482 resume_calls(ticks)=71 time=39.59ms us/expansion=8.83 snapshot_json=144655B
+bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8423 resume_calls(ticks)=132 time=72.36ms us/expansion=8.59 snapshot_json=269701B
+bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=15462 resume_calls(ticks)=242 time=129.01ms us/expansion=8.34 snapshot_json=470624B
+bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=29 resume_calls(ticks)=1 time=0.13ms us/expansion=4.34 snapshot_json=1063B
+bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=497 resume_calls(ticks)=8 time=1.91ms us/expansion=3.84 snapshot_json=14233B
+bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=2017 resume_calls(ticks)=32 time=8.45ms us/expansion=4.19 snapshot_json=57771B
+bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8129 resume_calls(ticks)=128 time=50.35ms us/expansion=6.19 snapshot_json=236427B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=32641 resume_calls(ticks)=511 time=349.18ms us/expansion=10.70 snapshot_json=1016396B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=57281 resume_calls(ticks)=896 time=665.23ms us/expansion=11.61 snapshot_json=1844356B
+bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=906.99ms us/expansion=13.84 snapshot_json=2124245B
+bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=337.20ms
+bench_route_search: regions full build (open grid, array callable) time=134.06ms
+bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=182.04ms
+bench_route_search: regions on_passability_changed (unblock it again) time=0.03ms
+bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=938.48ms
+bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=111.32ms
+bench_route_search: done
+### A3 branch
+bench_route_search: commit=279b42f godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=79 resume_calls(ticks)=2 time=0.40ms us/expansion=5.11 snapshot_json=3659B
+bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=1728 resume_calls(ticks)=27 time=6.73ms us/expansion=3.89 snapshot_json=60031B
+bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=4482 resume_calls(ticks)=71 time=17.00ms us/expansion=3.79 snapshot_json=144655B
+bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8423 resume_calls(ticks)=132 time=32.81ms us/expansion=3.90 snapshot_json=269701B
+bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=15462 resume_calls(ticks)=242 time=64.28ms us/expansion=4.16 snapshot_json=470624B
+bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=29 resume_calls(ticks)=1 time=0.11ms us/expansion=3.66 snapshot_json=1063B
+bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=497 resume_calls(ticks)=8 time=1.23ms us/expansion=2.47 snapshot_json=14233B
+bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=2017 resume_calls(ticks)=32 time=4.56ms us/expansion=2.26 snapshot_json=57771B
+bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8129 resume_calls(ticks)=128 time=12.33ms us/expansion=1.52 snapshot_json=236427B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=32641 resume_calls(ticks)=511 time=46.63ms us/expansion=1.43 snapshot_json=1016396B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=57281 resume_calls(ticks)=896 time=81.80ms us/expansion=1.43 snapshot_json=1844356B
+bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=94.31ms us/expansion=1.44 snapshot_json=2124245B
+bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=268.59ms
+bench_route_search: regions full build (open grid, array callable) time=116.85ms
+bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=135.15ms
+bench_route_search: regions on_passability_changed (unblock it again) time=0.03ms
+bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=880.35ms
+bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=114.94ms
+bench_route_search: done

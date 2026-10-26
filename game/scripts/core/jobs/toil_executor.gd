@@ -95,7 +95,9 @@ var _work_progress_clear: Callable
 ## Live in-flight re-route searches, keyed by colonist id -- the same
 ## Dictionary instance WorldState._reroutes holds (shared by reference, not
 ## copied), since persistence/state_codec.gd reads and rebuilds that field
-## directly.
+## directly. While a search is live, colonist.route.rerouting holds only its
+## constant-size summary() (start, target, status, counters), refreshed each
+## tick; StateCodec encodes the full snapshot() from this Dictionary.
 var _reroutes: Dictionary
 ## fetch_tool toil (colonist-ai.md 2/3.3): extracted into its own
 ## injected object (tool_fetch_toil.gd) purely to keep this file under its
@@ -106,7 +108,7 @@ var _reroutes: Dictionary
 var _tool_fetch: ToolFetchToilType
 ## route_search_factory(start: Vector2i, target: Vector2i, passable: Callable)
 ## -> a RerouteType-shaped object (is_terminal(), resume(), snapshot(),
-## get_status(), get_path()) must construct and return a fresh bounded route
+## summary(), get_status(), get_path()) must construct and return a fresh bounded route
 ## search from WorldState's own RerouteType, with WorldState's map bounds --
 ## this module stays decoupled from both (colonist-ai.md 3.5).
 var _route_search_factory: Callable
@@ -425,7 +427,7 @@ func _begin_go_to_reroute(colonist: Dictionary, job_id: String, target: Vector2i
 	var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
 	var search = _route_search_factory.call(start, target, passable)
 	_reroutes[colonist["id"]] = search
-	route["rerouting"] = search.snapshot()
+	route["rerouting"] = search.summary()
 	return _resume_go_to_reroute(colonist, route, job_id, target, passable, record_as, on_arrive, force_trim_last)
 
 func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: String, target: Vector2i, passable: Callable,
@@ -435,7 +437,7 @@ func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: Stri
 	if not search.is_terminal() and not bool(_route_budget.get(colonist_id, false)):
 		search.resume()
 		_route_budget[colonist_id] = true
-	route["rerouting"] = search.snapshot()
+	route["rerouting"] = search.summary()
 	if not search.is_terminal():
 		return ""
 	if search.get_status() == RerouteType.STATUS_FOUND:
