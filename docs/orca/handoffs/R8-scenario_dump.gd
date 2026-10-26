@@ -13,6 +13,9 @@ extends SceneTree
 ## from_save_state() and play continues on the reloaded copy. Every 5 ticks it traces every
 ## actor's needs, accumulator, need reason, active need job, the raw paused-jobs and
 ## need-reason maps, the need jobs, NeedGiver's pending map, the berries and state_hash().
+## Each trace line is a deep copy, so later ticks cannot rewrite earlier observations. The
+## event log is runtime only (a reload starts it empty), so it is captured, as a deep copy,
+## right before every reload: events.json holds one entry per 100-tick segment.
 ## Runs unchanged on main (fields on WorldState) and on R8 (on world._needs_system).
 ## Lives outside game/ (not part of the suite):
 ##   godot --headless --path game --script <abs path to this file> -- <abs out dir>
@@ -61,7 +64,8 @@ func _trace_line(world) -> Dictionary:
 	line["need_pending"] = world._need_giver.get_pending_assignments()
 	line["berries"] = world._item_table.ground_berries
 	line["hash"] = world.state_hash()
-	return line
+	# Deep copy: the needs, accumulator, paused-job, reason and job dictionaries are live.
+	return line.duplicate(true)
 
 func _in_map(p: Vector2i) -> bool:
 	return p.x >= 0 and p.y >= 0 and p.x < 48 and p.y < 48
@@ -188,6 +192,7 @@ func _init() -> void:
 	var trace: Array = []
 	var saves: Array = []
 	var io: Array = []
+	var events: Array = []
 	for step in 8:
 		var from := step * 100
 		_play(world, results, trace, from, from + 100)
@@ -195,6 +200,8 @@ func _init() -> void:
 		saves.append(state)
 		var check := SaveIOType.write_atomic(out_dir.path_join("save_%d.json" % (from + 100)), state)
 		io.append({"tick": from + 100, "ok": check.get("ok"), "error": "%s %s" % [check.get("code", ""), check.get("message", "")]})
+		# The event log does not survive the reload below: keep this segment's events first.
+		events.append({"segment_end": from + 100, "events": (world.get_events() as Array).duplicate(true)})
 		# A reloaded world rebuilds its definitions from content: re-apply the probe's decay speed-up.
 		world = WorldStateType.from_save_state(state.duplicate(true))
 		world.enable_incidents()
@@ -205,7 +212,7 @@ func _init() -> void:
 	_write(out_dir.path_join("trace.json"), JSON.stringify(trace, "\t"))
 	_write(out_dir.path_join("results.json"), JSON.stringify(results, "\t"))
 	_write(out_dir.path_join("io.json"), JSON.stringify(io, "\t"))
-	_write(out_dir.path_join("events.json"), JSON.stringify(world.get_events(), "\t"))
+	_write(out_dir.path_join("events.json"), JSON.stringify(events, "\t"))
 	var need_jobs := {}
 	var completed := {}
 	var paused_seen := {}
@@ -227,15 +234,23 @@ func _init() -> void:
 		if r.has("ok") and not r.has("preview"):
 			if r["ok"]: applied += 1
 			else: rejected += 1
+	var event_count := 0
 	var unmet_events := 0
-	for event in world.get_events():
-		if String(event.get("type", "")) == "need_unmet":
-			unmet_events += 1
+	var unmet_segments := 0
+	for segment in events:
+		event_count += (segment["events"] as Array).size()
+		var in_segment := 0
+		for event in (segment["events"] as Array):
+			if String(event.get("type", "")) == "need_unmet":
+				in_segment += 1
+		unmet_events += in_segment
+		if in_segment > 0:
+			unmet_segments += 1
 	var failed: Array = []
 	for entry in io:
 		if not entry["ok"]:
 			failed.append("%d:%s" % [entry["tick"], entry["error"]])
-	print("scenario_dump: actors_left=%d results=%d applied=%d rejected=%d need_jobs=%d completed_need_jobs=%d paused_episodes=%d reason_lines=%d need_unmet_events_last_segment=%d save_refused=%s hash=%d" % [
+	print("scenario_dump: actors_left=%d results=%d applied=%d rejected=%d need_jobs=%d completed_need_jobs=%d paused_episodes=%d reason_lines=%d events=%d need_unmet_events=%d need_unmet_segments=%d save_refused=%s hash=%d" % [
 		world._colonists.size(), results.size(), applied, rejected, need_jobs.size(), completed.size(), paused_seen.size(),
-		reason_lines, unmet_events, str(failed), world.state_hash()])
+		reason_lines, event_count, unmet_events, unmet_segments, str(failed), world.state_hash()])
 	quit(0)
