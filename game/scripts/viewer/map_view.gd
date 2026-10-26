@@ -96,6 +96,12 @@ var _list_valid: Array[bool] = []
 ## drag_preview.gd) instead of re-validating the whole rectangle per move.
 var _preview_per_tile := false
 var _drag_preview := DragPreviewType.new()
+## The tick and log positions (world.get_dirty_cells(),
+## world.get_designation_changes()) _drag_preview's changed tiles were last
+## read up to; see _drag_preview_changes().
+var _drag_preview_changes_tick := -1
+var _drag_preview_cells_read := 0
+var _drag_preview_designations_read := -1
 var _suppress_hover := false
 var _dragging: bool = false
 var _drag_start: Vector2i = Vector2i.ZERO
@@ -392,7 +398,8 @@ func _update_preview() -> void:
 	_list_tiles.clear()
 	_list_valid.clear()
 	if tool_enabled and _dragging and _preview_per_tile:
-		_drag_preview.update(_rectangle(_drag_start, _drag_current), world.get_tick() if world != null else -1, preview_validity)
+		var changed := _drag_preview_changes()
+		_drag_preview.update(_rectangle(_drag_start, _drag_current), world.get_tick() if world != null else -1, preview_validity, changed)
 		queue_redraw()
 		return
 	# Zone judges the whole rectangle with one zone_add preview, which reads
@@ -420,6 +427,25 @@ func _update_preview() -> void:
 	if not _list_tiles.is_empty() and preview_validity.is_valid():
 		_list_valid = preview_validity.call(_list_tiles)
 	queue_redraw()
+
+## The tiles whose terrain, object or pending orders changed since the last
+## call, read once per tick from the world's append-only logs: the drag
+## preview re-validates them first. None for a drag just starting, which
+## validates every tile anyway.
+func _drag_preview_changes() -> Array[Vector2i]:
+	var changed: Array[Vector2i] = []
+	if world == null or (_drag_preview.is_active() and world.get_tick() == _drag_preview_changes_tick):
+		return changed
+	var cells := world.get_dirty_cells()
+	var designations: Dictionary = world.get_designation_changes(_drag_preview_designations_read if _drag_preview.is_active() else -1)
+	if _drag_preview.is_active():
+		changed.append_array(cells.slice(_drag_preview_cells_read))
+		for tile in designations["tiles"]:
+			changed.append(tile)
+	_drag_preview_changes_tick = world.get_tick()
+	_drag_preview_cells_read = cells.size()
+	_drag_preview_designations_read = int(designations["next"])
+	return changed
 
 ## Continues the per-tile drag preview's stale/unknown tiles, a budget per frame.
 func _process(_delta: float) -> void:

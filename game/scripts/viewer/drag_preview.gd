@@ -11,9 +11,16 @@ extends RefCounted
 ##   validated now, newly covered ones first; the rest continues a budget per
 ##   frame through step(), however far the cursor jumped;
 ## - known validity is kept per map cell for the whole drag. A new tick marks
-##   it stale (it may have changed) and step() re-validates it a budget per
-##   frame, showing the last known colour meanwhile -- a coarse preview; the
-##   release still applies every tile through the exact rules (apply());
+##   it stale (it may have changed): the tiles MapView reports changed (terrain,
+##   objects, pending orders) are re-validated first, and a sweep re-validates
+##   the rest a budget per frame, showing the last known colour meanwhile -- a
+##   coarse preview; the release still applies every tile through the exact
+##   rules (apply()). The sweep is needed because validity also reads state no
+##   tile log covers (a seed anywhere for Sow, passability). A tick never
+##   restarts it: it continues from its cursor, so every tile is re-validated
+##   within one rectangle's worth of visits however often ticks come (review
+##   3: restarting from the corner each tick never reached the far tiles of a
+##   whole-map drag at 60 FPS and X1);
 ## - the fill is one RGBA8 pixel per map cell in a texture drawn scaled, not
 ##   three draw calls per tile; outlines and invalid crosses are drawn only for
 ##   on-screen tiles, and only while there are few enough of them.
@@ -23,10 +30,13 @@ extends RefCounted
 ## Presentation only: never mutates the world, holds no world reference.
 ##
 ## Invariant: every tile of _rect is either current (validated at this
-## generation and painted with its state) or inside exactly one _pending
-## rectangle; _pending rectangles lie inside _rect and never overlap. They are
-## plain rectangles (partly done ones are split, never given a cursor), so a
-## new rectangle of any shape only intersects them.
+## generation and painted with its state), inside exactly one _pending
+## rectangle, in _dirty, or among the next _sweep_left tiles of the sweep;
+## _pending rectangles lie inside _rect and never overlap. They are plain
+## rectangles (partly done ones are split, never given a cursor), so a new
+## rectangle of any shape only intersects them. The sweep walks _rect
+## row-major in map coordinates from _sweep_at, wrapping, so a new rectangle
+## keeps its order.
 
 const TILE_BUDGET := 1024
 const VISIT_BUDGET := 8192
@@ -49,6 +59,11 @@ var _rect := Rect2i()
 ## Rectangles of _rect still to paint and, where stale or unknown, validate;
 ## processed front first.
 var _pending: Array[Rect2i] = []
+## Tiles reported changed, re-validated before the rest.
+var _dirty: Array[Vector2i] = []
+## The sweep's next tile and how many tiles it still visits.
+var _sweep_at := Vector2i.ZERO
+var _sweep_left := 0
 ## The State every tile of _rect shows under show_uniform(); -1 otherwise.
 var _uniform := -1
 var _image: Image
@@ -72,13 +87,15 @@ func rect() -> Rect2i:
 	return _rect
 
 func has_work() -> bool:
-	return not _pending.is_empty()
+	return not _pending.is_empty() or not _dirty.is_empty() or _sweep_left > 0
 
 ## Drops the rectangle and every known validity (a new drag, tool or world).
 func clear() -> void:
 	_generation += 1
 	_rect = Rect2i()
 	_pending = []
+	_dirty = []
+	_sweep_left = 0
 	_tick = -1
 	_uniform = -1
 	if _image != null:
@@ -87,10 +104,11 @@ func clear() -> void:
 
 ## Moves the previewed rectangle to `rect` at world tick `tick`, then paints
 ## and validates (through `validity`, OrderInput.preview_validity()'s shape)
-## newly covered tiles only, within the per-call budgets: stale tiles the
-## rectangle already showed wait for step(), so a mouse move costs what it
-## uncovers.
-func update(rect: Rect2i, tick: int, validity: Callable) -> void:
+## newly covered tiles and the `changed` ones (terrain, object or pending
+## orders changed since the last call) only, within the per-call budgets:
+## other stale tiles the rectangle already showed wait for step(), so a mouse
+## move costs what it uncovers.
+func update(rect: Rect2i, tick: int, validity: Callable, changed: Array[Vector2i] = []) -> void:
 	if _image == null:
 		return
 	if _uniform >= 0:
@@ -105,21 +123,25 @@ func update(rect: Rect2i, tick: int, validity: Callable) -> void:
 	for strip in fresh:
 		_image.fill_rect(strip, Color(UNKNOWN_COLOR, FILL_ALPHA))
 		fresh_area += strip.get_area()
-	var kept: Array[Rect2i] = []
+	for pending in _pending:
+		var clipped := pending.intersection(rect)
+		if clipped.has_area():
+			fresh.append(clipped)
+	_pending = fresh
 	if tick != _tick:
 		_tick = tick
 		_generation += 1
-		var overlap := previous.intersection(rect)
-		if overlap.has_area():
-			kept.append(overlap)
-	else:
-		for pending in _pending:
-			var clipped := pending.intersection(rect)
-			if clipped.has_area():
-				kept.append(clipped)
-	_pending = fresh
-	_pending.append_array(kept)
-	_process(validity, mini(fresh_area, VISIT_BUDGET))
+		if previous.intersection(rect).has_area():
+			_sweep_left = rect.get_area()
+	elif rect != previous and _sweep_left > 0:
+		_sweep_left = rect.get_area()
+	var dirty: Array[Vector2i] = []
+	for tile in _dirty + changed:
+		if rect.has_point(tile):
+			_generation_of[tile.y * _width + tile.x] = 0
+			dirty.append(tile)
+	_dirty = dirty
+	_process(validity, mini(fresh_area + _dirty.size(), VISIT_BUDGET))
 	_texture.update(_image)
 
 ## Shows `rect` with one validity for all of its tiles: clears the previous
@@ -139,11 +161,11 @@ func show_uniform(rect: Rect2i, valid: bool) -> void:
 ## Continues the pending work within the per-call budgets. Returns true while
 ## work remains.
 func step(validity: Callable) -> bool:
-	if _pending.is_empty():
+	if not has_work():
 		return false
 	_process(validity, VISIT_BUDGET)
 	_texture.update(_image)
-	return not _pending.is_empty()
+	return has_work()
 
 ## Every tile of the rectangle, row-major (MapView.tiles_in_rectangle()'s
 ## order). Tests and benchmarks only: it allocates the whole rectangle.
@@ -179,31 +201,61 @@ func draw(canvas: CanvasItem, tile_size: float, visible: Rect2i) -> void:
 			if state != State.VALID:
 				canvas.draw_line(cell.position + Vector2(3, 3), cell.end - Vector2(3, 3), color, 1.0)
 
-## Visits _pending tiles front first, row-major within each rectangle: paints
-## each with its last known state and collects the stale or unknown ones,
-## until `max_visits` (at most VISIT_BUDGET) tiles are visited or TILE_BUDGET
-## collected; the partly visited rectangle is split into its unvisited rest.
-## Then validates them.
+## Visits _dirty tiles, then _pending tiles front first, row-major within each
+## rectangle, then the sweep's: paints each with its last known state and
+## collects the stale or unknown ones, until `max_visits` (at most
+## VISIT_BUDGET) tiles are visited or TILE_BUDGET collected; the partly
+## visited rectangle is split into its unvisited rest. Then validates them.
 func _process(validity: Callable, max_visits: int) -> void:
 	var todo: Array[Vector2i] = []
 	var visits := 0
+	while not _dirty.is_empty() and visits < max_visits and todo.size() < TILE_BUDGET:
+		_visit(_dirty.pop_back(), todo)
+		visits += 1
 	while not _pending.is_empty() and visits < max_visits and todo.size() < TILE_BUDGET:
 		var pending: Rect2i = _pending[0]
 		var total := pending.get_area()
 		var i := 0
 		while i < total and visits < max_visits and todo.size() < TILE_BUDGET:
-			var tile := pending.position + Vector2i(i % pending.size.x, i / pending.size.x)
-			var index := tile.y * _width + tile.x
-			_paint(tile, index)
-			if _generation_of[index] != _generation:
-				todo.append(tile)
+			_visit(pending.position + Vector2i(i % pending.size.x, i / pending.size.x), todo)
 			visits += 1
 			i += 1
 		_pending.remove_at(0)
 		var rest := _rest(pending, i)
 		for k in rest.size():
 			_pending.insert(k, rest[k])
+	if _sweep_left > 0:
+		_sweep_at = _sweep_start(_rect, _sweep_at)
+	while _sweep_left > 0 and visits < max_visits and todo.size() < TILE_BUDGET:
+		_visit(_sweep_at, todo)
+		visits += 1
+		_sweep_left -= 1
+		_sweep_at.x += 1
+		if _sweep_at.x >= _rect.end.x:
+			_sweep_at = Vector2i(_rect.position.x, _sweep_at.y + 1)
+			if _sweep_at.y >= _rect.end.y:
+				_sweep_at = _rect.position
 	_validate(todo, validity)
+
+## Paints `tile` (inside _rect) with its last known state and collects it into
+## `todo` when stale or unknown, marking it current so it is collected once.
+func _visit(tile: Vector2i, todo: Array[Vector2i]) -> void:
+	var index := tile.y * _width + tile.x
+	_paint(tile, index)
+	if _generation_of[index] != _generation:
+		_generation_of[index] = _generation
+		todo.append(tile)
+
+## The first tile of `rect` at or after `at` in map row-major order, wrapping
+## to its first tile: where the sweep resumes after the rectangle changed.
+static func _sweep_start(rect: Rect2i, at: Vector2i) -> Vector2i:
+	if at.y < rect.position.y or at.y >= rect.end.y:
+		return rect.position
+	if at.x < rect.position.x:
+		return Vector2i(rect.position.x, at.y)
+	if at.x >= rect.end.x:
+		return rect.position if at.y + 1 >= rect.end.y else Vector2i(rect.position.x, at.y + 1)
+	return at
 
 ## The tiles of `rect` from row-major index `from` on, as at most two
 ## rectangles (the rest of that row, then the rows below).
@@ -228,7 +280,6 @@ func _validate(tiles: Array[Vector2i], validity: Callable) -> void:
 		var tile := tiles[i]
 		var index := tile.y * _width + tile.x
 		_state[index] = State.VALID if i < results.size() and bool(results[i]) else State.INVALID
-		_generation_of[index] = _generation
 		if _rect.has_point(tile):
 			_paint(tile, index)
 

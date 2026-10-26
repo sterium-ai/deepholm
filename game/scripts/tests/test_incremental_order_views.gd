@@ -7,7 +7,10 @@ extends SceneTree
 ##    over the whole rectangle -- also after a tick made it stale -- and a
 ##    one-column move validates only the newly covered column; jumps,
 ##    contractions and a narrower rectangle mid-work stay within the per-call
-##    budget and end equal to a fresh preview; a Zone drag
+##    budget and end equal to a fresh preview; tiles whose orders changed are
+##    re-validated on the next tick's refresh itself; a whole-map drag held
+##    through ticks at X1 with one bounded step per frame catches up with a
+##    global validity change everywhere (review 3); a Zone drag
 ##    previews one corner pair per move, keeps no per-tile list, and shows the
 ##    whole-rectangle zone_add validity;
 ## 2) the designation overlay's pixel per tile equals the colour of one
@@ -86,6 +89,25 @@ func _check_drag_preview() -> void:
 	_expect(view._preview_valid == orders.preview_validity(world, world.preview, view, all_tiles),
 		"after a tick the refreshed preview must equal a fresh whole-rectangle preview")
 	view.cancel_selection()
+	# Changed tiles first: orders placed under a finished Cancel preview are
+	# re-validated by the refresh() of the next tick itself, before any
+	# deferred step.
+	orders.select_tool(world, view, OrderInputType.Tool.CANCEL)
+	_mouse(view, Vector2i(0, 0), true)
+	_motion(view, Vector2i(40, 40))
+	view.finish_preview_work()
+	var ordered := MapViewType.tiles_in_rectangle(Vector2i(20, 20), Vector2i(23, 22))
+	_rect(world, "dig", Vector2i(20, 20), Vector2i(4, 3))
+	world.tick()
+	view.refresh()
+	var shown := view._preview_valid
+	var fresh := orders.preview_validity(world, world.preview, view, ordered)
+	_expect(fresh.has(true), "sanity: some of the dig orders must have landed")
+	for i in ordered.size():
+		_expect(shown[ordered[i].y * 41 + ordered[i].x] == fresh[i],
+			"the tile ordered at %s must show its new Cancel validity on the next tick's refresh" % ordered[i])
+	view.cancel_selection()
+	_check_drag_preview_under_ticks()
 	# Jumps and contractions mid-work: the whole map in one move, one deferred
 	# step, then a narrower rectangle (the pending work must follow the new
 	# shape, not the old width), a contraction to one tile and back, and a
@@ -126,6 +148,51 @@ func _check_drag_preview() -> void:
 		view.cancel_selection()
 		_expect(view._preview_tiles.is_empty(), "cancelling must clear the zone preview")
 	view.free()
+
+## Review 3 regression: a whole 256x256 drag held still while ticks keep
+## coming (60 frames per second, a tick every 30 frames: X1), one bounded
+## step per frame. Validity flips for every tile at one tick without any tile
+## reported changed (state no tile log covers, like the last seed); the
+## preview must show the new validity everywhere, the far corner included,
+## within one rectangle's worth of steps -- restarting from the corner each
+## tick never got past 30 * TILE_BUDGET tiles.
+func _check_drag_preview_under_ticks() -> void:
+	var size := 256
+	var preview := DragPreviewType.new()
+	preview.resize(size, size)
+	var flipped: Array[bool] = [false]
+	var validated: Array[int] = [0]
+	var validity := func(tiles: Array[Vector2i]) -> Array[bool]:
+		validated[0] += tiles.size()
+		var result: Array[bool] = []
+		for tile in tiles:
+			result.append(((tile.x + tile.y) % 3 == 0) != flipped[0])
+		return result
+	var rect := Rect2i(0, 0, size, size)
+	var tick := 0
+	var flip_frame := 300
+	# One rectangle's worth of steps, plus the tick frames among them.
+	var settle_frames := ceili(float(size * size) / DragPreviewType.TILE_BUDGET) + 4
+	for frame in range(flip_frame + settle_frames):
+		validated[0] = 0
+		if frame % 30 == 0:
+			if frame == flip_frame:
+				flipped[0] = true
+			tick += 1
+			preview.update(rect, tick, validity)
+		else:
+			preview.step(validity)
+		_expect(validated[0] <= DragPreviewType.TILE_BUDGET, "frame %d validated %d tiles, over TILE_BUDGET" % [frame, validated[0]])
+		if frame == flip_frame - 1:
+			var before := preview.valid()
+			_expect(before[-1] == (((size - 1) * 2) % 3 == 0), "the far corner must be validated before the flip")
+	var shown := preview.valid()
+	var wrong := 0
+	for i in shown.size():
+		var tile := Vector2i(i % size, i / size)
+		if shown[i] != (((tile.x + tile.y) % 3 == 0) != true):
+			wrong += 1
+	_expect(wrong == 0, "%d of %d tiles still showed the validity from before the flip %d frames later, with a tick every 30 frames" % [wrong, shown.size(), settle_frames])
 
 func _check_designation_overlay() -> void:
 	var world := WorldStateType.new(4242, 10, 64, 64)
