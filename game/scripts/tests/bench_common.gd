@@ -140,7 +140,8 @@ static func submit_till_orders(world: WorldStateType, count: int) -> int:
 ## bench_tick_scaling.gd proves it by comparing state_hash() against a twin
 ## world advanced with the real tick(). Adds the elapsed microseconds per
 ## phase into `totals`. If tick() changes, this copy must follow it (the
-## hash check fails loudly otherwise).
+## hash check fails loudly otherwise, and tools/run_benches.ps1 fails any
+## benchmark whose output has a SCRIPT ERROR, e.g. a call to a moved method).
 static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	var t := Time.get_ticks_usec()
 	world._clock.advance(1)
@@ -161,11 +162,11 @@ static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	t = _lap(totals, "scheduler", t)
 	world._construction.resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
 	t = _lap(totals, "site_fetch_resolve", t)
-	world._rescue_giver.advance(world._rescue_candidates(), world._trapped_rescue_victims(), world._clock.tick)
+	world._rescue_giver.advance(world._trench.rescue_candidates(), world._trench.trapped_rescue_victims(), world._clock.tick)
 	t = _lap(totals, "rescue_giver", t)
 	world._incidents.activate_pending()
 	t = _lap(totals, "incidents_activate", t)
-	world._activate_pending_escapes()
+	world._trench.activate_pending_escapes()
 	t = _lap(totals, "escapes_activate", t)
 	world._advance_colonists()
 	t = _lap(totals, "advance_colonists", t)

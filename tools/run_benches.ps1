@@ -8,7 +8,8 @@
 # With -Filter and no -Out, nothing is written (the baseline keeps every benchmark).
 # Godot is taken from -GodotPath, then $env:GODOT, then "godot" on PATH.
 # Timings are wall-clock and host-dependent: run nothing else heavy meanwhile, and never
-# gate CI on them. The full set takes about 15-25 min.
+# gate CI on them. The full set takes about 15-25 min. A benchmark fails (exit 1 overall) when
+# it exits non-zero or prints a SCRIPT ERROR; exit 3 in the report marks the latter.
 [CmdletBinding()]
 param(
     [string]$Filter = "",
@@ -59,13 +60,20 @@ foreach ($bench in $benches) {
     $output = & $GodotPath --headless --path $gameRoot --script "res://scripts/tests/$($bench.Name)" 2>&1 | ForEach-Object { "$_" }
     $exitCode = $LASTEXITCODE
     $sw.Stop()
+    # A GDScript runtime error aborts only the current function, so a benchmark calling a
+    # method that a refactor moved can still exit 0 with wrong numbers: count it as a failure.
+    $scriptErrors = @($output | Where-Object { $_ -match 'SCRIPT ERROR' })
+    if ($scriptErrors.Count -gt 0 -and $exitCode -eq 0) { $exitCode = 3 }
     $lines = @($output | Where-Object { $_ -match '^bench_' })
     $rows = @($output | Where-Object { $_.StartsWith("@row ") } | ForEach-Object { $_.Substring(5) | ConvertFrom-Json })
     $lines += ("{0}: wall={1:n0}s exit={2}" -f $bench.BaseName, $sw.Elapsed.TotalSeconds, $exitCode)
+    if ($scriptErrors.Count -gt 0) {
+        $lines += ("{0}: {1} SCRIPT ERROR line(s), first: {2}" -f $bench.BaseName, $scriptErrors.Count, $scriptErrors[0].Trim())
+    }
     $lines | ForEach-Object { Write-Output $_ }
     if ($exitCode -ne 0) {
         # A failing benchmark keeps its error output, so the report says why.
-        $output | Where-Object { $_ -match 'ERROR|SCRIPT ERROR|Parse Error' } | Select-Object -First 10 | ForEach-Object { Write-Output "  $_" }
+        $output | Where-Object { $_ -match 'ERROR|Parse Error' } | Select-Object -First 10 | ForEach-Object { Write-Output "  $_" }
     }
     $otherGodot = [Math]::Max($otherGodot, (Get-OtherGodotCount))
     $results += [pscustomobject]@{
