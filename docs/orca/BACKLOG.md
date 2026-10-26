@@ -364,6 +364,8 @@ one.
   lines from it.
 - **Owned paths:** `tools/run_benches.ps1` (new), `docs/architecture/bench-baseline.md` (new),
   `docs/orca/README.md` (one paragraph), `game/scripts/tests/bench_*.gd` (output format only).
+  Scope amendment approved by the owner, 2026-10-27: repair bench calls broken by R6
+  (`BenchCommon.profiled_tick()` in `bench_common.gd` follows `TrenchSystem`).
 - **Acceptance:** the runner reproduces the A0 lines on the host; `run_tests` still ignores
   `bench_*`; no CI gate is added (timings are host-dependent).
 - **Non-goals:** performance thresholds in CI; changing what the benchmarks measure.

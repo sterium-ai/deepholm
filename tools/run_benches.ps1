@@ -11,7 +11,8 @@
 # gate CI on them. The full set takes about 15-25 min. A benchmark fails (exit 1 overall) when
 # it exits non-zero or prints a SCRIPT ERROR (exit 3 in the report), or when it runs longer
 # than -TimeoutMinutes and is killed (exit 124): an error inside _init() skips its quit() and
-# would otherwise leave Godot idling forever.
+# would otherwise leave Godot idling forever. A report (-Out or -RawOut) that cannot be written
+# ends the run with exit 4.
 [CmdletBinding()]
 param(
     [string]$Filter = "",
@@ -126,7 +127,18 @@ function ConvertTo-MarkdownTable([object[]]$tableRows) {
 
 $allLines = @($results | ForEach-Object { $_.Lines })
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-if ($RawOut) { [System.IO.File]::WriteAllText($RawOut, (($allLines -join "`n") + "`n"), $utf8NoBom) }
+# "Continue" above would let a failed write fall through to "wrote ..." and exit 0, leaving a
+# missing or stale report that looks fresh: a write that throws ends the run with exit 4.
+function Write-Report([string]$path, [string[]]$reportLines) {
+    try {
+        [System.IO.File]::WriteAllText($path, (($reportLines -join "`n") + "`n"), $utf8NoBom)
+    } catch {
+        Write-Output ("run_benches: could not write {0}: {1}" -f $path, $_.Exception.Message)
+        exit 4
+    }
+    Write-Output "run_benches: wrote $path"
+}
+if ($RawOut) { Write-Report $RawOut $allLines }
 
 if ($Out) {
     # Host fields come from the first benchmark header line ("<bench>: commit=... godot=... os=... cpu=... threads=N").
@@ -173,8 +185,7 @@ if ($Out) {
         $md += ""
         $md += "</details>"
     }
-    [System.IO.File]::WriteAllText($Out, (($md -join "`n") + "`n"), $utf8NoBom)
-    Write-Output "run_benches: wrote $Out"
+    Write-Report $Out $md
 }
 
 $failed = @($results | Where-Object { $_.Exit -ne 0 })

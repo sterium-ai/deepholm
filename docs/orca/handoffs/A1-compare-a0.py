@@ -4,7 +4,8 @@ Compares docs/orca/handoffs/A0-bench-results.txt with a raw-lines file from
 `tools\\run_benches.ps1 -RawOut <file>` (or the raw lines of bench-baseline.md).
 Each line's shape (its text with every number replaced by #) must match, in
 order. Every value that is not a timing must be equal; timings (ms, us, wall
-seconds, phase splits) are only listed side by side.
+seconds, phase splits) are not compared. On a line that ends in a phase list
+(top_phases:, phases[...]) the values before the list are still compared.
 
 Lines are matched by shape, in order within a shape (both runs print idle,
 then busy, then needs; A0's needs lines come from its separate re-run).
@@ -22,6 +23,8 @@ NUM = re.compile(r"-?\d+(?:\.\d+)?")
 TIMING_KEY = re.compile(r"(ms|us|mean|p50|p95|max|first|time|setup|load|wall|mean_tick|_state|stringify|"
                         r"encode|decode|write_atomic|read\+integrity|total_save|total_load|us/expansion)$")
 PHASES = re.compile(r"(phases\[|top_phases:|JSON\.parse_string)")
+# The per-phase splits themselves: everything from here on is timings.
+PHASE_LIST = re.compile(r"(phases\[|top_phases:)")
 SKIP = re.compile(r": commit=|: done$|: wall=")
 # Values that may differ for a known reason, reported as "expected" rather than as mismatches:
 # - bench_tick_scaling stops a run after RUN_BUDGET_USEC of measured ticks, so on a faster or
@@ -67,14 +70,16 @@ def main() -> int:
             continue
         n = new_by_key[k].pop(0)
         matched += 1
-        if PHASES.search(l):
-            continue  # phase splits are timings throughout
-        old_pairs, new_pairs = pairs(l), pairs(n)
-        n_changed = dict(old_pairs).get("n") != dict(new_pairs).get("n")
+        # Phase splits are timings throughout; the counts before them (ticks, queue sizes,
+        # open_orders, n, ...) are not.
+        old_pairs, new_pairs = pairs(PHASE_LIST.split(l)[0]), pairs(PHASE_LIST.split(n)[0])
+        # Only bench_tick_scaling has a run budget; every other n (e.g. the backlog's 50) is fixed.
+        budgeted = l.startswith("bench_tick_scaling:")
+        n_changed = budgeted and dict(old_pairs).get("n") != dict(new_pairs).get("n")
         for (ka, va), (kb, vb) in zip(old_pairs, new_pairs):
             if ka != kb or TIMING_KEY.search(ka) or va == vb:
                 continue
-            if ka == "n" or (n_changed and ka in BUDGET_STATE):
+            if (budgeted and ka == "n") or (n_changed and ka in BUDGET_STATE):
                 reason = "run budget: a different number of ticks fit in RUN_BUDGET_USEC"
             elif ka in CODE_DEPENDENT:
                 reason = "Object count depends on the code (R4-R6 landed after A0)"
