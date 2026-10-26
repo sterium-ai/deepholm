@@ -16,7 +16,7 @@ $backlog = Join-Path $repoRoot "docs\orca\BACKLOG.md"
 
 # Find the entry "### <id> — <title> · ..." and build a short kebab slug from the title.
 $dash = [char]0x2014; $dot = [char]0x00B7
-$pattern = "^### $([regex]::Escape($TaskId))\s+[$dash-]\s+(.+?)\s+$dot"
+$pattern = "^###+ $([regex]::Escape($TaskId))\s+[$dash-]\s+(.+?)\s+$dot"   # A-tasks from the audit are #### headings
 $line = Get-Content -LiteralPath $backlog -Encoding UTF8 | Where-Object { $_ -match $pattern } | Select-Object -First 1
 if (-not $line) {
     Write-Error "new-task: no entry '### $TaskId — ...' in docs/orca/BACKLOG.md"
