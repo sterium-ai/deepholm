@@ -659,7 +659,7 @@ one.
   new game is byte-identical to today's.
 - **Non-goals:** win/lose conditions (A17); a campaign.
 
-#### A17 — Story and quest layer: design ADR · `todo` · *parallel-safe (docs only)*
+#### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 
 - **Goal:** an ADR for trigger → condition → effect rules evaluated by one story giver (job
   giver pattern, ADR 011). Effects are ordinary commands. Flags and quest stages are persisted
