@@ -919,8 +919,7 @@ func get_pending_trade_offers() -> Array[Dictionary]:
 	return _trade.get_pending_trade_offers()
 
 ## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state; a non-empty `kinds` keeps only those kinds, costing only the jobs returned (B1).
-## get_job(): one job as get_jobs() shows it, {} when unknown. The reads below it: see JobIndex (B1);
-## get_pending_job_ids_at(): pending jobs targeting a tile, site jobs excepted (the viewer's Cancel candidates).
+## get_job(): one job as get_jobs() shows it ({} when unknown); the reads below: JobIndex (B1); get_pending_job_ids_at(): a tile's pending non-site jobs (Cancel's candidates).
 func get_jobs(kinds: Array = []) -> Array[Dictionary]:
 	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
