@@ -115,7 +115,7 @@ Orca helper scripts, this backlog.
   `jobs/givers/rescue_giver.gd`, `state_codec.gd`, `core-budgets.json`, affected tests.
 - **Acceptance:** as R1; `test_trapped_actors`, `test_rescue` unchanged.
 
-### R7 — Extract `TradeSystem` · `todo`
+### R7 — Extract `TradeSystem` · `review (antonelmejor50-hub/r7-extract-tradesystem)`
 
 - **Goal:** `economy/trade_system.gd` owns pending offers and `accept_trade`.
 - **Acceptance:** as R1; trader tests unchanged.
