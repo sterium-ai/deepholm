@@ -29,7 +29,7 @@ SKIP = re.compile(r": commit=|: done$|: wall=")
 # Values that may differ for a known reason, reported as "expected" rather than as mismatches:
 # - bench_tick_scaling stops a run after RUN_BUDGET_USEC of measured ticks, so on a faster or
 #   slower host `n` differs, and so does the state after n ticks (jobs/active/events).
-# - the leak check's Object counts depend on the code: A0 ran on 052d8c4, and R4-R6 since then
+# - the leak check's Object counts depend on the code: A0 ran on 052d8c4, and R4-R7 since then
 #   added core modules (more Objects per WorldState).
 BUDGET_STATE = {"jobs", "active", "events"}
 CODE_DEPENDENT = {"before", "WorldStates", "(delta"}
@@ -82,7 +82,7 @@ def main() -> int:
             if (budgeted and ka == "n") or (n_changed and ka in BUDGET_STATE):
                 reason = "run budget: a different number of ticks fit in RUN_BUDGET_USEC"
             elif ka in CODE_DEPENDENT:
-                reason = "Object count depends on the code (R4-R6 landed after A0)"
+                reason = "Object count depends on the code (R4-R7 landed after A0)"
             else:
                 reason = ""
             print(f"{'expected' if reason else 'DIFF'} {ka}: A0={va} now={vb}"

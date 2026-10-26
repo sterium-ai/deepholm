@@ -4,10 +4,10 @@
 > host before quoting before/after numbers, and quote the lines of this file that the change
 > moves. Timings are wall-clock and host-dependent; they are evidence, not a CI gate.
 
-- **Commit:** `8e0c57b`
+- **Commit:** `70fc496`
 - **Host:** AMD Ryzen 7 9800X3D 8-Core Processor, 16 threads, Windows, Godot 4.7.2-stable (official) headless
-- **Run:** 2026-10-26 21:55, 15 min in total
-- **Other Godot processes on the host:** up to 0 (sampled before and between benchmarks; 0 is a quiet run)
+- **Run:** 2026-10-27 00:42, 15 min in total
+- **Other Godot processes on the host:** up to 2 (sampled before and between benchmarks; 0 is a quiet run)
 
 The benchmarks and what each one measures are described in the header comment of each
 `game/scripts/tests/bench_*.gd` and in `docs/architecture/foundation-audit.md`.
@@ -20,21 +20,21 @@ Wall time 2 s, exit code 0.
 
 | case | bytes | items | objects | valid | load ms | mean ms | p50 ms | p95 ms | max ms | n | us per added entry |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| real bundle | 12999 | 9 | 10 | true | 19.41 | 19.41 | 19.09 | 21.73 | 21.73 | 5 |  |
-| synthetic +100 items +100 objects | 47552 | 109 | 110 | true | 36.0 |  |  |  |  |  | 180.1 |
-| synthetic +1000 items +1000 objects | 348152 | 1009 | 1010 | true | 192.5 |  |  |  |  |  | 96.3 |
-| synthetic +5000 items +5000 objects | 1692152 | 5009 | 5010 | true | 932.4 |  |  |  |  |  | 93.2 |
-| native JSON.parse_string of the +5000 objects.json | 1337305 |  |  | true | 21.4 |  |  |  |  |  |  |
+| real bundle | 12999 | 9 | 10 | true | 17.79 | 17.79 | 17.82 | 18.52 | 18.52 | 5 |  |
+| synthetic +100 items +100 objects | 47552 | 109 | 110 | true | 34.2 |  |  |  |  |  | 171.2 |
+| synthetic +1000 items +1000 objects | 348152 | 1009 | 1010 | true | 180.9 |  |  |  |  |  | 90.5 |
+| synthetic +5000 items +5000 objects | 1692152 | 5009 | 5010 | true | 866.1 |  |  |  |  |  | 86.6 |
+| native JSON.parse_string of the +5000 objects.json | 1337305 |  |  | true | 20.0 |  |  |  |  |  |  |
 
 <details><summary>Raw lines</summary>
 
 ```text
-bench_content_load: commit=8e0c57b godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
-bench_content_load: real bundle (12999 bytes, 9 items, 10 objects) valid=true load mean=19.41ms p50=19.09ms p95=21.73ms max=21.73ms n=5
-bench_content_load: synthetic +100 items +100 objects (47552 bytes) valid=true load=36.0ms (180.1 us per added entry) error={  }
-bench_content_load: synthetic +1000 items +1000 objects (348152 bytes) valid=true load=192.5ms (96.3 us per added entry) error={  }
-bench_content_load: synthetic +5000 items +5000 objects (1692152 bytes) valid=true load=932.4ms (93.2 us per added entry) error={  }
-bench_content_load: for comparison, Godot's native JSON.parse_string of the +5000 objects.json: 21.4ms (parsed=true)
+bench_content_load: commit=70fc496 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_content_load: real bundle (12999 bytes, 9 items, 10 objects) valid=true load mean=17.79ms p50=17.82ms p95=18.52ms max=18.52ms n=5
+bench_content_load: synthetic +100 items +100 objects (47552 bytes) valid=true load=34.2ms (171.2 us per added entry) error={  }
+bench_content_load: synthetic +1000 items +1000 objects (348152 bytes) valid=true load=180.9ms (90.5 us per added entry) error={  }
+bench_content_load: synthetic +5000 items +5000 objects (1692152 bytes) valid=true load=866.1ms (86.6 us per added entry) error={  }
+bench_content_load: for comparison, Godot's native JSON.parse_string of the +5000 objects.json: 20.0ms (parsed=true)
 bench_content_load: done
 bench_content_load: wall=2s exit=0
 ```
@@ -43,260 +43,260 @@ bench_content_load: wall=2s exit=0
 
 ## bench_long_session
 
-Wall time 134 s, exit code 0.
+Wall time 135 s, exit code 0.
 
 ### retention
 
 | case | mean tick ms | queue jobs | open | terminal | queue events | world events | dirty cells | top phases (ms/tick) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| ticks=1000 | 14.79 | 149 | 20 | 129 | 685 | 1834 | 129 | advance_colonists=11.93 scheduler=1.41 combat=0.30 |
-| ticks=2000 | 12.75 | 229 | 25 | 204 | 1061 | 3281 | 202 | advance_colonists=6.73 need_giver=2.19 scheduler=1.88 |
-| ticks=3000 | 12.17 | 296 | 16 | 280 | 1594 | 4900 | 270 | advance_colonists=6.71 scheduler=2.37 need_giver=0.71 |
-| ticks=4000 | 16.66 | 374 | 21 | 353 | 2366 | 6744 | 338 | advance_colonists=6.99 need_giver=3.49 scheduler=3.00 |
-| ticks=5000 | 15.98 | 428 | 18 | 410 | 2974 | 8402 | 390 | advance_colonists=5.91 scheduler=3.55 need_giver=2.82 |
-| ticks=6000 | 20.90 | 498 | 19 | 479 | 3706 | 10198 | 454 | advance_colonists=7.54 need_giver=4.55 scheduler=4.19 |
+| ticks=1000 | 15.39 | 149 | 20 | 129 | 685 | 1834 | 129 | advance_colonists=12.42 scheduler=1.47 combat=0.32 |
+| ticks=2000 | 13.67 | 229 | 25 | 204 | 1061 | 3281 | 202 | advance_colonists=7.13 need_giver=2.66 scheduler=1.94 |
+| ticks=3000 | 13.16 | 296 | 16 | 280 | 1594 | 4900 | 270 | advance_colonists=7.48 scheduler=2.50 need_giver=0.78 |
+| ticks=4000 | 19.75 | 374 | 21 | 353 | 2366 | 6744 | 338 | advance_colonists=8.45 need_giver=4.26 scheduler=3.58 |
+| ticks=5000 | 14.87 | 428 | 18 | 410 | 2974 | 8402 | 390 | advance_colonists=5.59 scheduler=3.36 need_giver=2.63 |
+| ticks=6000 | 19.18 | 498 | 19 | 479 | 3706 | 10198 | 454 | advance_colonists=7.07 need_giver=4.22 scheduler=3.99 |
 
 ### backlog
 
 | case | actors | mean ms | p50 ms | p95 ms | max ms | n | top phases (ms/tick) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| open_orders=0 | 10 | 1.11 | 1.08 | 1.28 | 1.72 | 50 | combat=0.32 calendar_alerts=0.26 needs_decay=0.26 |
-| open_orders=100 | 10 | 34.22 | 2.75 | 162.98 | 1067.33 | 50 | advance_colonists=31.51 scheduler=1.18 combat=0.31 |
-| open_orders=500 | 10 | 45.30 | 12.89 | 170.39 | 1081.57 | 50 | advance_colonists=31.49 scheduler=10.34 haul_giver=0.89 |
-| open_orders=2000 | 10 | 186.33 | 145.69 | 323.99 | 1258.61 | 50 | scheduler=138.42 advance_colonists=33.93 site_fetch_resolve=5.13 |
+| open_orders=0 | 10 | 1.06 | 1.04 | 1.19 | 1.23 | 50 | combat=0.31 calendar_alerts=0.25 needs_decay=0.25 |
+| open_orders=100 | 10 | 32.05 | 2.77 | 153.57 | 999.92 | 50 | advance_colonists=29.44 scheduler=1.14 combat=0.31 |
+| open_orders=500 | 10 | 43.26 | 12.57 | 183.01 | 1012.57 | 50 | advance_colonists=29.94 scheduler=10.02 haul_giver=0.85 |
+| open_orders=2000 | 10 | 169.63 | 131.80 | 308.58 | 1189.51 | 50 | scheduler=127.06 advance_colonists=31.99 haul_giver=3.32 |
 
 <details><summary>Raw lines</summary>
 
 ```text
-bench_long_session: commit=8e0c57b godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
-bench_long_session: retention ticks=1000 mean_tick=14.79ms queue_jobs=149 (open=20 terminal=129) queue_events=685 world_events=1834 dirty_cells=129 top_phases: advance_colonists=11.93 scheduler=1.41 combat=0.30
-bench_long_session: retention ticks=2000 mean_tick=12.75ms queue_jobs=229 (open=25 terminal=204) queue_events=1061 world_events=3281 dirty_cells=202 top_phases: advance_colonists=6.73 need_giver=2.19 scheduler=1.88
-bench_long_session: retention ticks=3000 mean_tick=12.17ms queue_jobs=296 (open=16 terminal=280) queue_events=1594 world_events=4900 dirty_cells=270 top_phases: advance_colonists=6.71 scheduler=2.37 need_giver=0.71
-bench_long_session: retention ticks=4000 mean_tick=16.66ms queue_jobs=374 (open=21 terminal=353) queue_events=2366 world_events=6744 dirty_cells=338 top_phases: advance_colonists=6.99 need_giver=3.49 scheduler=3.00
-bench_long_session: retention ticks=5000 mean_tick=15.98ms queue_jobs=428 (open=18 terminal=410) queue_events=2974 world_events=8402 dirty_cells=390 top_phases: advance_colonists=5.91 scheduler=3.55 need_giver=2.82
-bench_long_session: retention ticks=6000 mean_tick=20.90ms queue_jobs=498 (open=19 terminal=479) queue_events=3706 world_events=10198 dirty_cells=454 top_phases: advance_colonists=7.54 need_giver=4.55 scheduler=4.19
-bench_long_session: backlog open_orders=0 actors=10 tick mean=1.11ms p50=1.08ms p95=1.28ms max=1.72ms n=50 top_phases: combat=0.32 calendar_alerts=0.26 needs_decay=0.26
-bench_long_session: backlog open_orders=100 actors=10 tick mean=34.22ms p50=2.75ms p95=162.98ms max=1067.33ms n=50 top_phases: advance_colonists=31.51 scheduler=1.18 combat=0.31
-bench_long_session: backlog open_orders=500 actors=10 tick mean=45.30ms p50=12.89ms p95=170.39ms max=1081.57ms n=50 top_phases: advance_colonists=31.49 scheduler=10.34 haul_giver=0.89
-bench_long_session: backlog open_orders=2000 actors=10 tick mean=186.33ms p50=145.69ms p95=323.99ms max=1258.61ms n=50 top_phases: scheduler=138.42 advance_colonists=33.93 site_fetch_resolve=5.13
+bench_long_session: commit=70fc496 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_long_session: retention ticks=1000 mean_tick=15.39ms queue_jobs=149 (open=20 terminal=129) queue_events=685 world_events=1834 dirty_cells=129 top_phases: advance_colonists=12.42 scheduler=1.47 combat=0.32
+bench_long_session: retention ticks=2000 mean_tick=13.67ms queue_jobs=229 (open=25 terminal=204) queue_events=1061 world_events=3281 dirty_cells=202 top_phases: advance_colonists=7.13 need_giver=2.66 scheduler=1.94
+bench_long_session: retention ticks=3000 mean_tick=13.16ms queue_jobs=296 (open=16 terminal=280) queue_events=1594 world_events=4900 dirty_cells=270 top_phases: advance_colonists=7.48 scheduler=2.50 need_giver=0.78
+bench_long_session: retention ticks=4000 mean_tick=19.75ms queue_jobs=374 (open=21 terminal=353) queue_events=2366 world_events=6744 dirty_cells=338 top_phases: advance_colonists=8.45 need_giver=4.26 scheduler=3.58
+bench_long_session: retention ticks=5000 mean_tick=14.87ms queue_jobs=428 (open=18 terminal=410) queue_events=2974 world_events=8402 dirty_cells=390 top_phases: advance_colonists=5.59 scheduler=3.36 need_giver=2.63
+bench_long_session: retention ticks=6000 mean_tick=19.18ms queue_jobs=498 (open=19 terminal=479) queue_events=3706 world_events=10198 dirty_cells=454 top_phases: advance_colonists=7.07 need_giver=4.22 scheduler=3.99
+bench_long_session: backlog open_orders=0 actors=10 tick mean=1.06ms p50=1.04ms p95=1.19ms max=1.23ms n=50 top_phases: combat=0.31 calendar_alerts=0.25 needs_decay=0.25
+bench_long_session: backlog open_orders=100 actors=10 tick mean=32.05ms p50=2.77ms p95=153.57ms max=999.92ms n=50 top_phases: advance_colonists=29.44 scheduler=1.14 combat=0.31
+bench_long_session: backlog open_orders=500 actors=10 tick mean=43.26ms p50=12.57ms p95=183.01ms max=1012.57ms n=50 top_phases: advance_colonists=29.94 scheduler=10.02 haul_giver=0.85
+bench_long_session: backlog open_orders=2000 actors=10 tick mean=169.63ms p50=131.80ms p95=308.58ms max=1189.51ms n=50 top_phases: scheduler=127.06 advance_colonists=31.99 haul_giver=3.32
 bench_long_session: done
-bench_long_session: wall=134s exit=0
+bench_long_session: wall=135s exit=0
 ```
 
 </details>
 
 ## bench_route_search
 
-Wall time 6 s, exit code 0.
+Wall time 5 s, exit code 0.
 
 ### routes
 
 | case | from | to | status | path len | expansions | resume calls (ticks) | time ms | us/expansion | snapshot json B |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| generated/passability() d=8 | (225, 31) | (225, 23) | found | 9 | 79 | 2 | 0.63 | 7.91 | 3659 |
-| generated/passability() d=32 | (225, 31) | (224, 0) | found | 33 | 1728 | 27 | 14.47 | 8.37 | 60031 |
-| generated/passability() d=64 | (225, 31) | (192, 0) | found | 65 | 4482 | 71 | 38.73 | 8.64 | 144655 |
-| generated/passability() d=128 | (225, 31) | (128, 0) | found | 129 | 8423 | 132 | 70.87 | 8.41 | 269701 |
-| generated/passability() d=256 | (225, 31) | (0, 0) | found | 257 | 15462 | 242 | 135.19 | 8.74 | 470624 |
-| open/array-cost d=8 | (0, 0) | (8, 0) | found | 9 | 29 | 1 | 0.13 | 4.45 | 1063 |
-| open/array-cost d=32 | (0, 0) | (32, 0) | found | 33 | 497 | 8 | 1.58 | 3.18 | 14233 |
-| open/array-cost d=64 | (0, 0) | (64, 0) | found | 65 | 2017 | 32 | 8.28 | 4.11 | 57771 |
-| open/array-cost d=128 | (0, 0) | (128, 0) | found | 129 | 8129 | 128 | 51.48 | 6.33 | 236427 |
-| open/array-cost d=256 | (0, 0) | (255, 1) | found | 257 | 32641 | 511 | 345.85 | 10.60 | 1016396 |
-| open/array-cost d=384 | (0, 0) | (255, 129) | found | 385 | 57281 | 896 | 655.59 | 11.45 | 1844356 |
-| open/unreachable d=-1 | (0, 0) | (200, 200) | unreachable | 0 | 65531 | 1024 | 723.47 | 11.04 | 2124245 |
+| generated/passability() d=8 | (225, 31) | (225, 23) | found | 9 | 79 | 2 | 0.51 | 6.46 | 3659 |
+| generated/passability() d=32 | (225, 31) | (224, 0) | found | 33 | 1728 | 27 | 14.34 | 8.30 | 60031 |
+| generated/passability() d=64 | (225, 31) | (192, 0) | found | 65 | 4482 | 71 | 38.51 | 8.59 | 144655 |
+| generated/passability() d=128 | (225, 31) | (128, 0) | found | 129 | 8423 | 132 | 67.46 | 8.01 | 269701 |
+| generated/passability() d=256 | (225, 31) | (0, 0) | found | 257 | 15462 | 242 | 119.14 | 7.71 | 470624 |
+| open/array-cost d=8 | (0, 0) | (8, 0) | found | 9 | 29 | 1 | 0.10 | 3.59 | 1063 |
+| open/array-cost d=32 | (0, 0) | (32, 0) | found | 33 | 497 | 8 | 1.57 | 3.16 | 14233 |
+| open/array-cost d=64 | (0, 0) | (64, 0) | found | 65 | 2017 | 32 | 8.13 | 4.03 | 57771 |
+| open/array-cost d=128 | (0, 0) | (128, 0) | found | 129 | 8129 | 128 | 48.58 | 5.98 | 236427 |
+| open/array-cost d=256 | (0, 0) | (255, 1) | found | 257 | 32641 | 511 | 329.94 | 10.11 | 1016396 |
+| open/array-cost d=384 | (0, 0) | (255, 129) | found | 385 | 57281 | 896 | 614.14 | 10.72 | 1844356 |
+| open/unreachable d=-1 | (0, 0) | (200, 200) | unreachable | 0 | 65531 | 1024 | 675.66 | 10.31 | 2124245 |
 
 ### regions and rooms
 
 | case | time ms |
 | --- | ---: |
-| regions full build (generated map, TileGrid.get_regions()) | 269.13 |
-| regions full build (open grid, array callable) | 119.05 |
-| regions on_passability_changed (block one tile mid open 256x256 region) | 126.34 |
-| regions on_passability_changed (unblock it again) | 0.03 |
-| rooms full build (generated map, TileGrid.get_rooms()) | 749.16 |
-| rooms on_passability_changed at (225, 31) (no passability change, open area) | 76.28 |
+| regions full build (generated map, TileGrid.get_regions()) | 260.04 |
+| regions full build (open grid, array callable) | 114.27 |
+| regions on_passability_changed (block one tile mid open 256x256 region) | 112.83 |
+| regions on_passability_changed (unblock it again) | 0.02 |
+| rooms full build (generated map, TileGrid.get_rooms()) | 695.09 |
+| rooms on_passability_changed at (225, 31) (no passability change, open area) | 73.76 |
 
 <details><summary>Raw lines</summary>
 
 ```text
-bench_route_search: commit=8e0c57b godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
-bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=79 resume_calls(ticks)=2 time=0.63ms us/expansion=7.91 snapshot_json=3659B
-bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=1728 resume_calls(ticks)=27 time=14.47ms us/expansion=8.37 snapshot_json=60031B
-bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=4482 resume_calls(ticks)=71 time=38.73ms us/expansion=8.64 snapshot_json=144655B
-bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8423 resume_calls(ticks)=132 time=70.87ms us/expansion=8.41 snapshot_json=269701B
-bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=15462 resume_calls(ticks)=242 time=135.19ms us/expansion=8.74 snapshot_json=470624B
-bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=29 resume_calls(ticks)=1 time=0.13ms us/expansion=4.45 snapshot_json=1063B
-bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=497 resume_calls(ticks)=8 time=1.58ms us/expansion=3.18 snapshot_json=14233B
-bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=2017 resume_calls(ticks)=32 time=8.28ms us/expansion=4.11 snapshot_json=57771B
-bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8129 resume_calls(ticks)=128 time=51.48ms us/expansion=6.33 snapshot_json=236427B
-bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=32641 resume_calls(ticks)=511 time=345.85ms us/expansion=10.60 snapshot_json=1016396B
-bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=57281 resume_calls(ticks)=896 time=655.59ms us/expansion=11.45 snapshot_json=1844356B
-bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=723.47ms us/expansion=11.04 snapshot_json=2124245B
-bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=269.13ms
-bench_route_search: regions full build (open grid, array callable) time=119.05ms
-bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=126.34ms
-bench_route_search: regions on_passability_changed (unblock it again) time=0.03ms
-bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=749.16ms
-bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=76.28ms
+bench_route_search: commit=70fc496 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=79 resume_calls(ticks)=2 time=0.51ms us/expansion=6.46 snapshot_json=3659B
+bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=1728 resume_calls(ticks)=27 time=14.34ms us/expansion=8.30 snapshot_json=60031B
+bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=4482 resume_calls(ticks)=71 time=38.51ms us/expansion=8.59 snapshot_json=144655B
+bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8423 resume_calls(ticks)=132 time=67.46ms us/expansion=8.01 snapshot_json=269701B
+bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=15462 resume_calls(ticks)=242 time=119.14ms us/expansion=7.71 snapshot_json=470624B
+bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=29 resume_calls(ticks)=1 time=0.10ms us/expansion=3.59 snapshot_json=1063B
+bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=497 resume_calls(ticks)=8 time=1.57ms us/expansion=3.16 snapshot_json=14233B
+bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=2017 resume_calls(ticks)=32 time=8.13ms us/expansion=4.03 snapshot_json=57771B
+bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8129 resume_calls(ticks)=128 time=48.58ms us/expansion=5.98 snapshot_json=236427B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=32641 resume_calls(ticks)=511 time=329.94ms us/expansion=10.11 snapshot_json=1016396B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=57281 resume_calls(ticks)=896 time=614.14ms us/expansion=10.72 snapshot_json=1844356B
+bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=675.66ms us/expansion=10.31 snapshot_json=2124245B
+bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=260.04ms
+bench_route_search: regions full build (open grid, array callable) time=114.27ms
+bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=112.83ms
+bench_route_search: regions on_passability_changed (unblock it again) time=0.02ms
+bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=695.09ms
+bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=73.76ms
 bench_route_search: done
-bench_route_search: wall=6s exit=0
+bench_route_search: wall=5s exit=0
 ```
 
 </details>
 
 ## bench_save_load
 
-Wall time 56 s, exit code 0.
+Wall time 53 s, exit code 0.
 
 ### round trip
 
 | case | ticks | file KB | encode ms | write_atomic ms | _validate_state ms | one JSON.stringify ms | read+integrity ms | decode ms | total save ms | total load ms | read ok | hash match | write | largest sections |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| actors=10 | 10 | 476.8 | 19.8 | 462.3 | 39.2 | 11.4 | 355.2 | 513.9 | 482.1 | 869.1 | true | true | ok | map.tiles=450.5KB, objects=15.4KB, entities=4.9KB, jobs=1.9KB, scheduling.assignments=1.2KB |
-| actors=100 | 10 | 572.9 | 22.3 | 573.5 | 47.6 | 15.3 | 491.2 | 604.1 | 595.8 | 1095.3 | true | true | ok | map.tiles=450.5KB, entities=55.7KB, jobs=19.0KB, scheduling.assignments=16.6KB, objects=15.4KB |
-| actors=1000 | 10 | 1407.5 | 50.1 | 1616.1 | 110.6 | 50.8 | 1206.4 | 571.9 | 1666.3 | 1778.3 | true | true | ok | entities=462.1KB, map.tiles=450.5KB, jobs=191.2KB, scheduling.pending=114.0KB, scheduling.waiting=68.4KB |
+| actors=10 | 10 | 476.8 | 18.6 | 434.4 | 38.4 | 11.0 | 340.7 | 493.8 | 453.0 | 834.4 | true | true | ok | map.tiles=450.5KB, objects=15.4KB, entities=4.9KB, jobs=1.9KB, scheduling.assignments=1.2KB |
+| actors=100 | 10 | 572.9 | 20.4 | 543.0 | 46.4 | 14.9 | 420.1 | 498.7 | 563.4 | 918.8 | true | true | ok | map.tiles=450.5KB, entities=55.7KB, jobs=19.0KB, scheduling.assignments=16.6KB, objects=15.4KB |
+| actors=1000 | 10 | 1407.5 | 43.3 | 1480.6 | 101.4 | 40.4 | 1106.7 | 542.0 | 1523.9 | 1648.6 | true | true | ok | entities=462.1KB, map.tiles=450.5KB, jobs=191.2KB, scheduling.pending=114.0KB, scheduling.waiting=68.4KB |
 
 ### leak check
 
 | case | objects before | objects after | delta |
 | --- | ---: | ---: | ---: |
-| build and drop 3 WorldStates (64x64) | 1809 | 1914 | 105 |
+| build and drop 3 WorldStates (64x64) | 1817 | 1925 | 108 |
 
 <details><summary>Raw lines</summary>
 
 ```text
-bench_save_load: commit=8e0c57b godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
-bench_save_load: actors=10 write_atomic parts: _validate_state=39.2ms one JSON.stringify=11.4ms
-bench_save_load: actors=10 ticks=10 file=476.8KB encode=19.8ms write_atomic=462.3ms read+integrity=355.2ms decode=513.9ms total_save=482.1ms total_load=869.1ms read_ok=true hash_match=true write=ok
+bench_save_load: commit=70fc496 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_save_load: actors=10 write_atomic parts: _validate_state=38.4ms one JSON.stringify=11.0ms
+bench_save_load: actors=10 ticks=10 file=476.8KB encode=18.6ms write_atomic=434.4ms read+integrity=340.7ms decode=493.8ms total_save=453.0ms total_load=834.4ms read_ok=true hash_match=true write=ok
 bench_save_load: actors=10 largest sections (JSON chars): map.tiles=450.5KB, objects=15.4KB, entities=4.9KB, jobs=1.9KB, scheduling.assignments=1.2KB
-bench_save_load: actors=100 write_atomic parts: _validate_state=47.6ms one JSON.stringify=15.3ms
-bench_save_load: actors=100 ticks=10 file=572.9KB encode=22.3ms write_atomic=573.5ms read+integrity=491.2ms decode=604.1ms total_save=595.8ms total_load=1095.3ms read_ok=true hash_match=true write=ok
+bench_save_load: actors=100 write_atomic parts: _validate_state=46.4ms one JSON.stringify=14.9ms
+bench_save_load: actors=100 ticks=10 file=572.9KB encode=20.4ms write_atomic=543.0ms read+integrity=420.1ms decode=498.7ms total_save=563.4ms total_load=918.8ms read_ok=true hash_match=true write=ok
 bench_save_load: actors=100 largest sections (JSON chars): map.tiles=450.5KB, entities=55.7KB, jobs=19.0KB, scheduling.assignments=16.6KB, objects=15.4KB
-bench_save_load: actors=1000 write_atomic parts: _validate_state=110.6ms one JSON.stringify=50.8ms
-bench_save_load: actors=1000 ticks=10 file=1407.5KB encode=50.1ms write_atomic=1616.1ms read+integrity=1206.4ms decode=571.9ms total_save=1666.3ms total_load=1778.3ms read_ok=true hash_match=true write=ok
+bench_save_load: actors=1000 write_atomic parts: _validate_state=101.4ms one JSON.stringify=40.4ms
+bench_save_load: actors=1000 ticks=10 file=1407.5KB encode=43.3ms write_atomic=1480.6ms read+integrity=1106.7ms decode=542.0ms total_save=1523.9ms total_load=1648.6ms read_ok=true hash_match=true write=ok
 bench_save_load: actors=1000 largest sections (JSON chars): entities=462.1KB, map.tiles=450.5KB, jobs=191.2KB, scheduling.pending=114.0KB, scheduling.waiting=68.4KB
-bench_save_load: leak check: Object count before=1809 after building+dropping 3 WorldStates=1914 (delta=105)
+bench_save_load: leak check: Object count before=1817 after building+dropping 3 WorldStates=1925 (delta=108)
 bench_save_load: done
-bench_save_load: wall=56s exit=0
+bench_save_load: wall=53s exit=0
 ```
 
 </details>
 
 ## bench_tick_scaling
 
-Wall time 717 s, exit code 0.
+Wall time 700 s, exit code 0.
 
 ### phases first tick (ms/tick)
 
 | case | needs_decay | need_giver | combat | scheduler | rescue_giver | calendar_alerts | advance_colonists | approach_giver | collect_queue_events | haul_giver | construction_giver | site_fetch_resolve | escapes_activate |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| idle actors=10 | 0.36 | 0.08 | 0.39 | 273.65 | 0.07 | 0.28 |  |  |  |  |  |  |  |
-| idle actors=100 | 2.12 | 0.61 | 15.09 | 280.96 | 1.09 | 1.18 | 0.45 | 0.15 |  |  |  |  |  |
-| idle actors=500 | 10.32 | 3.11 | 341.10 | 276.36 | 19.92 | 4.31 | 1.92 | 0.84 |  |  |  |  |  |
-| idle actors=1000 | 20.39 | 6.24 | 1415.61 | 279.65 | 74.77 | 8.94 | 5.22 | 1.69 |  |  |  |  |  |
-| busy actors=10 | 0.35 | 0.08 | 0.33 | 269.54 | 0.06 | 0.30 | 0.33 |  | 0.05 |  |  |  |  |
-| busy actors=100 | 2.11 | 0.59 | 15.13 | 363.76 | 1.12 | 1.11 | 1.29 | 0.18 | 0.23 | 0.30 | 0.14 | 0.23 | 0.13 |
-| busy actors=500 | 10.80 | 3.52 | 420.04 | 1331.26 | 19.52 | 4.65 | 2.85 | 0.91 | 0.77 | 1.89 | 0.88 | 1.28 | 0.14 |
-| busy actors=1000 | 24.98 | 7.71 | 1435.78 | 3664.62 | 75.81 | 10.30 | 6.38 | 1.81 | 2.03 | 3.55 | 1.67 | 2.92 | 0.18 |
-| needs actors=10 | 0.34 | 1431.98 | 0.35 | 0.10 |  | 0.30 |  |  |  |  |  |  |  |
-| needs actors=25 | 0.64 | 7624.38 | 1.48 | 0.17 |  | 0.51 | 0.08 |  |  |  |  |  |  |
-| needs actors=50 | 1.14 | 29098.14 | 4.42 | 0.29 |  | 0.60 | 0.16 | 0.06 |  |  |  |  |  |
-| needs actors=100 | 2.15 | 115123.16 | 15.00 | 0.52 | 0.09 | 1.07 | 0.44 | 0.14 |  |  |  |  |  |
+| idle actors=10 | 0.34 | 0.07 | 0.33 | 265.24 | 0.07 | 0.27 |  |  |  |  |  |  |  |
+| idle actors=100 | 1.95 | 0.57 | 14.87 | 256.69 | 1.03 | 0.85 | 0.36 | 0.12 |  |  |  |  |  |
+| idle actors=500 | 9.48 | 2.89 | 334.01 | 263.76 | 18.80 | 3.31 | 1.84 | 0.63 |  |  |  |  |  |
+| idle actors=1000 | 19.47 | 5.96 | 1386.98 | 275.06 | 74.26 | 7.14 | 5.05 | 1.33 |  |  |  |  |  |
+| busy actors=10 | 0.30 | 0.07 | 0.33 | 259.96 | 0.05 | 0.29 | 0.34 |  | 0.05 |  |  |  |  |
+| busy actors=100 | 1.94 | 0.57 | 14.64 | 336.62 | 1.04 | 0.86 | 1.22 | 0.13 | 0.19 | 0.22 | 0.14 | 0.14 | 0.11 |
+| busy actors=500 | 9.97 | 3.06 | 335.53 | 1157.67 | 19.16 | 4.04 | 2.86 | 0.85 | 0.69 | 1.53 | 0.72 | 1.18 | 0.12 |
+| busy actors=1000 | 20.08 | 6.04 | 1372.37 | 3288.78 | 77.47 | 12.06 | 8.65 | 2.27 | 1.86 | 3.21 | 1.46 | 2.51 | 0.19 |
+| needs actors=10 | 0.34 | 1405.05 | 0.50 | 0.11 |  | 0.49 |  |  |  |  |  |  |  |
+| needs actors=25 | 0.60 | 7202.75 | 1.41 | 0.16 |  | 0.40 | 0.09 |  |  |  |  |  |  |
+| needs actors=50 | 1.06 | 27909.54 | 6.08 | 0.27 |  | 0.61 | 0.16 | 0.06 |  |  |  |  |  |
+| needs actors=100 | 2.03 | 110392.25 | 14.68 | 0.48 | 0.08 | 1.09 | 0.43 | 0.12 |  |  |  |  |  |
 
 ### ticks (real tick(), ticks 2..n)
 
 | case | setup ms | first ms | mean ms | p50 ms | p95 ms | max ms | n | profiled mean ms | hash match | jobs | active | events | water tiles | reachable water |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| idle actors=10 | 523 | 273.10 | 1.07 | 1.06 | 1.16 | 1.23 | 29 | 1.15 | true | 0 | 0 | 30 |  |  |
-| idle actors=100 | 528 | 290.44 | 22.34 | 21.06 | 28.93 | 37.10 | 29 | 21.30 | true | 0 | 0 | 30 |  |  |
-| idle actors=500 | 530 | 672.93 | 397.72 | 394.03 | 416.74 | 419.81 | 29 | 408.82 | true | 0 | 0 | 30 |  |  |
-| idle actors=1000 | 534 | 1842.02 | 1581.68 | 1566.17 | 1683.64 | 1791.87 | 29 | 1595.34 | true | 0 | 0 | 30 |  |  |
-| busy actors=10 | 644 | 267.52 | 1.96 | 1.88 | 2.48 | 2.54 | 29 | 1.78 | true | 10 | 10 | 70 |  |  |
-| busy actors=100 | 527 | 377.33 | 54.90 | 55.01 | 70.12 | 95.57 | 29 | 54.57 | true | 100 | 100 | 430 |  |  |
-| busy actors=500 | 1221 | 1768.00 | 1274.20 | 1219.70 | 1776.14 | 1841.96 | 29 | 1275.20 | true | 500 | 465 | 1960 |  |  |
-| busy actors=1000 | 3104 | 4915.47 | 3987.72 | 3977.25 | 4433.34 | 4870.76 | 21 | 4055.08 | true | 1000 | 568 | 3158 |  |  |
-| needs actors=10 | 511 | 1427.15 | 6.95 | 7.17 | 8.77 | 9.29 | 29 | 6.83 | true | 0 | 0 | 30 | 2218 | 234 |
-| needs actors=25 | 513 | 7372.59 | 17.78 | 18.26 | 20.64 | 25.46 | 29 | 17.58 | true | 0 | 0 | 30 | 2218 | 234 |
-| needs actors=50 | 527 | 28936.39 | 36.95 | 36.88 | 46.26 | 47.80 | 29 | 37.78 | true | 0 | 0 | 30 | 2218 | 234 |
-| needs actors=100 | 527 | 114797.35 | 0.00 | 0.00 | 0.00 | 0.00 | 0 | 0.00 | true | 0 | 0 | 1 | 2218 | 234 |
+| idle actors=10 | 492 | 259.81 | 1.05 | 1.02 | 1.09 | 1.60 | 29 | 1.05 | true | 0 | 0 | 30 |  |  |
+| idle actors=100 | 493 | 277.45 | 19.98 | 19.91 | 20.37 | 20.75 | 29 | 20.14 | true | 0 | 0 | 30 |  |  |
+| idle actors=500 | 525 | 651.73 | 377.88 | 377.04 | 384.26 | 390.36 | 29 | 379.66 | true | 0 | 0 | 30 |  |  |
+| idle actors=1000 | 518 | 1757.16 | 1498.35 | 1495.63 | 1510.26 | 1530.92 | 29 | 1503.83 | true | 0 | 0 | 30 |  |  |
+| busy actors=10 | 499 | 263.41 | 1.61 | 1.64 | 1.70 | 1.72 | 29 | 1.64 | true | 10 | 10 | 70 |  |  |
+| busy actors=100 | 516 | 360.75 | 52.34 | 51.81 | 66.68 | 88.61 | 29 | 52.40 | true | 100 | 100 | 430 |  |  |
+| busy actors=500 | 1187 | 1542.37 | 1216.91 | 1145.56 | 1735.73 | 1825.38 | 29 | 1219.88 | true | 500 | 465 | 1960 |  |  |
+| busy actors=1000 | 2884 | 4783.06 | 3818.83 | 3824.04 | 4289.97 | 4394.29 | 23 | 3838.02 | true | 1000 | 582 | 3188 |  |  |
+| needs actors=10 | 553 | 1403.10 | 6.60 | 6.55 | 7.55 | 7.62 | 29 | 6.72 | true | 0 | 0 | 30 | 2218 | 234 |
+| needs actors=25 | 493 | 7218.50 | 16.56 | 16.64 | 18.97 | 18.98 | 29 | 16.55 | true | 0 | 0 | 30 | 2218 | 234 |
+| needs actors=50 | 497 | 28041.84 | 34.53 | 35.53 | 38.55 | 38.95 | 29 | 34.42 | true | 0 | 0 | 30 | 2218 | 234 |
+| needs actors=100 | 496 | 110663.37 | 0.00 | 0.00 | 0.00 | 0.00 | 0 | 0.00 | true | 0 | 0 | 1 | 2218 | 234 |
 
 ### phases ticks 2..n (ms/tick)
 
 | case | needs_decay | need_giver | combat | scheduler | calendar_alerts | rescue_giver | advance_colonists | approach_giver | haul_giver | construction_giver | site_fetch_resolve | escapes_activate | collect_queue_events |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| idle actors=10 | 0.27 | 0.07 | 0.33 | 0.10 | 0.27 |  |  |  |  |  |  |  |  |
-| idle actors=100 | 1.85 | 0.60 | 15.47 | 0.99 | 0.80 | 1.06 | 0.38 | 0.13 |  |  |  |  |  |
-| idle actors=500 | 8.97 | 2.98 | 362.78 | 7.24 | 4.16 | 20.01 | 1.97 | 0.66 |  |  |  |  |  |
-| idle actors=1000 | 19.44 | 6.29 | 1458.85 | 16.00 | 10.00 | 77.55 | 5.42 | 1.72 |  |  |  |  |  |
-| busy actors=10 | 0.27 |  | 0.32 | 0.14 | 0.28 |  | 0.53 |  | 0.05 |  |  |  |  |
-| busy actors=100 | 1.82 | 0.39 | 14.88 | 6.51 | 1.01 | 1.05 | 26.64 | 0.14 | 1.22 | 0.15 | 0.14 | 0.54 | 0.06 |
-| busy actors=500 | 9.36 | 2.28 | 353.10 | 295.37 | 6.07 | 20.06 | 566.63 | 1.10 | 12.38 | 0.87 | 1.28 | 4.74 | 1.94 |
-| busy actors=1000 | 19.71 | 5.56 | 1454.56 | 1813.77 | 12.57 | 77.67 | 639.74 | 2.30 | 15.36 | 2.05 | 3.01 | 5.47 | 3.29 |
-| needs actors=10 | 0.26 | 5.83 | 0.33 | 0.05 | 0.28 |  |  |  |  |  |  |  |  |
-| needs actors=25 | 0.54 | 14.89 | 1.49 | 0.12 | 0.38 |  | 0.08 |  |  |  |  |  |  |
-| needs actors=50 | 0.98 | 31.25 | 4.39 | 0.22 | 0.64 |  | 0.16 | 0.07 |  |  |  |  |  |
+| idle actors=10 | 0.25 | 0.06 | 0.31 | 0.09 | 0.25 |  |  |  |  |  |  |  |  |
+| idle actors=100 | 1.71 | 0.56 | 14.66 | 0.94 | 0.75 | 1.02 | 0.36 | 0.12 |  |  |  |  |  |
+| idle actors=500 | 8.36 | 2.79 | 338.16 | 5.54 | 3.17 | 19.17 | 1.84 | 0.59 |  |  |  |  |  |
+| idle actors=1000 | 17.27 | 5.62 | 1378.97 | 14.81 | 7.01 | 73.70 | 5.18 | 1.22 |  |  |  |  |  |
+| busy actors=10 | 0.25 |  | 0.29 | 0.13 | 0.27 |  | 0.48 |  |  |  |  |  |  |
+| busy actors=100 | 1.72 | 0.38 | 14.21 | 6.19 | 0.81 | 1.02 | 25.97 | 0.12 | 1.13 | 0.14 | 0.14 | 0.50 |  |
+| busy actors=500 | 8.73 | 2.12 | 334.33 | 278.61 | 5.16 | 19.13 | 551.97 | 0.94 | 11.39 | 0.72 | 0.90 | 4.30 | 1.55 |
+| busy actors=1000 | 17.54 | 4.90 | 1371.67 | 1606.32 | 10.59 | 74.55 | 723.17 | 2.03 | 15.02 | 1.49 | 2.56 | 5.32 | 2.82 |
+| needs actors=10 | 0.26 | 5.74 | 0.33 | 0.05 | 0.27 |  |  |  |  |  |  |  |  |
+| needs actors=25 | 0.51 | 14.15 | 1.27 | 0.10 | 0.37 |  | 0.08 |  |  |  |  |  |  |
+| needs actors=50 | 0.92 | 28.40 | 4.11 | 0.19 | 0.54 |  | 0.15 | 0.06 |  |  |  |  |  |
 | needs actors=100 |  |  |  |  |  |  |  |  |  |  |  |  |  |
 
 <details><summary>Raw lines</summary>
 
 ```text
-bench_tick_scaling: commit=8e0c57b godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_tick_scaling: commit=70fc496 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
 bench_tick_scaling: map=256x256 seed=42 ticks<=30 per run
-bench_tick_scaling: workload=idle actors=10 phases[first tick] (ms/tick): needs_decay=0.36 need_giver=0.08 combat=0.39 scheduler=273.65 rescue_giver=0.07 calendar_alerts=0.28
-bench_tick_scaling: workload=idle actors=10 setup=523ms tick[profiled, ticks 2..n] mean=1.15ms p50=1.10ms p95=1.61ms max=1.63ms n=29
-bench_tick_scaling: workload=idle actors=10 tick[real, ticks 2..n] mean=1.07ms p50=1.06ms p95=1.16ms max=1.23ms n=29 first=273.10ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=idle actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.27 need_giver=0.07 combat=0.33 scheduler=0.10 calendar_alerts=0.27
-bench_tick_scaling: workload=idle actors=100 phases[first tick] (ms/tick): needs_decay=2.12 need_giver=0.61 combat=15.09 scheduler=280.96 rescue_giver=1.09 advance_colonists=0.45 approach_giver=0.15 calendar_alerts=1.18
-bench_tick_scaling: workload=idle actors=100 setup=528ms tick[profiled, ticks 2..n] mean=21.30ms p50=20.84ms p95=24.72ms max=25.76ms n=29
-bench_tick_scaling: workload=idle actors=100 tick[real, ticks 2..n] mean=22.34ms p50=21.06ms p95=28.93ms max=37.10ms n=29 first=290.44ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=idle actors=100 phases[ticks 2..n] (ms/tick): needs_decay=1.85 need_giver=0.60 combat=15.47 scheduler=0.99 rescue_giver=1.06 advance_colonists=0.38 approach_giver=0.13 calendar_alerts=0.80
-bench_tick_scaling: workload=idle actors=500 phases[first tick] (ms/tick): needs_decay=10.32 need_giver=3.11 combat=341.10 scheduler=276.36 rescue_giver=19.92 advance_colonists=1.92 approach_giver=0.84 calendar_alerts=4.31
-bench_tick_scaling: workload=idle actors=500 setup=530ms tick[profiled, ticks 2..n] mean=408.82ms p50=396.29ms p95=497.55ms max=523.97ms n=29
-bench_tick_scaling: workload=idle actors=500 tick[real, ticks 2..n] mean=397.72ms p50=394.03ms p95=416.74ms max=419.81ms n=29 first=672.93ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=idle actors=500 phases[ticks 2..n] (ms/tick): needs_decay=8.97 need_giver=2.98 combat=362.78 scheduler=7.24 rescue_giver=20.01 advance_colonists=1.97 approach_giver=0.66 calendar_alerts=4.16
-bench_tick_scaling: workload=idle actors=1000 phases[first tick] (ms/tick): needs_decay=20.39 need_giver=6.24 combat=1415.61 scheduler=279.65 rescue_giver=74.77 advance_colonists=5.22 approach_giver=1.69 calendar_alerts=8.94
-bench_tick_scaling: workload=idle actors=1000 setup=534ms tick[profiled, ticks 2..n] mean=1595.34ms p50=1575.41ms p95=1754.45ms max=1757.24ms n=29
-bench_tick_scaling: workload=idle actors=1000 tick[real, ticks 2..n] mean=1581.68ms p50=1566.17ms p95=1683.64ms max=1791.87ms n=29 first=1842.02ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=idle actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=19.44 need_giver=6.29 combat=1458.85 scheduler=16.00 rescue_giver=77.55 advance_colonists=5.42 approach_giver=1.72 calendar_alerts=10.00
-bench_tick_scaling: workload=busy actors=10 phases[first tick] (ms/tick): needs_decay=0.35 need_giver=0.08 combat=0.33 scheduler=269.54 rescue_giver=0.06 advance_colonists=0.33 collect_queue_events=0.05 calendar_alerts=0.30
-bench_tick_scaling: workload=busy actors=10 setup=644ms tick[profiled, ticks 2..n] mean=1.78ms p50=1.74ms p95=2.37ms max=2.38ms n=29
-bench_tick_scaling: workload=busy actors=10 tick[real, ticks 2..n] mean=1.96ms p50=1.88ms p95=2.48ms max=2.54ms n=29 first=267.52ms hash_match=true jobs=10 active=10 events=70
-bench_tick_scaling: workload=busy actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.27 haul_giver=0.05 combat=0.32 scheduler=0.14 advance_colonists=0.53 calendar_alerts=0.28
-bench_tick_scaling: workload=busy actors=100 phases[first tick] (ms/tick): needs_decay=2.11 need_giver=0.59 haul_giver=0.30 construction_giver=0.14 combat=15.13 scheduler=363.76 site_fetch_resolve=0.23 rescue_giver=1.12 escapes_activate=0.13 advance_colonists=1.29 approach_giver=0.18 collect_queue_events=0.23 calendar_alerts=1.11
-bench_tick_scaling: workload=busy actors=100 setup=527ms tick[profiled, ticks 2..n] mean=54.57ms p50=54.09ms p95=68.70ms max=91.92ms n=29
-bench_tick_scaling: workload=busy actors=100 tick[real, ticks 2..n] mean=54.90ms p50=55.01ms p95=70.12ms max=95.57ms n=29 first=377.33ms hash_match=true jobs=100 active=100 events=430
-bench_tick_scaling: workload=busy actors=100 phases[ticks 2..n] (ms/tick): needs_decay=1.82 need_giver=0.39 haul_giver=1.22 construction_giver=0.15 combat=14.88 scheduler=6.51 site_fetch_resolve=0.14 rescue_giver=1.05 escapes_activate=0.54 advance_colonists=26.64 approach_giver=0.14 collect_queue_events=0.06 calendar_alerts=1.01
-bench_tick_scaling: workload=busy actors=500 phases[first tick] (ms/tick): needs_decay=10.80 need_giver=3.52 haul_giver=1.89 construction_giver=0.88 combat=420.04 scheduler=1331.26 site_fetch_resolve=1.28 rescue_giver=19.52 escapes_activate=0.14 advance_colonists=2.85 approach_giver=0.91 collect_queue_events=0.77 calendar_alerts=4.65
-bench_tick_scaling: workload=busy actors=500 setup=1221ms tick[profiled, ticks 2..n] mean=1275.20ms p50=1205.00ms p95=1836.66ms max=1865.50ms n=29
-bench_tick_scaling: workload=busy actors=500 tick[real, ticks 2..n] mean=1274.20ms p50=1219.70ms p95=1776.14ms max=1841.96ms n=29 first=1768.00ms hash_match=true jobs=500 active=465 events=1960
-bench_tick_scaling: workload=busy actors=500 phases[ticks 2..n] (ms/tick): needs_decay=9.36 need_giver=2.28 haul_giver=12.38 construction_giver=0.87 combat=353.10 scheduler=295.37 site_fetch_resolve=1.28 rescue_giver=20.06 escapes_activate=4.74 advance_colonists=566.63 approach_giver=1.10 collect_queue_events=1.94 calendar_alerts=6.07
-bench_tick_scaling: workload=busy actors=1000 phases[first tick] (ms/tick): needs_decay=24.98 need_giver=7.71 haul_giver=3.55 construction_giver=1.67 combat=1435.78 scheduler=3664.62 site_fetch_resolve=2.92 rescue_giver=75.81 escapes_activate=0.18 advance_colonists=6.38 approach_giver=1.81 collect_queue_events=2.03 calendar_alerts=10.30
-bench_tick_scaling: workload=busy actors=1000 setup=3104ms tick[profiled, ticks 2..n] mean=4055.08ms p50=4073.87ms p95=4475.34ms max=4856.72ms n=21
-bench_tick_scaling: workload=busy actors=1000 tick[real, ticks 2..n] mean=3987.72ms p50=3977.25ms p95=4433.34ms max=4870.76ms n=21 first=4915.47ms hash_match=true jobs=1000 active=568 events=3158
-bench_tick_scaling: workload=busy actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=19.71 need_giver=5.56 haul_giver=15.36 construction_giver=2.05 combat=1454.56 scheduler=1813.77 site_fetch_resolve=3.01 rescue_giver=77.67 escapes_activate=5.47 advance_colonists=639.74 approach_giver=2.30 collect_queue_events=3.29 calendar_alerts=12.57
-bench_tick_scaling: workload=needs actors=10 phases[first tick] (ms/tick): needs_decay=0.34 need_giver=1431.98 combat=0.35 scheduler=0.10 calendar_alerts=0.30
-bench_tick_scaling: workload=needs actors=10 setup=511ms tick[profiled, ticks 2..n] mean=6.83ms p50=6.97ms p95=7.75ms max=7.85ms n=29
+bench_tick_scaling: workload=idle actors=10 phases[first tick] (ms/tick): needs_decay=0.34 need_giver=0.07 combat=0.33 scheduler=265.24 rescue_giver=0.07 calendar_alerts=0.27
+bench_tick_scaling: workload=idle actors=10 setup=492ms tick[profiled, ticks 2..n] mean=1.05ms p50=1.03ms p95=1.15ms max=1.16ms n=29
+bench_tick_scaling: workload=idle actors=10 tick[real, ticks 2..n] mean=1.05ms p50=1.02ms p95=1.09ms max=1.60ms n=29 first=259.81ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.25 need_giver=0.06 combat=0.31 scheduler=0.09 calendar_alerts=0.25
+bench_tick_scaling: workload=idle actors=100 phases[first tick] (ms/tick): needs_decay=1.95 need_giver=0.57 combat=14.87 scheduler=256.69 rescue_giver=1.03 advance_colonists=0.36 approach_giver=0.12 calendar_alerts=0.85
+bench_tick_scaling: workload=idle actors=100 setup=493ms tick[profiled, ticks 2..n] mean=20.14ms p50=19.94ms p95=20.69ms max=23.92ms n=29
+bench_tick_scaling: workload=idle actors=100 tick[real, ticks 2..n] mean=19.98ms p50=19.91ms p95=20.37ms max=20.75ms n=29 first=277.45ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=100 phases[ticks 2..n] (ms/tick): needs_decay=1.71 need_giver=0.56 combat=14.66 scheduler=0.94 rescue_giver=1.02 advance_colonists=0.36 approach_giver=0.12 calendar_alerts=0.75
+bench_tick_scaling: workload=idle actors=500 phases[first tick] (ms/tick): needs_decay=9.48 need_giver=2.89 combat=334.01 scheduler=263.76 rescue_giver=18.80 advance_colonists=1.84 approach_giver=0.63 calendar_alerts=3.31
+bench_tick_scaling: workload=idle actors=500 setup=525ms tick[profiled, ticks 2..n] mean=379.66ms p50=377.70ms p95=388.44ms max=403.80ms n=29
+bench_tick_scaling: workload=idle actors=500 tick[real, ticks 2..n] mean=377.88ms p50=377.04ms p95=384.26ms max=390.36ms n=29 first=651.73ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=500 phases[ticks 2..n] (ms/tick): needs_decay=8.36 need_giver=2.79 combat=338.16 scheduler=5.54 rescue_giver=19.17 advance_colonists=1.84 approach_giver=0.59 calendar_alerts=3.17
+bench_tick_scaling: workload=idle actors=1000 phases[first tick] (ms/tick): needs_decay=19.47 need_giver=5.96 combat=1386.98 scheduler=275.06 rescue_giver=74.26 advance_colonists=5.05 approach_giver=1.33 calendar_alerts=7.14
+bench_tick_scaling: workload=idle actors=1000 setup=518ms tick[profiled, ticks 2..n] mean=1503.83ms p50=1500.71ms p95=1527.63ms max=1533.53ms n=29
+bench_tick_scaling: workload=idle actors=1000 tick[real, ticks 2..n] mean=1498.35ms p50=1495.63ms p95=1510.26ms max=1530.92ms n=29 first=1757.16ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=17.27 need_giver=5.62 combat=1378.97 scheduler=14.81 rescue_giver=73.70 advance_colonists=5.18 approach_giver=1.22 calendar_alerts=7.01
+bench_tick_scaling: workload=busy actors=10 phases[first tick] (ms/tick): needs_decay=0.30 need_giver=0.07 combat=0.33 scheduler=259.96 rescue_giver=0.05 advance_colonists=0.34 collect_queue_events=0.05 calendar_alerts=0.29
+bench_tick_scaling: workload=busy actors=10 setup=499ms tick[profiled, ticks 2..n] mean=1.64ms p50=1.64ms p95=1.81ms max=2.02ms n=29
+bench_tick_scaling: workload=busy actors=10 tick[real, ticks 2..n] mean=1.61ms p50=1.64ms p95=1.70ms max=1.72ms n=29 first=263.41ms hash_match=true jobs=10 active=10 events=70
+bench_tick_scaling: workload=busy actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.25 combat=0.29 scheduler=0.13 advance_colonists=0.48 calendar_alerts=0.27
+bench_tick_scaling: workload=busy actors=100 phases[first tick] (ms/tick): needs_decay=1.94 need_giver=0.57 haul_giver=0.22 construction_giver=0.14 combat=14.64 scheduler=336.62 site_fetch_resolve=0.14 rescue_giver=1.04 escapes_activate=0.11 advance_colonists=1.22 approach_giver=0.13 collect_queue_events=0.19 calendar_alerts=0.86
+bench_tick_scaling: workload=busy actors=100 setup=516ms tick[profiled, ticks 2..n] mean=52.40ms p50=51.44ms p95=66.68ms max=89.73ms n=29
+bench_tick_scaling: workload=busy actors=100 tick[real, ticks 2..n] mean=52.34ms p50=51.81ms p95=66.68ms max=88.61ms n=29 first=360.75ms hash_match=true jobs=100 active=100 events=430
+bench_tick_scaling: workload=busy actors=100 phases[ticks 2..n] (ms/tick): needs_decay=1.72 need_giver=0.38 haul_giver=1.13 construction_giver=0.14 combat=14.21 scheduler=6.19 site_fetch_resolve=0.14 rescue_giver=1.02 escapes_activate=0.50 advance_colonists=25.97 approach_giver=0.12 calendar_alerts=0.81
+bench_tick_scaling: workload=busy actors=500 phases[first tick] (ms/tick): needs_decay=9.97 need_giver=3.06 haul_giver=1.53 construction_giver=0.72 combat=335.53 scheduler=1157.67 site_fetch_resolve=1.18 rescue_giver=19.16 escapes_activate=0.12 advance_colonists=2.86 approach_giver=0.85 collect_queue_events=0.69 calendar_alerts=4.04
+bench_tick_scaling: workload=busy actors=500 setup=1187ms tick[profiled, ticks 2..n] mean=1219.88ms p50=1153.03ms p95=1736.50ms max=1827.40ms n=29
+bench_tick_scaling: workload=busy actors=500 tick[real, ticks 2..n] mean=1216.91ms p50=1145.56ms p95=1735.73ms max=1825.38ms n=29 first=1542.37ms hash_match=true jobs=500 active=465 events=1960
+bench_tick_scaling: workload=busy actors=500 phases[ticks 2..n] (ms/tick): needs_decay=8.73 need_giver=2.12 haul_giver=11.39 construction_giver=0.72 combat=334.33 scheduler=278.61 site_fetch_resolve=0.90 rescue_giver=19.13 escapes_activate=4.30 advance_colonists=551.97 approach_giver=0.94 collect_queue_events=1.55 calendar_alerts=5.16
+bench_tick_scaling: workload=busy actors=1000 phases[first tick] (ms/tick): needs_decay=20.08 need_giver=6.04 haul_giver=3.21 construction_giver=1.46 combat=1372.37 scheduler=3288.78 site_fetch_resolve=2.51 rescue_giver=77.47 escapes_activate=0.19 advance_colonists=8.65 approach_giver=2.27 collect_queue_events=1.86 calendar_alerts=12.06
+bench_tick_scaling: workload=busy actors=1000 setup=2884ms tick[profiled, ticks 2..n] mean=3838.02ms p50=3808.79ms p95=4243.84ms max=4422.34ms n=23
+bench_tick_scaling: workload=busy actors=1000 tick[real, ticks 2..n] mean=3818.83ms p50=3824.04ms p95=4289.97ms max=4394.29ms n=23 first=4783.06ms hash_match=true jobs=1000 active=582 events=3188
+bench_tick_scaling: workload=busy actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=17.54 need_giver=4.90 haul_giver=15.02 construction_giver=1.49 combat=1371.67 scheduler=1606.32 site_fetch_resolve=2.56 rescue_giver=74.55 escapes_activate=5.32 advance_colonists=723.17 approach_giver=2.03 collect_queue_events=2.82 calendar_alerts=10.59
+bench_tick_scaling: workload=needs actors=10 phases[first tick] (ms/tick): needs_decay=0.34 need_giver=1405.05 combat=0.50 scheduler=0.11 calendar_alerts=0.49
+bench_tick_scaling: workload=needs actors=10 setup=553ms tick[profiled, ticks 2..n] mean=6.72ms p50=6.71ms p95=7.66ms max=8.24ms n=29
 bench_tick_scaling: workload=needs actors=10 water_tiles=2218 reachable_water_candidates=234
-bench_tick_scaling: workload=needs actors=10 tick[real, ticks 2..n] mean=6.95ms p50=7.17ms p95=8.77ms max=9.29ms n=29 first=1427.15ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=needs actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.26 need_giver=5.83 combat=0.33 scheduler=0.05 calendar_alerts=0.28
-bench_tick_scaling: workload=needs actors=25 phases[first tick] (ms/tick): needs_decay=0.64 need_giver=7624.38 combat=1.48 scheduler=0.17 advance_colonists=0.08 calendar_alerts=0.51
-bench_tick_scaling: workload=needs actors=25 setup=513ms tick[profiled, ticks 2..n] mean=17.58ms p50=17.74ms p95=20.50ms max=21.34ms n=29
+bench_tick_scaling: workload=needs actors=10 tick[real, ticks 2..n] mean=6.60ms p50=6.55ms p95=7.55ms max=7.62ms n=29 first=1403.10ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.26 need_giver=5.74 combat=0.33 scheduler=0.05 calendar_alerts=0.27
+bench_tick_scaling: workload=needs actors=25 phases[first tick] (ms/tick): needs_decay=0.60 need_giver=7202.75 combat=1.41 scheduler=0.16 advance_colonists=0.09 calendar_alerts=0.40
+bench_tick_scaling: workload=needs actors=25 setup=493ms tick[profiled, ticks 2..n] mean=16.55ms p50=16.71ms p95=18.88ms max=19.71ms n=29
 bench_tick_scaling: workload=needs actors=25 water_tiles=2218 reachable_water_candidates=234
-bench_tick_scaling: workload=needs actors=25 tick[real, ticks 2..n] mean=17.78ms p50=18.26ms p95=20.64ms max=25.46ms n=29 first=7372.59ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=needs actors=25 phases[ticks 2..n] (ms/tick): needs_decay=0.54 need_giver=14.89 combat=1.49 scheduler=0.12 advance_colonists=0.08 calendar_alerts=0.38
-bench_tick_scaling: workload=needs actors=50 phases[first tick] (ms/tick): needs_decay=1.14 need_giver=29098.14 combat=4.42 scheduler=0.29 advance_colonists=0.16 approach_giver=0.06 calendar_alerts=0.60
-bench_tick_scaling: workload=needs actors=50 setup=527ms tick[profiled, ticks 2..n] mean=37.78ms p50=36.83ms p95=49.53ms max=49.93ms n=29
+bench_tick_scaling: workload=needs actors=25 tick[real, ticks 2..n] mean=16.56ms p50=16.64ms p95=18.97ms max=18.98ms n=29 first=7218.50ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=25 phases[ticks 2..n] (ms/tick): needs_decay=0.51 need_giver=14.15 combat=1.27 scheduler=0.10 advance_colonists=0.08 calendar_alerts=0.37
+bench_tick_scaling: workload=needs actors=50 phases[first tick] (ms/tick): needs_decay=1.06 need_giver=27909.54 combat=6.08 scheduler=0.27 advance_colonists=0.16 approach_giver=0.06 calendar_alerts=0.61
+bench_tick_scaling: workload=needs actors=50 setup=497ms tick[profiled, ticks 2..n] mean=34.42ms p50=34.81ms p95=38.64ms max=39.22ms n=29
 bench_tick_scaling: workload=needs actors=50 water_tiles=2218 reachable_water_candidates=234
-bench_tick_scaling: workload=needs actors=50 tick[real, ticks 2..n] mean=36.95ms p50=36.88ms p95=46.26ms max=47.80ms n=29 first=28936.39ms hash_match=true jobs=0 active=0 events=30
-bench_tick_scaling: workload=needs actors=50 phases[ticks 2..n] (ms/tick): needs_decay=0.98 need_giver=31.25 combat=4.39 scheduler=0.22 advance_colonists=0.16 approach_giver=0.07 calendar_alerts=0.64
-bench_tick_scaling: workload=needs actors=100 phases[first tick] (ms/tick): needs_decay=2.15 need_giver=115123.16 combat=15.00 scheduler=0.52 rescue_giver=0.09 advance_colonists=0.44 approach_giver=0.14 calendar_alerts=1.07
-bench_tick_scaling: workload=needs actors=100 setup=527ms tick[profiled, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0
+bench_tick_scaling: workload=needs actors=50 tick[real, ticks 2..n] mean=34.53ms p50=35.53ms p95=38.55ms max=38.95ms n=29 first=28041.84ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=50 phases[ticks 2..n] (ms/tick): needs_decay=0.92 need_giver=28.40 combat=4.11 scheduler=0.19 advance_colonists=0.15 approach_giver=0.06 calendar_alerts=0.54
+bench_tick_scaling: workload=needs actors=100 phases[first tick] (ms/tick): needs_decay=2.03 need_giver=110392.25 combat=14.68 scheduler=0.48 rescue_giver=0.08 advance_colonists=0.43 approach_giver=0.12 calendar_alerts=1.09
+bench_tick_scaling: workload=needs actors=100 setup=496ms tick[profiled, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0
 bench_tick_scaling: workload=needs actors=100 water_tiles=2218 reachable_water_candidates=234
-bench_tick_scaling: workload=needs actors=100 tick[real, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0 first=114797.35ms hash_match=true jobs=0 active=0 events=1
+bench_tick_scaling: workload=needs actors=100 tick[real, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0 first=110663.37ms hash_match=true jobs=0 active=0 events=1
 bench_tick_scaling: workload=needs actors=100 phases[ticks 2..n] (ms/tick):
 bench_tick_scaling: done
-bench_tick_scaling: wall=717s exit=0
+bench_tick_scaling: wall=700s exit=0
 ```
 
 </details>
