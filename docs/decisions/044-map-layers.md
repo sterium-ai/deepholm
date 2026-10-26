@@ -68,11 +68,18 @@ index(c) = c.z * width * height + c.y * width + c.x
   `layer_size = width * height`. `regions.gd`, `rooms.gd` and `world_generator.gd` stop
   repeating the math and call it (or receive it as a `Callable`, per the no-back-reference
   rule).
-- Every per-tile table key is that integer. The four String formats and the composite are
-  retired: `objects`, `object_factions`, `object_origin`, `object_health`, ground berries,
+- Every per-tile table key is that integer. The four String formats are retired:
+  `objects`, `object_factions`, `object_origin`, `object_health`, ground berries, plain
   work progress, reservations and site keys all key by `int`. A reservation that must not
   collide with an item or actor id keeps a typed wrapper (`{"tile": index}` or a prefix on
   the integer, chosen by A2), never a coordinate string.
+- **Job-scoped keys keep their job.** A `rescue` job's work progress is keyed by the pair
+  (job id, tile index), not by the tile alone, because two rescues can share a target
+  ([ADR 032](032-rescue-shared-route-budget-and-activation-safety-core-budget-increase.md),
+  `WorkProgress`'s class invariant). The composite `"<jobId>:%d_%d"` String becomes that
+  pair (for example `"<jobId>:<index>"` or a job-id → index map, chosen by A2/L1); only the
+  coordinate part changes. Ownership, suspension and release rules are unchanged. The same
+  applies to any future key that today combines a tile with another identity.
 - `z` is outermost, so **layer 0's indices equal today's `y * width + x`**, and appending a
   layer never renumbers an existing one. Layers can therefore be added during play (a
   layer is "discovered") by growing `tiles` by `layer_size`; the count never shrinks.
@@ -102,10 +109,32 @@ index(c) = c.z * width * height + c.y * width + c.x
   `z ≥ layer_count`. A2's packed cost and door arrays grow by `layer_size` per layer, using
   the same flat index.
 - **Regions** flood-fill within a layer only (planar neighbours), and region ids stay
-  global integers (unique across layers). A region graph has one edge per vertical link
-  between the regions at its two ends; `reachable(a, b)` is "same connected component of
-  that graph", maintained by union-find over region ids and rebuilt when a link appears or
-  disappears. `same_region()` keeps its planar meaning.
+  global integers (unique across layers). `same_region()` keeps its planar meaning.
+- **Region graph.** One node per region id, one edge per vertical link between the regions
+  at its two ends. Each region gets a component label (lowest region id in its component).
+  Two regions are *connected* when their labels are equal.
+- **Graph invalidation.** The labels are derived and go stale on **any** change to region
+  membership or to links:
+  - a link appears or disappears;
+  - a planar split or merge (`on_passability_changed()` assigns a new id or folds ids
+    together);
+  - a region's last tile disappears.
+
+  Each of these marks the graph dirty. The next query rebuilds the labels from the current
+  region ids and links, in ascending region id order, so the result is deterministic.
+  Union-find alone is not enough, because it cannot undo a merge when a split happens. A
+  rebuild costs O(regions + links), not O(tiles).
+- **`reachable(from, target)`** keeps today's two rules and lifts them to the graph:
+  1. `target` is out of bounds → false.
+  2. `target` is passable → true when the region of `from` and the region of `target` are
+     connected.
+  3. `target` is impassable (region id 0: a dig, chop, mine or build target, worked from an
+     adjacent tile) → true when any of its **same-layer** orthogonal neighbours is passable
+     and its region is connected to the region of `from`.
+
+  This is the current adjacent-work exception in `regions.gd` `reachable()`, unchanged on
+  one layer. A tile is never "reachable" through the layer above or below it, matching the
+  planar work-adjacency rule below.
 - **Rooms** stay per layer. A link tile bounds a room the way a door does: rooms never span
   layers, so "bedroom", "storeroom" and their bonuses keep today's rules.
 - **Routing:** `RouteSearch` expands planar neighbours plus the link ends of the current
@@ -192,8 +221,13 @@ Order of work (each step its own task, suite green and hash-checked):
 3. **L2** — the `Vector2i` → `Vector3i` sweep with `layer_count = 1`, the save bump and the
    single-layer migration with its fixture. Scenario dump identical apart from the schema
    version and the added `z`/`layerCount` fields.
-4. **L3** — `VerticalLinks`, the region graph and link edges in `RouteSearch`, tested on a
-   hand-built two-layer map with a stair pair.
+4. **L3** — `VerticalLinks`, the region graph and link edges in `RouteSearch`. It is tested
+   on a hand-built two-layer map with a stair pair. The tests cover:
+   - a wall that splits a layer-0 region so that one half loses its stair;
+   - removing that wall again (merge);
+   - removing the stair;
+   - an impassable dig target whose only reachable neighbour sits on its own layer;
+   - two rescues on the same target, each keeping its own progress.
 5. **L4** — the viewer's active layer.
 6. **F4** — gameplay: layer generation and discovery, tunnel building, stairs, ores,
    supports and cave-ins, on top of L1–L4.
@@ -241,4 +275,6 @@ Order of work (each step its own task, suite green and hash-checked):
 - [x] Save/migration impact is specified (§5); implemented in L2.
 - [x] The source-of-truth index still points to the authoritative location
       (`docs/decisions/` is indexed as a folder).
-- [ ] The owner signs this ADR off; F4's Design block then cites it.
+- [ ] The owner signs this ADR off; F4's Design block then cites it. **Pending:** only the
+      owner can tick this. On sign-off, the status line becomes `accepted` with the date.
+      Until then the ADR stays `proposed` and A12 stays in `review`.
