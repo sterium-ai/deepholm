@@ -234,8 +234,10 @@ tasks land, a story beat has no extension point and must not be added as code in
   `quest_stage`, `days_in_stage`, `window_open`, `days_until_window`); effects are ordinary
   commands from a whitelist (`spawn_incident`, `set_faction`, `set_story_flag`,
   `set_quest_stage`, `story_message`, `end_scenario`). One `StoryGiver`
-  (`game/scripts/core/story/story_giver.gd`) evaluates rules once per tick in ascending id
-  order and sends their effects through `apply()`, so every story change is validated,
+  (`game/scripts/core/story/story_giver.gd`) keeps the triggers it still has to process in a
+  persisted inbox. Once per tick it takes them in order, offers each one to the matching rules
+  in ascending id order, and sends their effects through `apply()`, so every story change is
+  validated,
   previewable and logged like a player command. An incident is one effect kind
   (`spawn_incident`); an incident row marked `"draw": "story"` arrives only from a rule. A
   new beat is content only; a new fact or a new effect command is a small code change with

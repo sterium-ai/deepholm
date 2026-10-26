@@ -14,7 +14,7 @@
   [ADR 017](017-incidents-core-budget-increase.md) and
   [ADR 034](034-incident-lingering-actors.md) (incidents),
   [ADR 008](008-calendar-content-schema.md) (calendar windows).
-- **Related tasks:** A6 (event cursor), A13 (content packs), A15 (text keys), A16
+- **Related tasks:** A6 (event streams: the `EventLog` listener of section 4 must survive A6's change), A13 (content packs), A15 (text keys), A16
   (scenarios), R10 (command router), R12 (tick pipeline), R14 (save schema reset).
 
 ## Context
@@ -168,7 +168,13 @@ new, small commands with their own `CommandChecks` function, `apply()` handler (
 | `set_story_flag` | new | `{flag, value}` | sets a flag; emits `story_flag_set` |
 | `set_quest_stage` | new | `{quest, stage}` | moves a quest; emits `quest_stage_changed {quest, from, to}` and, on a terminal stage, `quest_finished {quest, stage}` |
 | `story_message` | new | `{text, severity, ...params}` | emits `story_message {rule_id, text, severity, params}` for the viewer's alert list; no state change |
-| `end_scenario` | new | `{outcome, text}` | records the outcome (`won`/`lost`) and emits `scenario_ended`; this is the win/lose hook A16 left to A17 |
+| `end_scenario` | new | `{outcome, text}` | records the outcome (`won`/`lost`) in the story module's persisted `outcome` (section 5) and emits `scenario_ended`; this is the win/lose hook A16 left to A17 |
+
+`end_scenario` is one-shot: once an outcome is recorded, a second `end_scenario` is rejected
+(`invalid_target`, "The scenario has already ended."), and the story giver stops taking in
+triggers and firing rules (the simulation itself keeps ticking; what the viewer does with an
+ended scenario is A16's and the presentation task's call). The outcome is owned by the story
+module, not by `WorldState`, and is read through a detached `get_story_outcome()`.
 
 Because they are commands, every effect is validated by the same rules a player command is,
 is previewable, appears in the event log as `command_applied`/`command_rejected`, and is
@@ -191,33 +197,62 @@ itself into story rules is deferred (Alternatives).
 
 `game/scripts/core/story/story_giver.gd` (`StoryGiver`, `RefCounted`), constructed by
 `WorldState` like the other givers, with explicit `_init` parameters only: the content
-registry, a facts record (the `Callable`s in section 2), `apply_command: Callable` (the R10
-router's `apply`), `events_since: Callable` (A6's cursor read; until A6 lands, a read of
-`EventLog` by sequence), and the world seed for its RNG. It holds no `WorldState` reference.
+registry, a facts record (the `Callable`s in section 2), `apply_command: Callable` and
+`preview_command: Callable` (the R10 router's `apply`/`preview`), and the world seed for its
+RNG. It holds no `WorldState` reference.
 
-It runs **once per tick, as the last phase before `tick_advanced`**: in today's `tick()` after
-`_incidents.advance()`, and in R12's `TickPipeline` as a `story` phase after `incidents` and
-`calendar`. Each run:
+**Intake: a persisted trigger inbox.** Story work that is still pending must survive a save,
+and events are not persisted (A0 §3.2). So the giver does not read the event log back later.
+It keeps its own **inbox**, a persisted, ordered list of the triggers it still has to process:
 
-1. **Collects triggers.** `day_start` if the calendar day changed since the last run; plus
-   every event with a sequence greater than the giver's cursor and not later than the last
-   event that existed when the phase began. Effects' own events therefore wait for the next
-   tick: a chain advances at most one hop per tick, so no rule can loop inside a tick.
-2. **Walks rules in ascending `id` order** (the registry's frozen order, independent of file
-   order or packs). For each rule, triggers are taken in the order collected (`day_start`
-   first, then events by sequence). Per trigger occurrence: check `repeat`, then the
-   conditions against **live state** (so an earlier rule's effects this tick are visible to a
-   later rule), then `chance_percent`.
-3. **Fires.** Every effect is first `preview()`ed with its bindings resolved. If any preview
-   is rejected, the rule does not fire, is not marked as fired, and the giver emits
-   `story_rule_skipped {rule_id, effect_index, reason}`; it will be looked at again on its next
-   trigger. Otherwise each effect is `apply()`d in listed order. An `apply()` that still
-   rejects (an earlier effect of the same rule changed the outcome) is logged as
-   `command_rejected` by the router as usual and the remaining effects still run; the rule
-   counts as fired. Effects are not rolled back.
-4. **Budget.** At most `MAX_FIRINGS_PER_TICK := 8` firings per run. When the budget is spent
-   the cursor stops at the last trigger processed and the rest (including a still-pending
-   `day_start`) is taken next tick, in the same order. Nothing is dropped.
+- `EventLog` gets one injected listener (`set_listener(Callable)`), called for every event
+  right after it is inserted. The giver's `on_event(event)` appends the event to the inbox
+  **only if some rule's trigger matches it** (its `type`, and its `match` keys, a pure check
+  on the event's `data`). It stores `{type, tick, sequence, data}` and nothing else. Events no
+  rule listens to are never stored, so the inbox stays small.
+- At the start of the first story phase of a new calendar day (the day of the tick differs
+  from the persisted `lastDay`), the giver appends `{type: "day_start", day, tick}` and updates
+  `lastDay`.
+- The inbox is in **intake order**: the order of `insert_event` calls, then the day entry.
+  That order is a pure function of the seed and the command stream. Player commands issued
+  between two ticks, effects' own events and budget leftovers all land in the same list, so a
+  save taken at any point between ticks holds every trigger not yet processed.
+- The inbox is capped at `INBOX_CAP := 256` entries. An event that arrives when it is full is
+  not stored. Instead the persisted `droppedEvents` counter goes up, and the next phase emits
+  `story_inbox_overflow {dropped}` and resets the counter. The loss is bounded, visible and
+  tested; it is not silent.
+
+**The phase.** The giver runs **once per tick, as the last phase before `tick_advanced`**: in
+today's `tick()` after `_incidents.advance()`, and in R12's `TickPipeline` as a `story` phase
+after `incidents` and `calendar`. Each run:
+
+1. **Snapshots the inbox length** `N` after the day entry (if any) is appended. Only entries
+   `0 … N-1` are processed this tick. Events emitted by this phase's own effects reach the
+   inbox through the listener at positions `≥ N`, so they wait for the next tick. A chain
+   advances at most one hop per tick, and no rule can loop inside a tick.
+2. **Walks triggers first, then rules.** It takes inbox entries in order. For each entry, it
+   walks the rules whose trigger matches that entry in ascending `id` order (the registry's
+   frozen order, independent of file order or packs). For the head entry, the walk starts
+   after the persisted `resume.afterRule`, if set. For each (entry, rule) pair it checks
+   `repeat`, then the conditions against **live state** (so an earlier firing's effects this
+   tick are visible to a later rule), then `chance_percent`.
+3. **Fires.** Every effect is first previewed with its bindings resolved (from that entry's
+   `data`). If any preview is rejected, the rule does not fire, is not marked as fired, and the
+   giver emits `story_rule_skipped {rule_id, effect_index, reason}`; it will be looked at again
+   on its next matching trigger. Otherwise each effect is `apply()`d in listed order. An
+   `apply()` that still rejects (an earlier effect of the same rule changed the outcome) is
+   logged as `command_rejected` by the router as usual and the remaining effects still run;
+   the rule counts as fired. Effects are not rolled back.
+4. **Removes an entry** from the inbox once every matching rule has been walked for it, and
+   clears `resume`.
+5. **Budget.** At most `MAX_FIRINGS_PER_TICK := 8` firings per run. Only firings count;
+   evaluating a rule whose conditions fail is cheap and does not consume budget. When the
+   eighth firing happens, the run stops right there. If rules matching the current entry remain,
+   `resume.afterRule` is set to the id of the rule that just fired and the entry stays at the
+   head of the inbox. The next tick resumes at exactly the next (entry, rule) pair. Nothing is
+   skipped or replayed: a rule that already handled an entry is never offered it again, and a
+   rule further down the order still gets it. Both `resume` and the inbox are persisted
+   (section 5), so this holds across a save as well.
 
 **Determinism.** Rule order, trigger order and event order are all total and seed-independent.
 The only random draw is `chance_percent`, from the giver's own `RandomNumberGenerator`, seeded
@@ -242,6 +277,13 @@ per-module split):
   "quests": {"raid_warning": {"stage": "warned", "enteredTick": 26400}},
   "rules": {"raid_warning_1_scouts": {"fired": 1, "lastDay": 12}},
   "lastDay": 12,
+  "inbox": [
+    {"type": "incident_actor_arrived", "tick": 26391, "sequence": 9120,
+     "data": {"incident_id": "migrant_joins", "actor_id": "incident_actor_3"}}
+  ],
+  "resume": {"afterRule": "migrant_chain_2_join"},
+  "droppedEvents": 0,
+  "outcome": {"result": "", "tick": -1, "text": ""},
   "rng": {"seed": 123, "state": 456}
 }
 ```
@@ -249,28 +291,36 @@ per-module split):
 - Keys are sorted on encode, as elsewhere. An unknown flag, quest, stage or rule id in a save
   is a typed load error (`schema_error`), not silently dropped; A13's pack list makes that
   error explain which pack is missing.
-- The event **cursor is not persisted**: events are not persisted either (A0 §3.2), so on
-  decode it is set to the restored log's head. Consequence, accepted: an event emitted by a
-  player command after the last tick and before a save is not seen by `event` rules after that
-  save is loaded. Rules that must not miss a beat use `day_start` with state conditions.
-- A shape change, so the code task ships a schema bump, a migration that adds an empty
-  `story` block (`{flags:{}, quests:{}, rules:{}, lastDay: <day of the saved tick>, rng: <seeded
-  from the save's seed>}`) and a fixture. If it lands after R14, it is v1 → v2.
-- `state_hash()` covers `flags`, `quests`, `rules`, `lastDay` and the RNG state: they decide
-  future commands, so two worlds that differ only there must hash differently.
+- `inbox` holds the pending triggers (section 4) with their `data` as emitted (strings,
+  ints and arrays of them, which is every core event's shape today), and `resume` holds the
+  position inside the head entry (`{}` when none). Because both are persisted, a chain never
+  stalls across a save. A load resumes at the same (entry, rule) pair the uninterrupted run
+  would have processed next. This covers events from player commands issued after the last
+  tick, events produced by the last tick's effects, and budget-deferred triggers.
+- `droppedEvents` is the overflow counter (section 4, `INBOX_CAP`).
+- `outcome` is `{result: "" | "won" | "lost", tick, text}`, owned by the story module and set
+  only by `end_scenario`; `{result: "", tick: -1, text: ""}` until the scenario ends.
+- A shape change, so the code task ships a schema bump, a migration that adds the default
+  block (`{flags:{}, quests:{}, rules:{}, lastDay: <day of the saved tick>, inbox: [], resume:
+  {}, droppedEvents: 0, outcome: {result: "", tick: -1, text: ""}, rng: <seeded from the save's
+  seed>}`) and a fixture. If it lands after R14, it is v1 → v2. `lastDay` defaults to the saved
+  tick's day so a migrated save does not fire a `day_start` for a day it already lived.
+- `state_hash()` covers the whole block: `flags`, `quests`, `rules`, `lastDay`, `inbox`,
+  `resume`, `droppedEvents`, `outcome` and the RNG state. They all decide future commands, so
+  two worlds that differ only there must hash differently.
 
 ### 6. Presentation
 
 The viewer reads `story_message`, `quest_stage_changed`, `quest_finished` and
-`scenario_ended` events and a read-only `get_quests()` snapshot (visible quests, current
+`scenario_ended` events, a read-only `get_quests()` snapshot and `get_story_outcome()` (visible quests, current
 stage, text keys). It resolves text keys through `TextTable` (A15) and appends story messages
 to the same standing-alert list `incident_started` and `calendar_alert` use. A quest panel is
 a later presentation task, not part of the core.
 
 ## Worked examples
 
-All three use only the vocabulary above. Rule ids carry a numeric step so the ascending-id
-walk is also the reading order.
+All three use only the vocabulary above. Rule ids carry a numeric step, so the ascending-id
+walk over the rules matching one trigger is also the reading order.
 
 ### A. A migrant chain
 
@@ -461,9 +511,18 @@ change either way: they read `window_open`/`days_until_window` by window id.
   tick.** Gives same-tick chains, but makes loops possible inside one tick and makes order
   depend on effect side effects. One hop per tick is easy to reason about and still lets a
   chain run at simulation speed.
-- **Persisting the event cursor and the event backlog** so `event` rules never miss a
-  pre-save event. Would make events part of the save (A6 explicitly avoids that). Rejected;
-  the limitation is documented and `day_start` + conditions covers the cases that matter.
+- **A read cursor into the event log instead of a persisted inbox.** The first draft of this
+  ADR used a cursor over the log, with a single trigger cursor and a rule-first walk. Review
+  found two flaws. First, a single cursor cannot resume a rule-first walk: eight firings by an
+  early rule would advance the cursor past events later rules still needed. Second, on a load
+  the cursor lost every trigger not yet processed (events from the last tick's effects,
+  budget-deferred ones, player commands since the last tick), because events are not persisted.
+  That could stall a chain for good. Persisting the whole event log would fix it, but at the
+  cost A6 explicitly avoids. The inbox persists only what some rule listens to, plus one resume
+  position. Rejected in favour of the inbox.
+- **Rule-first walk** (each rule takes all of the tick's triggers, then the next rule). It needs
+  one position per rule to resume fairly under a budget. Trigger-first needs one position in
+  total, and it processes events in the order they happened, which is easier to read.
 
 ## Consequences
 
@@ -477,10 +536,12 @@ change either way: they read `window_open`/`days_until_window` by window id.
 - Every story-driven change is an ordinary command, so it is previewable, logged and
   replayable, and a rejected beat is visible (`story_rule_skipped`) instead of silently
   half-applied.
-- The save grows one key with a migration; the hash covers it.
+- The save grows one key with a migration; the hash covers all of it, including pending
+  triggers and the scenario outcome.
 - Known limits, accepted: no player choices yet (a later `story_choice` command answering a
-  `story_prompt` event fits the same model); no OR/NOT beyond `!=` and two rules; `event`
-  rules can miss events emitted between the last tick and a save; one chain hop per tick.
+  `story_prompt` event fits the same model); no OR/NOT beyond `!=` and two rules; one chain
+  hop per tick; more than `INBOX_CAP` matching events pending at once are dropped (counted and
+  reported, never silent).
 
 ### Code tasks this ADR creates
 
@@ -493,14 +554,29 @@ To be added to `docs/orca/BACKLOG.md` once the owner signs this ADR off. All wai
    skipping `"story"` rows). Tests: `test_content_registry.gd`, `test_incidents.gd`.
 2. **S2: story commands.** `set_story_flag`, `set_quest_stage`, `story_message`,
    `end_scenario`: `CommandChecks` functions, an R10 handler family, the events they emit,
-   rejection reasons in `commands/README.md`. Tests through `apply()`/`preview()`.
-3. **S3: `StoryGiver` and its tick phase.** Trigger collection, id-ordered evaluation, facts,
-   bindings, preview-then-apply, the per-tick budget, the salted RNG, the `story` phase in
-   `TickPipeline`. Tests through real ticks: each worked example as a headless scenario, a
-   same-seed `state_hash()` determinism check, the budget carry-over, a skipped rule.
-4. **S4: story persistence.** `story` save key, module encode/decode/validate, schema bump,
-   migration, fixture, `state_hash()` coverage, `save-system.md`. Test: save → load →
-   identical hash mid-quest.
+   rejection reasons in `commands/README.md` (including "scenario already ended"). Tests
+   through `apply()`/`preview()`.
+3. **S3: `StoryGiver` and its tick phase.** The `EventLog` listener and the inbox intake, the
+   trigger-first walk with `resume`, facts, bindings, preview-then-apply, the per-tick budget,
+   the inbox cap, the salted RNG, the stop after an outcome, and the `story` phase in
+   `TickPipeline`. Tests through real ticks:
+   - each worked example as a headless scenario;
+   - a same-seed `state_hash()` determinism check;
+   - a skipped rule;
+   - **budget resume**: three rules sharing one trigger type with twelve matching events in one
+     tick (more than eight firings). Every (event, rule) pair fires exactly once, in the
+     trigger-first order, and the later rules are not starved;
+   - inbox overflow is counted and reported.
+4. **S4: story persistence.** `story` save key (including `inbox`, `resume`,
+   `droppedEvents`, `outcome`), module encode/decode/validate, schema bump, migration with the
+   defaults in section 5, fixture, `state_hash()` coverage, `save-system.md`. Tests, each
+   compared with an uninterrupted run of the same seed and commands (same firings, same events,
+   same final `state_hash()`):
+   - save → load mid-quest;
+   - save → load mid-budget (with `resume` set);
+   - save → load right after a tick whose effects emitted triggering events;
+   - save → load after a player command issued between ticks;
+   - an ended scenario's outcome restored, with a second `end_scenario` still rejected.
 5. **S5: incident arrival event.** `incident_actor_arrived` from
    `IncidentScheduler.on_job_finished()` for lingering actors (needed by example A); ADR 034
    amendment.
