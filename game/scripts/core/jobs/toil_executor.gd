@@ -97,7 +97,8 @@ var _work_progress_clear: Callable
 ## copied), since persistence/state_codec.gd reads and rebuilds that field
 ## directly. While a search is live, colonist.route.rerouting holds only its
 ## constant-size summary() (start, target, status, counters), refreshed each
-## tick; StateCodec encodes the full snapshot() from this Dictionary.
+## tick; StateCodec encodes, and state_hash() hashes, the full snapshot()
+## from this Dictionary.
 var _reroutes: Dictionary
 ## fetch_tool toil (colonist-ai.md 2/3.3): extracted into its own
 ## injected object (tool_fetch_toil.gd) purely to keep this file under its

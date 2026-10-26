@@ -12,9 +12,9 @@ extends SceneTree
 ## world is reloaded from its own save and play continues on the copy.
 ##
 ## Output: <out>/saves.json (the kept encodings, tick -> JSON) and
-## <out>/summary.txt (counts, the per-tick state_hash() list). saves.json must
-## be byte-identical between main and A3; state_hash() is expected to differ
-## on rerouting ticks (route.rerouting is summary() in memory on A3).
+## <out>/summary.txt (counts, the per-tick state_hash() list). Both files must
+## be byte-identical between main and A3: state_hash() hashes the live
+## search's full snapshot() in place of the in-memory summary().
 ## Lives outside game/ (not part of the suite):
 ##   godot --headless --path game --script <abs path to this file> -- <abs out dir>
 

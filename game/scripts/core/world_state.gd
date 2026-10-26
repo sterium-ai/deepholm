@@ -669,7 +669,7 @@ func state_hash(include_incidents: bool = true) -> int:
 		"tool_items": _tool_store.items,
 		"next_tool_item_id": _tool_store.next_id,
 		"tool_reservations": _tool_store.reservations.snapshot(),
-		"colonists": _colonists,
+		"colonists": StateCodec._hash_colonists(_colonists, _reroutes),
 		"jobs": get_jobs(),
 		"scheduling": _scheduler.snapshot(),
 		"calendar_alerts_fired": _calendar_alerts_fired,

@@ -1018,6 +1018,27 @@ static func _encode_route_field(route, live_search):
 		encoded["rerouting"] = _encode_route(live_search.snapshot() if live_search != null else rerouting)
 	return encoded
 
+## state_hash()'s view of the colonists: a colonist whose route.rerouting is
+## the live search's summary() is hashed with that search's full snapshot()
+## instead, so two in-flight re-routes that differ only in their frontier,
+## visited set or parent map never hash equal (the same value a save
+## persists). Returns the array itself, uncopied, when nothing is rerouting.
+static func _hash_colonists(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
+	if reroutes.is_empty():
+		return colonists
+	var hashed: Array = []
+	for colonist in colonists:
+		var route = colonist.get("route")
+		var search = reroutes.get(colonist["id"])
+		if route == null or route.get("rerouting") == null or search == null:
+			hashed.append(colonist)
+			continue
+		var copy: Dictionary = colonist.duplicate()
+		copy["route"] = route.duplicate()
+		copy["route"]["rerouting"] = search.snapshot()
+		hashed.append(copy)
+	return hashed
+
 static func _decode_route_field(route):
 	if route == null:
 		return null
