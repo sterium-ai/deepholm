@@ -50,6 +50,16 @@ Acceso directo **"Deepholm (última versión)"** en el escritorio → ejecuta `t
 el `main` más reciente de GitHub, reimporta y abre el juego en ventana. Lo que está en `main` es
 lo fusionado; lo que los agentes tienen a medias en sus worktrees no aparece hasta fusionarse.
 
+## Benchmarks
+
+`tools\run_benches.ps1` corre todos los `game/scripts/tests/bench_*.gd` (unos 15–25 min) y
+reescribe `docs/architecture/bench-baseline.md`: commit y máquina en la cabecera, una sección con
+tablas por benchmark y sus líneas en bruto. Las tareas `A*` que tocan rendimiento citan en su
+informe las líneas de antes (de ese archivo) y las de después (de una pasada en su rama, con
+`-Out` a otro archivo o `-Filter <nombre>` para uno solo). Los tiempos dependen de la máquina y de
+lo que corra a la vez (la cabecera cuenta los demás procesos de Godot), así que no son una puerta
+de CI y `run_tests` no los ejecuta.
+
 ## Ciclo de una tarea
 
 ### 1. Abrir la tarea

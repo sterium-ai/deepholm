@@ -6,6 +6,8 @@ extends RefCounted
 ## profiled/real state_hash() check fails). They are named bench_*.gd so
 ## tools/run_tests.* (which only globs test_*.gd) never runs them.
 ##
+## Run all of them, and rewrite docs/architecture/bench-baseline.md, with:
+##   tools\run_benches.ps1
 ## Run one with:
 ##   & $env:GODOT --headless --path game --script res://scripts/tests/bench_tick_scaling.gd
 
@@ -49,6 +51,24 @@ static func stats_ms(samples_usec: Array) -> Dictionary:
 static func format_stats(stats: Dictionary) -> String:
 	return "mean=%.2fms p50=%.2fms p95=%.2fms max=%.2fms n=%d" % [stats["mean"], stats["p50"],
 		stats["p95"], stats["max"], stats["n"]]
+
+## stats_ms() as row() columns, formatted like format_stats(); `prefix` names
+## the series when a row carries two (e.g. "real " and "profiled ").
+static func stats_values(stats: Dictionary, prefix: String = "") -> Dictionary:
+	return {
+		prefix + "mean ms": "%.2f" % stats["mean"], prefix + "p50 ms": "%.2f" % stats["p50"],
+		prefix + "p95 ms": "%.2f" % stats["p95"], prefix + "max ms": "%.2f" % stats["max"],
+		prefix + "n": stats["n"],
+	}
+
+## Machine-readable twin of a "bench_*:" result line, for tools/run_benches.ps1,
+## which turns them into the tables of docs/architecture/bench-baseline.md
+## (one table per `table` name, one row per call). Printed as "@row <json>" so
+## that filters on "^bench_" keep only the human lines. `values` keeps its
+## insertion order, which becomes the column order; floats are passed already
+## formatted as strings so the table shows the same digits as the line.
+static func row(bench_name: String, table: String, case_label: String, values: Dictionary) -> void:
+	print("@row " + JSON.stringify({"bench": bench_name, "table": table, "case": case_label, "values": values}, "", false))
 
 ## Passable tiles in breadth-first order from `origin` (4-neighbour, the
 ## colony's own passability rule), skipping tiles that already hold an

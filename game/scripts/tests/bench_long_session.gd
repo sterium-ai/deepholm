@@ -58,6 +58,11 @@ func _retention() -> void:
 				tick, window_usec / 1000.0 / WINDOW, jobs.size(), _open_jobs(world), jobs.size() - _open_jobs(world),
 				world._scheduler.queue._events.size(), world._event_log._events.size(), world._tile_grid.dirty_cells.size(),
 				_top_phases(totals, WINDOW)])
+			BenchCommon.row("bench_long_session", "retention", "ticks=%d" % tick, {
+				"mean tick ms": "%.2f" % (window_usec / 1000.0 / WINDOW), "queue jobs": jobs.size(),
+				"open": _open_jobs(world), "terminal": jobs.size() - _open_jobs(world),
+				"queue events": world._scheduler.queue._events.size(), "world events": world._event_log._events.size(),
+				"dirty cells": world._tile_grid.dirty_cells.size(), "top phases (ms/tick)": _top_phases(totals, WINDOW)})
 			window_usec = 0
 			totals = {}
 
@@ -72,8 +77,13 @@ func _backlog(size: int) -> void:
 		var t := Time.get_ticks_usec()
 		BenchCommon.profiled_tick(world, totals)
 		samples.append(Time.get_ticks_usec() - t)
+	var stats := BenchCommon.stats_ms(samples)
 	print("bench_long_session: backlog open_orders=%d actors=%d tick %s top_phases: %s" % [size, ACTORS,
-		BenchCommon.format_stats(BenchCommon.stats_ms(samples)), _top_phases(totals, BACKLOG_TICKS)])
+		BenchCommon.format_stats(stats), _top_phases(totals, BACKLOG_TICKS)])
+	var values := {"actors": ACTORS}
+	values.merge(BenchCommon.stats_values(stats))
+	values["top phases (ms/tick)"] = _top_phases(totals, BACKLOG_TICKS)
+	BenchCommon.row("bench_long_session", "backlog", "open_orders=%d" % size, values)
 
 func _candidates(world: WorldStateType) -> Array[Vector2i]:
 	var origin := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))

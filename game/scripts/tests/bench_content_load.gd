@@ -28,22 +28,37 @@ func _init() -> void:
 		var t := Time.get_ticks_usec()
 		registry = ContentRegistryType.new()
 		samples.append(Time.get_ticks_usec() - t)
+	var real_bytes := _bundle_bytes("res://content/")
+	var real_stats := BenchCommon.stats_ms(samples)
 	print("bench_content_load: real bundle (%d bytes, %d items, %d objects) valid=%s load %s" % [
-		_bundle_bytes("res://content/"), registry.list("items").size(), registry.list("objects").size(),
-		registry.is_valid(), BenchCommon.format_stats(BenchCommon.stats_ms(samples))])
+		real_bytes, registry.list("items").size(), registry.list("objects").size(),
+		registry.is_valid(), BenchCommon.format_stats(real_stats)])
+	var real_row := {"bytes": real_bytes, "items": registry.list("items").size(),
+		"objects": registry.list("objects").size(), "valid": registry.is_valid(),
+		"load ms": "%.2f" % real_stats["mean"]}
+	real_row.merge(BenchCommon.stats_values(real_stats))
+	BenchCommon.row("bench_content_load", "load", "real bundle", real_row)
 	for size in SYNTHETIC_SIZES:
 		var dir := _write_synthetic_bundle(int(size))
 		var t := Time.get_ticks_usec()
 		var synthetic := ContentRegistryType.new(dir, SCHEMA_DIR)
 		var usec := Time.get_ticks_usec() - t
+		var bytes := _bundle_bytes(dir)
 		print("bench_content_load: synthetic +%d items +%d objects (%d bytes) valid=%s load=%.1fms (%.1f us per added entry) error=%s" % [
-			size, size, _bundle_bytes(dir), synthetic.is_valid(), usec / 1000.0, float(usec) / (2 * int(size)),
+			size, size, bytes, synthetic.is_valid(), usec / 1000.0, float(usec) / (2 * int(size)),
 			synthetic.get_error()])
+		BenchCommon.row("bench_content_load", "load", "synthetic +%d items +%d objects" % [size, size], {
+			"bytes": bytes, "items": synthetic.list("items").size(), "objects": synthetic.list("objects").size(),
+			"valid": synthetic.is_valid(), "load ms": "%.1f" % (usec / 1000.0),
+			"us per added entry": "%.1f" % (float(usec) / (2 * int(size)))})
 	var objects_text := FileAccess.get_file_as_string(_write_synthetic_bundle(5000) + "objects.json")
 	var t := Time.get_ticks_usec()
 	var parsed = JSON.parse_string(objects_text)
+	var parse_usec := Time.get_ticks_usec() - t
 	print("bench_content_load: for comparison, Godot's native JSON.parse_string of the +5000 objects.json: %.1fms (parsed=%s)" % [
-		(Time.get_ticks_usec() - t) / 1000.0, parsed != null])
+		parse_usec / 1000.0, parsed != null])
+	BenchCommon.row("bench_content_load", "load", "native JSON.parse_string of the +5000 objects.json", {
+		"bytes": objects_text.to_utf8_buffer().size(), "valid": parsed != null, "load ms": "%.1f" % (parse_usec / 1000.0)})
 	print("bench_content_load: done")
 	quit(0)
 
