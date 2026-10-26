@@ -107,7 +107,7 @@ Orca helper scripts, this backlog.
   `core-budgets.json`, affected tests.
 - **Acceptance:** as R1; `test_build`, `test_wall_orders`, the site-fetch tests unchanged.
 
-### R6 — Extract `TrenchSystem` · `todo`
+### R6 — Extract `TrenchSystem` · `review (antonelmejor50-hub/r6-extract-trenchsystem)`
 
 - **Goal:** `actors/trench_system.gd` owns trapping, climb-out, escape job submission,
   rescue candidate/victim pools and rescue reasons; `rescue_giver.gd` depends on it.
