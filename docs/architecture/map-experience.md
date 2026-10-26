@@ -280,3 +280,30 @@ godot --path game --script res://scripts/tests/test_map_pc_playtest_flow.gd -- -
 godot --headless --path game --script res://scripts/tests/test_map_experience_fps_measurement.gd
 godot --path game --script res://scripts/tests/test_map_experience_fps_measurement.gd -- --capture
 ```
+
+## Layers (planned, ADR 044)
+
+Not implemented yet: this is the presentation half of
+[ADR 044](../decisions/044-map-layers.md), which the L4 step and F4 build. Until then
+the map has one layer and nothing below applies.
+
+- **One active layer.** The map shows exactly one layer at a time, starting on the surface
+  (`z = 0`). The active layer is viewer state like the camera: never serialized, reset to
+  the surface by a load or a restart, and changing it issues no command.
+- **Switching.** Layer up/down buttons next to the toolbar and the `PageUp`/`PageDown`
+  keys move one layer; only layers the world reports (`layer_count`) are reachable. A
+  label shows the active layer ("Surface", "Layer 1", …). Switching keeps the camera's
+  pan and zoom (all layers share the map size) and discards an unfinished rectangle, like
+  zooming or loading does.
+- **What is drawn.** Tiles, objects, construction sites, designations and actors are drawn
+  for the active layer only. Each layer has its own `TileMapLayer` content; the first
+  switch to a layer pays one full rebuild of it, later switches reuse it.
+- **Dirty cells.** `get_dirty_cells()` carries `Vector3i`. The viewer consumes the whole
+  tail on every `refresh()` as today, applies cells of the active layer, and keeps the
+  others as pending for their layer, so a layer redrawn on switch never shows stale tiles.
+- **Coordinates.** `screen_to_tile()` and `tiles_in_rectangle()` stay planar and the viewer
+  attaches the active layer: every preview and command names `Vector3i(x, y,
+  active_layer)`. A rectangle never spans layers.
+- **Links.** Stair, ramp and tunnel tiles are drawn on both layers they join, so the player
+  sees where a path goes up or down. The colonist panel and the "center colonists" action
+  name an actor's layer; centering on an actor on another layer switches to it.
