@@ -81,7 +81,7 @@ static func encode(world: WorldState) -> Dictionary:
 		# an older save predating this field simply restores with no
 		# suspended entries, matching decode()'s own constructor default.
 		"suspendedWorkProgress": work_progress["suspendedWorkProgress"],
-		"pausedJobs": _encode_paused_jobs(world._paused_jobs),
+		"pausedJobs": world._needs_system.encode()["pausedJobs"],
 		"toolItems": _encode_tool_items(world._tool_store.items, world._tool_store.next_id),
 		"toolReservations": world._tool_store.reservations.snapshot(),
 		"needJobAssignments": _encode_paused_jobs(world._need_giver.get_pending_assignments()),
@@ -153,7 +153,7 @@ static func decode(state: Dictionary) -> WorldState:
 	# "workProgress" and the optional "suspendedWorkProgress"; the persisted owners
 	# are applied by restore_owners() below, once jobs are restored.
 	var work_progress_owners := world._progress_table.decode(state)
-	world._paused_jobs = _decode_paused_jobs(state["pausedJobs"])
+	world._needs_system.decode(state)
 	var tool_items_data := _decode_tool_items(state["toolItems"])
 	world._tool_store.items = tool_items_data["items"]
 	world._tool_store.next_id = tool_items_data["next_id"]
@@ -210,7 +210,7 @@ static func decode(state: Dictionary) -> WorldState:
 	# restore and before _reconcile_incident_jobs_after_load() below may
 	# cancel one through the shared _finish_job() boundary, so that
 	# cancellation's own ownership-gated work-progress cleanup fires correctly immediately after a load.
-	world._progress_table.restore_owners(work_progress_owners, world._colonists, world._paused_jobs)
+	world._progress_table.restore_owners(work_progress_owners, world._colonists, world._needs_system.paused_jobs)
 
 	var bounds_max := Vector2i(width - 1, height - 1)
 	world._scheduler.restore_scheduling(_decode_scheduling(scheduling),
@@ -609,7 +609,7 @@ static func _decode_suspended_work_progress(list: Array) -> Dictionary:
 
 # --- paused jobs (colonist-ai.md 3.6) ---------------------------------------
 
-## world._paused_jobs is keyed by colonist id; sorted keys give a
+## NeedsSystem.paused_jobs is keyed by colonist id; sorted keys give a
 ## deterministic encoding order, matching every other keyed-map encoder here.
 ## Reused as-is for NeedGiver's own colonist_id -> job_id association (see
 ## encode()'s "needJobAssignments"): both are the same {colonistId, jobId}

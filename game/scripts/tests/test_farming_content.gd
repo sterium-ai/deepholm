@@ -558,7 +558,7 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 			hauler_colonist = colonist
 	_expect(InventoryType.has_kind(hauler_colonist, "seed"),
 		"setup: the hauler must still be carrying the seed the instant the need job interrupts it")
-	_expect(world._paused_jobs.get("hauler", "") == haul_job_id,
+	_expect(world._needs_system.paused_jobs.get("hauler", "") == haul_job_id,
 		"setup: the interrupted haul must be recorded in _paused_jobs, not the colonist's current assignment")
 
 	var sow_result := _command(world, "sow_1", "sow", {"x": 41, "y": 0, "priority": 1})
@@ -575,7 +575,7 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	var haul_job := _find_job(world, haul_job_id)
 	_expect(String(haul_job.get("status", "")) == "failed" and String(haul_job.get("reason", "")) == "blocked_missing_input",
 		"the haul job paused for a need, carrying the now-consumed seed, must fail blocked_missing_input, got %s" % haul_job)
-	_expect(not world._paused_jobs.has("hauler"),
+	_expect(not world._needs_system.paused_jobs.has("hauler"),
 		"the cancelled haul's _paused_jobs entry must be cleared so the hauler is never resumed toward a delivery that no longer exists")
 
 	var eat_completed := false

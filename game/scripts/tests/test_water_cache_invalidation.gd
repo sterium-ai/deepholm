@@ -97,7 +97,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	_expect(world.get_tile(WATER_TILE.x, WATER_TILE.y) == WorldStateType.TILE_FLOOR,
 		"forage must convert the water tile to floor exactly like any other forage target")
 
-	var live_candidates: Array[Vector2i] = world._need_source_candidates("water")
+	var live_candidates: Array[Vector2i] = world._needs_system.need_source_candidates("water")
 	_expect(not live_candidates.has(WATER_TILE),
 		"the live world's water-tile cache must stop offering a tile that is no longer water once forage converts it to floor")
 
@@ -108,7 +108,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	# side effect) is what keeps them in sync.
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	var restored_candidates: Array[Vector2i] = restored._need_source_candidates("water")
+	var restored_candidates: Array[Vector2i] = restored._needs_system.need_source_candidates("water")
 	_expect(not restored_candidates.has(WATER_TILE),
 		"a freshly decoded world must never offer the former water tile either")
 	_expect(live_candidates == restored_candidates,

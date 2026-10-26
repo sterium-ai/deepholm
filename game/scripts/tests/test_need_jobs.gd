@@ -669,7 +669,7 @@ func _check_urgent_need_interrupts_haul_at_toil_boundary() -> void:
 
 	_expect(String(world._scheduler.queue.get_job(haul_job_id).get("status", "")) == "queued",
 		"an urgent need reaching a toil boundary must suspend the colonist's still-active haul job back to queued")
-	_expect(world._paused_jobs.get("colonist_0", "") == haul_job_id,
+	_expect(world._needs_system.paused_jobs.get("colonist_0", "") == haul_job_id,
 		"the interrupt must record the haul job as paused for colonist_0")
 	_expect(not world._scheduler.queue.get_reservation_table().is_reserved(item_key),
 		"suspending the haul job must release its item reservation (colonist-ai.md 3.4)")

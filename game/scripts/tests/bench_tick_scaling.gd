@@ -10,7 +10,7 @@ extends SceneTree
 ##           spawn needs make this the normal case, not a contrived one). Water,
 ##           not food: a fresh generated map has no ground berries, so a food
 ##           search finds no candidate and never routes
-##           (WorldState._need_source_candidates()); the map has a river.
+##           (WorldState._needs_system.need_source_candidates()); the map has a river.
 ## Tick 1 is reported on its own ("first"): it pays the lazy full-map region
 ## build (TileGrid.get_regions()). The mean/p50/p95/max cover ticks 2..n.
 ## Each run also times every phase of tick() through BenchCommon.profiled_tick()
@@ -95,7 +95,7 @@ func _run(workload: String, actor_count: int, ticks: int) -> void:
 		world._colonists.size(), build_usec / 1000.0, BenchCommon.format_stats(stats)])
 	if workload == "needs":
 		print("bench_tick_scaling: workload=needs actors=%d water_tiles=%d reachable_water_candidates=%d" % [
-			world._colonists.size(), world._tile_grid.get_water_tiles().size(), world._need_source_candidates("water").size()])
+			world._colonists.size(), world._tile_grid.get_water_tiles().size(), world._needs_system.need_source_candidates("water").size()])
 	print("bench_tick_scaling: workload=%s actors=%d tick[real, ticks 2..n] %s first=%.2fms hash_match=%s jobs=%d active=%d events=%d" % [
 		workload, twin._colonists.size(), BenchCommon.format_stats(real_stats),
 		int(twin_samples[0]) / 1000.0 if not twin_samples.is_empty() else 0.0, hash_match,

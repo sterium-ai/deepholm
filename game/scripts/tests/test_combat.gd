@@ -757,9 +757,9 @@ func _check_death_during_need_job_releases_paused_work() -> void:
 		"the worker must be assigned the unrestricted till job before the interrupt")
 
 	var worker := world._find_colonist("worker")
-	world._interrupt_current_job(worker) # mirrors NeedGiver's own critical-need interrupt
+	world._needs_system.interrupt_current_job(worker) # mirrors NeedGiver's own critical-need interrupt
 	_expect(String(world._get_job(work_job_id).get("status", "")) == "queued", "the interrupted till job must be suspended back to queued")
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
 
 	var need_result: Dictionary = world._scheduler.submit(Vector2i(8, 5), 1, world.get_tick(), "drink_water", "worker")
 	_expect(need_result.get("ok", false), "the worker's own restricted need job must be accepted")
@@ -782,7 +782,7 @@ func _check_death_during_need_job_releases_paused_work() -> void:
 	_expect(String(world._get_job(need_job_id).get("status", "")) in ["cancelled", "failed"], "the dead actor's own active need job must be terminated")
 	_expect(String(world._get_job(work_job_id).get("status", "")) in ["cancelled", "failed"],
 		"the dead actor's own previously-paused, unrestricted work job must also be terminated, not silently resumed and left dangling")
-	_expect(not (world._paused_jobs as Dictionary).has("worker"), "a dead actor must leave no residual paused-job entry")
+	_expect(not (world._needs_system.paused_jobs as Dictionary).has("worker"), "a dead actor must leave no residual paused-job entry")
 	_expect(world._need_giver.get_pending_job("worker").is_empty(), "a dead actor must leave no residual NeedGiver pending association")
 
 ## _pick_flee_target() only checked eligibility
@@ -1129,7 +1129,7 @@ func _check_flee_interrupted_incident_job_survives_save_load() -> void:
 		if String(job.get("kind", "")) == "flee" and world._job_restricted_to(String(job["id"])) == actor_id:
 			flee_job_id = String(job["id"])
 	_expect(not flee_job_id.is_empty(), "the incident actor must be given its own flee job once it starts fleeing")
-	_expect(String(world._paused_jobs.get(actor_id, "")) == job_id,
+	_expect(String(world._needs_system.paused_jobs.get(actor_id, "")) == job_id,
 		"the incident actor's own paused-job entry must still name its interrupted incident job")
 
 	var loaded := StateCodecType.decode(StateCodecType.encode(world))
@@ -1351,7 +1351,7 @@ func _check_flee_recovery_after_save_load_matches_uninterrupted() -> void:
 			"[%s] recovery right after a load must leave no residual CombatGiver association or exclusions" % shape)
 		_expect(not loaded._scheduler.get_pending().has("prey"),
 			"[%s] recovery right after a load must drop the restored flee job's own route search" % shape)
-		_expect(not loaded._paused_jobs.has("prey") and not uninterrupted._paused_jobs.has("prey"),
+		_expect(not loaded._needs_system.paused_jobs.has("prey") and not uninterrupted._needs_system.paused_jobs.has("prey"),
 			"[%s] recovery must consume the paused-job entry in both runs" % shape)
 		var flee_target: Vector2i = loaded._get_job(live_flee_id)["target"]
 		_expect(not loaded._flee_target_reserved(flee_target.x, flee_target.y),
@@ -1421,7 +1421,7 @@ func _check_flee_recovery_after_destination_exhaustion() -> void:
 	_expect(exhausted, "the boxed-in raider must exhaust every flee destination (blocked, cancelled, excluded) within the tick budget for this check to be meaningful")
 	if not exhausted:
 		return
-	_expect(String(world._paused_jobs.get("prey", "")) == work_job_id or String(world._get_job(work_job_id).get("status", "")) == "active",
+	_expect(String(world._needs_system.paused_jobs.get("prey", "")) == work_job_id or String(world._get_job(work_job_id).get("status", "")) == "active",
 		"the interrupted till job must still be tracked as paused (or already back active) while the raider is stuck")
 	world.tick() # one more tick with nothing left to try: the episode must persist without a job
 	_expect(world._combat_giver.get_blocked_targets().has("prey"),
@@ -1432,7 +1432,7 @@ func _check_flee_recovery_after_destination_exhaustion() -> void:
 	_expect(not world._combat_giver.get_blocked_targets().has("prey"),
 		"recovery after destination exhaustion must clear the episode's exclusions")
 	_expect(not world._combat_giver.get_committed_jobs().has("prey"), "recovery must leave no residual flee association")
-	_expect(not world._paused_jobs.has("prey"), "recovery after destination exhaustion must consume the paused-job entry")
+	_expect(not world._needs_system.paused_jobs.has("prey"), "recovery after destination exhaustion must consume the paused-job entry")
 	_expect(String(_flee_job_of(world, "prey").get("status", "")) not in ["queued", "active"], "no flee job may outlive recovery")
 	var work_status := String(world._get_job(work_job_id).get("status", ""))
 	_expect(work_status in ["active", "completed"],
@@ -1562,7 +1562,7 @@ func _check_need_search_survives_flee_activation() -> void:
 	world._find_colonist("worker")["needs"]["water"] = 0
 	world.tick() # a real NeedGiver._evaluate() interrupts the till job and starts a real search
 	_expect(world._need_giver._searching.has("worker"), "a real need search must have started for this check to be meaningful")
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id, "the need interrupt must pause the till job")
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id, "the need interrupt must pause the till job")
 
 	world._find_colonist("worker")["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
 	var flee_active := false
@@ -1572,12 +1572,12 @@ func _check_need_search_survives_flee_activation() -> void:
 			flee_active = true
 			break
 	_expect(flee_active, "the need search must still be in flight when the worker starts fleeing, for this check to be meaningful")
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id,
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id,
 		"the pre-existing need interrupt's own paused-work association must survive flee activation untouched")
 
 	for _i in 20:
 		world.tick()
-		_expect(String(world._paused_jobs.get("worker", "")) == work_job_id or not world._combat_giver.owns("worker"),
+		_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id or not world._combat_giver.owns("worker"),
 			"a frozen need search must never overwrite the till job's own paused-job entry while CombatGiver owns this actor (tick %d)" % world.get_tick())
 
 	world._find_colonist("worker")["health"]["hp"] = 100
@@ -1588,7 +1588,7 @@ func _check_need_search_survives_flee_activation() -> void:
 			resumed = true
 			break
 	_expect(resumed, "the original pre-need-search till job must resume cleanly once the worker recovers")
-	_expect(not world._paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
+	_expect(not world._needs_system.paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
 	_expect(not world._combat_giver.get_committed_jobs().has("worker"), "recovery must leave no residual CombatGiver association")
 
 ## A real need onset (urgent/critical) that fires only after CombatGiver
@@ -1624,7 +1624,7 @@ func _check_need_onset_during_existing_flee_episode() -> void:
 			flee_active = true
 			break
 	_expect(flee_active, "the worker must actually start fleeing for this check to be meaningful")
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id, "combat's own interrupt must pause the till job")
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id, "combat's own interrupt must pause the till job")
 	_expect(world._combat_giver.owns("worker"), "CombatGiver must own the interrupt/resume boundary for this check to be meaningful")
 
 	# A real need onset now, mid-episode: this must never reach NeedGiver's
@@ -1634,7 +1634,7 @@ func _check_need_onset_during_existing_flee_episode() -> void:
 		world.tick()
 		_expect(not world._need_giver._searching.has("worker"), "a need onset during an open flee episode must never start a real search (tick %d)" % world.get_tick())
 		_expect(world._need_giver.get_pending_job("worker").is_empty(), "a need onset during an open flee episode must never submit a need job (tick %d)" % world.get_tick())
-		_expect(String(world._paused_jobs.get("worker", "")) == work_job_id,
+		_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id,
 			"a need onset during an open flee episode must never overwrite the till job's own paused-job entry (tick %d)" % world.get_tick())
 
 	world._find_colonist("worker")["health"]["hp"] = 100
@@ -1795,14 +1795,14 @@ func _check_flee_recovery_resume_needs_fresh_route_faction_aware() -> void:
 	_expect(String(world._get_job(job_id).get("status", "")) == "active", "the raider's own till job must be active before it is interrupted for this check to be meaningful")
 
 	var prey := world._find_colonist("prey")
-	world._interrupt_current_job(prey)
-	_expect(String(world._paused_jobs.get("prey", "")) == job_id, "the till job must actually be paused for this check to be meaningful")
+	world._needs_system.interrupt_current_job(prey)
+	_expect(String(world._needs_system.paused_jobs.get("prey", "")) == job_id, "the till job must actually be paused for this check to be meaningful")
 	prey["x"] = 15
 	prey["y"] = 30 # south of the door, on the direct column back to the paused job's own target
 	world._combat_giver._episodes["prey"] = {}
 
 	var loaded := StateCodecType.decode(StateCodecType.encode(world))
-	_expect(String(loaded._paused_jobs.get("prey", "")) == job_id, "a save/load must preserve the raider's own paused-job entry")
+	_expect(String(loaded._needs_system.paused_jobs.get("prey", "")) == job_id, "a save/load must preserve the raider's own paused-job entry")
 	_expect(loaded._combat_giver.owns("prey"), "a save/load must preserve the raider's own open flee episode")
 
 	var stood_on_door := false
@@ -1845,8 +1845,8 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 	_expect(String(world._get_job(work_job_id).get("status", "")) == "active", "the unrestricted till job must be active before the interrupt")
 
 	var worker := world._find_colonist("worker")
-	world._interrupt_current_job(worker) # mirrors NeedGiver's own critical-need interrupt
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
+	world._needs_system.interrupt_current_job(worker) # mirrors NeedGiver's own critical-need interrupt
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
 
 	var need_result: Dictionary = world._scheduler.submit(Vector2i(20, 20), 1, world.get_tick(), "drink_water", "worker")
 	_expect(need_result.get("ok", false), "the worker's own restricted need job must be accepted")
@@ -1881,7 +1881,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 		"the worker's own scheduler assignment must still point at the flee job after the need job resolves")
 	_expect(world._flee_target_reserved(flee_target.x, flee_target.y),
 		"the flee job's own destination reservation must remain held, not released by an errant resume")
-	_expect(String(world._paused_jobs.get("worker", "")) == work_job_id,
+	_expect(String(world._needs_system.paused_jobs.get("worker", "")) == work_job_id,
 		"the original interrupted till job must still be the one recorded as paused, deferred until CombatGiver releases ownership")
 	_expect(world._combat_giver.owns("worker"), "CombatGiver must still own the flee episode after the need job resolves")
 
@@ -1893,7 +1893,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 			resumed = true
 			break
 	_expect(resumed, "the original till job must resume once the actor recovers, even after an intervening need-job cancellation mid-episode")
-	_expect(not world._paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
+	_expect(not world._needs_system.paused_jobs.has("worker"), "recovery must leave no residual paused-job entry")
 	_expect(not world._combat_giver.owns("worker"), "recovery must leave no residual CombatGiver episode")
 
 ## _advance_go_to_or_resubmit() (recovery's own fresh-route
@@ -1934,8 +1934,8 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	world.tick() # backfills "combat" before CombatGiver.advance() reads it
 
 	var trapped := world._find_colonist(actor_id)
-	world._interrupt_current_job(trapped)
-	_expect(String(world._paused_jobs.get(actor_id, "")) == job_id, "the interrupt must pause the trapped incident actor's own incident job for this check to be meaningful")
+	world._needs_system.interrupt_current_job(trapped)
+	_expect(String(world._needs_system.paused_jobs.get(actor_id, "")) == job_id, "the interrupt must pause the trapped incident actor's own incident job for this check to be meaningful")
 	_expect(String(world._get_job(job_id).get("status", "")) == "queued", "the paused incident job must be suspended back to queued")
 	world._combat_giver._episodes[actor_id] = {} # opens the episode directly, mirroring the file's own established idiom for this boundary
 
@@ -1961,7 +1961,7 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 		if String(job.get("kind", "")) == "incident" and world._job_restricted_to(String(job["id"])) == actor_id:
 			replacement_found = true
 	_expect(not replacement_found, "recovery from an unreachable incident destination must cancel, never resubmit, a replacement job restricted to the now-removed actor")
-	_expect(not world._paused_jobs.has(actor_id), "recovery must leave no residual paused-job entry for the despawned actor")
+	_expect(not world._needs_system.paused_jobs.has(actor_id), "recovery must leave no residual paused-job entry for the despawned actor")
 	_expect(not world._combat_giver.owns(actor_id), "recovery must leave no residual CombatGiver episode for the despawned actor")
 	_expect(world.get_assignments().get(actor_id) == null, "the despawned actor must hold no scheduler assignment")
 
@@ -2016,7 +2016,7 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 			_expect(String(world._get_job(flee_job_id).get("status", "")) == "active", "the flee job must actually reach 'active' status for this check to be meaningful")
 			_expect(world._flee_target_reserved(flee_target.x, flee_target.y),
 				"an active flee job must hold a live reservation on its own destination for this check to be meaningful")
-		_expect(String(world._paused_jobs.get(actor_id, "")) == job_id,
+		_expect(String(world._needs_system.paused_jobs.get(actor_id, "")) == job_id,
 			"combat's own flee interrupt must pause the incident actor's own incident job for this check to be meaningful")
 
 		var cancel_result := world.apply({"actor": "test", "command_id": "cancel_suspended_incident_%s" % searching, "tick": world.get_tick(),
@@ -2032,7 +2032,7 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 		if not searching:
 			_expect(not world._flee_target_reserved(flee_target.x, flee_target.y),
 				"the despawned actor's own flee destination reservation must be released, not held indefinitely")
-		_expect(not world._paused_jobs.has(actor_id), "the despawned actor must leave no residual paused-job entry")
+		_expect(not world._needs_system.paused_jobs.has(actor_id), "the despawned actor must leave no residual paused-job entry")
 		_expect(not world._combat_giver.owns(actor_id), "the despawned actor must leave no residual CombatGiver episode")
 		_expect(not world._combat_giver.get_committed_jobs().has(actor_id), "the despawned actor must leave no residual CombatGiver commitment")
 		var residual_job := false

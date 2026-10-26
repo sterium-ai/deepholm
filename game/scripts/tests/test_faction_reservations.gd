@@ -194,7 +194,7 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 ## check -- not just tick()'s pre-activation one -- must refuse a job whose
 ## actor's faction changed while it was suspended (colonist-ai.md 3.6's
 ## critical-need interrupt). Drives suspend_assignment()/resume_assignment()
-## directly (the same scheduler seam WorldState._interrupt_current_job()/
+## directly (the same scheduler seam WorldState._needs_system.interrupt_current_job()/
 ## _resume_interrupted_job() themselves call) rather than through a live need
 ## interrupt: need_giver.gd's own may_be_ordered actor-pool filter would
 ## otherwise freeze the need search itself the instant the faction below
@@ -400,12 +400,12 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	_expect(carrying, "the colonist must pick up the item before this check can proceed")
 	if not carrying:
 		return
-	world._interrupt_current_job(world._find_colonist(colonist_id))
+	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry haul must suspend its reservation back to queued")
 	_expect(_set_faction(world, "set_raider_mid_carry", colonist_id, "raiders").get("ok", false),
 		"set_faction while the haul is suspended mid-carry must be accepted")
-	world._resume_interrupted_job(colonist_id)
+	world._needs_system.resume_interrupted_job(colonist_id)
 	world._resolve_refused_reservations()
 	var job := world._scheduler.queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
@@ -457,12 +457,12 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	var blocker_tile := Vector2i(int(carrier["x"]), int(carrier["y"]))
 	world._colonists.append({"id": "colonist_1", "kind": "colonist",
 		"x": blocker_tile.x, "y": blocker_tile.y, "route": null, "work": null, "hands": []})
-	world._interrupt_current_job(world._find_colonist(colonist_id))
+	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry haul must suspend its reservation back to queued")
 	_expect(_set_faction(world, "set_raider_mid_carry_blocked", colonist_id, "raiders").get("ok", false),
 		"set_faction while the haul is suspended mid-carry must be accepted")
-	world._resume_interrupted_job(colonist_id)
+	world._needs_system.resume_interrupted_job(colonist_id)
 	world._resolve_refused_reservations()
 	var job := world._scheduler.queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
@@ -608,7 +608,7 @@ func _check_command_boundary_drains_refusal_without_manual_call() -> void:
 	_expect(working, "the colonist must be actively working the till job before this check can proceed")
 	if not working:
 		return
-	world._interrupt_current_job(world._find_colonist(colonist_id))
+	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
 	_expect(String(world._scheduler.queue.get_job(till_job_id).get("status", "")) == "queued",
 		"interrupting the till job must suspend its reservation back to queued")
 	# Fakes a NeedGiver commitment through the same seam need_giver.gd itself
