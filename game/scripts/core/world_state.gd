@@ -38,6 +38,7 @@ const ConstructionGiverType = preload("res://scripts/core/jobs/givers/constructi
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
 const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
+const TradeSystemType = preload("res://scripts/core/economy/trade_system.gd")
 
 ## Default/fixture map size: every existing test and the debug scenario
 ## construct WorldState with no explicit width/height and must keep getting
@@ -164,12 +165,6 @@ var _tile_definitions: Dictionary = {}
 var _work_ticks: Dictionary = {} # see _load_work_ticks()
 var _need_full: int = 0 # see _load_need_config()
 var _mapgen: Dictionary = {}
-## trader_id -> {"give_item", "want_item"}: a trader's own
-## trade_offer, posted partway through its generic incident wait (see
-## _maybe_post_trade_offer()). Not persisted, like IncidentScheduler's own
-## _staged/_actor_by_job: an offer in flight across a save/load is
-## simply lost, and the trader still leaves on schedule either way.
-var _pending_trade_offers: Dictionary = {}
 var _scheduler: AssignmentType
 var _toils: ToilExecutorType
 ## Callables ToilExecutor.advance() cannot resolve itself, keyed by hook name.
@@ -226,6 +221,8 @@ var _approach_giver: ApproachGiverType
 var _construction: ConstructionSystemType
 ## Decides when a site's next fetch/work job should exist (ADR 040).
 var _construction_giver: ConstructionGiverType
+## Trader offers and accept_trade (economy/trade_system.gd); offers are never persisted or hashed.
+var _trade: TradeSystemType
 
 ## incidents_enabled defaults false so every pre-existing caller keeps ticking byte-identically.
 func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_height: int = MAP_HEIGHT, incidents_enabled: bool = false) -> void:
@@ -305,6 +302,8 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		func() -> Dictionary: return _need_giver.get_pending_assignments(), _combat_giver.owns,
 		func(job_id: String) -> String: return _rescue_giver.victim_for_job(job_id),
 		func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
+	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
+		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -480,7 +479,7 @@ func apply(command) -> Dictionary:
 		"spawn_incident":
 			return _apply_spawn_incident_command(command)
 		"accept_trade":
-			return _apply_accept_trade_command(command)
+			return _trade.apply_accept_trade_command(command)
 		"zone_add":
 			return _apply_zone_add_command(command)
 		"zone_remove":
@@ -820,7 +819,7 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 		if String(job.get("kind", "")) == "incident":
 			_incidents.on_job_finished(job_id)
 			if not incident_actor.is_empty():
-				_pending_trade_offers.erase(String(incident_actor["id"]))
+				_trade.pending_offers.erase(String(incident_actor["id"]))
 			# Unlike every other work-ticked kind below, an incident's stamped
 			# wait is written by IncidentSchedulerType.activate_pending()
 			# (incident_scheduler.gd) through
@@ -913,14 +912,9 @@ func get_actors_with_health() -> Array[Dictionary]:
 			copy.append(actor.duplicate(true))
 	return copy
 
-## Every trader's own outstanding trade_offer, state only, for
-## the presentation layer (colonist_panel.gd) to render and wire to accept_trade.
+## Every trader's own outstanding trade_offer, for colonist_panel.gd.
 func get_pending_trade_offers() -> Array[Dictionary]:
-	var offers: Array[Dictionary] = []
-	for trader_id in _pending_trade_offers:
-		var offer: Dictionary = _pending_trade_offers[trader_id]
-		offers.append({"trader_id": trader_id, "give_item": String(offer["give_item"]), "want_item": String(offer["want_item"])})
-	return offers
+	return _trade.get_pending_trade_offers()
 
 ## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state.
 func get_jobs() -> Array[Dictionary]:
@@ -1170,125 +1164,7 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 	# before the trader's unchanged despawn (test_incidents.gd's own
 	# exact-wait-timing checks still hold).
 	if not job_id.is_empty() and String(_scheduler.queue.get_job(job_id).get("kind", "")) == "incident":
-		_maybe_post_trade_offer(job_id)
-
-## job_id's incident actor posts its trade_offer exactly once (guarded by
-## _pending_trade_offers, not a separate flag); a no-op for a non-visitor
-## incident actor (wolf, raider) or one that already posted.
-func _maybe_post_trade_offer(job_id: String) -> void:
-	var actor := _find_job_colonist(job_id)
-	if actor.is_empty() or not ActorTableType.has_component(actor, "visitor", _content):
-		return
-	var trader_id: String = String(actor["id"])
-	if _pending_trade_offers.has(trader_id):
-		return
-	_post_trade_offer(actor)
-
-## Posts actor's own trade_offer: two distinct
-## content/items.json kinds, deterministic from actor's own id (never
-## global randomness, AGENTS.md; no new persisted RNG stream needed, since a
-## lost offer across a save/load is simply never posted again). give_item is
-## placed into the trader's "inventory" component items array (F2) so
-## accept_trade has something concrete to move; want_item names what the
-## colony must give up, taken only if accept_trade is actually called.
-func _post_trade_offer(actor: Dictionary) -> void:
-	var trader_id: String = String(actor["id"])
-	var picks := _pick_trade_items(trader_id)
-	var give_item: String = picks[0]
-	var want_item: String = picks[1]
-	_append_trader_inventory_item(actor, give_item)
-	_pending_trade_offers[trader_id] = {"give_item": give_item, "want_item": want_item}
-	_event_log.insert_event({
-		"type": "trade_offer", "tick": _clock.tick, "system_priority": PRIORITY_TICK,
-		"entity_id": trader_id, "sequence": _event_log.next_sequence(),
-		"data": {"trader_id": trader_id, "give_item": give_item, "want_item": want_item},
-	})
-
-## Two distinct non-tool content/items.json kinds, keyed off trader_id's own
-## hash so the pick is stable without a persisted RNG stream. Tool kinds
-## (axe, pick) are excluded: trading one would need ToolItemStore's own
-## reservation/handover machinery, out of scope for a plain ground-item swap.
-func _pick_trade_items(trader_id: String) -> Array:
-	var kinds: Array[String] = []
-	for entry in _content.list("items"):
-		var id := String(entry["id"])
-		if not is_tool_kind(id):
-			kinds.append(id)
-	kinds.sort()
-	var base := int(trader_id.hash()) % kinds.size()
-	if base < 0:
-		base += kinds.size()
-	return [kinds[base], kinds[(base + 1) % kinds.size()]]
-
-## accept_trade {trader_id}, modelled on
-## _apply_set_faction_command()'s validate-then-mutate shape
-## (orders-and-movement.md's typed-rejection pattern). Performs the full
-## two-way swap: one want_item unit moves out of an eligible stockpiled item
-## (ItemTable.find_available_stockpiled_item(), the same zone/reservation invariant
-## the superseded `build` job once resolved its own seed item through -- a
-## trade must never rip an item out of a colonist's hands mid-haul) into the
-## trader's own "inventory" component, and the trader's give_item moves out
-## of that same inventory into the colony's stockpile, at the tile the
-## want_item unit just vacated (still inside the same zone). Then cancels the
-## trader's still-active incident job through the shared finish boundary --
-## _finish_job()'s "incident" branch calls IncidentScheduler.on_job_finished(),
-## which removes the trader exactly like its own unaccepted despawn would, and
-## also clears this trader's own _pending_trade_offers entry.
-## Refusing (never calling this) leaves the trader to that same despawn.
-func _apply_accept_trade_command(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command["payload"]
-	if not (payload.get("trader_id") is String) or String(payload.get("trader_id", "")).is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload",
-			"accept_trade requires a non-empty string trader_id.")
-	var trader_id: String = String(payload["trader_id"])
-	if not _pending_trade_offers.has(trader_id):
-		return _event_log.rejection(command["command_id"], command["actor"], "invalid_target",
-			"No pending trade offer for trader_id '%s' (unknown or already departed)." % trader_id)
-	var trader := _find_colonist(trader_id)
-	if trader.is_empty():
-		_pending_trade_offers.erase(trader_id)
-		return _event_log.rejection(command["command_id"], command["actor"], "invalid_target",
-			"Trader '%s' has already departed." % trader_id)
-	var offer: Dictionary = _pending_trade_offers[trader_id]
-	var want_item := String(offer["want_item"])
-	var give_item := String(offer["give_item"])
-	var stock_item_id := _item_table.find_available_stockpiled_item(want_item, 1)
-	if stock_item_id.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], "blocked_missing_input",
-			"stockpile_the_required_item")
-	var stock_tile := _item_table.remove_stockpiled_item_unit(stock_item_id)
-	_append_trader_inventory_item(trader, want_item)
-	_remove_trader_offered_item(trader, give_item)
-	_item_table.spawn_item(give_item, stock_tile.x, stock_tile.y)
-	_pending_trade_offers.erase(trader_id)
-	var assignment = _scheduler.get_assignments().get(trader_id)
-	if assignment != null:
-		_finish_job(String(assignment["job_id"]), "cancel_job")
-	else:
-		_remove_colonist_by_id(trader_id)
-	return _event_log.applied(command)
-
-## Appends one unit of `kind` to actor's own "inventory" component items
-## array (F2's per-instance shape, no "id" field), shared by _post_trade_offer()
-## (the trader's initial give_item) and _apply_accept_trade_command() (the
-## want_item moving into the trader on acceptance).
-func _append_trader_inventory_item(actor: Dictionary, kind: String) -> void:
-	var inventory = actor.get("inventory")
-	if inventory is Dictionary:
-		(inventory["items"] as Array).append({"kind": kind, "count": 1})
-
-## Removes the one inventory-component entry _append_trader_inventory_item()
-## added (mirroring how _drop_inventory_contents() already reads only
-## "kind"/"count" off it).
-func _remove_trader_offered_item(trader: Dictionary, kind: String) -> void:
-	var inventory = trader.get("inventory")
-	if not (inventory is Dictionary):
-		return
-	var items: Array = inventory["items"]
-	for i in items.size():
-		if String((items[i] as Dictionary).get("kind", "")) == kind:
-			items.remove_at(i)
-			return
+		_trade.maybe_post_trade_offer(job_id)
 
 ## F3: terminally resolves every job GlobalAssignment's
 ## may_be_ordered/may_reserve_colony_items gates refused, with the same typed
