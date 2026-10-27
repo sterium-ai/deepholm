@@ -401,6 +401,7 @@ one.
   (test compares against recorded paths); `test_routing_budget`, `test_reroute`,
   `test_save_reproducibility` unchanged; open-grid d=256 search ≤ 60 ms (baseline 365 ms).
 - **Non-goals:** A* or any change to which path is chosen (that is A8).
+- **Scope amendment approved by the owner (2026-10-27):** `game/scripts/core/world_state.gd` only where `state_hash()` covers live re-route continuations (the hash-coverage fix the review required); no other WorldState change.
 
 #### A4 — Need-source candidates per region and a spatial occupancy index · `todo` · combat part after R9
 
