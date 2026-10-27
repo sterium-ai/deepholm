@@ -127,7 +127,7 @@ Orca helper scripts, this backlog.
   `need_giver.gd` depends on it.
 - **Acceptance:** as R1; `test_need_jobs`, `test_needs_*` unchanged.
 
-### R9 — Extract `CombatSystem` · `todo`
+### R9 — Extract `CombatSystem` · `review (antonelmejor50-hub/r9-extract-combatsystem)`
 
 - **Goal:** `actors/combat_system.gd` owns `_apply_combat`, combat reasons, death and its
   cleanup (scheduling, inventory drop). `combat_giver.gd`/`approach_giver.gd` depend on it.

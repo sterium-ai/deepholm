@@ -739,7 +739,7 @@ func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 			working = true
 			break
 	_expect(working, "setup: rescuer B must reach its own active work toil before victim B dies")
-	world._apply_actor_death(victim_b)
+	world._combat_system.apply_actor_death(victim_b)
 	var completed := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -1369,7 +1369,7 @@ func _check_rescuer_death_clears_the_rescue_progress_key() -> void:
 	var job_id: String = String(job["id"])
 	var key := _tick_until_rescue_progress(world, rescuer, job_id, RESCUE_TICK_BOUND)
 	_expect(not key.is_empty(), "setup: the rescue must be mid-work with parked progress")
-	world._apply_actor_death(rescuer)
+	world._combat_system.apply_actor_death(rescuer)
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "cancelled", "the dead rescuer's rescue must be cancelled")
 	_expect(not world._progress_table.progress.has(key), "a rescue cancelled by its rescuer's death must drop its own job-scoped progress key")
 	_expect(victim.get("trapped") != null, "the victim stays trapped -- nobody rescued it")

@@ -928,7 +928,7 @@ func _check_trapped_colonist_removed_on_death() -> void:
 	_expect(world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"setup: till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
-	world._apply_actor_death(colonist)
+	world._combat_system.apply_actor_death(colonist)
 	_expect(world._find_colonist(colonist_id).is_empty(),
 		"a trapped actor killed via _apply_actor_death() must still be removed from the roster -- death must never be suppressed by the trapped-despawn guard")
 	var report := ReservationInvariantsType.check(world._scheduler.queue.get_reservation_table(), world.get_jobs())
@@ -967,7 +967,7 @@ func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 	var reservation_key := world._tile_key(1, 0)
 	_expect(world._scheduler.queue.get_reservation_table().is_reserved(reservation_key),
 		"setup: the active escape_trench job must hold its own self-tile reservation before death")
-	world._apply_actor_death(wolf)
+	world._combat_system.apply_actor_death(wolf)
 	_expect(world._find_colonist("trap_wolf_death").is_empty(),
 		"a trapped hostile killed mid-escape must still be removed from the roster, not kept alive by the trapped-despawn guard")
 	var final_status := String(world._scheduler.queue.get_job(escape_job_id).get("status", ""))
