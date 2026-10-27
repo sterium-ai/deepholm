@@ -35,7 +35,9 @@
 1. Refuse a malformed log with `invalid_replay` (`ReplayLog.validate()`, run both on read
    and at the start of `replay()`). The checkpoints must be exactly the start tick, then every
    `checkpointInterval` ticks up to the last tick: none out of range, duplicated, off that
-   grid or missing. Command ticks must never decrease. As a result, a replay that reports OK
+   grid or missing. Command ticks must never decrease. Every number read from the file
+   (ticks, hashes, interval, versions) must be a whole JSON number: `40.5` is refused, never
+   truncated to `40`. As a result, a replay that reports OK
    has compared every recorded checkpoint, and `replay()` checks that count again at the end.
 2. Refuse with `content_version_mismatch` or `generator_version_mismatch` when the running
    build differs from the recording. A replay across content versions cannot be expected to

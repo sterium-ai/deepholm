@@ -229,15 +229,25 @@ func _check_tampered_checkpoint(recording: ReplayLogType) -> void:
 	_expect(not result.get("ok", true) and int(result.get("tick", -1)) == 300 and int(result.get("last_matching_tick", -1)) == 290,
 		"a tampered checkpoint at tick 300 must be the reported divergence: %s" % [result])
 
-## A checkpoint off the recorded grid, duplicated or missing is refused when
-## read, so replay can never report success with a checkpoint left unchecked.
+## A checkpoint off the recorded grid, duplicated, missing or not a whole
+## number is refused when read, so replay can never report success with a
+## checkpoint left unchecked. The unmutated JSON (whole floats) still reads.
 func _check_malformed_checkpoints(recording: ReplayLogType) -> void:
 	var cases := {
 		"out of range": func(data: Dictionary) -> void: data["checkpoints"].append({"tick": SESSION_TICKS + 5, "hash": 1}),
 		"duplicate": func(data: Dictionary) -> void: data["checkpoints"].insert(3, data["checkpoints"][3].duplicate()),
 		"missing": func(data: Dictionary) -> void: data["checkpoints"].remove_at(7),
 		"off the grid": func(data: Dictionary) -> void: data["checkpoints"][4]["tick"] = 41,
+		# Fractions are refused, never truncated back onto the grid (40.5 is not 40).
+		"fractional tick": func(data: Dictionary) -> void: data["checkpoints"][4]["tick"] = 40.5,
+		"fractional hash": func(data: Dictionary) -> void: data["checkpoints"][4]["hash"] = float(data["checkpoints"][4]["hash"]) + 0.5,
+		"fractional command tick": func(data: Dictionary) -> void: data["commands"][0]["tick"] = 0.5,
+		"fractional endTick": func(data: Dictionary) -> void: data["endTick"] = float(SESSION_TICKS) + 0.5,
+		"fractional interval": func(data: Dictionary) -> void: data["checkpointInterval"] = 10.5,
+		"string tick": func(data: Dictionary) -> void: data["checkpoints"][4]["tick"] = "40",
 	}
+	var untouched := ReplayLogType.from_dict(JSON.parse_string(JSON.stringify(recording.to_dict())))
+	_expect(untouched.get("ok", false), "the unmutated JSON must still read: %s" % [untouched])
 	for label: String in cases:
 		var data: Dictionary = JSON.parse_string(JSON.stringify(recording.to_dict()))
 		var mutate: Callable = cases[label]

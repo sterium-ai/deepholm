@@ -28,6 +28,8 @@ extends RefCounted
 const FORMAT := "deepholm-replay"
 const FORMAT_VERSION := 1
 const DEFAULT_CHECKPOINT_INTERVAL := 10
+## 2^53: above it a JSON number (a double) no longer holds every integer.
+const MAX_EXACT_JSON_INT := 9007199254740992.0
 
 var content_version: String = ""
 var generator_version: int = 0
@@ -80,7 +82,9 @@ func finish(world: WorldState) -> void:
 func checkpoint_index() -> Dictionary[int, int]:
 	var by_tick: Dictionary[int, int] = {}
 	for checkpoint in checkpoints:
-		by_tick[_to_int(checkpoint["tick"], -1)] = _to_int(checkpoint["hash"], 0)
+		var tick: int = checkpoint["tick"]
+		var state_hash: int = checkpoint["hash"]
+		by_tick[tick] = state_hash
 	return by_tick
 
 ## Replays this log headless. after_tick(world, tick) runs after every tick(),
@@ -116,7 +120,7 @@ func replay(after_tick: Callable = Callable()) -> Dictionary:
 				return _diverged("checkpoint", tick, last_matching, expected[tick], actual)
 			last_matching = tick
 			compared += 1
-		while next_command < commands.size() and _to_int(commands[next_command]["tick"], -1) == tick:
+		while next_command < commands.size() and commands[next_command]["tick"] == tick:
 			var entry: Dictionary = commands[next_command]
 			var command: Dictionary = entry["command"]
 			var recorded_ok: bool = entry["ok"]
@@ -152,14 +156,18 @@ func validate() -> String:
 		return "checkpointInterval must be >= 1 and endTick >= startTick"
 	var last_tick := start_tick
 	for entry in commands:
-		var tick := _to_int(entry.get("tick"), -1)
+		if typeof(entry.get("tick")) != TYPE_INT:
+			return "every command tick must be an int"
+		var tick: int = entry["tick"]
 		if tick < last_tick or tick > end_tick:
 			return "command ticks must be non-decreasing within [startTick, endTick]"
 		if typeof(entry.get("command")) != TYPE_DICTIONARY or typeof(entry.get("ok")) != TYPE_BOOL:
 			return "every commands entry needs a command Dictionary and a bool ok"
 		last_tick = tick
 	for i in checkpoints.size():
-		var tick := _to_int(checkpoints[i].get("tick"), -1)
+		if typeof(checkpoints[i].get("tick")) != TYPE_INT:
+			return "checkpoint %d tick must be an int" % i
+		var tick: int = checkpoints[i]["tick"]
 		if tick != start_tick + i * checkpoint_interval or tick > end_tick or typeof(checkpoints[i].get("hash")) != TYPE_INT:
 			return "checkpoint %d must be at tick %d (<= endTick) with an int hash" % [i, start_tick + i * checkpoint_interval]
 	if checkpoints.is_empty() or start_tick + checkpoints.size() * checkpoint_interval <= end_tick:
@@ -187,21 +195,29 @@ func to_dict() -> Dictionary:
 static func from_dict(data: Dictionary) -> Dictionary:
 	if data.get("format") != FORMAT:
 		return _invalid("not a %s file" % FORMAT)
-	if _to_int(data.get("formatVersion"), 0) != FORMAT_VERSION:
+	if _whole(data.get("formatVersion")) != FORMAT_VERSION:
 		return _invalid("unsupported formatVersion %s (expected %d)" % [str(data.get("formatVersion")), FORMAT_VERSION])
 	for key: String in ["contentVersion", "generatorVersion", "seed", "incidentsEnabled", "startTick", "endTick",
 			"checkpointInterval", "initialState", "commands", "checkpoints", "finalHash"]:
 		if not data.has(key):
 			return _invalid("missing field '%s'" % key)
+	# Every number must be a whole JSON number: 40.5 is refused, never truncated to 40.
+	for key: String in ["generatorVersion", "startTick", "endTick", "checkpointInterval", "finalHash"]:
+		if _whole(data[key]) == null:
+			return _invalid("%s must be a whole number, found %s" % [key, str(data[key])])
+	if typeof(data["seed"]) != TYPE_STRING or not str(data["seed"]).is_valid_int():
+		return _invalid("seed must be a decimal integer string")
+	if typeof(data["incidentsEnabled"]) != TYPE_BOOL:
+		return _invalid("incidentsEnabled must be a bool")
 	var replay_log := ReplayLog.new()
 	replay_log.content_version = str(data["contentVersion"])
-	replay_log.generator_version = _to_int(data["generatorVersion"], -1)
+	replay_log.generator_version = _whole(data["generatorVersion"])
 	replay_log.world_seed = str(data["seed"]).to_int()
-	replay_log.incidents_enabled = data["incidentsEnabled"] == true
-	replay_log.start_tick = _to_int(data["startTick"], 0)
-	replay_log.end_tick = _to_int(data["endTick"], -1)
-	replay_log.checkpoint_interval = _to_int(data["checkpointInterval"], 0)
-	replay_log.final_hash = _to_int(data["finalHash"], 0)
+	replay_log.incidents_enabled = data["incidentsEnabled"]
+	replay_log.start_tick = _whole(data["startTick"])
+	replay_log.end_tick = _whole(data["endTick"])
+	replay_log.checkpoint_interval = _whole(data["checkpointInterval"])
+	replay_log.final_hash = _whole(data["finalHash"])
 	var state: Variant = Marshalls.base64_to_variant(str(data["initialState"]))
 	if typeof(state) != TYPE_DICTIONARY:
 		return _invalid("initialState does not decode to a Dictionary")
@@ -210,17 +226,23 @@ static func from_dict(data: Dictionary) -> Dictionary:
 		return _invalid("commands and checkpoints must be arrays")
 	var raw_commands: Array = data["commands"]
 	var raw_checkpoints: Array = data["checkpoints"]
-	for raw: Variant in raw_commands:
-		if typeof(raw) != TYPE_DICTIONARY:
+	for i in raw_commands.size():
+		if typeof(raw_commands[i]) != TYPE_DICTIONARY:
 			return _invalid("every commands entry must be a Dictionary")
-		var entry: Dictionary = raw
-		replay_log.commands.append({"tick": _to_int(entry.get("tick"), -1), "ok": entry.get("ok"),
-			"command": JSON.to_native(entry.get("command"))})
-	for raw: Variant in raw_checkpoints:
-		if typeof(raw) != TYPE_DICTIONARY:
+		var entry: Dictionary = raw_commands[i]
+		var tick: Variant = _whole(entry.get("tick"))
+		if tick == null:
+			return _invalid("commands[%d].tick must be a whole number, found %s" % [i, str(entry.get("tick"))])
+		replay_log.commands.append({"tick": tick, "ok": entry.get("ok"), "command": JSON.to_native(entry.get("command"))})
+	for i in raw_checkpoints.size():
+		if typeof(raw_checkpoints[i]) != TYPE_DICTIONARY:
 			return _invalid("every checkpoints entry must be a Dictionary")
-		var entry: Dictionary = raw
-		replay_log.checkpoints.append({"tick": _to_int(entry.get("tick"), -1), "hash": _to_int(entry.get("hash"), 0)})
+		var entry: Dictionary = raw_checkpoints[i]
+		var tick: Variant = _whole(entry.get("tick"))
+		var state_hash: Variant = _whole(entry.get("hash"))
+		if tick == null or state_hash == null:
+			return _invalid("checkpoints[%d] tick and hash must be whole numbers, found %s" % [i, str(entry)])
+		replay_log.checkpoints.append({"tick": tick, "hash": state_hash})
 	var invalid := replay_log.validate()
 	if invalid != "":
 		return _invalid(invalid)
@@ -229,15 +251,16 @@ static func from_dict(data: Dictionary) -> Dictionary:
 static func _invalid(message: String) -> Dictionary:
 	return {"ok": false, "code": "invalid_replay", "message": message}
 
-## An int or a JSON float as int; anything else is `fallback`.
-static func _to_int(value: Variant, fallback: int) -> int:
+## The int a JSON number stands for, or null when it is not a whole number
+## that a double holds exactly (a fraction, a string, a missing value...).
+static func _whole(value: Variant) -> Variant:
 	if typeof(value) == TYPE_INT:
-		var whole: int = value
-		return whole
+		return value
 	if typeof(value) == TYPE_FLOAT:
 		var number: float = value
-		return int(number)
-	return fallback
+		if number == floorf(number) and absf(number) <= MAX_EXACT_JSON_INT:
+			return int(number)
+	return null
 
 func _commands_to_json() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
