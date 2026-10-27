@@ -281,10 +281,10 @@ godot --headless --path game --script res://scripts/tests/test_map_experience_fp
 godot --path game --script res://scripts/tests/test_map_experience_fps_measurement.gd -- --capture
 ```
 
-## Layers (planned, ADR 044)
+## Layers (planned, ADR 045)
 
 Not implemented yet: this is the presentation half of
-[ADR 044](../decisions/044-map-layers.md), which the L4 step and F4 build. Until then
+[ADR 045](../decisions/045-map-layers.md), which the L4 step and F4 build. Until then
 the map has one layer and nothing below applies.
 
 - **One active layer.** The map shows exactly one layer at a time, starting on the surface

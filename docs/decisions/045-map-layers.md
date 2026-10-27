@@ -1,4 +1,4 @@
-# ADR 044: Map layers — one `Vector3i` coordinate, one flat tile index
+# ADR 045: Map layers — one `Vector3i` coordinate, one flat tile index
 
 > **In short:** Underground layers are stacked copies of the surface map, all the same size.
 > A tile is named by `Vector3i(x, y, layer)` everywhere in the rules, and stored by one
@@ -20,12 +20,12 @@
 The baseline's identity feature (`docs/design/baseline.md` §1) is a stack of underground
 layers reached through a tunnel building, with stairs between them. The core is 2D by
 construction (`docs/architecture/foundation-audit.md` §3.3). Measured on `main` at
-`279b42f` (commands under "Inventory" below):
+`08f5da3` (commands under "Inventory" below):
 
 - one `TileGrid.tiles: Array[String]` indexed `y * width + x`; `regions.gd`, `rooms.gd` and
   `world_generator.gd` each repeat that index math;
-- 516 `Vector2i` occurrences in `game/scripts/core` (the audit's 506 plus later growth),
-  and 183 more in `game/scripts/viewer` and `boot.gd`;
+- 526 `Vector2i` occurrences in `game/scripts/core` (the audit's 506 plus later growth),
+  and 216 more in `game/scripts/viewer` and `boot.gd`;
 - four String key formats for one tile, plus a composite: `"%d_%d"` (23 occurrences:
   `ObjectTable.object_key()`, `ItemTable` ground berries, `WorkProgress`, combat targeting
   and resolver, `StateCodec`), `"tile:%d,%d"` (`WorldState._tile_key()`,
@@ -33,14 +33,14 @@ construction (`docs/architecture/foundation-audit.md` §3.3). Measured on `main`
   `"cell:%d,%d"` (`WorldState._cell_key()`, `JobQueue._cell_key()`), `"%d,%d"`
   (`ConstructionGiver._site_key()`), and `"<jobId>:%d_%d"` (`WorkProgress`, rescue jobs);
 - saves write every coordinate as `{x, y}` through `StateCodec._encode_tile()`; actors,
-  items, zones and commands carry flat `"x"`/`"y"` fields (115 `["x"]` reads in core);
+  items, zones and commands carry flat `"x"`/`"y"` fields (120 `["x"]` reads in core);
 - 17 lines of planar distance math (`absi`, Chebyshev, `_distance_sq`) in 11 core files
   (givers, toils, combat, assignment, worldgen, `world_state.gd`), used to rank nearest
   candidates and to test adjacency.
 
 The audit offered three models: a layer index carried next to `Vector2i`, `Vector3i`, or one
 flat index across layers. This ADR picks one, before any F4 code, so that adding a layer is
-one change at a few owners and not 516 independent edits.
+one change at a few owners and not 526 independent edits.
 
 ## Decision
 
@@ -152,8 +152,8 @@ index(c) = c.z * width * height + c.y * width + c.x
 
   | Helper (on `TileGrid`, static) | Formula | Used today for | Sites |
   | --- | --- | --- | --- |
-  | `manhattan(a, b)` | `absi(dx) + absi(dy)` | nearest-candidate ranking and travel penalty | `approach_giver.gd:423`, `combat_targeting.gd:96`, `need_giver.gd:322-334`, `rescue_giver.gd:341-342`, `tool_drop_toil.gd:399`, `tool_matching.gd:40`, `global_assignment.gd:438` |
-  | `chebyshev(a, b)` | `maxi(absi(dx), absi(dy))` | the `<= 1` "next to" test (8 neighbours) and square rings | `approach_giver.gd:458`, `toil_executor.gd:509/589/885`, `tool_fetch_toil.gd:322`, `world_state.gd:1451`, `world_generator.gd:1125` |
+  | `manhattan(a, b)` | `absi(dx) + absi(dy)` | nearest-candidate ranking and travel penalty | `approach_giver.gd:423`, `combat_targeting.gd:96`, `need_giver.gd:322-334`, `rescue_giver.gd:341-342`, `tool_drop_toil.gd:399`, `tool_matching.gd:40`, `global_assignment.gd:439` |
+  | `chebyshev(a, b)` | `maxi(absi(dx), absi(dy))` | the `<= 1` "next to" test (8 neighbours) and square rings | `approach_giver.gd:458`, `toil_executor.gd:512/592/888`, `tool_fetch_toil.gd:322`, `world_state.gd:1344`, `world_generator.gd:1125` |
   | `distance_sq(a, b)` | `dx * dx + dy * dy` | flee-candidate comparison | `combat_giver.gd:372-393` |
 
   - All three take `Vector3i` and assert `a.z == b.z`, so a call across layers fails
@@ -162,7 +162,7 @@ index(c) = c.z * width * height + c.y * width + c.x
     L1's scenario dump stays byte-identical.
   - `world_generator.gd:1125` works on plain `x`/`y` ints inside one layer's generation and
     may keep its inline form.
-  - Line numbers are as of `279b42f`.
+  - Line numbers are as of `08f5da3`.
 - **Incidents and spawn** stay on the surface (`z = 0`) until an F-task says otherwise;
   map-edge entry is a surface concept.
 
@@ -198,7 +198,7 @@ index(c) = c.z * width * height + c.y * width + c.x
 ### 7. Viewer: one active layer
 
 The viewer shows one layer at a time; the rest of the contract is in
-[`map-experience.md`](../architecture/map-experience.md#layers-planned-adr-044). In short:
+[`map-experience.md`](../architecture/map-experience.md#layers-planned-adr-045). In short:
 an *active layer* (viewer state, never persisted, like the camera), switched by buttons and
 keys; tiles, objects, designations and actors drawn for that layer only; screen-to-tile
 conversion returns `Vector3i(x, y, active_layer)`; dirty cells of other layers are consumed
@@ -206,25 +206,25 @@ but not drawn until that layer becomes active.
 
 ## Inventory: what must change
 
-Counts from `main` at `279b42f`. Not every `Vector2i` is a map tile (directions, footprint
+Counts from `main` at `08f5da3`. Not every `Vector2i` is a map tile (directions, footprint
 offsets, atlas coordinates); the sweep keeps those.
 
 | Area | `Vector2i` | Other coordinate sites | Change |
 | --- | ---: | --- | --- |
 | `map/` (`tile_grid`, `passability`, `regions`, `rooms`) | 60 | 3 copies of `y * width + x` | flat index owner; region graph; `VerticalLinks` (new) |
-| `jobs/` (queue, toils, givers, work progress, tools) | 105 | `"tile:"`, `"cell:"`, `"%d,%d"`, `"<jobId>:%d_%d"` keys | job `target`/`cell`/`site` become `Vector3i`; integer keys |
+| `jobs/` (queue, toils, givers, work progress, tools) | 110 | `"tile:"`, `"cell:"`, `"%d,%d"`, `"<jobId>:%d_%d"` keys | job `target`/`cell`/`site` become `Vector3i`; integer keys |
 | `objects/` (object table, construction) | 60 | `"%d_%d"` object keys, footprints | integer keys; footprints stay planar offsets on the origin's layer |
-| `world_state.gd` | 56 | `_tile_key()`, `_cell_key()` | delegation to `TileGrid` helpers only |
+| `world_state.gd` | 44 | `_tile_key()`, `_cell_key()` | delegation to `TileGrid` helpers only |
 | `combat/` | 58 | `"%d_%d"` target keys, `_distance_sq` | integer keys; same-layer distance helper |
 | `worldgen/` | 46 | own index math, distance fields | layer-0 generation unchanged; per-layer generator salted by layer |
-| `actors/` (trench system, components) | 35 | actor `x`/`y` fields | actor position gains `z` |
-| `routing/` | 30 | row-major neighbour sort | `Vector3i` bounds, link edges, flat-index order |
+| `actors/` (trench and needs systems, components) | 48 | actor `x`/`y` fields | actor position gains `z` |
+| `routing/` | 31 | row-major `NEIGHBOR_OFFSETS` | `Vector3i` bounds, link edges, flat-index order |
 | `incidents/` | 20 | edge spawn | surface only |
-| `scheduling/` | 20 | planar distance | same-layer helper or route cost |
-| `persistence/` | 15 | `_encode_tile()`, `_valid_tile()`, 115 `["x"]` reads in core | `{x, y, z}`, `layerCount`, migration + fixture |
-| `items/`, `commands/` | 11 | ground-berry `"%d_%d"` keys, command `x`/`y` | integer keys; command `z` default at the boundary |
-| **core total** | **516** | | |
-| viewer + `boot.gd` | 183 | `tiles_in_rectangle()`, `tile_at_local()`, dirty-cell cursor | active layer (map-experience.md) |
+| `scheduling/` | 18 | planar distance | same-layer helper or route cost |
+| `persistence/` | 15 | `_encode_tile()`, `_valid_tile()`, 120 `["x"]` reads in core | `{x, y, z}`, `layerCount`, migration + fixture |
+| `items/`, `commands/` | 16 | ground-berry `"%d_%d"` keys, command `x`/`y` | integer keys; command `z` default at the boundary |
+| **core total** | **526** | | |
+| viewer + `boot.gd` | 216 | `tiles_in_rectangle()`, `tile_at_local()`, dirty-cell cursor | active layer (map-experience.md) |
 
 Order of work (each step its own task, suite green and hash-checked):
 
@@ -272,7 +272,7 @@ Order of work (each step its own task, suite green and hash-checked):
 - One coordinate type and one index make "add a layer" a change to `TileGrid` and content,
   not to every system. Layer 0 keeps its indices, neighbour order and tile array, so the L1
   and L2 steps can prove "no behaviour change" with the existing scenario dumps.
-- The sweep (L2) is large (516 core sites, 183 viewer sites) but mechanical; it is a save
+- The sweep (L2) is large (526 core sites, 216 viewer sites) but mechanical; it is a save
   format change and must ship its bump, migration and fixture in the same change.
 - Memory grows linearly: each layer adds `width × height` tile kinds (65,536 at 256×256) and
   the matching packed arrays from A2.

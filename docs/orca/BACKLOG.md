@@ -706,7 +706,7 @@ Questions: first recipes (planks? stone blocks?), queue vs. target counts, who c
 The largest gap and the game's identity. Needs a map model that supports several layers
 (prepared by R3's `TileGrid`).
 
-- **Coordinate model:** [ADR 044](../decisions/044-map-layers.md) (A12; *accepted* by the owner
+- **Coordinate model:** [ADR 045](../decisions/045-map-layers.md) (A12; *accepted* by the owner
   on 2026-10-27). Tiles are `Vector3i(x, y, layer)`, stored by one flat index owned by
   `TileGrid`; layers move only through vertical links (stairs, ramps, tunnel). The ADR's
   steps A2 → L1 (one index owner) → L2 (`Vector3i` sweep, save bump and single-layer
