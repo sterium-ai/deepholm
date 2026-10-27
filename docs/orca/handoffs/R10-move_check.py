@@ -3,7 +3,9 @@
 For each moved function it takes the body from the base ref's world_state.gd, applies
 the mechanical renames listed for it (new names, injected Callables, handler
 receivers), and compares it, statement by statement with comment lines, blank lines
-and the `func` line dropped, with the body in its new file. Signatures are printed for
+and the `func` line dropped, with the body in its new file. A moved function whose old
+name is still defined in WorldState (other than the preview/apply delegations) counts
+as a failure too. Signatures are printed for
 the reader (the new ones take `command` where the old place_object/cancel_site checks
 took `payload`, and the CommandChecks ones are static with a `world` parameter).
 
@@ -139,16 +141,16 @@ def main():
             for added in ADDED.get(new, []):
                 if added in got_code:
                     got_code.remove(added)
-        ok = got_code == expected
-        bad += not ok
         # preview/apply stay in WorldState as one-line delegations; everything else must be gone.
         still_there = old not in ("preview", "apply") and body(cur_ws, old) is not None
-        print("%-40s -> %-60s %s%s" % (old, path.split("core/")[1] + ":" + new, "OK" if ok else "DIFFERS",
+        ok = got_code == expected and not still_there
+        bad += not ok
+        print("%-40s -> %-60s %s%s" % (old, path.split("core/")[1] + ":" + new, "OK" if ok else ("DIFFERS" if got_code != expected else "NOT REMOVED"),
                                         "  (old name still defined in WorldState)" if still_there else ""))
-        if not ok and "--verbose" in sys.argv:
+        if got_code != expected and "--verbose" in sys.argv:
             print("  expected:\n    " + "\n    ".join(expected) + "\n  got:\n    " + "\n    ".join(got_code or []))
         print("    old: %s\n    new: %s" % (old_body[0], got[0] if got else "-"))
-    print("move_check: %d function(s), %d differ" % (len(MOVED), bad + 0))
+    print("move_check: %d function(s), %d differ" % (len(MOVED), bad))
     sys.exit(1 if bad else 0)
 
 
