@@ -1,4 +1,4 @@
-# ADR 045: Story and quest layer (trigger → condition → effect)
+# ADR 046: Story and quest layer (trigger → condition → effect)
 
 > **In short:** Story beats, warnings and quests become content rules: "when this happens,
 > if these things are true, issue these commands". One story giver reads them once per tick
@@ -6,8 +6,8 @@
 > quest stages are saved like any other module, and an incident is just one thing a rule can
 > fire.
 
-- **Status:** proposed (owner sign-off pending)
-- **Date:** 2026-10-26
+- **Status:** accepted (owner sign-off 2026-10-27, after review round 1)
+- **Date:** 2026-10-26 (proposed); 2026-10-27 (accepted)
 - **Scope:** simulation, content, persistence. Design only; no code lands with this ADR.
 - **Depends on:** [ADR 011](011-one-work-engine.md) (one work engine, job-giver pattern),
   [ADR 010](010-content-registry.md) (content registry),
@@ -545,7 +545,8 @@ change either way: they read `window_open`/`days_until_window` by window id.
 
 ### Code tasks this ADR creates
 
-To be added to `docs/orca/BACKLOG.md` once the owner signs this ADR off. All wait for R12
+To be added to `docs/orca/BACKLOG.md` now that the owner has signed this ADR off (a backlog
+change of its own, outside A17). All wait for R12
 (the tick pipeline and command router they plug into), as the audit's A12–A17 note says.
 
 1. **S1: story content kinds.** `quests.json`, `story.json`, their schemas, registration in
@@ -588,7 +589,10 @@ To be added to `docs/orca/BACKLOG.md` once the owner signs this ADR off. All wai
 
 ## Acceptance criteria
 
-- [ ] The owner signs off this ADR (status → accepted).
+- [x] The owner signs off this ADR (status → accepted): approved by the owner on 2026-10-27,
+      in answer to "¿Apruebas ahora el ADR 045 tal como está?" — "Apruebo el ADR". This ADR
+      was numbered 045 when the owner was asked. It was renumbered to 046 the same day, before
+      merge, because A12's map-layers ADR takes 045; the content is unchanged.
 - [x] The affected canonical document is updated: `docs/architecture/extension-points.md`
       gains a "Story rule" entry pointing here.
 - [x] Contracts, examples and tests: N/A for this design-only change; the code tasks above

@@ -221,7 +221,7 @@ boundaries and are not a separate extension point.
 
 ## Story rule
 
-*Proposed by [ADR 045](../decisions/045-story-layer.md); not implemented yet. Until its code
+*Accepted in [ADR 046](../decisions/046-story-layer.md) (2026-10-27); not implemented yet. Until its code
 tasks land, a story beat has no extension point and must not be added as code in
 `WorldState`.*
 
@@ -245,7 +245,7 @@ tasks land, a story beat has no extension point and must not be added as code in
 - Test: a headless scenario per rule chain driven by real ticks (not a direct call into the
   giver), a same-seed `state_hash()` check, and `test_content_registry.gd` for the schema and
   cross-checks.
-- Example: ADR 045's three worked examples (a migrant chain, a raid warning, a first-winter
+- Example: ADR 046's three worked examples (a migrant chain, a raid warning, a first-winter
   quest) use only this vocabulary.
 
 Keep core classes scene-independent and deterministic. A new job giver or
