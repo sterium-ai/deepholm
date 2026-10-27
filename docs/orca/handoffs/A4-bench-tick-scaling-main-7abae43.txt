@@ -1,0 +1,56 @@
+bench_tick_scaling: commit=7abae43 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_tick_scaling: map=256x256 seed=42 ticks<=30 per run
+bench_tick_scaling: workload=idle actors=10 phases[first tick] (ms/tick): needs_decay=0.34 need_giver=0.07 combat=0.32 scheduler=266.04 rescue_giver=0.09 calendar_alerts=0.30
+bench_tick_scaling: workload=idle actors=10 setup=499ms tick[profiled, ticks 2..n] mean=1.09ms p50=1.07ms p95=1.20ms max=1.49ms n=29
+bench_tick_scaling: workload=idle actors=10 tick[real, ticks 2..n] mean=1.15ms p50=1.08ms p95=1.50ms max=1.62ms n=29 first=274.12ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.25 need_giver=0.06 combat=0.30 scheduler=0.10 calendar_alerts=0.28
+bench_tick_scaling: workload=idle actors=100 phases[first tick] (ms/tick): needs_decay=2.80 need_giver=0.59 combat=22.87 scheduler=311.35 rescue_giver=1.54 advance_colonists=0.56 approach_giver=0.19 calendar_alerts=1.24
+bench_tick_scaling: workload=idle actors=100 setup=492ms tick[profiled, ticks 2..n] mean=24.68ms p50=23.74ms p95=31.59ms max=31.81ms n=29
+bench_tick_scaling: workload=idle actors=100 tick[real, ticks 2..n] mean=24.89ms p50=23.58ms p95=31.68ms max=31.73ms n=29 first=326.25ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=100 phases[ticks 2..n] (ms/tick): needs_decay=2.06 need_giver=0.66 combat=18.05 scheduler=1.15 rescue_giver=1.22 advance_colonists=0.43 approach_giver=0.14 calendar_alerts=0.93
+bench_tick_scaling: workload=idle actors=500 phases[first tick] (ms/tick): needs_decay=14.25 need_giver=4.44 combat=479.75 scheduler=361.90 rescue_giver=27.00 advance_colonists=2.83 approach_giver=0.93 calendar_alerts=4.83
+bench_tick_scaling: workload=idle actors=500 setup=689ms tick[profiled, ticks 2..n] mean=486.46ms p50=484.48ms p95=534.73ms max=559.18ms n=29
+bench_tick_scaling: workload=idle actors=500 tick[real, ticks 2..n] mean=482.69ms p50=483.25ms p95=530.04ms max=549.65ms n=29 first=734.56ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=500 phases[ticks 2..n] (ms/tick): needs_decay=10.66 need_giver=3.52 combat=434.37 scheduler=7.34 rescue_giver=23.18 advance_colonists=2.39 approach_giver=0.77 calendar_alerts=4.18
+bench_tick_scaling: workload=idle actors=1000 phases[first tick] (ms/tick): needs_decay=26.64 need_giver=8.80 combat=1727.40 scheduler=347.90 rescue_giver=79.70 advance_colonists=5.06 approach_giver=1.45 calendar_alerts=7.44
+bench_tick_scaling: workload=idle actors=1000 setup=768ms tick[profiled, ticks 2..n] mean=1854.86ms p50=1858.91ms p95=1942.32ms max=1957.12ms n=29
+bench_tick_scaling: workload=idle actors=1000 tick[real, ticks 2..n] mean=1775.46ms p50=1832.55ms p95=1992.25ms max=2485.30ms n=29 first=2115.29ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=idle actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=20.43 need_giver=7.15 combat=1707.60 scheduler=16.98 rescue_giver=86.81 advance_colonists=6.12 approach_giver=1.54 calendar_alerts=8.16
+bench_tick_scaling: workload=busy actors=10 phases[first tick] (ms/tick): needs_decay=0.39 need_giver=0.08 combat=0.32 scheduler=306.58 rescue_giver=0.08 advance_colonists=0.48 collect_queue_events=0.19 calendar_alerts=0.51
+bench_tick_scaling: workload=busy actors=10 setup=633ms tick[profiled, ticks 2..n] mean=2.14ms p50=2.30ms p95=2.52ms max=2.53ms n=29
+bench_tick_scaling: workload=busy actors=10 tick[real, ticks 2..n] mean=1.86ms p50=1.67ms p95=2.45ms max=2.45ms n=29 first=320.30ms hash_match=true jobs=10 active=10 events=70
+bench_tick_scaling: workload=busy actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.34 need_giver=0.06 combat=0.39 scheduler=0.15 rescue_giver=0.06 advance_colonists=0.66 calendar_alerts=0.39
+bench_tick_scaling: workload=busy actors=100 phases[first tick] (ms/tick): needs_decay=3.01 need_giver=0.90 combat=23.03 scheduler=356.86 rescue_giver=1.56 escapes_activate=0.14 advance_colonists=1.85 approach_giver=0.23 collect_queue_events=0.79 calendar_alerts=1.43
+bench_tick_scaling: workload=busy actors=100 setup=710ms tick[profiled, ticks 2..n] mean=45.52ms p50=43.72ms p95=62.08ms max=78.77ms n=29
+bench_tick_scaling: workload=busy actors=100 tick[real, ticks 2..n] mean=51.77ms p50=51.01ms p95=68.94ms max=84.58ms n=29 first=411.58ms hash_match=true jobs=100 active=100 events=430
+bench_tick_scaling: workload=busy actors=100 phases[ticks 2..n] (ms/tick): needs_decay=2.12 need_giver=0.45 haul_giver=0.09 combat=17.11 scheduler=4.55 rescue_giver=1.22 escapes_activate=0.36 advance_colonists=18.37 approach_giver=0.15 calendar_alerts=1.03
+bench_tick_scaling: workload=busy actors=500 phases[first tick] (ms/tick): needs_decay=14.35 need_giver=4.00 combat=421.22 scheduler=1318.56 rescue_giver=27.91 escapes_activate=0.16 advance_colonists=4.19 approach_giver=1.17 collect_queue_events=0.90 calendar_alerts=5.70
+bench_tick_scaling: workload=busy actors=500 setup=685ms tick[profiled, ticks 2..n] mean=858.83ms p50=801.30ms p95=1262.78ms max=1336.81ms n=29
+bench_tick_scaling: workload=busy actors=500 tick[real, ticks 2..n] mean=774.48ms p50=716.92ms p95=1150.85ms max=1179.76ms n=29 first=1640.65ms hash_match=true jobs=500 active=465 events=1960
+bench_tick_scaling: workload=busy actors=500 phases[ticks 2..n] (ms/tick): needs_decay=12.00 need_giver=2.97 haul_giver=0.51 combat=417.88 scheduler=223.94 rescue_giver=24.67 escapes_activate=2.18 advance_colonists=165.52 approach_giver=1.25 collect_queue_events=0.43 calendar_alerts=7.40
+bench_tick_scaling: workload=busy actors=1000 phases[first tick] (ms/tick): needs_decay=26.28 need_giver=8.72 combat=1670.14 scheduler=3353.48 rescue_giver=79.55 escapes_activate=0.25 advance_colonists=8.80 approach_giver=2.36 collect_queue_events=0.96 calendar_alerts=16.25
+bench_tick_scaling: workload=busy actors=1000 setup=679ms tick[profiled, ticks 2..n] mean=3930.13ms p50=3675.30ms p95=6507.19ms max=6953.00ms n=22
+bench_tick_scaling: workload=busy actors=1000 tick[real, ticks 2..n] mean=4162.26ms p50=3158.49ms p95=8339.94ms max=8533.45ms n=22 first=10675.66ms hash_match=true jobs=1000 active=574 events=3171
+bench_tick_scaling: workload=busy actors=1000 phases[ticks 2..n] (ms/tick): needs_decay=28.36 need_giver=7.67 haul_giver=1.03 combat=1810.07 scheduler=1699.35 rescue_giver=98.69 escapes_activate=2.68 advance_colonists=259.91 approach_giver=2.89 collect_queue_events=0.84 calendar_alerts=18.56
+bench_tick_scaling: workload=needs actors=10 phases[first tick] (ms/tick): needs_decay=0.34 need_giver=1725.67 combat=0.34 scheduler=0.10 calendar_alerts=0.33
+bench_tick_scaling: workload=needs actors=10 setup=724ms tick[profiled, ticks 2..n] mean=3.63ms p50=3.60ms p95=3.89ms max=3.98ms n=29
+bench_tick_scaling: workload=needs actors=10 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=10 tick[real, ticks 2..n] mean=3.63ms p50=3.61ms p95=3.86ms max=4.00ms n=29 first=1427.72ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=10 phases[ticks 2..n] (ms/tick): needs_decay=0.26 need_giver=2.65 combat=0.30 scheduler=0.06 calendar_alerts=0.29
+bench_tick_scaling: workload=needs actors=25 phases[first tick] (ms/tick): needs_decay=0.65 need_giver=7994.36 combat=1.39 scheduler=0.17 advance_colonists=0.08 calendar_alerts=0.46
+bench_tick_scaling: workload=needs actors=25 setup=517ms tick[profiled, ticks 2..n] mean=11.78ms p50=13.12ms p95=13.86ms max=14.56ms n=29
+bench_tick_scaling: workload=needs actors=25 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=25 tick[real, ticks 2..n] mean=10.84ms p50=9.77ms p95=13.83ms max=14.00ms n=29 first=8143.25ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=25 phases[ticks 2..n] (ms/tick): needs_decay=0.65 need_giver=8.65 combat=1.64 scheduler=0.14 advance_colonists=0.10 calendar_alerts=0.51
+bench_tick_scaling: workload=needs actors=50 phases[first tick] (ms/tick): needs_decay=1.10 need_giver=32593.94 combat=6.30 scheduler=0.38 rescue_giver=0.06 advance_colonists=0.24 approach_giver=0.09 calendar_alerts=0.94
+bench_tick_scaling: workload=needs actors=50 setup=551ms tick[profiled, ticks 2..n] mean=25.65ms p50=28.41ms p95=30.04ms max=30.32ms n=29
+bench_tick_scaling: workload=needs actors=50 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=50 tick[real, ticks 2..n] mean=23.26ms p50=20.82ms p95=29.62ms max=30.23ms n=29 first=33951.15ms hash_match=true jobs=0 active=0 events=30
+bench_tick_scaling: workload=needs actors=50 phases[ticks 2..n] (ms/tick): needs_decay=1.23 need_giver=17.52 combat=5.54 scheduler=0.26 advance_colonists=0.20 approach_giver=0.08 calendar_alerts=0.73
+bench_tick_scaling: workload=needs actors=100 phases[first tick] (ms/tick): needs_decay=2.12 need_giver=158603.82 combat=15.38 scheduler=0.53 rescue_giver=0.09 advance_colonists=0.37 approach_giver=0.12 calendar_alerts=1.10
+bench_tick_scaling: workload=needs actors=100 setup=502ms tick[profiled, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0
+bench_tick_scaling: workload=needs actors=100 water_tiles=2218 reachable_water_candidates=234
+bench_tick_scaling: workload=needs actors=100 tick[real, ticks 2..n] mean=0.00ms p50=0.00ms p95=0.00ms max=0.00ms n=0 first=137380.47ms hash_match=true jobs=0 active=0 events=1
+bench_tick_scaling: workload=needs actors=100 phases[ticks 2..n] (ms/tick):
+bench_tick_scaling: done
+bench_tick_scaling: wall=795s exit=0

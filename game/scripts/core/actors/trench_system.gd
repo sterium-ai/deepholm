@@ -37,6 +37,8 @@ var rescue_status: Dictionary = {}
 ## The advancing colonist's tile at the start of its ToilExecutor.advance() call:
 ## scratch for trap_on_work_complete(). Never saved.
 var trap_tile_before: Vector2i = Vector2i.ZERO
+## (actor) -> void after a rescue or escape writes x/y: WorldState's ActorIndex.moved (A4).
+var on_actor_moved: Callable = func(_actor: Dictionary) -> void: pass
 
 var _content: ContentRegistryType
 var _relations: RelationsType
@@ -197,6 +199,7 @@ func complete_rescue(job_id: String) -> void:
 	if not rescuer.is_empty() and not victim.is_empty():
 		victim["x"] = rescuer["x"]
 		victim["y"] = rescuer["y"]
+		on_actor_moved.call(victim)
 		victim["trapped"] = null
 
 # --- trapping -------------------------------------------------------------------
@@ -309,6 +312,7 @@ func complete_escape(job_id: String, target: Vector2i) -> void:
 		if exit_tile.x >= 0:
 			actor["x"] = exit_tile.x
 			actor["y"] = exit_tile.y
+			on_actor_moved.call(actor)
 			actor["trapped"] = null
 		else:
 			# Recoverable blocked-exit outcome: stays trapped, retries.

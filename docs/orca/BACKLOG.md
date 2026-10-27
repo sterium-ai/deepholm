@@ -453,7 +453,7 @@ one.
 - **Non-goals:** A* or any change to which path is chosen (that is A8).
 - **Scope amendment approved by the owner (2026-10-27):** `game/scripts/core/world_state.gd` only where `state_hash()` covers live re-route continuations (the hash-coverage fix the review required); no other WorldState change.
 
-#### A4 — Need-source candidates per region and a spatial occupancy index · `todo` · combat part after R9
+#### A4 — Need-source candidates per region and a spatial occupancy index · `review (antonelmejor50-hub/a4-need-source-candidates-per)` · combat part after R9
 
 - **Goal:** need-source candidates (`WorldState._need_source_candidates()` /
   `_reachable_candidates_only()`, used by `NeedGiver._start_search()`) are computed once per
@@ -471,6 +471,7 @@ one.
   `combat` phase ≤ 5% of its baseline; `needs` workload, 100 colonists: tick 1 ≤ 1 s
   (baseline 147,658 ms), and the 10-colonist tick 1 ≤ 100 ms (baseline 2,010 ms).
 - **Non-goals:** exclusive tile occupancy (a rule change); new combat behaviour.
+- **Scope amendment approved by the owner (2026-10-27, in the A4 terminal):** the entry predates R8, so `actors/needs_system.gd` (where `need_source_candidates()` now lives), plus one hook line each in `jobs/toil_executor.gd` and `actors/trench_system.gd` where an actor's x/y is written. `persistence/state_codec.gd` was approved too, but A4 did not need it. Owner's coordination note: the index is a new module composed in WorldState, with minimal `world_state.gd` changes and no CommandRouter change.
 
 #### A5 — Job storage: id index, retired jobs, read-only views inside the core · `todo` · after R4/R5 (best after R14, still with a migration)
 
@@ -680,6 +681,22 @@ one.
 - **Acceptance:** the APK runs the game on the reference device; the bench lines from the
   device are in the appendix; the ADR records the decision.
 - **Non-goals:** store release; iOS.
+
+#### A19 — One-time `RegionMap` build cost · `todo` · *parallel-safe (map/regions.gd only)*
+
+- **Goal:** the first `TileGrid.get_regions()` on a 256×256 map, the full-map flood fill in
+  `RegionMap._init()`/`_flood_assign()`, stops dominating tick 1. A4 measured it at about
+  258 ms out of a 10-colonist needs tick 1 of about 290 ms; the A4 part of that tick is about 31 ms
+  (`docs/orca/handoffs/A4.md`, `A4-first_tick_split.gd`). Region ids, their numbering and
+  `on_passability_changed()` behaviour stay exactly the same.
+- **Owned paths:** `map/regions.gd`, `map/tile_grid.gd` (only if the build moves to an
+  explicit point), affected tests.
+- **Acceptance:** `bench_tick_scaling` needs workload, 10 colonists: tick 1 ≤ 100 ms;
+  `A4-first_tick_split.gd` shows the `regions=` share; region ids identical to `main` for the
+  generated seed-42 256×256 map and every `test_regions*`/`test_rooms*` case; A4 scenario
+  dumps (R8/R9) identical; full suite green.
+- **Non-goals:** changing what counts as passable or as one region; rooms (`rooms.gd` reuses
+  `RegionMap`, but only to keep its ids identical).
 
 ---
 

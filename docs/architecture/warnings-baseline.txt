@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 3230
-untyped_declaration 614
+total 3209
+untyped_declaration 608
 unsafe_property_access 0
-unsafe_method_access 274
-unsafe_call_argument 2309
+unsafe_method_access 272
+unsafe_call_argument 2296
 other 33
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -17,13 +17,13 @@ file game/scripts/core/actors/components/mover.gd 1
 file game/scripts/core/actors/components/needs.gd 16
 file game/scripts/core/actors/components/wild.gd 1
 file game/scripts/core/actors/components/worker.gd 12
-file game/scripts/core/actors/needs_system.gd 50
+file game/scripts/core/actors/needs_system.gd 42
 file game/scripts/core/actors/trench_system.gd 52
 file game/scripts/core/calendar/calendar_service.gd 9
 file game/scripts/core/combat/approach_giver.gd 87
 file game/scripts/core/combat/combat_giver.gd 57
 file game/scripts/core/combat/combat_resolver.gd 24
-file game/scripts/core/combat/combat_targeting.gd 34
+file game/scripts/core/combat/combat_targeting.gd 27
 file game/scripts/core/commands/area_orders.gd 82
 file game/scripts/core/commands/command_checks.gd 28
 file game/scripts/core/commands/handlers/actor_handler.gd 13
@@ -45,6 +45,7 @@ file game/scripts/core/jobs/job_index.gd 22
 file game/scripts/core/jobs/job_queue.gd 68
 file game/scripts/core/jobs/reservation_invariants.gd 16
 file game/scripts/core/jobs/reservation_table.gd 5
+file game/scripts/core/jobs/toil_bindings.gd 48
 file game/scripts/core/jobs/toil_executor.gd 83
 file game/scripts/core/jobs/tool_drop_toil.gd 65
 file game/scripts/core/jobs/tool_fetch_toil.gd 48
@@ -70,5 +71,5 @@ file game/scripts/core/scheduling/measured_route.gd 2
 file game/scripts/core/scheduling/waiting_index.gd 13
 file game/scripts/core/world/command_router.gd 54
 file game/scripts/core/world/event_log.gd 16
-file game/scripts/core/world_state.gd 155
+file game/scripts/core/world_state.gd 101
 file game/scripts/core/worldgen/world_generator.gd 97

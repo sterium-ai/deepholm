@@ -51,6 +51,10 @@ var _bounds_max: Vector2i
 var _reservation_table
 var _claimed_targets: Callable
 var _source_candidates: Callable
+## kind -> source_candidates(kind), filled lazily during one advance() and cleared
+## at the start of the next (A4): nothing advance() does changes a need source, a
+## region or a colonist's tile, so one list serves every colonist of the pass.
+var _candidates_this_pass: Dictionary = {}
 var _tile_key: Callable
 var _routable_to: Callable
 var _submit_job: Callable
@@ -166,6 +170,7 @@ func get_pending_job(colonist_id: String) -> String:
 ## Runs once per tick, before the fair scheduler's own tick() (colonist-ai.md
 ## 3.1's layers 2/4, evaluated "before layer 5's work is even considered").
 func advance(colonists: Array[Dictionary], tick: int) -> void:
+	_candidates_this_pass.clear()
 	for colonist in colonists:
 		if not _may_be_ordered(colonist):
 			continue
@@ -313,7 +318,9 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
 	var claimed: Dictionary = _claimed_targets.call()
 	var candidates: Array[Vector2i] = []
-	for tile in (_source_candidates.call(kind) as Array):
+	if not _candidates_this_pass.has(kind):
+		_candidates_this_pass[kind] = _source_candidates.call(kind)
+	for tile in (_candidates_this_pass[kind] as Array):
 		if claimed.has(tile):
 			continue
 		if not _reservation_table.is_reserved(String(_tile_key.call(tile.x, tile.y))):

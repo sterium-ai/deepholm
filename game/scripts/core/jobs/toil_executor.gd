@@ -69,6 +69,8 @@ const REASON_SITE_GONE := "site_gone"
 ## fact. Never read by production code -- purely additive bookkeeping, so it
 ## changes no behaviour and no function signature.
 var trace: Array[Dictionary] = []
+## (actor) -> void after a route step writes x/y: WorldState's ActorIndex.moved (A4).
+var on_actor_moved: Callable = func(_actor: Dictionary) -> void: pass
 
 func clear_trace() -> void:
 	trace.clear()
@@ -324,6 +326,7 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 	var arrived: Vector2i = path[step]
 	colonist["x"] = arrived.x
 	colonist["y"] = arrived.y
+	on_actor_moved.call(colonist)
 	route["step"] = step
 	if step == path.size() - 1:
 		var job_id: String = route["job_id"]
