@@ -130,6 +130,10 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			if not _is_schema_v25_state(state):
 				return no_migration
 			return {"ok": true, "state": _migrate_v25_to_v26(state)}
+		26:
+			if not _is_schema_v26_state(state):
+				return no_migration
+			return {"ok": true, "state": _migrate_v26_to_v27(state)}
 		_:
 			return no_migration
 
@@ -1277,6 +1281,31 @@ static func _migrate_v25_to_v26(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 26
 	migrated["areaOrders"] = {"nextId": 1, "list": [], "created": []}
+	return migrated
+
+## The v25 shape one version up: the optional "areaOrders" is accepted too.
+static func _is_schema_v26_state(state: Dictionary) -> bool:
+	var probe := state.duplicate()
+	probe.erase("areaOrders")
+	probe["schemaVersion"] = 25
+	if state.has("areaOrders") and typeof(state["areaOrders"]) != TYPE_DICTIONARY:
+		return false
+	return typeof(state.get("schemaVersion")) == TYPE_INT and int(state["schemaVersion"]) == 26 and _is_schema_v25_state(probe)
+
+## Version 26 predates persisted ground-berry factions (ADR 045): every
+## groundBerries entry gains factionId "colony", the only faction
+## ItemTable.spawn_berries_item() has ever stamped. workProgressOwners needs
+## no rewrite: a job-scoped owner made every v26 write fail, so a v26 file
+## only holds plain-tile owners, which v27 encodes the same way.
+static func _migrate_v26_to_v27(state: Dictionary) -> Dictionary:
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 27
+	var berries: Array = []
+	for entry in migrated["groundBerries"]:
+		var updated: Dictionary = (entry as Dictionary).duplicate(true)
+		updated["factionId"] = "colony"
+		berries.append(updated)
+	migrated["groundBerries"] = berries
 	return migrated
 
 static func _backfill_restrict_to(entries: Array) -> Array:

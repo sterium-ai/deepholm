@@ -99,7 +99,8 @@
       "required": ["target", "jobId"],
       "properties": {
         "target": { "$ref": "#/$defs/tile" },
-        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+        "jobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+        "ownerJobId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
       }
     },
     "suspendedWorkProgressEntry": {
@@ -230,10 +231,11 @@
     "groundBerry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["target", "berries"],
+      "required": ["target", "berries", "factionId"],
       "properties": {
         "target": { "$ref": "#/$defs/tile" },
-        "berries": { "type": "integer", "minimum": 0 }
+        "berries": { "type": "integer", "minimum": 0 },
+        "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
       }
     },
     "zone": {
@@ -337,7 +339,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 26 },
+    "schemaVersion": { "type": "integer", "const": 27 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },

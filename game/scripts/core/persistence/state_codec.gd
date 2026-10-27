@@ -14,7 +14,7 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
-const SCHEMA_VERSION := 26
+const SCHEMA_VERSION := 27
 
 ## content/manifest.json's version, read fresh through a new ContentRegistry
 ## each call (mirroring how WorldState._init() itself builds one) rather than
@@ -515,76 +515,74 @@ static func _decode_objects(objects: Array) -> Array:
 ## _objects); the sorted keys give a deterministic encoding order. Field name
 ## "berries" mirrors the old per-tile groundItems wire shape's "wood" field
 ## ({target, wood}): ground berries stay a simple per-tile counter, not a
-## first-class pickable item like wood.
-static func _encode_ground_berries(ground_berries: Dictionary) -> Array:
+## first-class pickable item like wood. "factionId" (schemaVersion 27, ADR 045)
+## comes from the parallel ground_berries_factions map, defaulting to "colony"
+## like _encode_items() does for an untracked item.
+static func _encode_ground_berries(ground_berries: Dictionary, factions: Dictionary) -> Array:
 	var keys := ground_berries.keys()
 	keys.sort()
 	var encoded: Array = []
 	for key in keys:
 		var coords := String(key).split("_")
 		var tile := Vector2i(int(coords[0]), int(coords[1]))
-		encoded.append({"target": _encode_tile(tile), "berries": int(ground_berries[key])})
+		encoded.append({"target": _encode_tile(tile), "berries": int(ground_berries[key]),
+			"factionId": String(factions.get(key, "colony"))})
 	return encoded
 
+## {berries: key -> count, factions: key -> faction id}, keyed like ItemTable.
 static func _decode_ground_berries(list: Array) -> Dictionary:
-	var decoded: Dictionary = {}
+	var berries: Dictionary = {}
+	var factions: Dictionary = {}
 	for entry in list:
 		var tile := _decode_tile(entry["target"])
-		decoded["%d_%d" % [tile.x, tile.y]] = int(entry["berries"])
-	return decoded
+		var key := "%d_%d" % [tile.x, tile.y]
+		berries[key] = int(entry["berries"])
+		factions[key] = String(entry["factionId"])
+	return {"berries": berries, "factions": factions}
 
 # --- work progress (colonist-ai.md 3.6) -------------------------------------
 
-## WorkProgress.progress is keyed by "%d_%d", or by "<jobId>:%d_%d" when the
-## tile's reservation is currently owned by a job (WorkProgress.key(), scoped per-job so two jobs sharing one target tile
-## never read/clear each other's progress). Job ids never contain ":" (the
-## `^[a-z0-9_-]+$` id pattern), so splitting on the last ":" losslessly
-## recovers the owner; the sorted keys give a deterministic encoding order.
+## WorkProgress.progress is keyed by "%d_%d", or by "<jobId>:%d_%d" for a
+## job-scoped (rescue) key; WorkProgress.key_parts()/key_of() split and build
+## it, so the wire entry names its tile and scope ("ownerJobId", present only
+## for a scoped key) explicitly. Sorted keys give a deterministic encoding order.
 static func _encode_work_progress(work_progress: Dictionary) -> Array:
 	var keys := work_progress.keys()
 	keys.sort()
 	var encoded: Array = []
 	for key in keys:
-		var key_str := String(key)
-		var owner_job_id := ""
-		var coord_part := key_str
-		var colon_index := key_str.rfind(":")
-		if colon_index >= 0:
-			owner_job_id = key_str.substr(0, colon_index)
-			coord_part = key_str.substr(colon_index + 1)
-		var coords := coord_part.split("_")
-		var tile := Vector2i(int(coords[0]), int(coords[1]))
-		var entry := {"target": _encode_tile(tile), "ticksRemaining": int(work_progress[key])}
-		if not owner_job_id.is_empty():
-			entry["ownerJobId"] = owner_job_id
+		var parts := WorkProgress.key_parts(String(key))
+		var entry := {"target": _encode_tile(parts["tile"]), "ticksRemaining": int(work_progress[key])}
+		if not String(parts["scope"]).is_empty():
+			entry["ownerJobId"] = String(parts["scope"])
 		encoded.append(entry)
 	return encoded
 
 static func _decode_work_progress(list: Array) -> Dictionary:
 	var decoded: Dictionary = {}
 	for entry in list:
-		var tile := _decode_tile(entry["target"])
-		var coord_key := "%d_%d" % [tile.x, tile.y]
-		var key := coord_key
-		if entry.has("ownerJobId"):
-			key = "%s:%s" % [String(entry["ownerJobId"]), coord_key]
+		var key := WorkProgress.key_of(_decode_tile(entry["target"]), String(entry.get("ownerJobId", "")))
 		decoded[key] = int(entry["ticksRemaining"])
 	return decoded
 
-## WorkProgress.owners is keyed like WorkProgress.progress ("%d_%d") ->
-## job_id; sorted keys give a deterministic
-## encoding order matching _encode_work_progress() above. Only keys with a
-## non-empty owner appear -- an "incident" job's stamped wait never
-## participates in job-id ownership (see WorkProgress.release_owned()'s
-## own comment), so it is simply absent here, not encoded with an empty id.
+## WorkProgress.owners is keyed like WorkProgress.progress -> job_id. Each
+## owner is an explicit {target, jobId, ownerJobId?} record (schemaVersion 27,
+## ADR 045): target + ownerJobId name the progress key exactly as a
+## workProgress entry does, jobId the owning job. Sorted keys match
+## _encode_work_progress()'s order. Only keys with a non-empty owner appear --
+## an "incident" job's stamped wait never participates in job-id ownership
+## (see WorkProgress.release_owned()), so it is absent here, not encoded with
+## an empty id.
 static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Array:
 	var keys := work_progress_owner.keys()
 	keys.sort()
 	var encoded: Array = []
 	for key in keys:
-		var coords := String(key).split("_")
-		var tile := Vector2i(int(coords[0]), int(coords[1]))
-		encoded.append({"target": _encode_tile(tile), "jobId": String(work_progress_owner[key])})
+		var parts := WorkProgress.key_parts(String(key))
+		var entry := {"target": _encode_tile(parts["tile"]), "jobId": String(work_progress_owner[key])}
+		if not String(parts["scope"]).is_empty():
+			entry["ownerJobId"] = String(parts["scope"])
+		encoded.append(entry)
 	return encoded
 
 ## Returns the raw key -> job_id map; WorkProgress.restore_owners()
@@ -593,8 +591,8 @@ static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Arr
 static func _decode_work_progress_owners(list: Array) -> Dictionary:
 	var decoded: Dictionary = {}
 	for entry in list:
-		var tile := _decode_tile(entry["target"])
-		decoded["%d_%d" % [tile.x, tile.y]] = String(entry["jobId"])
+		var key := WorkProgress.key_of(_decode_tile(entry["target"]), String(entry.get("ownerJobId", "")))
+		decoded[key] = String(entry["jobId"])
 	return decoded
 
 ## WorkProgress.suspended is keyed by job_id directly: a suspended job's own snapshot, so no tile coordinate

@@ -16,10 +16,12 @@ extends RefCounted
 ##   id is never reused; next_item_id is persisted and hashed.
 ## - ground_berries is a per-tile counter keyed "%d_%d" (like WorldState's
 ##   _objects), not a pickable item; the key is dropped when it reaches zero.
-## - state_hash() covers items, next_item_id and the dig-find RNG
-##   (hash_into()); item_factions, ground_berries, ground_berries_factions and
-##   pending_dig_finds are deliberately left out.
-## - ground_berries_factions is never persisted: a loaded world starts it empty.
+## - state_hash() covers items, next_item_id, ground_berries and the dig-find
+##   RNG (hash_into()); item_factions, ground_berries_factions and
+##   pending_dig_finds are deliberately left out (ADR 045: factions decide
+##   nothing during a tick).
+## - ground_berries_factions is persisted with ground_berries (one factionId
+##   per groundBerries entry, ADR 045), so a load restores it.
 ## - pending_dig_finds is staged during a tick and drained by
 ##   resolve_dig_finds() in ascending job-id order, so the find sequence never
 ##   depends on colonist iteration order. Always empty between ticks; not saved.
@@ -65,7 +67,7 @@ func _init(content: ContentRegistryType, p_dig_find_random: RandomNumberGenerato
 func encode() -> Dictionary:
 	return {
 		"items": StateCodec._encode_items(items, next_item_id, item_factions),
-		"groundBerries": StateCodec._encode_ground_berries(ground_berries),
+		"groundBerries": StateCodec._encode_ground_berries(ground_berries, ground_berries_factions),
 		"digFindRng": {"seed": dig_find_random.seed, "state": dig_find_random.state},
 	}
 
@@ -75,7 +77,9 @@ func decode(state: Dictionary) -> void:
 	items = items_data["items"]
 	next_item_id = items_data["next_id"]
 	item_factions = items_data["factions"]
-	ground_berries = StateCodec._decode_ground_berries(state["groundBerries"])
+	var berries_data := StateCodec._decode_ground_berries(state["groundBerries"])
+	ground_berries = berries_data["berries"]
+	ground_berries_factions = berries_data["factions"]
 	if state.has("digFindRng"):
 		var dig_find_rng: Dictionary = state["digFindRng"]
 		dig_find_random.seed = int(dig_find_rng["seed"])
@@ -85,6 +89,7 @@ func decode(state: Dictionary) -> void:
 func hash_into(snapshot: Dictionary) -> void:
 	snapshot["items"] = items
 	snapshot["next_item_id"] = next_item_id
+	snapshot["ground_berries"] = ground_berries
 	snapshot["dig_find_rng"] = {"seed": dig_find_random.seed, "state": dig_find_random.state}
 
 ## Id-sorted detached copies, each with its "faction_id".
