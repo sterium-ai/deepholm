@@ -519,7 +519,7 @@ const V25_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 }
 
-## ADR 045: V25_FIXTURE_STATE one version up (built by _v26_fixture_state()):
+## ADR 047: V25_FIXTURE_STATE one version up (built by _v26_fixture_state()):
 ## "areaOrders" is present, a plain-tile workProgress entry has its
 ## workProgressOwners record, and groundBerries entries have no "factionId"
 ## yet. Migrating must give each berry pile factionId "colony" and touch

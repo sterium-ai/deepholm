@@ -10,7 +10,7 @@ extends RefCounted
 ## - progress is keyed "%d_%d", or "<job_id>:%d_%d" for a "rescue" job (two
 ##   rescues can share a target); every other kind keeps the plain tile key.
 ##   key_of() builds a key and key_parts() is its inverse; nothing else
-##   formats or splits one (ADR 045: the save codec goes through them too).
+##   formats or splits one (ADR 047: the save codec goes through them too).
 ## - owners records the job_id that last wrote a progress key, so a job paused
 ##   mid-work (status back to "queued") still owns its progress and only the
 ##   owner's termination drops it. "incident" never has an owner: its wait is
@@ -28,7 +28,7 @@ extends RefCounted
 ## - state_hash() covers suspended only (hash_into()); progress and owners are
 ##   deliberately left out.
 ## - Owners persist as explicit {target, jobId, ownerJobId?} records naming the
-##   key's tile and scope (ADR 045), never a re-split of the key.
+##   key's tile and scope (ADR 047), never a re-split of the key.
 
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 

@@ -372,7 +372,7 @@ field, but the validator keeps it optional like `constructionSites`, so a hand-b
 current-schema state without it still loads (with an empty queue). `state_hash()` covers it
 while an order is pending (an idle queue's `nextId` is not observable outside the save).
 
-Version 26 saves are migrated explicitly to version 27 (ADR 045): every `groundBerries` entry
+Version 26 saves are migrated explicitly to version 27 (ADR 047): every `groundBerries` entry
 gains `factionId: "colony"` (the only writer, `ItemTable.spawn_berries_item()`, has always
 stamped `"colony"`), and nothing else changes. Version 27 also gives `workProgressOwners`
 entries an optional `ownerJobId` (see "Critical-need interrupts and tile work progress"
@@ -561,7 +561,7 @@ above) — no object or item could ever have belonged to another faction on a
 save this old.
 
 Ground berries (`groundBerries`, a per-tile counter rather than an item) gained the same
-required `factionId` at schemaVersion 27 (ADR 045): `ItemTable` keeps it in the parallel
+required `factionId` at schemaVersion 27 (ADR 047): `ItemTable` keeps it in the parallel
 `ground_berries_factions` map, `StateCodec._encode_ground_berries()` writes it (defaulting to
 `"colony"`) and `_decode_ground_berries()` restores it, so
 `WorldState.get_ground_berries_faction_id()` reads the same value after a load.
@@ -713,7 +713,7 @@ that owns it. `target` and `ownerJobId` name the key exactly as a `workProgress`
 `ownerJobId` is present only for a job-scoped key (a `rescue`, keyed `"<jobId>:<x>_<y>"` in
 memory so two rescues can share a target), and `SaveIO` rejects a duplicate
 *(ownerJobId, target)* pair rather than a duplicate target. Both arrays are encoded and decoded
-through `WorkProgress.key_parts()`/`key_of()`, the single codec of the in-memory key (ADR 045);
+through `WorkProgress.key_parts()`/`key_of()`, the single codec of the in-memory key (ADR 047);
 before schema 27 the owner encoder split a job-scoped key by hand and wrote an out-of-map tile,
 so `SaveIO.write_atomic()` refused every save taken while a rescue was mid-work. Two different job kinds can
 legitimately target the same tile at once — a `dig` submitted at a `build`'s

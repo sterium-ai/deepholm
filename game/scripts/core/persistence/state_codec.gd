@@ -515,7 +515,7 @@ static func _decode_objects(objects: Array) -> Array:
 ## _objects); the sorted keys give a deterministic encoding order. Field name
 ## "berries" mirrors the old per-tile groundItems wire shape's "wood" field
 ## ({target, wood}): ground berries stay a simple per-tile counter, not a
-## first-class pickable item like wood. "factionId" (schemaVersion 27, ADR 045)
+## first-class pickable item like wood. "factionId" (schemaVersion 27, ADR 047)
 ## comes from the parallel ground_berries_factions map, defaulting to "colony"
 ## like _encode_items() does for an untracked item.
 static func _encode_ground_berries(ground_berries: Dictionary, factions: Dictionary) -> Array:
@@ -567,7 +567,7 @@ static func _decode_work_progress(list: Array) -> Dictionary:
 
 ## WorkProgress.owners is keyed like WorkProgress.progress -> job_id. Each
 ## owner is an explicit {target, jobId, ownerJobId?} record (schemaVersion 27,
-## ADR 045): target + ownerJobId name the progress key exactly as a
+## ADR 047): target + ownerJobId name the progress key exactly as a
 ## workProgress entry does, jobId the owning job. Sorted keys match
 ## _encode_work_progress()'s order. Only keys with a non-empty owner appear --
 ## an "incident" job's stamped wait never participates in job-id ownership

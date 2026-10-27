@@ -1509,7 +1509,7 @@ static func _valid_zone(value, map_width: int, map_height: int) -> Dictionary:
 ## Mirrors _valid_zones()/_valid_zone(): ItemTable.ground_berries's wire shape is
 ## an array of {target, berries, factionId} entries (see StateCodec._encode_ground_berries()),
 ## each a simple per-tile counter, not a first-class item with an id. factionId
-## is required from schemaVersion 27 (ADR 045; the v26->v27 migration backfills it).
+## is required from schemaVersion 27 (ADR 047; the v26->v27 migration backfills it).
 static func _valid_ground_berries(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid groundBerries type")
@@ -1575,7 +1575,7 @@ static func _valid_work_progress_entry(value, map_width: int, map_height: int) -
 ## entries (StateCodec._encode_work_progress_owners()): the exact job that
 ## owns a workProgress key, so decode() never
 ## has to guess it from whichever job happens to target that key. target +
-## ownerJobId name the key like a workProgress entry (ADR 045). At most one
+## ownerJobId name the key like a workProgress entry (ADR 047). At most one
 ## job owns a given key, so a duplicate (ownerJobId, target) pair is rejected
 ## the same way duplicate colonistId/actorId are for pausedJobs/combatBlockedTargets;
 ## two rescues' scoped keys on one tile are distinct keys and both allowed.

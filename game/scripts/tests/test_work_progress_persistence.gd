@@ -1,9 +1,9 @@
 extends SceneTree
 
-## ADR 045 (backlog B5): the persistence bugs the R2/R4 probes found.
+## ADR 047 (backlog B5): the persistence bugs the R2/R4 probes found.
 ## - A rescue's job-scoped work-progress key ("<job_id>:<x>_<y>") must save
 ##   through SaveIO and load back with the same owner and state_hash; before
-##   ADR 045 its workProgressOwners entry was written with an out-of-map tile
+##   ADR 047 its workProgressOwners entry was written with an out-of-map tile
 ##   and SaveIO.write_atomic() refused the whole save.
 ## - WorkProgress.key_of()/key_parts() are each other's inverse, whatever
 ##   digits and underscores the job id holds.

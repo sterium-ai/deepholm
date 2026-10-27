@@ -1,4 +1,4 @@
-# ADR 045: Work-progress owners and ground berries persist explicit records
+# ADR 047: Work-progress owners and ground berries persist explicit records
 
 > **In short:** A save taken while a rescue was mid-work was refused, because the
 > owner of the rescue's work timer was written with a garbage tile. Owners are now

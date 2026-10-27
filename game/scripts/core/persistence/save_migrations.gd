@@ -1296,7 +1296,7 @@ static func _is_schema_v26_state(state: Dictionary) -> bool:
 		return false
 	return typeof(state.get("schemaVersion")) == TYPE_INT and int(state["schemaVersion"]) == 26 and _is_schema_v25_state(probe)
 
-## Version 26 predates persisted ground-berry factions (ADR 045): every
+## Version 26 predates persisted ground-berry factions (ADR 047): every
 ## groundBerries entry gains factionId "colony", the only faction
 ## ItemTable.spawn_berries_item() has ever stamped. workProgressOwners needs
 ## no rewrite: a job-scoped owner made every v26 write fail, so a v26 file

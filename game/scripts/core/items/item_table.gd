@@ -18,10 +18,10 @@ extends RefCounted
 ##   _objects), not a pickable item; the key is dropped when it reaches zero.
 ## - state_hash() covers items, next_item_id, ground_berries and the dig-find
 ##   RNG (hash_into()); item_factions, ground_berries_factions and
-##   pending_dig_finds are deliberately left out (ADR 045: factions decide
+##   pending_dig_finds are deliberately left out (ADR 047: factions decide
 ##   nothing during a tick).
 ## - ground_berries_factions is persisted with ground_berries (one factionId
-##   per groundBerries entry, ADR 045), so a load restores it.
+##   per groundBerries entry, ADR 047), so a load restores it.
 ## - pending_dig_finds is staged during a tick and drained by
 ##   resolve_dig_finds() in ascending job-id order, so the find sequence never
 ##   depends on colonist iteration order. Always empty between ticks; not saved.

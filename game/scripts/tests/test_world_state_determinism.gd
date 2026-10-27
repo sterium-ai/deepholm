@@ -439,7 +439,7 @@ func _check_incident_replay_determinism() -> void:
 ##   sorted {jobId, victimId} array so insertion order does not matter),
 ##   "approach_job_targets" (ADR 033), the colonist "hands" list (ADR 037) and
 ##   "construction_sites" (ADR 040).
-## - Ground berries entering state_hash() ("ground_berries", ADR 045).
+## - Ground berries entering state_hash() ("ground_berries", ADR 047).
 const PRE_INCIDENT_BASELINE_HASH := 2193816304
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
