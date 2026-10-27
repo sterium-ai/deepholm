@@ -418,7 +418,7 @@ one.
   `bench_*`; no CI gate is added (timings are host-dependent).
 - **Non-goals:** performance thresholds in CI; changing what the benchmarks measure.
 
-#### A2 — Allocation-free map queries (cost grid and integer tile keys) · `todo` · R3 done; coordinate with R4 on `world_state.gd`
+#### A2 — Allocation-free map queries (cost grid and integer tile keys) · `review (antonelmejor50-hub/a2-allocation-free-map-queries)` · R3 done; coordinate with R4 on `world_state.gd`
 
 - **Goal:** `map/passability.gd` (R3) keeps per-tile movement cost and door flags in packed
   arrays, and objects are indexed by integer tile index instead of `"%d_%d"` Strings. The
@@ -435,6 +435,7 @@ one.
   when a tile's passability did not change (bench line `rooms on_passability_changed ...
   no passability change` ≤ 1 ms).
 - **Non-goals:** changing passability rules or door semantics; layers.
+- **Scope amendment approved by the owner (2026-10-27, in the A2 terminal):** `actors/needs_system.gd`, where the "rest" need candidates read `ObjectTable.objects` keys as `"%d_%d"` Strings (now `ObjectTable.tiles_of_kind("bed")`).
 
 #### A3 — `RouteSearch` with a binary heap and no per-step allocation · `review (antonelmejor50-hub/a3-routesearch-with-a-binary)` · *parallel-safe (routing only)*
 

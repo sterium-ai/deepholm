@@ -4,8 +4,19 @@ extends RefCounted
 ## The movement and faction rules (ADR 014, F3/F5): whether a tile and its
 ## object can be crossed, at what cost, and by which faction (doors), plus the
 ## faction rules for ordering and reserving colony items. Reads the sibling
-## TileGrid/ObjectTable; actor factions arrive as Callables. Holds no state of
-## its own, so it is neither persisted nor hashed.
+## TileGrid/ObjectTable; actor factions arrive as Callables. Its only state is
+## a per-tile cache derived from them, so it is neither persisted nor hashed.
+##
+## Per-tile cache (A2): every tile's move cost and passable/door flags live in
+## packed arrays indexed by TileGrid.tile_index(), so passability() and the
+## route cost callables never format a key or allocate. The arrays are built on
+## the first query, refreshed per tile by TileGrid.mark_dirty() (every tile-kind
+## or object change calls it) and dropped by TileGrid.reset_cells() after a
+## wholesale objects replacement. Each tile also keeps the tile kind it was
+## computed from (_kind): a query recomputes a tile whose TileGrid.tiles entry
+## no longer matches, so a direct tiles[] write (a test fixture) can never leave
+## the cache stale. A direct write to ObjectTable's maps after a query must be
+## followed by TileGrid.reset_cells().
 ##
 ## Invariants:
 ## - passability() is the one authoritative movement rule: out of bounds and
@@ -14,10 +25,17 @@ extends RefCounted
 ## - faction_id only matters for a door; it defaults to "colony".
 ## - Every faction rule fails open (true) for a faction id the registry does
 ##   not declare, so a lookup miss never silently blocks doors or orders.
+## - The cache equals what the rule above computes from tiles and objects:
+##   _flags holds PASSABLE (tile or object passable) and DOOR, _cost the move
+##   cost (0 when not PASSABLE), _colony_cost/_colony_passable the same under
+##   "colony"'s door rule. A door's per-faction rule is applied at query time.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
+
+const PASSABLE := 1
+const DOOR := 2
 
 var _content: ContentRegistryType
 var _tile_grid: TileGridType
@@ -30,6 +48,20 @@ var _actor_faction: Callable
 ## (colonist_id) -> Dictionary: the live roster actor, {} when unknown.
 var _find_colonist: Callable
 
+## The per-tile cache (class doc), sized _width * TileGrid.height when _built.
+var _built := false
+var _width := 0
+var _flags := PackedByteArray()
+var _cost := PackedInt32Array()
+var _colony_cost := PackedInt32Array()
+var _colony_passable := PackedByteArray()
+## Tile index -> the TileGrid.tiles entry the arrays were computed from.
+var _kind: Array[String] = []
+## faction_id -> bool: _faction_may_pass_doors() (content is frozen).
+var _door_rule_by_faction: Dictionary = {}
+## Tile kind -> [flags, cost], from _tile_definitions.
+var _tile_rule_by_kind: Dictionary = {}
+
 func _init(content: ContentRegistryType, tile_grid: TileGridType, object_table: ObjectTableType,
 		object_definitions: Dictionary, tile_definitions: Dictionary, actor_faction: Callable, find_colonist: Callable) -> void:
 	_content = content
@@ -39,35 +71,123 @@ func _init(content: ContentRegistryType, tile_grid: TileGridType, object_table: 
 	_tile_definitions = tile_definitions
 	_actor_faction = actor_faction
 	_find_colonist = find_colonist
+	tile_grid.bind_passability(refresh_cell, reset_cells, passable_at, door_at, passable_mask, room_cell_flags)
 
+## The public rule as a Dictionary, for callers outside the hot paths; the
+## route cost callables below read the arrays without building one.
 func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
 	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
 		return {"passable": false, "cost": 0, "is_door": false}
-	var object_kind := _object_table.get_object(x, y)
+	var index := _fresh_index(x, y)
+	var flags := _flags[index]
+	if flags & DOOR and not _faction_may_pass_doors(faction_id):
+		return {"passable": false, "cost": 0, "is_door": true}
+	return {"passable": flags & PASSABLE != 0, "cost": _cost[index], "is_door": flags & DOOR != 0}
+
+## passability(x, y)["passable"] (colony): regions' and rooms' rule.
+func passable_at(x: int, y: int) -> bool:
+	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
+		return false
+	return _colony_passable[_fresh_index(x, y)] == 1
+
+## passability(x, y)["is_door"] (any faction).
+func door_at(x: int, y: int) -> bool:
+	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
+		return false
+	return _flags[_fresh_index(x, y)] & DOOR != 0
+
+## Every tile's passable_at() as 1/0, row-major (RegionMap's full build).
+func passable_mask() -> PackedByteArray:
+	_refresh_all()
+	return _colony_passable
+
+## Every tile's passable_at() (bit 1) and door_at() (bit 2), row-major (RoomMap's full build).
+func room_cell_flags() -> PackedByteArray:
+	_refresh_all()
+	var flags := PackedByteArray()
+	flags.resize(_colony_passable.size())
+	for index in flags.size():
+		flags[index] = _colony_passable[index] | (2 if _flags[index] & DOOR else 0)
+	return flags
+
+## TileGrid.mark_dirty()'s hook: (x, y)'s tile kind or object changed.
+func refresh_cell(x: int, y: int) -> void:
+	if _built:
+		_write_cell(y * _width + x)
+
+## TileGrid.reset_cells()'s hook: rebuilt on the next query.
+func reset_cells() -> void:
+	_built = false
+
+## (x, y)'s index into the arrays (in bounds), built and fresh (class doc).
+func _fresh_index(x: int, y: int) -> int:
+	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size():
+		_build()
+	var index := y * _width + x
+	if _tile_grid.tiles[index] != _kind[index]:
+		_write_cell(index)
+	return index
+
+## Every tile fresh: one native Array comparison when nothing changed.
+func _refresh_all() -> void:
+	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size():
+		_build()
+	elif _kind != _tile_grid.tiles:
+		for index in _kind.size():
+			if _tile_grid.tiles[index] != _kind[index]:
+				_write_cell(index)
+
+func _build() -> void:
+	_width = _tile_grid.width
+	var size := _width * _tile_grid.height
+	_kind.resize(size)
+	_flags.resize(size)
+	_cost.resize(size)
+	_colony_cost.resize(size)
+	_colony_passable.resize(size)
+	_built = true
+	for index in size:
+		_write_cell(index)
+
+## The rule of the class doc for one tile, into every array.
+func _write_cell(index: int) -> void:
+	var flags := 0
+	var cost := 0
+	var tile_kind := _tile_grid.tiles[index] if index < _tile_grid.tiles.size() else ""
+	_kind[index] = tile_kind
+	var object_kind := String(_object_table.objects.get(index, ""))
 	if not object_kind.is_empty():
 		var object_definition: Dictionary = _object_definitions.get(object_kind, {})
-		if object_definition.is_empty():
-			return {"passable": false, "cost": 0, "is_door": false}
-		var is_door := bool(object_definition.get("is_door", false))
-		if is_door and not _faction_may_pass_doors(faction_id):
-			return {"passable": false, "cost": 0, "is_door": true}
-		var object_passable := bool(object_definition.get("passable", false))
-		return {
-			"passable": object_passable,
-			"cost": int(object_definition.get("move_cost", 0)) if object_passable else 0,
-			"is_door": is_door
-		}
-	var tile_kind := _tile_grid.get_tile(x, y)
-	var tile_definition: Dictionary = _tile_definitions.get(tile_kind, {})
-	var tile_passable := bool(tile_definition.get("passable", false))
-	return {"passable": tile_passable, "cost": int(tile_definition.get("move_cost", 0)) if tile_passable else 0, "is_door": false}
+		if not object_definition.is_empty():
+			if bool(object_definition.get("passable", false)):
+				flags = PASSABLE
+				cost = int(object_definition.get("move_cost", 0))
+			if bool(object_definition.get("is_door", false)):
+				flags |= DOOR
+	elif index < _tile_grid.tiles.size():
+		if not _tile_rule_by_kind.has(tile_kind):
+			var tile_definition: Dictionary = _tile_definitions.get(tile_kind, {})
+			var tile_passable := bool(tile_definition.get("passable", false))
+			_tile_rule_by_kind[tile_kind] = [PASSABLE if tile_passable else 0, int(tile_definition.get("move_cost", 0)) if tile_passable else 0]
+		var rule: Array = _tile_rule_by_kind[tile_kind]
+		flags = rule[0]
+		cost = rule[1]
+	_flags[index] = flags
+	_cost[index] = cost
+	var colony_blocked := flags & DOOR != 0 and not _faction_may_pass_doors("colony")
+	_colony_cost[index] = 0 if colony_blocked else cost
+	_colony_passable[index] = 1 if flags & PASSABLE and not colony_blocked else 0
 
 ## rules.may_pass_doors (ADR 014) for a door object.
 func _faction_may_pass_doors(faction_id: String) -> bool:
+	if _door_rule_by_faction.has(faction_id):
+		return _door_rule_by_faction[faction_id]
 	var faction: Dictionary = _content.get_entry("factions", faction_id)
-	if faction.is_empty():
-		return true
-	return bool(faction.get("rules", {}).get("may_pass_doors", true))
+	var rule := true
+	if not faction.is_empty():
+		rule = bool(faction.get("rules", {}).get("may_pass_doors", true))
+	_door_rule_by_faction[faction_id] = rule
+	return rule
 
 ## rules.may_be_ordered (F3): whether faction_id may be named as an order's assignee.
 func faction_may_be_ordered(faction_id: String) -> bool:
@@ -96,14 +216,26 @@ func colonist_may_be_ordered(colonist_id: String) -> bool:
 func colonist_may_reserve_colony_items(colonist_id: String) -> bool:
 	return faction_may_reserve_colony_items(_actor_faction.call(colonist_id))
 
-## RouteSearch's colony cost callable (also GlobalAssignment.restore_scheduling()'s).
+## RouteSearch's colony cost callable (also GlobalAssignment.restore_scheduling()'s):
+## passability(x, y)["cost"].
 func is_passable(tile: Vector2i) -> float:
-	return float(passability(tile.x, tile.y)["cost"])
+	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
+		return 0.0
+	# _fresh_index() inlined: this runs four times per route expansion.
+	var index := tile.y * _width + tile.x
+	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size() or _tile_grid.tiles[index] != _kind[index]:
+		index = _fresh_index(tile.x, tile.y)
+	return float(_colony_cost[index])
 
 ## Faction-aware cost callable (IncidentScheduler's spawn/target selection): the
 ## colony-only is_passable() would let wildlife use a tile only reachable through a door.
 func passable_for_faction(tile: Vector2i, faction_id: String) -> float:
-	return float(passability(tile.x, tile.y, faction_id)["cost"])
+	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
+		return 0.0
+	var index := _fresh_index(tile.x, tile.y)
+	if _flags[index] & DOOR and not _faction_may_pass_doors(faction_id):
+		return 0.0
+	return float(_cost[index])
 
 ## GlobalAssignment's autonomous passability (F5): an incident actor routes under its own faction.
 func passable_for_worker(actor_id: String, tile: Vector2i) -> float:

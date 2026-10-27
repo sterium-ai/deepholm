@@ -39,8 +39,7 @@ static func _spawn_colonists(placement_seed: int, map: Array[String], width: int
 	var placement: Dictionary = WorldGeneratorType.place_spawn(placement_random, map, width, height, mapgen,
 		water_tiles, berry_bush_tiles, int(mapgen["colonist_count"]))
 	for pos in placement["berry_bush_tiles"]:
-		object_table.objects[object_table.object_key(pos.x, pos.y)] = "berry_bush"
-		object_table.object_factions[object_table.object_key(pos.x, pos.y)] = "colony"
+		object_table.place_generated(pos.x, pos.y, "berry_bush")
 	var spawned: Array[Dictionary] = []
 	var positions: Array = placement["colonist_positions"]
 	for i in positions.size():

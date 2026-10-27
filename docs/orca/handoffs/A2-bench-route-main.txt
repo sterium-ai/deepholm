@@ -1,0 +1,20 @@
+bench_route_search: commit=89d44a0 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=79 resume_calls(ticks)=2 time=0.42ms us/expansion=5.27 snapshot_json=3659B
+bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=1728 resume_calls(ticks)=27 time=7.01ms us/expansion=4.06 snapshot_json=60031B
+bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=4482 resume_calls(ticks)=71 time=17.34ms us/expansion=3.87 snapshot_json=144655B
+bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8423 resume_calls(ticks)=132 time=31.14ms us/expansion=3.70 snapshot_json=269701B
+bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=15462 resume_calls(ticks)=242 time=58.98ms us/expansion=3.81 snapshot_json=470624B
+bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=29 resume_calls(ticks)=1 time=0.11ms us/expansion=3.90 snapshot_json=1063B
+bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=497 resume_calls(ticks)=8 time=1.33ms us/expansion=2.68 snapshot_json=14233B
+bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=2017 resume_calls(ticks)=32 time=3.25ms us/expansion=1.61 snapshot_json=57771B
+bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=8129 resume_calls(ticks)=128 time=11.65ms us/expansion=1.43 snapshot_json=236427B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=32641 resume_calls(ticks)=511 time=45.99ms us/expansion=1.41 snapshot_json=1016396B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=57281 resume_calls(ticks)=896 time=78.26ms us/expansion=1.37 snapshot_json=1844356B
+bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=96.24ms us/expansion=1.47 snapshot_json=2124245B
+bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=266.06ms
+bench_route_search: regions full build (open grid, array callable) time=162.71ms
+bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=174.63ms
+bench_route_search: regions on_passability_changed (unblock it again) time=0.03ms
+bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=1028.79ms
+bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=106.42ms
+bench_route_search: done
