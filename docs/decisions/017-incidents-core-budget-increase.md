@@ -2,7 +2,7 @@
 
 > **In short:** Adding incidents (visitors such as wolves or traders arriving on their own) needed more lines in two core files, so their size limits were raised to match.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-20 (amended 2026-09-21)
 - **Scope:** `docs/architecture/core-budgets.json` caps for `game/scripts/core/world_state.gd`
   and `game/scripts/core/scheduling/global_assignment.gd`.

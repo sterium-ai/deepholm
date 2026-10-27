@@ -47,20 +47,9 @@ jobs:
                   json.load(source)
           print(f"Validated {len(files)} JSON files")
 
-      - name: Check core file size budgets
-        shell: python
-        run: |
-          import json, sys
-          budgets = json.load(open("docs/architecture/core-budgets.json", encoding="utf-8"))
-          over = []
-          for path, cap in budgets.items():
-              if path.startswith("_"):
-                  continue
-              lines = sum(1 for _ in open(path, encoding="utf-8"))
-              print(f"{path}: {lines}/{cap}")
-              if lines > cap:
-                  over.append(path)
-          sys.exit(f"over budget: {over}" if over else 0)
+      # ADR 048: no core file above 800 lines, no function above 80 code lines, frozen exceptions only.
+      - name: Check core file and function size budgets
+        run: python tools/check_core_budgets.py
 
       - name: Lint content literals in the simulation core
         shell: pwsh

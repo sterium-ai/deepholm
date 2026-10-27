@@ -2,7 +2,7 @@
 
 > **In short:** Colonists used to jump across each tile quickly and then pause, so walking looked jerky. The display now spreads the movement evenly over the whole step, which needed one small, read-only addition to the main world-state file.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-25
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`.
 

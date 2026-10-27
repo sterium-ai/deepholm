@@ -4,7 +4,7 @@
 > rescuer, never creates duplicate rescues or leaves things wrongly marked as claimed. The fixes
 > needed more room in two size-limited core files.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-23
 - **Scope:** `docs/architecture/core-budgets.json` caps for `game/scripts/core/world_state.gd`
   and `game/scripts/core/jobs/job_queue.gd`; `game/scripts/core/jobs/givers/rescue_giver.gd`;

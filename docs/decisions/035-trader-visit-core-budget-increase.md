@@ -2,7 +2,7 @@
 
 > **In short:** Visiting traders can now offer a swap that the player accepts. That feature lives in the main world-state file, so that file's agreed size limit was raised to fit it.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-24
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`.
 

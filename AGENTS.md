@@ -56,10 +56,11 @@ toil executor is a defect, whatever the acceptance checks say.
 
 ## Core size budgets
 
-`docs/architecture/core-budgets.json` caps the line count of the largest
-core files. The caps are checked before review. Raising a budget requires an
-ADR in the same change that explains why the code cannot move into an
-extension point instead.
+No file under `game/scripts/core/` may exceed 800 lines and no function 80
+lines of code (ADR 048). `docs/architecture/core-budgets.json` holds the rule and
+the few frozen exceptions; `python tools/check_core_budgets.py` checks it, in CI
+and before review. Code that does not fit goes into a new module or an extension
+point. Raising an exception's cap or adding one needs an ADR in the same change.
 
 ## Contracts before code
 

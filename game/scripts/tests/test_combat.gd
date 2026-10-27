@@ -410,7 +410,7 @@ func _check_flee_wins_while_need_searching() -> void:
 	world.tick()
 
 	var included := false
-	for colonist in world._colonists_not_searching_need():
+	for colonist in world._tick_pipeline._colonists_not_searching_need():
 		if String(colonist["id"]) == "worker":
 			included = true
 	_expect(included, "an actor CombatGiver already tracks as fleeing must still be proposed the scheduler tick even while mid need-search")

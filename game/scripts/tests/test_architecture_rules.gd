@@ -25,6 +25,7 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WORLD_STATE_PATH := "res://scripts/core/world_state.gd"
+const TICK_PIPELINE_PATH := "res://scripts/core/world/tick_pipeline.gd"
 const VIEWER_DIR := "res://scripts/viewer"
 const JOBS_CONTENT_PATH := "res://content/jobs.json"
 
@@ -405,14 +406,15 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 
 # --- 2) single per-colonist advance path -------------------------------------
 
-## Source scan of world_state.gd: no _advance_need_*/_advance_haul_* function,
+## Source scan of world_state.gd and world/tick_pipeline.gd (R12 moved
+## _advance_colonists there): no _advance_need_*/_advance_haul_* function,
 ## no _begin_*reroute*/_resume_*reroute* function, no _start_need_search/
 ## _advance_need_search function, no _need_jobs/_need_searches/
 ## _need_job_by_colonist field -- and exactly one function whose name both
 ## starts with _advance_ and names "colonist" (_advance_colonists), matching
 ## the rule "no kind-specific branch other than reading the toils list".
 func _check_single_advance_path() -> void:
-	var lines := _read_text(WORLD_STATE_PATH).split("\n")
+	var lines := (_read_text(WORLD_STATE_PATH) + "\n" + _read_text(TICK_PIPELINE_PATH)).split("\n")
 	var per_colonist_advance: Array[String] = []
 	for raw_line in lines:
 		var line := String(raw_line).strip_edges()

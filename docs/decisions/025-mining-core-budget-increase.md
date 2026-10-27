@@ -4,7 +4,7 @@
 > the same rules as other dig-style orders, and two orders on the same rock can never both produce
 > stone.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-23
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`;
   `game/scripts/core/commands/command_checks.gd`.

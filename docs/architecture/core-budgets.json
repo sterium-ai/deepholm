@@ -1,26 +1,20 @@
 {
-  "_note": "Line-count caps for the largest core files, checked in CI. Raising one requires an ADR in the same change.",
-  "game/scripts/core/world_state.gd": 1478,
-  "game/scripts/core/world/event_log.gd": 800,
-  "game/scripts/core/items/item_table.gd": 800,
-  "game/scripts/core/map/tile_grid.gd": 800,
-  "game/scripts/core/map/passability.gd": 800,
-  "game/scripts/core/objects/object_table.gd": 800,
-  "game/scripts/core/objects/zone_table.gd": 800,
-  "game/scripts/core/jobs/work_progress.gd": 800,
-  "game/scripts/core/objects/construction_system.gd": 800,
-  "game/scripts/core/actors/trench_system.gd": 800,
-  "game/scripts/core/economy/trade_system.gd": 800,
-  "game/scripts/core/actors/needs_system.gd": 800,
-  "game/scripts/core/actors/combat_system.gd": 800,
-  "game/scripts/core/world/command_router.gd": 800,
-  "game/scripts/core/jobs/toil_bindings.gd": 800,
-  "game/scripts/core/commands/handlers/order_handler.gd": 800,
-  "game/scripts/core/commands/handlers/construction_handler.gd": 800,
-  "game/scripts/core/commands/handlers/zone_handler.gd": 800,
-  "game/scripts/core/commands/handlers/actor_handler.gd": 800,
-  "game/scripts/core/commands/handlers/incident_handler.gd": 800,
-  "game/scripts/core/jobs/toil_executor.gd": 970,
-  "game/scripts/core/jobs/job_queue.gd": 790,
-  "game/scripts/core/scheduling/global_assignment.gd": 688
+  "_note": "The composed-core size rule (ADR 048), checked in CI by tools/check_core_budgets.py: no .gd file under game/scripts/core above max_file_lines total lines, no function above max_function_lines code lines (from its func line to the next, comments and blanks excluded; tools/measure_core.ps1's FuncLines). The exceptions are the files and functions that were already over the rule when it landed, frozen at their size then; a cap is never raised, and an exception the code no longer needs fails the check until it is removed.",
+  "max_file_lines": 800,
+  "max_function_lines": 80,
+  "file_exceptions": {
+    "game/scripts/core/persistence/save_io.gd": {"cap": 2287, "until": "R14"},
+    "game/scripts/core/persistence/save_migrations.gd": {"cap": 1532, "until": "R14"},
+    "game/scripts/core/persistence/state_codec.gd": {"cap": 1409, "until": "R14"},
+    "game/scripts/core/worldgen/world_generator.gd": {"cap": 1178, "until": "unassigned"},
+    "game/scripts/core/jobs/toil_executor.gd": {"cap": 963, "until": "unassigned"},
+    "game/scripts/core/content/content_registry.gd": {"cap": 826, "until": "unassigned"}
+  },
+  "function_exceptions": {
+    "game/scripts/core/persistence/save_io.gd::_validate_state": {"cap": 306, "until": "R14"},
+    "game/scripts/core/persistence/save_migrations.gd::_migrate_step": {"cap": 113, "until": "R14"},
+    "game/scripts/core/scheduling/global_assignment.gd::tick": {"cap": 150, "until": "unassigned"},
+    "game/scripts/core/worldgen/world_generator.gd::place_spawn": {"cap": 122, "until": "unassigned"},
+    "game/scripts/core/content/content_registry.gd::_check_references": {"cap": 103, "until": "unassigned"}
+  }
 }
