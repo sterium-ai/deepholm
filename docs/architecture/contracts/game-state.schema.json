@@ -337,7 +337,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 25 },
+    "schemaVersion": { "type": "integer", "const": 26 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },
@@ -707,6 +707,43 @@
           "properties": {
             "seed": { "type": "integer" },
             "state": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "areaOrders": {
+      "description": "ADR 044 (schemaVersion 26): pending area_order expansions (tile by tile in acceptance order; ticks expand them first in first out). Always written by StateCodec.encode() and backfilled empty by the v25->v26 migration; optional on the wire like constructionSites, absent meaning an empty queue.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextId", "list", "created"],
+      "properties": {
+        "nextId": { "type": "integer", "minimum": 1 },
+        "created": {
+          "type": "array",
+          "description": "[first, end, order id]: job numbers first..end-1 were created by that area order's expansion while a later cancel order was pending (a cancel may pick them although they are newer than its jobLimit). Ascending, disjoint.",
+          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "integer" } }
+        },
+        "list": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"],
+            "properties": {
+              "id": { "type": "integer", "minimum": 1 },
+              "order": { "enum": ["dig", "chop", "forage", "till", "sow", "mine", "cancel", "remove_object"] },
+              "actor": { "type": "string", "minLength": 1 },
+              "commandId": { "type": "string", "minLength": 1 },
+              "x": { "type": "integer", "minimum": 0 },
+              "y": { "type": "integer", "minimum": 0 },
+              "width": { "type": "integer", "minimum": 1 },
+              "height": { "type": "integer", "minimum": 1 },
+              "priority": { "type": "integer" },
+              "next": { "type": "integer", "minimum": 0, "description": "Row-major index of the next tile to expand; below width*height." },
+              "done": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "uniqueItems": true, "description": "Row-major indexes from next on already expanded early, pulled forward by a later order over the same tile; skipped when next reaches them." },
+              "jobLimit": { "type": "integer", "description": "The next job number when the order was accepted: cancel only touches older jobs, or those an earlier area order created since (see created)." },
+              "siteLimit": { "type": "integer", "description": "The next construction site number when the order was accepted." }
+            }
           }
         }
       }

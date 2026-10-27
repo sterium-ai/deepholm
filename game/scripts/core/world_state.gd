@@ -171,6 +171,7 @@ var _toils: ToilExecutorType
 var _toil_hooks: Dictionary = {}
 ## Events, their sequence counter and the command envelopes (world/event_log.gd).
 var _event_log: EventLogType
+var _area_orders: AreaOrders # pending area_order expansions, a budget per tick (commands/area_orders.gd, ADR 044)
 ## Live in-flight re-route searches, keyed by colonist id, shared by
 ## reference with _toils.
 var _reroutes: Dictionary = {}
@@ -303,6 +304,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
+	_area_orders = AreaOrders.new(apply, get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -363,12 +365,11 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		"on_pick_up_success": _toil_on_pick_up_success,
 	}
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
-	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs, get_items, _zone_table.is_in_any_zone, _scheduler.submit,
+	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	# The queue's own get_jobs: get_jobs()'s tool-handover overlay never touches a
-	# site_fetch/site_work job (neither kind needs a tool), the only kinds the giver reads.
-	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs, _item_table.get_items,
+	# The queue's own kind-filtered read: get_jobs()'s tool-handover overlay never touches site_fetch/site_work (no tool).
+	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
 		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
 	# Live _tile_grid.tiles by reference: the giver only scans it per tick, and get_tiles() would copy 65536 Strings.
@@ -471,6 +472,8 @@ func apply(command) -> Dictionary:
 			return _construction.apply_construction_submission(command)
 		"build_line":
 			return _construction.apply_build_line_command(command)
+		"area_order":
+			return _area_orders.apply_command(command, get_map_width(), get_map_height())
 		"cancel_site":
 			return _apply_cancel_site_command(command)
 		"place_object":
@@ -497,6 +500,7 @@ func apply(command) -> Dictionary:
 
 ## Only mutator alongside apply(): advances exactly one tick.
 func tick() -> void:
+	_area_orders.advance() # commands of tick T, applied before it advances
 	_clock.advance(1)
 	_needs_system.decay_needs()
 	_need_giver.advance(_colonists_not_combat_owned(), _clock.tick)
@@ -689,6 +693,7 @@ func state_hash(include_incidents: bool = true) -> int:
 		# differ only here must not hash equal.
 		"approach_job_targets": StateCodec._encode_approach_job_targets(_approach_giver.get_job_targets()),
 	}
+	if not _area_orders.is_idle(): snapshot["area_orders"] = _area_orders.encode() # pending expansion shapes the next ticks
 	# Each module adds its own keys (JSON.stringify sorts keys, so insertion order is irrelevant):
 	# "width"/"height"/"tiles", "objects"/"object_health", "zones"/"next_zone_id",
 	# "items"/"next_item_id"/"dig_find_rng", "suspended_work_progress", "construction_sites".
@@ -913,13 +918,28 @@ func get_actors_with_health() -> Array[Dictionary]:
 func get_pending_trade_offers() -> Array[Dictionary]:
 	return _trade.get_pending_trade_offers()
 
-## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state.
-func get_jobs() -> Array[Dictionary]:
-	var jobs := _scheduler.queue.get_jobs()
+## The handover overlay only mutates this call's own detached duplicates, never JobQueue's state; a non-empty `kinds` keeps only those kinds, costing only the jobs returned (B1).
+## get_job(): one job as get_jobs() shows it ({} when unknown); the reads below: JobIndex (B1); get_pending_job_ids_at(): a tile's pending non-site jobs (Cancel's candidates).
+func get_jobs(kinds: Array = []) -> Array[Dictionary]:
+	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
 	for job in jobs:
 		ToolHandoverType.apply(job, assignments, _toils)
 	return jobs
+
+func get_job(job_id: String) -> Dictionary:
+	var job := _scheduler.queue.get_job(job_id)
+	ToolHandoverType.apply(job, _scheduler.get_assignments(), _toils)
+	return job
+
+func get_queued_job_summary() -> Dictionary:
+	return _scheduler.queue.get_index().queued_summary()
+
+func get_designation_changes(from: int) -> Dictionary:
+	return _scheduler.queue.get_index().designation_changes(from)
+
+func get_pending_job_ids_at(tile: Vector2i) -> Array[String]:
+	return _scheduler.queue.get_index().pending_ids_at(tile)
 
 func get_reservations() -> Dictionary:
 	return _scheduler.queue.get_reservations()
@@ -2019,21 +2039,12 @@ func _cancel_job_for_death(job_id: String) -> void:
 		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association(job_id, String(job.get("kind", "")))
 
-## restrict_to_for()'s own restriction, falling back to the raw waiting-queue
-## entry (GlobalAssignment.get_waiting()) for a job that has never yet been
-## activated: restrict_to_for() only reads _activated_entries, "" by its own
-## documented contract for a not-yet-activated job_id, which would otherwise
-## let a freshly submitted, still-queued job restricted to a just-killed
-## actor (a flee job submitted the same tick it died, say) survive
-## _apply_actor_death()'s cleanup below.
+## restrict_to_for(), else the waiting entry's restriction for a never-activated job, so a still-queued job restricted to a just-killed actor (a flee job submitted the same tick it died) cannot survive _apply_actor_death()'s cleanup below.
 func _job_restricted_to(job_id: String) -> String:
 	var restrict_to := _scheduler.restrict_to_for(job_id)
 	if not restrict_to.is_empty():
 		return restrict_to
-	for entry in _scheduler.get_waiting():
-		if String(entry.get("id", "")) == job_id:
-			return String(entry.get("restrict_to", ""))
-	return ""
+	return _scheduler.waiting_restrict_to(job_id)
 
 ## Drops whatever `actor` is holding as loose ground items at its own tile:
 ## a colonist's hands contents (one fresh item per distinct kind held), a
@@ -2133,17 +2144,13 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		if not check.is_empty():
 			return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
 		var target := Vector2i(payload["x"], payload["y"])
-		# assignee (F3), dig/chop/forage/mine only: carried through
-		# submit()'s existing restrict_to (already used by need_giver.gd).
+		# assignee (F3), dig/chop/forage/mine only: submit()'s restrict_to, as need_giver.gd uses it.
 		var assignee := String(payload.get("assignee", "")) if command["type"] in ["dig", "chop", "forage", "mine"] else ""
 		result = _scheduler.submit(target, payload.get("priority", 1), _clock.tick, command["type"], assignee)
 	else:
 		if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
 			return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload", "A non-empty job_id is required.")
-		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry
-		# drops the carried item (colonist-ai.md 3.3); "complete_job"
-		# already went through the job's own completion effect. A site_work job
-		# never carries anything.
+		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry drops the carried item (colonist-ai.md 3.3); "complete_job" already went through the job's own completion effect; a site_work job never carries anything.
 		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
 			if String(target_job.get("kind", "")) in ["haul", "site_fetch"]:
@@ -2154,13 +2161,8 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		result = _finish_job(payload["job_id"], command["type"])
 		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
 			_progress_table.clear_terminated_job(String(payload["job_id"]), terminal_job, terminal_was_active)
-		# Shares _resolve_giver_association() with
-		# _toil_on_work_complete()/TrenchSystem._trap_actor()/_cancel_job_for_death()/
-		# _resolve_refused_reservations() rather than only ever telling
-		# NeedGiver -- a command that cancels/fails/invalidates/completes a
-		# rescue job must tell RescueGiver too, or its own _pending/_job_victim
-		# association keeps naming a job that is no longer queued or active,
-		# and the rescuer can never take ordinary work or another rescue.
+		# Shares _resolve_giver_association() with _toil_on_work_complete()/TrenchSystem._trap_actor()/_cancel_job_for_death()/
+		# _resolve_refused_reservations(): a command ending a rescue job must tell RescueGiver too, or its _pending/_job_victim association keeps naming a dead job and the rescuer never takes other work or another rescue.
 		if result["ok"]:
 			_resolve_giver_association(String(payload["job_id"]), String(terminal_job.get("kind", "")))
 	# F3: a cancel/fail/invalidate_job command above can
@@ -2418,8 +2420,8 @@ func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void
 			_reroutes.erase(colonist_id)
 			return
 
-func get_events() -> Array[Dictionary]:
-	return _event_log.get_events()
+func get_events(types: Array = []) -> Array[Dictionary]:
+	return _event_log.get_events(types)
 
 ## record=false (preview() only) builds every rejection through _event_log.pure_rejection() instead of
 ## _event_log.rejection(), so an invalid envelope, a malformed payload or a tick mismatch previewed on an

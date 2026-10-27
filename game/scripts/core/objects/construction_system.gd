@@ -337,8 +337,8 @@ func construction_item_reservation_owner(item_id: String) -> String:
 ## no reservation on its item yet, so source searches must skip it explicitly.
 func _pending_site_fetch_jobs(exclude_job_id: String = "") -> Array[Dictionary]:
 	var pending: Array[Dictionary] = []
-	for job in _scheduler.queue.get_jobs():
-		if String(job.get("kind", "")) != "site_fetch" or String(job.get("status", "")) not in ["queued", "active"]:
+	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+		if String(job.get("status", "")) not in ["queued", "active"]:
 			continue
 		if String(job["id"]) != exclude_job_id:
 			pending.append(job)
@@ -411,10 +411,7 @@ func reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vec
 ## ConstructionGiver.advance() uses.
 func _site_fetch_work_busy(origin: Vector2i) -> int:
 	var busy := 0
-	for job in _scheduler.queue.get_jobs():
-		var kind := String(job.get("kind", ""))
-		if kind != "site_fetch" and kind != "site_work":
-			continue
+	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch", "site_work"]):
 		if String(job.get("status", "")) in ["queued", "active"] and job.get("site") == origin:
 			busy += 1
 	return busy
@@ -428,8 +425,8 @@ func next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector2i, ex
 ## so the jobs that just (re)activated can be told apart.
 func active_site_fetch_job_ids() -> Dictionary:
 	var ids: Dictionary = {}
-	for job in _scheduler.queue.get_jobs():
-		if String(job.get("kind", "")) == "site_fetch" and String(job.get("status", "")) == "active":
+	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+		if String(job.get("status", "")) == "active":
 			ids[String(job["id"])] = true
 	return ids
 
@@ -438,9 +435,8 @@ func active_site_fetch_job_ids() -> Dictionary:
 ## Only jobs still fetching (cell == null) and not active before this tick: a
 ## running job is never re-evaluated mid-route.
 func resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
-	for job in _scheduler.queue.get_jobs():
-		if (String(job.get("kind", "")) != "site_fetch" or String(job.get("status", "")) != "active"
-				or job.get("cell") != null):
+	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+		if String(job.get("status", "")) != "active" or job.get("cell") != null:
 			continue
 		var job_id := String(job["id"])
 		if before.has(job_id):
@@ -506,12 +502,10 @@ func cancel_construction_site(site_id: String) -> void:
 	if site.is_empty():
 		return
 	var origin: Vector2i = site["origin"]
-	for job in _scheduler.queue.get_jobs():
+	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch", "site_work"]):
 		if job.get("site") != origin or not (String(job.get("status", "")) in ["queued", "active"]):
 			continue
 		var kind := String(job.get("kind", ""))
-		if kind != "site_fetch" and kind != "site_work":
-			continue
 		var job_id := String(job["id"])
 		if kind == "site_fetch":
 			_drop_carried_haul_item.call(job_id)

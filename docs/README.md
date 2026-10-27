@@ -88,6 +88,7 @@ the order they were accepted. New ones start from the
 | [041](decisions/041-colonist-glide-move-ticks-getter-core-budget-increase.md) | A read-only move_ticks_per_tile getter for the colonist glide raises the world_state.gd core budget |
 | [042](decisions/042-build-line-batch-command.md) | `build_line` submits a whole wall/rectangle drag as one atomic command |
 | [043](decisions/043-site-fetch-chained-deposit.md) | `site_fetch`'s `deposit` completion chains onto further same-kind sites |
+| [044](decisions/044-area-order-expansion-queue.md) | Area orders expand through a saved per-tick queue |
 
 ## Content and data
 

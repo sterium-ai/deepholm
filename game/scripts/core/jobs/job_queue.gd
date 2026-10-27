@@ -4,6 +4,8 @@ extends RefCounted
 ## Standalone deterministic dig queue. See README.md for the integration contract.
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
 const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
+const JobIndexType = preload("res://scripts/core/jobs/job_index.gd")
+const JobEventLogType = preload("res://scripts/core/jobs/job_event_log.gd")
 
 enum Priority { LOW, NORMAL, HIGH }
 
@@ -36,8 +38,10 @@ var _tick: int = 0
 var _next_id: int = 1
 var _sequence: int = 0
 var _jobs: Array[Dictionary] = []
+## Lookup indexes over _jobs and the event log (B1, see each module's doc).
+var _index := JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
 var _table: ReservationTableType = ReservationTableType.new()
-var _events: Array[Dictionary] = []
+var _events := JobEventLogType.new()
 ## haul-only: item_id -> a free destination cell, or null when none is free
 ## (colonist-ai.md 3.4's free-cell lookup). Injected post-construction
 ## (set_haul_destination_finder()) since AssignmentQueue's constructor
@@ -151,6 +155,7 @@ func submit_dig(target: Vector2i, priority: int = Priority.NORMAL, kind: String 
 		"site": null,
 	}
 	_jobs.append(job)
+	_index.add(_jobs, job)
 	_emit("job_queued", job_id, {})
 	return {"ok": true, "job_id": job_id}
 
@@ -483,6 +488,7 @@ func block_no_tool(job_id: String) -> void:
 	ToolMatchingType.gate_force_backoff(job, _tick, _tool_requirement_of, _block_no_tool)
 
 func _block_no_tool(job: Dictionary, remedy: String) -> void:
+	_index.watch(job) # every ToolMatching retry_at backoff ends here
 	_block(job, BLOCKED_NO_TOOL, remedy)
 
 ## Critical-need interrupt support (colonist-ai.md 3.6/ADR 009): releases
@@ -630,6 +636,18 @@ func get_job(job_id: String) -> Dictionary:
 func get_jobs() -> Array[Dictionary]:
 	return _jobs.duplicate(true)
 
+## get_jobs() filtered to `kinds`, costing only the jobs returned.
+func get_jobs_of_kinds(kinds: Array) -> Array[Dictionary]:
+	return _index.of_kinds(_jobs, kinds).duplicate(true)
+
+## job id -> kind for every job; a live view callers must never mutate.
+func get_job_kinds() -> Dictionary:
+	return _index.kinds_of(_jobs)
+
+## The lookup indexes themselves (job_index.gd), for read-only queries.
+func get_index() -> JobIndexType:
+	return _index
+
 ## Vector2i target -> owning job id, for every active job, plus every queued
 ## haul job still within its destination backoff (colonist-ai.md 3.4,
 ## gated on `retry_at` alone -- see _tick_haul()'s gate -- never the
@@ -642,19 +660,11 @@ func get_jobs() -> Array[Dictionary]:
 ## never applies -- reporting its target "reserved" here routes it through
 ## that same exclusion, still refreshed each selection but never competing
 ## for a route-search slot or a chosen assignment while backed off.
+## Any backed-off queued job (haul or needs_tool, sharing "retry_at" -- see
+## _tick_haul()/_tool_requirement_satisfied()) also counts as reserved, so its
+## aging score can't keep winning a route-search slot while backed off.
 func get_reservations() -> Dictionary:
-	var reservations: Dictionary = {}
-	for job in _jobs:
-		if job["status"] == "active":
-			reservations[job["target"]] = job["id"]
-	# Any backed-off queued job (haul or needs_tool, sharing "retry_at" --
-	# see _tick_haul()/_tool_requirement_satisfied()) also counts as reserved,
-	# so its aging score can't keep winning a route-search slot while backed off.
-	for job in _jobs:
-		if job["status"] == "queued" and _tick < int(job["retry_at"]):
-			if not reservations.has(job["target"]):
-				reservations[job["target"]] = job["id"]
-	return reservations
+	return _index.reservations(_jobs, _tick)
 
 ## The actual shared ReservationTable (colonist-ai.md 3.4), for callers that
 ## need the generic String-keyed ledger directly -- e.g. the reserve toil
@@ -668,7 +678,11 @@ func get_reservation_table() -> ReservationTableType:
 	return _table
 
 func get_events() -> Array[Dictionary]:
-	return _events.duplicate(true)
+	return _events.get_all()
+
+## The events get_events() lists whose sequence is above after_sequence.
+func get_events_after(after_sequence: int) -> Array[Dictionary]:
+	return _events.get_after(after_sequence)
 
 ## Overwrites the job list and counters from a prior save state. Reservations
 ## are not a separate input: they are re-derived from active jobs' targets,
@@ -678,6 +692,7 @@ func get_events() -> Array[Dictionary]:
 ## correctly continued sequence number from the restored counters.
 func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: int) -> void:
 	_jobs = jobs
+	_index = JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
 	_tick = tick_value
 	_next_id = next_id
 	_sequence = sequence
@@ -699,7 +714,7 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 			_table.acquire(_target_key(job["target"]), job["id"])
 			for key in _extra_keys(job["id"]):
 				_table.acquire(key, job["id"])
-	_events = []
+	_events.reset(_sequence)
 
 ## Namespaces a tile target into the ReservationTable's generic String key
 ## space (colonist-ai.md 3.4), so an "item:"/"cell:" key can never collide
@@ -714,10 +729,7 @@ func _cell_key(cell: Vector2i) -> String:
 	return "cell:%d,%d" % [cell.x, cell.y]
 
 func _find_job(job_id: String) -> Dictionary:
-	for job in _jobs:
-		if job["id"] == job_id:
-			return job
-	return {}
+	return _index.find(_jobs, job_id)
 
 ## Pure pre-mutation predicate for _finish()'s own unknown-job/already-terminal/not-active
 ## rules, shared with CommandChecks.check_terminal_job_command()'s preview
@@ -757,6 +769,7 @@ func _set_reason(job: Dictionary, reason: String, remedy: String, owner: String 
 	job["reason"] = reason
 	job["remedy"] = remedy
 	job["blocking_job_id"] = owner
+	_index.note_reason(job)
 
 func _reject(job_id: String, reason: String, remedy: String) -> Dictionary:
 	var rejection := {"job_id": job_id, "reason": reason, "remedy": remedy, "tick": _tick}
@@ -769,13 +782,4 @@ func _emit(event_type: String, job_id: String, data: Dictionary) -> void:
 		"entity_id": job_id, "sequence": _sequence, "data": data.duplicate(true),
 	})
 	_sequence += 1
-	_events.sort_custom(_event_before)
-
-func _event_before(a: Dictionary, b: Dictionary) -> bool:
-	if a["tick"] != b["tick"]:
-		return a["tick"] < b["tick"]
-	if a["system_priority"] != b["system_priority"]:
-		return a["system_priority"] < b["system_priority"]
-	if a["entity_id"] != b["entity_id"]:
-		return a["entity_id"] < b["entity_id"]
-	return a["sequence"] < b["sequence"]
+	_index.on_event(event_type, _find_job(job_id))

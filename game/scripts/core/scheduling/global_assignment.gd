@@ -5,6 +5,7 @@ const RouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
+const WaitingIndexType = preload("res://scripts/core/scheduling/waiting_index.gd")
 const JOB_EVALUATION_BUDGET := 32
 const PRIORITY_WEIGHT := 16
 const MAX_TRAVEL_PENALTY := 15
@@ -20,6 +21,7 @@ var queue: QueueType
 ## worker's labourTable against.
 var _content
 var _waiting: Array[Dictionary] = []
+var _waiting_index := WaitingIndexType.new() # B1: finds a _waiting entry by binary search
 var _next_ordinal: int = 0
 var _cursors: Dictionary = {}
 var _pending: Dictionary = {}
@@ -147,10 +149,9 @@ func submit(target: Vector2i, priority: int, tick_number: int, kind: String = "d
 		if autonomous:
 			entry["autonomous"] = true
 		_next_ordinal += 1
-		var index := 0
-		while index < _waiting.size() and _entry_before(_waiting[index], entry):
-			index += 1
+		var index := _waiting.bsearch_custom(entry, _entry_before, true) # = the old scan's index
 		_waiting.insert(index, entry)
+		_waiting_index.record(entry)
 		for worker in _cursors:
 			if int(_cursors[worker]) > index:
 				_cursors[worker] += 1
@@ -232,8 +233,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 	## skipped when no caller wires labour scoring in.
 	var job_kinds: Dictionary = {}
 	if get_job_labour.is_valid():
-		for job in queue.get_jobs():
-			job_kinds[job["id"]] = String(job.get("kind", ""))
+		job_kinds = queue.get_job_kinds()
 		# Before advance_selection() below, so a labour re-enable's job_unblocked fires first.
 		_refresh_labour_disabled_reasons(all_colonists if not all_colonists.is_empty() else workers, job_kinds, get_job_labour)
 	var reservations := queue.get_reservations()
@@ -414,10 +414,11 @@ func _propose_committed_need(worker: String, colonist: Dictionary, job_id: Strin
 		tick_number, get_job_labour, get_calendar_boost))
 
 func _find_waiting_entry(job_id: String) -> Dictionary:
-	for entry in _waiting:
-		if entry["id"] == job_id:
-			return entry
-	return {}
+	var index := _waiting_index.index_of(_waiting, job_id, _entry_before)
+	return _waiting[index] if index >= 0 else {}
+
+func waiting_restrict_to(job_id: String) -> String:
+	return String(_find_waiting_entry(job_id).get("restrict_to", ""))
 
 func _pending_matches_job(worker: String, job_id: String) -> bool:
 	if not _pending.has(worker):
@@ -452,9 +453,7 @@ func _refresh_labour_disabled_reasons(colony: Array[Dictionary], job_kinds: Dict
 				disabled_labours[kind] = true
 			if level > 0:
 				disabled_labours[kind] = false
-	for entry in _waiting:
-		var labour := String(get_job_labour.call(String(job_kinds.get(entry["id"], ""))))
-		queue.set_labour_disabled(entry["id"], bool(disabled_labours.get(labour, false)))
+	_waiting_index.apply_labour_disabled(queue, _waiting, disabled_labours, job_kinds, get_job_labour, _entry_before)
 
 ## Frees worker's current assignment without touching the underlying job's own
 ## record (colonist-ai.md 3.6). A no-op when worker has no assignment.
@@ -566,6 +565,7 @@ func get_pending() -> Dictionary:
 ## autonomous entry is gated by its own actor's faction, not the colony's.
 func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i) -> void:
 	_waiting = state["waiting"].duplicate(true)
+	_waiting_index.restore(_waiting, state.get("activated_entries", {}))
 	_next_ordinal = state["next_ordinal"]
 	_cursors = state["cursors"].duplicate()
 	_assignments = state["assignments"].duplicate(true)
@@ -666,14 +666,13 @@ func _resolve_path(start: Vector2i, target: Vector2i, passable: Callable, bounds
 	return route.get_path()
 
 func _remove_waiting(job_id: String) -> void:
-	for index in _waiting.size():
-		if _waiting[index]["id"] != job_id:
-			continue
-		_waiting.remove_at(index)
-		for worker in _cursors:
-			if int(_cursors[worker]) > index:
-				_cursors[worker] -= 1
+	var index := _waiting_index.index_of(_waiting, job_id, _entry_before)
+	if index < 0:
 		return
+	_waiting.remove_at(index)
+	for worker in _cursors:
+		if int(_cursors[worker]) > index:
+			_cursors[worker] -= 1
 
 func _entry_before(a: Dictionary, b: Dictionary) -> bool:
 	if a["base"] != b["base"]:

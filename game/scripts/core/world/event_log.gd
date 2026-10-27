@@ -7,7 +7,10 @@ extends RefCounted
 ##
 ## Invariants:
 ## - _events stays sorted by (tick, system_priority, entity_id, sequence) at
-##   all times (insertion sort in insert_event()).
+##   all times (binary-search insert in insert_event(), at the same index the
+##   former backward scan found), and so does each _by_type list.
+## - insert_event() is the only way in: _by_type indexes every event by type
+##   so get_events(types) never walks or copies the whole log (B1).
 ## - Only the two counters are persisted (StateCodec "scheduling".
 ##   eventSequence/queueEventSequence); the event list itself is never saved
 ##   and starts empty after a load.
@@ -17,6 +20,7 @@ extends RefCounted
 ##   only rejection path preview() may call.
 
 var _events: Array[Dictionary] = []
+var _by_type: Dictionary = {}
 var _event_sequence: int = 0
 ## Highest JobQueue event sequence already copied into _events.
 var _queue_event_sequence: int = -1
@@ -35,15 +39,16 @@ func encode() -> Dictionary:
 ## Reads the counters from a decoded save's "scheduling" block; the event list restarts empty.
 func decode(scheduling: Dictionary) -> void:
 	_events = []
+	_by_type = {}
 	_event_sequence = int(scheduling["eventSequence"])
 	_queue_event_sequence = int(scheduling["queueEventSequence"])
 
 func collect_queue_events() -> void:
-	# JobQueue.get_events() deep-copies its whole log: skip ticks whose counter shows nothing new.
+	# Cheap when nothing is new; otherwise only the new tail is copied (B1).
 	if _queue.get_sequence() <= _queue_event_sequence + 1:
 		return
 	var highest := _queue_event_sequence
-	for event in _queue.get_events():
+	for event in _queue.get_events_after(_queue_event_sequence):
 		var queue_sequence: int = event["sequence"]
 		if queue_sequence <= _queue_event_sequence:
 			continue
@@ -52,9 +57,18 @@ func collect_queue_events() -> void:
 		insert_event(event)
 	_queue_event_sequence = highest
 
-func get_events() -> Array[Dictionary]:
+## Deep copies of the log, or of only its events whose type is in a non-empty
+## `types` (same order), costing only the events returned.
+func get_events(types: Array = []) -> Array[Dictionary]:
+	var source: Array[Dictionary] = _events
+	if not types.is_empty():
+		source = []
+		for type in types:
+			source.append_array(_by_type.get(type, []))
+		if types.size() > 1:
+			source.sort_custom(_event_less)
 	var copy: Array[Dictionary] = []
-	for event in _events:
+	for event in source:
 		copy.append(event.duplicate(true))
 	return copy
 
@@ -115,10 +129,12 @@ func next_sequence() -> int:
 	return sequence
 
 func insert_event(event: Dictionary) -> void:
-	var index := _events.size()
-	while index > 0 and _event_less(event, _events[index - 1]):
-		index -= 1
-	_events.insert(index, event)
+	_events.insert(_events.bsearch_custom(event, _event_less, false), event)
+	if not _by_type.has(event["type"]):
+		var of_type: Array[Dictionary] = []
+		_by_type[event["type"]] = of_type
+	var same_type: Array[Dictionary] = _by_type[event["type"]]
+	same_type.insert(same_type.bsearch_custom(event, _event_less, false), event)
 
 func _event_less(a: Dictionary, b: Dictionary) -> bool:
 	if a["tick"] != b["tick"]:

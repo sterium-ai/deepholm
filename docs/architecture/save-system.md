@@ -99,7 +99,7 @@ codes are:
 
 ## Schema history and migration
 
-The current persisted schema is version 25 (`StateCodec.SCHEMA_VERSION`).
+The current persisted schema is version 26 (`StateCodec.SCHEMA_VERSION`).
 Version 1 saves are migrated
 explicitly to version 2: scheduler continuation fields are initialized to the
 v1 starting values and the RNG state is reconstructed from the saved
@@ -353,6 +353,24 @@ save predates a colonist ever holding more than one ground item at once, so ther
 else to backfill). The item id is dropped: a `hands` entry never had one of its own,
 even freshly after this migration -- only the ground item `place()` later creates for it gets a
 new id.
+
+Version 25 saves are migrated explicitly to version 26 (ADR 044): a v25 save predates
+area orders, so nothing can be pending and `areaOrders` is backfilled as an empty queue,
+`{"nextId": 1, "list": [], "created": []}`; nothing else changes. `areaOrders` is the last top-level
+field `StateCodec.encode()` writes: `nextId` (the next order id), `list`, one entry
+per pending `area_order` expansion in acceptance order -- `{id, order, actor, commandId, x, y,
+width, height, priority, next, done, jobLimit, siteLimit}`, where `next` is the row-major index
+of the next tile to expand and `done` the indexes from `next` on already expanded early
+for a later order over the same tile (so a save taken mid-expansion resumes exactly there),
+`jobLimit`/`siteLimit` the next job/site number when the order was accepted -- and
+`created`, `[first, end, order id]` ranges of job numbers an area order created while a
+later cancel was pending (that cancel may pick them although they are newer than its
+`jobLimit`). `SaveIO._valid_area_orders()` checks the shape, a known `order`,
+an in-map non-empty rectangle, `0 <= next < width*height`, distinct `done` indexes in
+`[next, width*height)` and ascending, disjoint `created` ranges naming a past order id. Every v26 save carries the
+field, but the validator keeps it optional like `constructionSites`, so a hand-built
+current-schema state without it still loads (with an empty queue). `state_hash()` covers it
+while an order is pending (an idle queue's `nextId` is not observable outside the save).
 
 Schema version 25 stays current for object footprint/rotation (ADR 039): no
 migration step or version bump was needed. Each `objects` entry gains an *optional*

@@ -754,7 +754,11 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 	# that change still loads; state_codec.gd's decode() no longer reads it.
 	# constructionSites: optional for the same reason combatBlockedTargets is -- absence is allowed for any save written
 	# before construction sites existed.
-	var optional_top_level := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "approachRetiredActors", "constructionSites"]
+	# areaOrders (ADR 044, schemaVersion 26): every v26 save written by encode()
+	# carries it and the v25->v26 migration backfills it, but it stays optional
+	# here like constructionSites so a hand-built current-schema state without
+	# it still validates; StateCodec.decode() then restores an empty queue.
+	var optional_top_level := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "approachRetiredActors", "constructionSites", "areaOrders"]
 	if not _keys_allowed(state, top_level + optional_top_level):
 		return _fail("unexpected top-level field")
 	for key in top_level:
@@ -822,6 +826,11 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 			var site_check := _valid_construction_site(site_entry, map_width, map_height)
 			if not site_check["ok"]:
 				return site_check
+
+	if state.has("areaOrders"):
+		var area_orders_check := _valid_area_orders(state["areaOrders"], map_width, map_height)
+		if not area_orders_check["ok"]:
+			return area_orders_check
 
 	var zones_check := _valid_zones(state.get("zones"), map_width, map_height)
 	if not zones_check["ok"]:
@@ -2215,3 +2224,54 @@ static func _replace_target(temporary: String, target: String) -> Dictionary:
 
 static func _error(code: String, message: String, file: String) -> Dictionary:
 	return {"ok": false, "code": code, "message": message, "file": file}
+
+## "areaOrders" (ADR 044, schemaVersion 26): {nextId, list, created}, each
+## list entry one pending area_order expansion as AreaOrders.encode() writes
+## it -- a known order kind, a non-empty in-map rectangle, a next tile index
+## inside it and distinct "done" indexes from next on; each "created" entry a
+## [first, end, order id] job-number range, ascending and disjoint.
+static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictionary:
+	if not (value is Dictionary):
+		return _fail("invalid areaOrders type")
+	if not _keys_allowed(value, ["nextId", "list", "created"]):
+		return _fail("unexpected areaOrders field")
+	for key in ["nextId", "list", "created"]:
+		if not value.has(key):
+			return _fail_missing("missing areaOrders field '%s'" % key)
+	if not _is_int_min(value["nextId"], 1) or not (value["list"] is Array) or not (value["created"] is Array):
+		return _fail("invalid areaOrders nextId, list or created")
+	var range_end := 0
+	for created in value["created"]:
+		if not (created is Array) or created.size() != 3 or not _is_int(created[0]) or not _is_int(created[1]) or not _is_int(created[2]):
+			return _fail("invalid areaOrders created range")
+		if int(created[0]) < range_end or int(created[1]) <= int(created[0]) or int(created[2]) < 1 or int(created[2]) >= int(value["nextId"]):
+			return _fail("invalid areaOrders created range")
+		range_end = int(created[1])
+	var fields := ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"]
+	for entry in value["list"]:
+		if not (entry is Dictionary) or not _keys_allowed(entry, fields):
+			return _fail("invalid areaOrders entry")
+		for key in fields:
+			if not entry.has(key):
+				return _fail_missing("missing areaOrders entry field '%s'" % key)
+		for key in ["order", "actor", "commandId"]:
+			if not (entry[key] is String) or str(entry[key]).is_empty():
+				return _fail("invalid areaOrders entry %s" % key)
+		if not AreaOrders.ORDERS.has(str(entry["order"])):
+			return _fail("invalid areaOrders entry order")
+		for key in ["id", "x", "y", "width", "height", "priority", "next", "jobLimit", "siteLimit"]:
+			if not _is_int(entry[key]):
+				return _fail("invalid areaOrders entry %s" % key)
+		var rect := Rect2i(int(entry["x"]), int(entry["y"]), int(entry["width"]), int(entry["height"]))
+		if not rect.has_area() or not Rect2i(0, 0, map_width, map_height).encloses(rect):
+			return _fail("invalid areaOrders entry rectangle")
+		if int(entry["next"]) < 0 or int(entry["next"]) >= rect.get_area() or int(entry["id"]) >= int(value["nextId"]):
+			return _fail("invalid areaOrders entry next or id")
+		if not (entry["done"] is Array):
+			return _fail("invalid areaOrders entry done")
+		var seen := {}
+		for index in entry["done"]:
+			if not _is_int(index) or int(index) < int(entry["next"]) or int(index) >= rect.get_area() or seen.has(int(index)):
+				return _fail("invalid areaOrders entry done")
+			seen[int(index)] = true
+	return {"ok": true}

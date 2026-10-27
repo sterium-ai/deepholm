@@ -333,7 +333,7 @@ func _reachable_candidates_only(candidates: Array[Vector2i]) -> Array[Vector2i]:
 ## concurrent searches never pick the same not-yet-reserved source (colonist-ai.md 3.4).
 func need_job_targets() -> Dictionary:
 	var claimed: Dictionary = {}
-	for job in _scheduler.queue.get_jobs():
+	for job in _scheduler.queue.get_jobs_of_kinds(["eat_food", "drink_water", "sleep"]):
 		if not need_kind_for_job(String(job["kind"])).is_empty() and job["status"] in ["queued", "active"]:
 			claimed[job["target"]] = true
 	return claimed

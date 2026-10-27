@@ -199,7 +199,7 @@ Orca helper scripts, this backlog.
 
 ## Phase B — bugs found by the owner's playtests
 
-### B1 — Large area orders freeze the game and the selection lags the cursor · `todo` · *parallel-safe (coordinate with R4 on world_state.gd)*
+### B1 — Large area orders freeze the game and the selection lags the cursor · `review (antonelmejor50-hub/b1-large-area-orders-freeze)` · *parallel-safe (coordinate with R4 on world_state.gd)*
 
 - **Symptom (owner, 2026-10-25, main `e0a9f56`, native Windows build 1600×900):** dragging a
   large rectangle for an order (dig/mine/chop/cancel/zone) makes the game stutter and then

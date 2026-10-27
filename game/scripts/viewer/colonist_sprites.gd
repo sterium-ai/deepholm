@@ -379,13 +379,12 @@ func _work_animation(colonist: Dictionary) -> String:
 	var work = colonist.get("work")
 	if work == null:
 		return ""
-	for job in world.get_jobs():
-		if job["id"] == work["job_id"]:
-			# job_queue.gd's SITE_WORK_KIND ("site_work") is the only job kind
-			# whose toils reach "work" under labour "build" (content/jobs.json)
-			# -- a construction site's builder job, not a literal "build" kind.
-			return String(WORK_ANIMATION_BY_JOB_KIND.get(String(job.get("kind", "")), ""))
-	return ""
+	# job_queue.gd's SITE_WORK_KIND ("site_work") is the only job kind
+	# whose toils reach "work" under labour "build" (content/jobs.json)
+	# -- a construction site's builder job, not a literal "build" kind.
+	# get_job() reads the one job, not a copy of every job (B1).
+	var kind := String(world.get_job(String(work["job_id"])).get("kind", ""))
+	return String(WORK_ANIMATION_BY_JOB_KIND.get(kind, ""))
 
 ## Applies one colonist's current motion state to its sprite, both item
 ## markers, and the animation frame -- called from refresh() (t as last
