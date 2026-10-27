@@ -1,0 +1,12 @@
+bench_long_session: commit=c6e3971 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_long_session: retention ticks=1000 mean_tick=16.51ms queue_jobs=149 (open=20 terminal=129) queue_events=685 world_events=1834 dirty_cells=129 top_phases: advance_colonists=14.55 scheduler=0.88 combat=0.36
+bench_long_session: retention ticks=2000 mean_tick=11.43ms queue_jobs=229 (open=25 terminal=204) queue_events=1061 world_events=3281 dirty_cells=202 top_phases: advance_colonists=7.71 need_giver=2.13 scheduler=0.64
+bench_long_session: retention ticks=3000 mean_tick=8.81ms queue_jobs=296 (open=16 terminal=280) queue_events=1594 world_events=4900 dirty_cells=270 top_phases: advance_colonists=7.04 scheduler=0.77 combat=0.36
+bench_long_session: retention ticks=4000 mean_tick=10.42ms queue_jobs=374 (open=21 terminal=353) queue_events=2366 world_events=6744 dirty_cells=338 top_phases: advance_colonists=7.05 need_giver=1.71 scheduler=0.79
+bench_long_session: retention ticks=5000 mean_tick=7.50ms queue_jobs=428 (open=18 terminal=410) queue_events=2974 world_events=6353 dirty_cells=390 top_phases: advance_colonists=5.45 scheduler=0.81 need_giver=0.41
+bench_long_session: retention ticks=6000 mean_tick=9.17ms queue_jobs=498 (open=19 terminal=479) queue_events=3706 world_events=8149 dirty_cells=454 top_phases: advance_colonists=6.37 need_giver=1.16 scheduler=0.83
+bench_long_session: backlog open_orders=0 actors=10 tick mean=1.59ms p50=1.67ms p95=1.71ms max=1.80ms n=50 top_phases: combat=0.44 calendar_alerts=0.42 needs_decay=0.36
+bench_long_session: backlog open_orders=100 actors=10 tick mean=40.12ms p50=2.48ms p95=197.40ms max=1316.20ms n=50 top_phases: advance_colonists=38.37 combat=0.42 needs_decay=0.36
+bench_long_session: backlog open_orders=500 actors=10 tick mean=39.74ms p50=2.48ms p95=189.51ms max=1283.93ms n=50 top_phases: advance_colonists=38.04 combat=0.40 needs_decay=0.36
+bench_long_session: backlog open_orders=2000 actors=10 tick mean=39.52ms p50=2.10ms p95=161.96ms max=1327.22ms n=50 top_phases: advance_colonists=37.99 combat=0.37 scheduler=0.34
+bench_long_session: done
