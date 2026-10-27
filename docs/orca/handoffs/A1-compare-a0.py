@@ -6,6 +6,8 @@ Each line's shape (its text with every number replaced by #) must match, in
 order. Every value that is not a timing must be equal; timings (ms, us, wall
 seconds, phase splits) are not compared. On a line that ends in a phase list
 (top_phases:, phases[...]) the values before the list are still compared.
+Numbers outside key=value pairs ("12999 bytes", "+100 items", "(225, 31)") are
+compared too, unless they are timings ("22.7ms", "177.9 us per added entry").
 
 Lines are matched by shape, in order within a shape (both runs print idle,
 then busy, then needs; A0's needs lines come from its separate re-run).
@@ -46,8 +48,19 @@ def key(line: str) -> str:
     return NUM.sub("#", line)
 
 
+PAIR = re.compile(r"([\w/+()\[\].]+)=([^\s,)]+)")
+# A bare number that is a timing: "22.7ms", "177.9 us per added entry".
+BARE_TIMING = re.compile(r"\s*(ms|us)\b")
+
+
 def pairs(line: str) -> list[tuple[str, str]]:
-    return re.findall(r"([\w/+()\[\].]+)=([^\s,)]+)", line)
+    return PAIR.findall(line)
+
+
+def bare_numbers(line: str) -> list[str]:
+    """The numbers outside key=value pairs that are not timings, e.g. "12999 bytes", "+100 items"."""
+    rest = PAIR.sub(" ", line)
+    return [m.group(0) for m in NUM.finditer(rest) if not BARE_TIMING.match(rest, m.end())]
 
 
 def main() -> int:
@@ -89,6 +102,10 @@ def main() -> int:
                   f"{'  (' + reason + ')' if reason else ''}\n  A0 : {l}\n  now: {n}")
             if not reason:
                 mismatches += 1
+        old_bare, new_bare = bare_numbers(PHASE_LIST.split(l)[0]), bare_numbers(PHASE_LIST.split(n)[0])
+        if old_bare != new_bare:
+            print(f"DIFF bare numbers: A0={old_bare} now={new_bare}\n  A0 : {l}\n  now: {n}")
+            mismatches += 1
     leftover = [l for v in new_by_key.values() for l in v]
     print(f"compare-a0: {matched} of {len(old)} A0 lines matched by shape, {mismatches} mismatch(es), "
           f"{len(leftover)} new line(s) without an A0 counterpart")
