@@ -9,32 +9,41 @@ extends RefCounted
 ##
 ## Invariant: _events[i]["sequence"] == _first_sequence + i.
 ##
-## Bounded retention (A6): trim() drops the oldest events (by sequence) down
-## to RETAINED_EVENTS once more than MAX_EVENTS are held. JobQueue calls it
-## only at the start of its own tick(), never mid-command or mid-tick. Events
-## EventLog.collect_queue_events() has not copied yet are the newest ones, so
-## they survive a trim unless more than RETAINED_EVENTS were emitted since the
-## last collection (every command handler and WorldState tick collects).
+## Bounded retention (A6): only events a consumer has released may go.
+## EventLog.collect_queue_events() calls release_through() with the highest
+## sequence it has copied; once more than MAX_EVENTS are held, the oldest
+## released events are dropped, down to RETAINED_EVENTS at most. An event not
+## yet collected is never dropped, however large the burst (a labour change
+## blocking thousands of waiting jobs in one tick): the log may then hold more
+## than MAX_EVENTS until the next collection releases them. A queue nothing
+## collects from (a standalone JobQueue in a test) never trims.
 
 const MAX_EVENTS := 4096
 const RETAINED_EVENTS := 3072
 
 var _events: Array[Dictionary] = []
 var _first_sequence: int = 0
+## Highest sequence a consumer has released (copied elsewhere); -1 for none.
+var _released: int = -1
 
 ## Empties the log; the next appended event carries first_sequence.
 func reset(first_sequence: int) -> void:
 	_events = []
 	_first_sequence = first_sequence
+	_released = first_sequence - 1
 
 func append(event: Dictionary) -> void:
 	_events.append(event)
 
-## Drops the oldest events down to RETAINED_EVENTS once more than MAX_EVENTS are held.
-func trim() -> void:
+## Marks every event up to `sequence` as collected, then drops the oldest
+## released events down to RETAINED_EVENTS once more than MAX_EVENTS are held.
+func release_through(sequence: int) -> void:
+	_released = maxi(_released, sequence)
 	if _events.size() <= MAX_EVENTS:
 		return
-	var drop := _events.size() - RETAINED_EVENTS
+	var drop := mini(_events.size() - RETAINED_EVENTS, _released + 1 - _first_sequence)
+	if drop <= 0:
+		return
 	_events = _events.slice(drop)
 	_first_sequence += drop
 
@@ -42,12 +51,12 @@ func trim() -> void:
 func size() -> int:
 	return _events.size()
 
-## {"events", "next", "truncated"}: "events" are get_after(sequence - 1);
-## "next" (the queue's next sequence) is the cursor for the following call;
-## "truncated" is true when trim() already dropped an event at or after
-## `sequence`.
-func since(sequence: int, next: int) -> Dictionary:
-	return {"events": get_after(sequence - 1), "next": next, "truncated": sequence < _first_sequence}
+## The log as a cursor stream: {"events", "next", "truncated"}. "events" are
+## get_after(sequence - 1); "next" (the queue's next sequence, by the class
+## invariant) is the cursor for the following call; "truncated" is true when
+## retention already dropped an event at or after `sequence`.
+func since(sequence: int) -> Dictionary:
+	return {"events": get_after(sequence - 1), "next": _first_sequence + _events.size(), "truncated": sequence < _first_sequence}
 
 ## Deep copy of the whole log, sorted.
 func get_all() -> Array[Dictionary]:

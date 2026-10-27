@@ -308,7 +308,6 @@ func set_labour_disabled(job_id: String, disabled: bool) -> void:
 ## One explicit tick evaluates every queued job, highest priority first, FIFO
 ## within a priority. Blocked jobs remain queued and are retried on every tick.
 func tick() -> void:
-	_events.trim()
 	_tick += 1
 	for priority in [Priority.HIGH, Priority.NORMAL, Priority.LOW]:
 		for job in _jobs:
@@ -685,9 +684,10 @@ func get_events() -> Array[Dictionary]:
 func get_events_after(after_sequence: int) -> Array[Dictionary]:
 	return _events.get_after(after_sequence)
 
-## The log as a cursor stream (A6): see JobEventLog.since().
-func get_events_since(sequence: int) -> Dictionary:
-	return _events.since(sequence, _sequence)
+## Share-by-reference like get_reservation_table(): the event log itself, for
+## its cursor stream and collection-driven retention (A6, job_event_log.gd).
+func get_event_log() -> JobEventLogType:
+	return _events
 
 ## Overwrites the job list and counters from a prior save state. Reservations
 ## are not a separate input: they are re-derived from active jobs' targets,

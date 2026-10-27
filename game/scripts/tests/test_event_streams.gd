@@ -7,8 +7,11 @@ extends SceneTree
 ## - EventLog retention: past MAX_EVENTS the oldest events (in log order) go,
 ##   the per-type index stays equal to the filtered log, and a cursor that
 ##   missed dropped events reads back "truncated".
-## - JobQueue (JobEventLog) retention: trimmed only at the start of tick(),
-##   never mid-burst; get_events_since() reports truncation the same way.
+## - JobQueue (JobEventLog) retention: only events EventLog has collected
+##   (release_through()) are ever dropped, so a burst survives whole; since()
+##   reports truncation the same way. Regression (review round 1): disabling a
+##   labour with thousands of waiting jobs, then tick(), loses no job_blocked
+##   event on its way into the world log.
 ## - TileGrid dirty-cell retention and get_dirty_cells_since().
 ## - Viewer consumers: map_view falls back to a full rebuild on a truncated
 ##   dirty-cell read; status_text keeps incident lines after their event was
@@ -30,6 +33,7 @@ func _init() -> void:
 	_check_incremental_read_equals_full_log()
 	_check_event_log_retention()
 	_check_job_queue_retention()
+	_check_labour_burst_reaches_world_log()
 	_check_dirty_cell_retention()
 	_check_map_view_full_rebuild_on_truncation()
 	_check_status_text_keeps_trimmed_incidents()
@@ -137,22 +141,67 @@ func _check_event_log_retention() -> void:
 
 func _check_job_queue_retention() -> void:
 	var queue := QueueType.new(RandomNumberGenerator.new(), Callable())
+	var log: JobEventLogType = queue.get_event_log()
 	var burst := JobEventLogType.MAX_EVENTS + 500
 	for i in burst:
 		queue._emit("job_test", "job_%d" % i, {})
-	_expect(queue.get_events().size() == burst, "a burst must be kept whole until the next tick()")
-	_expect(not bool(queue.get_events_since(0)["truncated"]), "nothing is dropped mid-burst")
 	queue.tick()
+	_expect(queue.get_events().size() == burst, "nothing released: tick() must keep the whole burst, got %d" % queue.get_events().size())
+	log.release_through(99)
+	_expect(queue.get_events().size() == burst - 100, "only the 100 released events may go, got %d" % queue.get_events().size())
+	log.release_through(burst - 1)
 	var events := queue.get_events()
-	_expect(events.size() == JobEventLogType.RETAINED_EVENTS, "tick() must trim to RETAINED_EVENTS, got %d" % events.size())
+	_expect(events.size() == JobEventLogType.RETAINED_EVENTS, "a fully released log trims to RETAINED_EVENTS, got %d" % events.size())
 	_expect(int(events[0]["sequence"]) == burst - JobEventLogType.RETAINED_EVENTS, "the trim must drop the oldest events")
-	var stream := queue.get_events_since(0)
+	var stream: Dictionary = log.since(0)
 	_expect(bool(stream["truncated"]) and int(stream["next"]) == queue.get_sequence(), "an old cursor must read back truncated, next = get_sequence()")
-	var tail := queue.get_events_since(burst - 10)
+	var tail: Dictionary = log.since(burst - 10)
 	_expect(not bool(tail["truncated"]) and tail["events"] == events.slice(events.size() - 10), "a recent cursor must read the exact tail")
-	_expect(queue.get_events_after(burst - 11) == tail["events"], "get_events_since(s) must equal get_events_after(s - 1)")
-	queue.tick()
+	_expect(queue.get_events_after(burst - 11) == tail["events"], "since(s) must equal get_events_after(s - 1)")
+	log.release_through(burst - 1)
 	_expect(queue.get_events().size() == JobEventLogType.RETAINED_EVENTS, "a log under MAX_EVENTS is not trimmed again")
+
+## Every queued till job blocks in the same tick once farming is disabled for
+## everyone: more job_blocked events than JobEventLog.MAX_EVENTS, all emitted
+## after the last collection. Each must reach the world log. The orders go in
+## a few ticks earlier, so this tick's events sort after them in log order and
+## the world log's own retention drops the old command events, not these.
+func _check_labour_burst_reaches_world_log() -> void:
+	var world := WorldStateType.new(9090, 10, 96, 96)
+	var target := JobEventLogType.MAX_EVENTS + 200
+	var accepted := 0
+	for y in world.get_map_height():
+		for x in world.get_map_width():
+			if accepted == target:
+				break
+			if world.get_tile(x, y) == WorldStateType.TILE_SOIL and bool(world.apply(_cmd(world, "till", {"x": x, "y": y, "priority": 1})).get("ok", false)):
+				accepted += 1
+	_expect(accepted == target, "setup: %d till orders must be accepted, got %d" % [target, accepted])
+	for i in 5:
+		world.tick()
+	_expect(_labour_disabled_jobs(world) == 0, "setup: no job may be labour-blocked before the labour change")
+	for colonist in world.get_colonists():
+		world.apply(_cmd(world, "set_labour", {"colonist": String(colonist["id"]), "kind": "farm", "level": 0}))
+	var cursor := int(world.get_events_since(0)["next"])
+	world.tick()
+	var blocked := _labour_disabled_jobs(world)
+	_expect(blocked > JobEventLogType.MAX_EVENTS, "setup: the tick must block more than %d jobs, got %d" % [JobEventLogType.MAX_EVENTS, blocked])
+	var read: Dictionary = world.get_events_since(cursor, ["job_blocked"])
+	_expect(not bool(read["truncated"]), "setup: the world log must not have dropped this tick's events")
+	var collected := 0
+	for event in read["events"]:
+		if String(event["data"]["reason"]) == QueueType.BLOCKED_LABOUR_DISABLED:
+			collected += 1
+	_expect(collected == blocked, "every labour job_blocked event must reach the world log: %d jobs blocked, %d events collected" % [blocked, collected])
+	var queue = world._scheduler.queue
+	_expect(queue.get_events().size() <= JobEventLogType.MAX_EVENTS, "once collected, the queue log must be back within its bound, got %d" % queue.get_events().size())
+
+func _labour_disabled_jobs(world: WorldStateType) -> int:
+	var count := 0
+	for job in world.get_jobs(["till"]):
+		if job["status"] == "queued" and String(job["reason"]) == QueueType.BLOCKED_LABOUR_DISABLED:
+			count += 1
+	return count
 
 func _check_dirty_cell_retention() -> void:
 	var grid := TileGridType.new(8, 8, Callable(), Callable(), Callable())

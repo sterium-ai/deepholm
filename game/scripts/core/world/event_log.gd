@@ -77,6 +77,8 @@ func collect_queue_events() -> void:
 		event["sequence"] = next_sequence()
 		insert_event(event)
 	_queue_event_sequence = highest
+	# Only now may the queue's own log drop them (A6, job_event_log.gd).
+	_queue.get_event_log().release_through(highest)
 
 ## Deep copies of the log, or of only its events whose type is in a non-empty
 ## `types` (same order), costing only the events returned.
