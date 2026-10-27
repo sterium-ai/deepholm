@@ -684,6 +684,11 @@ func get_events() -> Array[Dictionary]:
 func get_events_after(after_sequence: int) -> Array[Dictionary]:
 	return _events.get_after(after_sequence)
 
+## Share-by-reference like get_reservation_table(): the event log itself, for
+## its cursor stream and collection-driven retention (A6, job_event_log.gd).
+func get_event_log() -> JobEventLogType:
+	return _events
+
 ## Overwrites the job list and counters from a prior save state. Reservations
 ## are not a separate input: they are re-derived from active jobs' targets,
 ## the same invariant tick() maintains (exactly one reservation per active

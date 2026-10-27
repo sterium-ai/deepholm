@@ -56,13 +56,15 @@ See [ADR 018](../decisions/018-pc-map-presentation.md).
 `get_map_height()` rather than a fixed constant, so `map_viewport.gd`'s pan/zoom
 bounds always match whichever world is live (48x48 fixture or a 256x256
 game). `set_world()` performs one full `TileMapLayer` rebuild; every
-subsequent `refresh()` (called once per tick) instead replays only the
-newly-appended tail of `WorldState.get_dirty_cells()` (an append-only log of
-every cell whose tile kind or object changed) since the last call, so a tick
-with no dig/chop/forage/till/sow/place_object/remove_object touches zero
-`TileMapLayer` cells rather than clearing and rebuilding all of them. Loading
-a different world resets the consumed-log cursor and forces a fresh full
-rebuild, invalidating any stale cached cell content. Colonist sprites and the
+subsequent `refresh()` (called once per tick) instead replays only the cells
+`WorldState.get_dirty_cells_since(cursor)` returns (a cursor stream over the
+append-only log of every cell whose tile kind or object changed) since the last
+call, so a tick with no dig/chop/forage/till/sow/place_object/remove_object
+touches zero `TileMapLayer` cells rather than clearing and rebuilding all of
+them. The log's retention is bounded (A6, `TileGrid.MAX_DIRTY_CELLS`): a read
+whose cursor fell behind dropped cells comes back `truncated` and the view does
+one full rebuild instead. Loading a different world resets the cursor and
+forces a fresh full rebuild, invalidating any stale cached cell content. Colonist sprites and the
 designation overlay were already `O(colonists)`/`O(jobs)`, not `O(map)`, so
 neither needed a change. See
 [ADR 019](../decisions/019-world-dimensions-and-generation.md).
@@ -298,7 +300,7 @@ the map has one layer and nothing below applies.
 - **What is drawn.** Tiles, objects, construction sites, designations and actors are drawn
   for the active layer only. Each layer has its own `TileMapLayer` content; the first
   switch to a layer pays one full rebuild of it, later switches reuse it.
-- **Dirty cells.** `get_dirty_cells()` carries `Vector3i`. The viewer consumes the whole
+- **Dirty cells.** `get_dirty_cells_since()` carries `Vector3i`. The viewer consumes the whole
   tail on every `refresh()` as today, applies cells of the active layer, and keeps the
   others as pending for their layer, so a layer redrawn on switch never shows stale tiles.
 - **Coordinates.** `screen_to_tile()` and `tiles_in_rectangle()` stay planar and the viewer

@@ -11,15 +11,25 @@ const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const NEED_UNMET_PREFIX := "need_unmet:"
 const NEED_SOURCE_MISSING_PREFIX := "need_source_missing:"
 
+## need_alerts_text()'s incident_started events so far, kept in the event
+## log's own order (a later read can return one that sorts earlier), for the
+## world whose instance id is _incident_world_id (another world restarts
+## them), read up to the world.get_events_since() cursor _incident_cursor.
+static var _incident_world_id: int = 0
+static var _incident_cursor: int = 0
+static var _incident_events: Array[Dictionary] = []
+
 ## Standing alert list (colonist-ai.md sections 3.1, 3.8 and 4): every
 ## colonist currently exposing need_unmet:<kind> or need_source_missing:<kind>
 ## (WorldState.get_colonist_need_reason()), one line each, id-sorted, followed
-## by every incident_started event WorldState.get_events() has recorded so far
-## -- an incident is a one-time historical
+## by one line per incident_started event WorldState.get_events_since() has
+## returned so far -- an incident is a one-time historical
 ## fact rather than an ongoing condition, so unlike the need lines above it is
-## never dropped once shown, only appended to as new incidents fire. Rebuilt
-## from scratch every refresh instead of appended to, so the need portion of
-## the list never grows tick over tick and a colonist drops off it the instant
+## never dropped once shown, only added to as new incidents fire (A6: the
+## events are kept here, so they outlive the event log's bounded retention,
+## and a refresh copies only the events past _incident_cursor). The need portion
+## is rebuilt from scratch every refresh instead of appended to, so it never
+## grows tick over tick and a colonist drops off it the instant
 ## its reason clears -- the same replace-not-append pattern
 ## rejected_tiles_text() already uses. Presentation-only: no
 ## simulation rule lives here, it only reads WorldState's existing getters.
@@ -42,11 +52,29 @@ static func need_alerts_text(world: WorldStateType, text_table: TextTableType) -
 			continue
 		var kind_text := text_table.get_string("status.need.%s" % kind)
 		lines.append(text_table.format(label_key, [colonist_id, kind_text]))
-	for event in world.get_events(["incident_started"]):
+	if world.get_instance_id() != _incident_world_id:
+		_incident_world_id = world.get_instance_id()
+		_incident_cursor = 0
+		_incident_events = []
+	var stream: Dictionary = world.get_events_since(_incident_cursor, ["incident_started"])
+	for event in stream["events"]:
 		if String(event.get("type", "")) != "incident_started":
 			continue
+		_incident_events.insert(_incident_events.bsearch_custom(event, event_log_less, false), event)
+	_incident_cursor = int(stream["next"])
+	for event in _incident_events:
 		lines.append(_incident_started_alert_line(event))
 	return "\n".join(lines)
+
+## WorldState's event-log order: (tick, system_priority, entity_id, sequence).
+static func event_log_less(a: Dictionary, b: Dictionary) -> bool:
+	if a["tick"] != b["tick"]:
+		return a["tick"] < b["tick"]
+	if a["system_priority"] != b["system_priority"]:
+		return a["system_priority"] < b["system_priority"]
+	if a["entity_id"] != b["entity_id"]:
+		return a["entity_id"] < b["entity_id"]
+	return a["sequence"] < b["sequence"]
 
 ## Hard-coded English text; not yet routed through the text table (like the
 ## New Game controls in boot.gd).

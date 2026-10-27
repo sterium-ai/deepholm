@@ -10,7 +10,14 @@ extends RefCounted
 ##   all times (binary-search insert in insert_event(), at the same index the
 ##   former backward scan found), and so does each _by_type list.
 ## - insert_event() is the only way in: _by_type indexes every event by type
-##   so get_events(types) never walks or copies the whole log (B1).
+##   so get_events(types) never walks or copies the whole log (B1), and
+##   _arrival keeps the same events in insertion order for
+##   get_events_since() (A6).
+## - Bounded retention (A6): once the log holds more than MAX_EVENTS, the
+##   oldest events in log order are dropped down to RETAINED_EVENTS, from
+##   _events, _by_type and _arrival alike. _trimmed_sequence remembers the
+##   highest sequence dropped, so a get_events_since() cursor at or below it
+##   is reported as truncated instead of silently missing events.
 ## - Only the two counters are persisted (StateCodec "scheduling".
 ##   eventSequence/queueEventSequence); the event list itself is never saved
 ##   and starts empty after a load.
@@ -19,8 +26,19 @@ extends RefCounted
 ## - pure_rejection() never appends an event or advances the sequence -- the
 ##   only rejection path preview() may call.
 
+const MAX_EVENTS := 8192
+const RETAINED_EVENTS := 6144
+
 var _events: Array[Dictionary] = []
 var _by_type: Dictionary = {}
+## The retained events in insertion order (sequence order on every core path).
+var _arrival: Array[Dictionary] = []
+## False once an event arrived with a sequence below its predecessor's (only a
+## test inserting a hand-made event): get_events_since() then scans _arrival
+## whole instead of binary-searching it.
+var _arrival_sorted := true
+## Highest sequence among the events retention dropped; -1 while none was.
+var _trimmed_sequence: int = -1
 var _event_sequence: int = 0
 ## Highest JobQueue event sequence already copied into _events.
 var _queue_event_sequence: int = -1
@@ -40,6 +58,9 @@ func encode() -> Dictionary:
 func decode(scheduling: Dictionary) -> void:
 	_events = []
 	_by_type = {}
+	_arrival = []
+	_arrival_sorted = true
+	_trimmed_sequence = -1
 	_event_sequence = int(scheduling["eventSequence"])
 	_queue_event_sequence = int(scheduling["queueEventSequence"])
 
@@ -56,6 +77,8 @@ func collect_queue_events() -> void:
 		event["sequence"] = next_sequence()
 		insert_event(event)
 	_queue_event_sequence = highest
+	# Only now may the queue's own log drop them (A6, job_event_log.gd).
+	_queue.get_event_log().release_through(highest)
 
 ## Deep copies of the log, or of only its events whose type is in a non-empty
 ## `types` (same order), costing only the events returned.
@@ -71,6 +94,29 @@ func get_events(types: Array = []) -> Array[Dictionary]:
 	for event in source:
 		copy.append(event.duplicate(true))
 	return copy
+
+## The log as a stream (A6): {"events", "next", "truncated"}. "events" are deep
+## copies of the retained events whose sequence is at least `sequence` (only
+## those whose type is in a non-empty `types`), in log order; "next" is the
+## cursor for the following call; "truncated" is true when retention already
+## dropped an event at or after `sequence`. A later read can return an event
+## that sorts before one an earlier read returned (a command applied at tick T
+## orders before tick T's tick_advanced): the reads merged in log order are
+## the log.
+func get_events_since(sequence: int, types: Array = []) -> Dictionary:
+	var start := _arrival_start(sequence) if _arrival_sorted else 0
+	var picked: Array[Dictionary] = []
+	for i in range(start, _arrival.size()):
+		var event: Dictionary = _arrival[i]
+		var event_sequence: int = event["sequence"]
+		if event_sequence >= sequence and (types.is_empty() or types.has(event["type"])):
+			picked.append(event.duplicate(true))
+	picked.sort_custom(_event_less)
+	return {"events": picked, "next": _event_sequence, "truncated": sequence <= _trimmed_sequence}
+
+## Number of retained events.
+func size() -> int:
+	return _events.size()
 
 func reject(command_id, actor, reason: String, message: String, record: bool) -> Dictionary:
 	if record:
@@ -135,6 +181,48 @@ func insert_event(event: Dictionary) -> void:
 		_by_type[event["type"]] = of_type
 	var same_type: Array[Dictionary] = _by_type[event["type"]]
 	same_type.insert(same_type.bsearch_custom(event, _event_less, false), event)
+	if not _arrival.is_empty():
+		var sequence: int = event["sequence"]
+		var last_sequence: int = _arrival[-1]["sequence"]
+		if sequence < last_sequence:
+			_arrival_sorted = false
+	_arrival.append(event)
+	if _events.size() > MAX_EVENTS:
+		_trim()
+
+## Drops the oldest events in log order down to RETAINED_EVENTS. They are a
+## prefix of _events' total order, so every index keeps exactly the events
+## not ordered before the first kept one.
+func _trim() -> void:
+	var drop := _events.size() - RETAINED_EVENTS
+	for i in drop:
+		var dropped_sequence: int = _events[i]["sequence"]
+		_trimmed_sequence = maxi(_trimmed_sequence, dropped_sequence)
+	var first_kept: Dictionary = _events[drop]
+	_events = _events.slice(drop)
+	for type: String in _by_type.keys():
+		var same_type: Array[Dictionary] = _by_type[type]
+		var kept: Array[Dictionary] = same_type.slice(same_type.bsearch_custom(first_kept, _event_less, true))
+		if kept.is_empty():
+			_by_type.erase(type)
+		else:
+			_by_type[type] = kept
+	var arrival: Array[Dictionary] = []
+	arrival.assign(_arrival.filter(func(e: Dictionary) -> bool: return not _event_less(e, first_kept)))
+	_arrival = arrival
+
+## Index of the first _arrival event whose sequence is at least `sequence`.
+func _arrival_start(sequence: int) -> int:
+	var low := 0
+	var high := _arrival.size()
+	while low < high:
+		var mid := (low + high) >> 1
+		var mid_sequence: int = _arrival[mid]["sequence"]
+		if mid_sequence < sequence:
+			low = mid + 1
+		else:
+			high = mid
+	return low
 
 func _event_less(a: Dictionary, b: Dictionary) -> bool:
 	if a["tick"] != b["tick"]:

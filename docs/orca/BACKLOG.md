@@ -496,7 +496,7 @@ one.
   `test_scheduling_fairness` unchanged.
 - **Non-goals:** changing the fairness policy (ADR 004) or job states.
 
-#### A6 — Bounded event and dirty-cell streams · `todo` · *parallel-safe (no save change)*
+#### A6 — Bounded event and dirty-cell streams · `review (antonelmejor50-hub/a6-bounded-event-and-dirty)` · *parallel-safe (no save change)*
 
 - **Goal:** `EventLog` and `JobQueue` events, and `TileGrid.dirty_cells`, become cursor-based streams
   (`get_events_since(sequence)`, `get_dirty_cells_since(cursor)`) with bounded retention. The

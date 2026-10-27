@@ -690,8 +690,7 @@ func get_items() -> Array[Dictionary]:
 	return _item_table.get_items()
 
 ## Tool item CRUD + reservations: thin delegators onto _tool_store (see
-## tool_item_store.gd), kept as WorldState's own public surface since every
-## other module (ToilExecutor, job-givers, tests) already depends on these names.
+## tool_item_store.gd), kept since ToilExecutor, job-givers and tests use these names.
 func get_tool_items() -> Array[Dictionary]:
 	return _tool_store.get_items()
 
@@ -728,8 +727,7 @@ func get_tool_item_reservation(item_id: String) -> String:
 func is_tool_item_reserved(item_id: String) -> bool:
 	return _tool_store.is_reserved(item_id)
 
-## Share-by-reference like JobQueue.get_reservation_table(), for
-## ReservationInvariants reuse.
+## Share-by-reference like JobQueue.get_reservation_table(), for ReservationInvariants.
 func get_tool_reservation_table() -> ReservationTableType:
 	return _tool_store.reservations
 
@@ -1272,9 +1270,9 @@ func _drop_carried_haul_item(job_id: String) -> void: _toil_bindings.drop_carrie
 func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void: _toil_bindings.terminate_haul_job_by_id(job_id, reason, remedy)
 func _resolve_giver_association(job_id: String, kind: String) -> void: _toil_bindings.resolve_giver_association(job_id, kind)
 
-## Append-only log of every cell whose tile kind or object changed (map/tile_grid.gd).
-func get_dirty_cells() -> Array[Vector2i]:
-	return _tile_grid.get_dirty_cells()
+## Cursor stream of the cells whose tile kind or object changed (map/tile_grid.gd, A6).
+func get_dirty_cells_since(cursor: int) -> Dictionary:
+	return _tile_grid.get_dirty_cells_since(cursor)
 
 ## {} for a tile with no recognised room; otherwise RoomMapType.get_room_at().
 func get_room_at(x: int, y: int) -> Dictionary:
@@ -1413,6 +1411,9 @@ func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void
 func get_events(types: Array = []) -> Array[Dictionary]:
 	return _event_log.get_events(types)
 
+func get_events_since(sequence: int, types: Array = []) -> Dictionary:
+	return _event_log.get_events_since(sequence, types)
+
 ## Delegates to WorldGeneratorType, a pure, scene-independent module so
 ## world_state.gd's own core-budgets.json cap has room for width/height
 ## plumbing. Consumes a GEOGRAPHY_SEED_SALT-derived local RNG, not _random
@@ -1466,8 +1467,7 @@ func _spawn_colonists(map: Array[String]) -> Array[Dictionary]:
 		spawned.append(colonist)
 	return spawned
 
-## The colonist starting clearing actually chosen for this world -- see
-## _spawn_clearing's own doc comment.
+## The colonist starting clearing actually chosen for this world (see _spawn_clearing).
 func get_spawn_clearing() -> Dictionary:
 	return _spawn_clearing.duplicate()
 
