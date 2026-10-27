@@ -605,6 +605,9 @@ one.
   without the hook. **Follow-up after R12:** add the observer, call
   `CommandRecorder.observe_command()` and `observe_tick()` from `boot.gd`, and switch
   `test_command_replay.gd` to record through the observer. See `docs/orca/handoffs/A11.md`.
+- **Scope extension (owner decision, after review round 1):** `tools/replay.gd`, the helper
+  `tools/replay.ps1` runs, is approved. The branch currently embeds that script inside
+  `replay.ps1`, so the file does not exist, but splitting it back out is within scope.
 
 #### A12 — Map layers: coordinate model ADR · `review (antonelmejor50-hub/a12-map-layers-coordinate-model)` · *parallel-safe (docs only)* · before F4
 
