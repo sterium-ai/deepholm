@@ -108,7 +108,8 @@ func get_events_since(sequence: int, types: Array = []) -> Dictionary:
 	var picked: Array[Dictionary] = []
 	for i in range(start, _arrival.size()):
 		var event: Dictionary = _arrival[i]
-		if int(event["sequence"]) >= sequence and (types.is_empty() or types.has(event["type"])):
+		var event_sequence: int = event["sequence"]
+		if event_sequence >= sequence and (types.is_empty() or types.has(event["type"])):
 			picked.append(event.duplicate(true))
 	picked.sort_custom(_event_less)
 	return {"events": picked, "next": _event_sequence, "truncated": sequence <= _trimmed_sequence}
@@ -180,8 +181,11 @@ func insert_event(event: Dictionary) -> void:
 		_by_type[event["type"]] = of_type
 	var same_type: Array[Dictionary] = _by_type[event["type"]]
 	same_type.insert(same_type.bsearch_custom(event, _event_less, false), event)
-	if not _arrival.is_empty() and int(event["sequence"]) < int(_arrival[-1]["sequence"]):
-		_arrival_sorted = false
+	if not _arrival.is_empty():
+		var sequence: int = event["sequence"]
+		var last_sequence: int = _arrival[-1]["sequence"]
+		if sequence < last_sequence:
+			_arrival_sorted = false
 	_arrival.append(event)
 	if _events.size() > MAX_EVENTS:
 		_trim()
@@ -192,10 +196,11 @@ func insert_event(event: Dictionary) -> void:
 func _trim() -> void:
 	var drop := _events.size() - RETAINED_EVENTS
 	for i in drop:
-		_trimmed_sequence = maxi(_trimmed_sequence, int(_events[i]["sequence"]))
+		var dropped_sequence: int = _events[i]["sequence"]
+		_trimmed_sequence = maxi(_trimmed_sequence, dropped_sequence)
 	var first_kept: Dictionary = _events[drop]
 	_events = _events.slice(drop)
-	for type in _by_type.keys():
+	for type: String in _by_type.keys():
 		var same_type: Array[Dictionary] = _by_type[type]
 		var kept: Array[Dictionary] = same_type.slice(same_type.bsearch_custom(first_kept, _event_less, true))
 		if kept.is_empty():
@@ -212,7 +217,8 @@ func _arrival_start(sequence: int) -> int:
 	var high := _arrival.size()
 	while low < high:
 		var mid := (low + high) >> 1
-		if int(_arrival[mid]["sequence"]) < sequence:
+		var mid_sequence: int = _arrival[mid]["sequence"]
+		if mid_sequence < sequence:
 			low = mid + 1
 		else:
 			high = mid
