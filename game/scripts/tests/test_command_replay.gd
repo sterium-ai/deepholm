@@ -255,6 +255,24 @@ func _check_malformed_checkpoints(recording: ReplayLogType) -> void:
 		var parsed := ReplayLogType.from_dict(data)
 		_expect(not parsed.get("ok", true) and parsed.get("code") == "invalid_replay",
 			"a %s checkpoint must be refused as invalid_replay: %s" % [label, parsed])
+	# A malformed start snapshot is refused before StateCodec.decode() sees it.
+	var snapshots := {
+		"empty": {},
+		"missing map": _without(recording.initial_state, "map"),
+		"older schemaVersion": _with(recording.initial_state, "schemaVersion", int(recording.initial_state["schemaVersion"]) - 1),
+		"wrong-typed tick": _with(recording.initial_state, "tick", "zero"),
+	}
+	for label: String in snapshots:
+		var data: Dictionary = JSON.parse_string(JSON.stringify(recording.to_dict()))
+		data["initialState"] = Marshalls.variant_to_base64(snapshots[label])
+		var parsed := ReplayLogType.from_dict(data)
+		_expect(not parsed.get("ok", true) and parsed.get("code") == "invalid_replay",
+			"a %s initialState must be refused as invalid_replay: %s" % [label, parsed])
+	var empty_snapshot := _copy(recording)
+	empty_snapshot.initial_state = {}
+	var refused := empty_snapshot.replay()
+	_expect(not refused.get("ok", true) and refused.get("code") == "invalid_replay",
+		"replay() must refuse an empty initialState set in memory: %s" % [refused])
 	var in_memory := _copy(recording)
 	in_memory.checkpoints.remove_at(2)
 	var result := in_memory.replay()
@@ -277,6 +295,16 @@ func _check_content_version_mismatch(recording: ReplayLogType) -> void:
 	other.content_version = "0.0.0-other"
 	var result := other.replay()
 	_expect(result.get("code") == "content_version_mismatch", "a different content version must be refused: %s" % [result])
+
+func _without(state: Dictionary, key: String) -> Dictionary:
+	var copy := state.duplicate(true)
+	copy.erase(key)
+	return copy
+
+func _with(state: Dictionary, key: String, value: Variant) -> Dictionary:
+	var copy := state.duplicate(true)
+	copy[key] = value
+	return copy
 
 func _copy(recording: ReplayLogType) -> ReplayLogType:
 	var parsed := ReplayLogType.from_dict(JSON.parse_string(JSON.stringify(recording.to_dict())))

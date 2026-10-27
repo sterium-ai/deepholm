@@ -33,7 +33,10 @@
 ## Replay rules
 
 1. Refuse a malformed log with `invalid_replay` (`ReplayLog.validate()`, run both on read
-   and at the start of `replay()`). The checkpoints must be exactly the start tick, then every
+   and at the start of `replay()`). The start snapshot must carry this build's
+   `schemaVersion`, since a replay file is never migrated, and pass the same full schema check
+   as a save on Load (`SaveIO._validate_state()`), before `StateCodec.decode()` sees it. The
+   checkpoints must be exactly the start tick, then every
    `checkpointInterval` ticks up to the last tick: none out of range, duplicated, off that
    grid or missing. Command ticks must never decrease. Every number read from the file
    (ticks, hashes, interval, versions) must be a whole JSON number: `40.5` is refused, never

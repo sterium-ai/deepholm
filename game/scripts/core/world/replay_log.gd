@@ -148,12 +148,19 @@ static func _diverged(kind: String, tick: int, last_matching: int, expected: int
 	return {"ok": false, "code": "diverged", "kind": kind, "tick": tick, "last_matching_tick": last_matching,
 		"expected": expected, "actual": actual}
 
-## "" when the log is well formed, else what is wrong: the checkpoints are
+## "" when the log is well formed, else what is wrong: initial_state is a save
+## state of this build's schema that passes SaveIO's full schema check (so
+## from_save_state() never sees a malformed snapshot), the checkpoints are
 ## exactly start_tick, then every checkpoint_interval ticks up to end_tick,
 ## and command ticks never decrease within [start_tick, end_tick].
 func validate() -> String:
 	if checkpoint_interval < 1 or end_tick < start_tick:
 		return "checkpointInterval must be >= 1 and endTick >= startTick"
+	if typeof(initial_state.get("schemaVersion")) != TYPE_INT or initial_state["schemaVersion"] != StateCodec.SCHEMA_VERSION:
+		return "initialState must be a save state of schemaVersion %d, found %s" % [StateCodec.SCHEMA_VERSION, str(initial_state.get("schemaVersion"))]
+	var snapshot := SaveIO._validate_state(initial_state)
+	if not snapshot.get("ok", false):
+		return "initialState is not a valid save state (%s: %s)" % [str(snapshot.get("code")), str(snapshot.get("message"))]
 	var last_tick := start_tick
 	for entry in commands:
 		if typeof(entry.get("tick")) != TYPE_INT:
