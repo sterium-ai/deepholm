@@ -438,10 +438,16 @@ func _check_malformed_envelope_with_valid_actor_purity() -> void:
 		{"actor": "player", "command_id": "c1", "tick": tick_mismatch.get_tick() + 1, "type": "dig", "payload": {"x": 2, "y": 0, "priority": 1}},
 		"tick mismatch, valid actor")
 
-## Goal: previewing a 12x12 hover rectangle (144 commands) on a 256x256 world must
-## take under 5ms headless -- the old StateCodec.encode()/decode() round trip measured ~390ms
-## per single-tile hover on the host.
-const PREVIEW_BUDGET_USEC := 5000
+## Goal: previewing a 12x12 hover rectangle (144 commands) on a 256x256 world must cost
+## less than ONE StateCodec.encode() of that world, timed in the same process -- the old hover
+## path round-tripped the whole state through StateCodec.encode()/decode() per previewed tile
+## (~390ms each on the host), so it would cost at least 144 encodes. Measured on the host
+## (bdb1a15 and B1): 144 previews ~1.2ms, one encode ~19ms, a ratio of ~0.06.
+## A relative bound, not wall-clock microseconds: the former absolute 5ms budget failed on a
+## shared GitHub runner (B1's PR #13, run 40433050997: 7800us) with no code regression
+## (both branches ~1.07ms locally). Each side keeps its fastest of PREVIEW_REPEATS
+## interleaved runs, so a pause on a shared runner does not land on one side only.
+const PREVIEW_REPEATS := 5
 
 func _check_preview_performance_256() -> void:
 	var world := WorldStateType.new(42, 10, 256, 256)
@@ -450,13 +456,21 @@ func _check_preview_performance_256() -> void:
 		for x in range(10, 22):
 			commands.append(_job_command(world, "perf_dig_%d_%d" % [x, y], "dig", {"x": x, "y": y, "priority": 1}))
 	_expect(commands.size() == 144, "the timed fixture must cover a 12x12 = 144-tile rectangle, got %d" % commands.size())
-	var start := Time.get_ticks_usec()
-	for command in commands:
-		world.preview(command)
-	var elapsed_usec := Time.get_ticks_usec() - start
-	_expect(elapsed_usec < PREVIEW_BUDGET_USEC,
-		"previewing a 12x12 rectangle (144 commands) on a 256x256 world must take under %d us, took %d us"
-			% [PREVIEW_BUDGET_USEC, elapsed_usec])
+	var hash_before := world.state_hash()
+	var preview_usec := 1 << 62
+	var encode_usec := 1 << 62
+	for repeat in range(PREVIEW_REPEATS):
+		var start := Time.get_ticks_usec()
+		for command in commands:
+			world.preview(command)
+		preview_usec = mini(preview_usec, Time.get_ticks_usec() - start)
+		start = Time.get_ticks_usec()
+		StateCodec.encode(world)
+		encode_usec = mini(encode_usec, Time.get_ticks_usec() - start)
+	_expect(world.state_hash() == hash_before, "the timed previews must leave state_hash() unchanged")
+	_expect(preview_usec < encode_usec,
+		"previewing a 12x12 rectangle (144 commands) on a 256x256 world must cost less than one StateCodec.encode() of it: %d us vs %d us"
+			% [preview_usec, encode_usec])
 
 ## boot.gd's own hover-path function must call world.preview() instead of round-tripping
 ## through StateCodec.encode()/decode() -- proved by text-scanning _preview_validity()'s own
