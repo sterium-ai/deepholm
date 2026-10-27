@@ -526,6 +526,14 @@ const V25_FIXTURE_STATE := {
 ## nothing else.
 const V26_FIXTURE_DIR := "user://test-save-migration-v26-fixture"
 
+## Regression: _migrate_v26_to_v27() casts every groundBerries entry to a
+## Dictionary, so _is_schema_v26_state() must reject a groundBerries that is
+## not an array of dictionaries ([null] would crash the cast; {} would be
+## iterated as an empty list and silently become []). Used by
+## _check_malformed_v26_ground_berries_rejected_through_save_io().
+const V26_BERRIES_NULL_ENTRY_FIXTURE_DIR := "user://test-save-migration-v26-berries-null-entry-fixture"
+const V26_BERRIES_DICTIONARY_FIXTURE_DIR := "user://test-save-migration-v26-berries-dictionary-fixture"
+
 ## Regression: calendar window ids come from content/calendar.json,
 ## whose own schema (game/content/schemas/calendar.schema.json) allows any
 ## non-empty string, not the stricter ^[a-z0-9_-]+$ pattern _matches_id_pattern()
@@ -620,6 +628,8 @@ func _init() -> void:
 	_check_v25_fixture_loads_through_save_io()
 	_check_v26_fixture_migrates_to_v27()
 	_check_v26_fixture_loads_through_save_io()
+	_check_malformed_v26_ground_berries_is_rejected()
+	_check_malformed_v26_ground_berries_rejected_through_save_io()
 	_check_dig_find_rng_continuation_survives_save_load_round_trip()
 	_check_multi_tile_object_round_trips_through_save_load()
 	_check_object_without_orientation_field_loads_unchanged()
@@ -686,6 +696,7 @@ func _init() -> void:
 	_cleanup_dir(V23_FIXTURE_DIR)
 	_cleanup_dir(V24_FIXTURE_DIR)
 	_cleanup_dir(V25_FIXTURE_DIR)
+	_cleanup_dir(V26_FIXTURE_DIR)
 	if _failed:
 		quit(1)
 		return
@@ -1917,6 +1928,30 @@ func _check_v26_fixture_loads_through_save_io() -> void:
 	var resaved := world.to_save_state()
 	_expect(resaved["workProgressOwners"] == [{"target": {"x": 2, "y": 0}, "jobId": "job_1"}],
 		"a plain-tile owner must re-encode in the same v26 shape (no ownerJobId)")
+
+## Regression: a v26 groundBerries that is not an array of dictionaries must
+## be a typed no_migration_available rejection, not a script error in
+## _migrate_v26_to_v27()'s Dictionary cast nor a silent rewrite to [].
+func _check_malformed_v26_ground_berries_is_rejected() -> void:
+	for malformed in [[null], [3], {}, {"0_1": 2}, null, "berries"]:
+		var state := _load_fixture_state(_v26_fixture_path)
+		state["groundBerries"] = malformed
+		var result := SaveMigrationsType.migrate(state, 26, 27)
+		_expect(not result["ok"] and result["code"] == "no_migration_available",
+			"malformed v26 groundBerries %s must be rejected, not crash or migrate: %s" % [str(malformed), result])
+
+## Same rejection through a real integrity-valid save file: SaveIO.read()
+## must verify the hash, then return the typed migration failure.
+func _check_malformed_v26_ground_berries_rejected_through_save_io() -> void:
+	var cases := {V26_BERRIES_NULL_ENTRY_FIXTURE_DIR: [null], V26_BERRIES_DICTIONARY_FIXTURE_DIR: {}}
+	for dir_path in cases:
+		var state := _load_fixture_state(_v26_fixture_path)
+		state["groundBerries"] = cases[dir_path]
+		var path := _write_state_fixture(dir_path, state)
+		var result := SaveIOType.read(path)
+		_cleanup_dir(dir_path)
+		_expect(not result["ok"] and result["code"] == "no_migration_available",
+			"an integrity-valid v26 save with groundBerries %s must be rejected through SaveIO.read(): %s" % [str(cases[dir_path]), result])
 
 ## Proves the dig-find RNG's own continuation --
 ## a non-freshly-seeded stream (distinct seed and state from a brand-new

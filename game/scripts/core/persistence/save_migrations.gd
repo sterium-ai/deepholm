@@ -1290,6 +1290,10 @@ static func _is_schema_v26_state(state: Dictionary) -> bool:
 	probe["schemaVersion"] = 25
 	if state.has("areaOrders") and typeof(state["areaOrders"]) != TYPE_DICTIONARY:
 		return false
+	# _migrate_v26_to_v27() rewrites every groundBerries entry as a Dictionary;
+	# anything else ([null], or a {} it would silently turn into []) is no v26 save.
+	if not _has_dictionary_entries(state.get("groundBerries")):
+		return false
 	return typeof(state.get("schemaVersion")) == TYPE_INT and int(state["schemaVersion"]) == 26 and _is_schema_v25_state(probe)
 
 ## Version 26 predates persisted ground-berry factions (ADR 045): every
