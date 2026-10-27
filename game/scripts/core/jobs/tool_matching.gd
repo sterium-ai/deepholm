@@ -34,7 +34,7 @@ static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
 		var owner := String(reservation_of.call(item_id))
 		if not owner.is_empty() and owner != job_id:
 			continue
-		var target = item_target(item, colonist_positions)
+		var target: Variant = item_target(item, colonist_positions)
 		if target == null:
 			continue
 		var distance: int = absi(target.x - from.x) + absi(target.y - from.y)

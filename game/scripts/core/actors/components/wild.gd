@@ -15,5 +15,5 @@ static func validate(tunables: Dictionary) -> bool:
 		return true
 	if tunables.size() > 1 or not tunables.has("trench_climb_ticks"):
 		return false
-	var ticks = tunables["trench_climb_ticks"]
+	var ticks: Variant = tunables["trench_climb_ticks"]
 	return ticks is int and int(ticks) >= 1

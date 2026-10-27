@@ -239,7 +239,7 @@ func _consume_carried_item_of_kind(kind: String) -> bool:
 ## accept_trade's stockpile draw: the lowest-id unreserved item of item_kind
 ## with at least quantity, inside a stockpile zone, or "".
 func find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
-	var table = _reservation_table.call()
+	var table: Variant = _reservation_table.call()
 	var ids := items.keys()
 	ids.sort()
 	for id in ids:
@@ -286,7 +286,7 @@ func _roll_dig_find() -> String:
 	for entry in find_table:
 		cumulative += int(entry["weight"])
 		if roll < cumulative:
-			var item = entry.get("item")
+			var item: Variant = entry.get("item")
 			return String(item) if item != null else ""
 	return ""
 

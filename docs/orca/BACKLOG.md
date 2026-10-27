@@ -569,7 +569,7 @@ one.
   purity test fails on a planted `world._x` read; manual run shows the same screen.
 - **Non-goals:** new art or UI features.
 
-#### A10 — Static typing gate for the core · `todo` · *parallel-safe*
+#### A10 — Static typing gate for the core · `review (antonelmejor50-hub/a10-static-typing-gate-for)` · *parallel-safe*
 
 - **Goal:** `project.godot` enables `untyped_declaration`, `inferred_declaration` (off),
   `unsafe_property_access`, `unsafe_method_access` and `unsafe_call_argument` as warnings. A

@@ -207,7 +207,7 @@ func restore_owners(persisted: Dictionary, colonists: Array, paused_jobs: Dictio
 	for progress_key in reconstructed:
 		if owners.has(progress_key):
 			continue
-		var candidate = reconstructed[progress_key]
+		var candidate: Variant = reconstructed[progress_key]
 		if candidate != null:
 			owners[progress_key] = String(candidate)
 	var incident_keys := active_incident_keys()
@@ -221,7 +221,7 @@ func restore_owners(persisted: Dictionary, colonists: Array, paused_jobs: Dictio
 func reconstruct_owners(colonists: Array, paused_jobs: Dictionary) -> Dictionary:
 	var result: Dictionary = {}
 	for colonist in colonists:
-		var work = colonist.get("work")
+		var work: Variant = colonist.get("work")
 		if work != null:
 			claim_reconstructed_owner(result, String(work.get("job_id", "")))
 	for colonist_id in paused_jobs.keys():

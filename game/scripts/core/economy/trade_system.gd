@@ -142,7 +142,7 @@ func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	_remove_trader_offered_item(trader, give_item)
 	_item_table.spawn_item(give_item, stock_tile.x, stock_tile.y)
 	pending_offers.erase(trader_id)
-	var assignment = _scheduler.get_assignments().get(trader_id)
+	var assignment: Variant = _scheduler.get_assignments().get(trader_id)
 	if assignment != null:
 		_finish_job.call(String(assignment["job_id"]), "cancel_job")
 	else:
@@ -152,13 +152,13 @@ func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 ## One unit of `kind` into actor's "inventory" component items (F2's
 ## per-instance shape, no "id" field).
 func _append_trader_inventory_item(actor: Dictionary, kind: String) -> void:
-	var inventory = actor.get("inventory")
+	var inventory: Variant = actor.get("inventory")
 	if inventory is Dictionary:
 		(inventory["items"] as Array).append({"kind": kind, "count": 1})
 
 ## Removes the first inventory entry of `kind` (the one _append_trader_inventory_item() added).
 func _remove_trader_offered_item(trader: Dictionary, kind: String) -> void:
-	var inventory = trader.get("inventory")
+	var inventory: Variant = trader.get("inventory")
 	if not (inventory is Dictionary):
 		return
 	var items: Array = inventory["items"]

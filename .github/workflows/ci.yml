@@ -73,5 +73,11 @@ jobs:
       - name: Headless boot check
         run: godot --headless --path game --quit-after 1
 
+      # Fails when any GDScript warning kind under game/scripts/core rises above
+      # docs/architecture/warnings-baseline.txt (switches in game/project.godot [debug]).
+      - name: Check GDScript warnings in the simulation core
+        shell: pwsh
+        run: ./tools/check_core_warnings.ps1 -SkipImport -GodotPath "$env:RUNNER_TEMP/godot/Godot_v4.7.2-stable_win64_console.exe"
+
       - name: Run the full headless test suite
         run: bash tools/run_tests.sh godot

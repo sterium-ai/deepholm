@@ -231,7 +231,7 @@ func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callab
 ## real state; only a wholesale replacement (colonist["route"] = {...}) must
 ## still assign the colonist dict directly, since ActorTable has no setter.
 func _route(colonist: Dictionary):
-	var mover_component = ActorTableType.get_component(colonist, "mover", _content)
+	var mover_component: Variant = ActorTableType.get_component(colonist, "mover", _content)
 	return mover_component.get("route") if mover_component != null else null
 
 func has_kind(kind: String) -> bool:
@@ -289,7 +289,7 @@ func start_work(colonist: Dictionary, job_id: String) -> void:
 	_record(TOIL_WORK, "enter")
 	var ticks_remaining: int = int(_work_ticks[job["kind"]])
 	if _work_progress_get.is_valid():
-		var stored = _work_progress_get.call(_work_target(job), job_id)
+		var stored: Variant = _work_progress_get.call(_work_target(job), job_id)
 		if stored != null:
 			ticks_remaining = int(stored)
 	colonist["work"] = {"job_id": job_id, "ticks_remaining": ticks_remaining}
@@ -397,7 +397,7 @@ func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passa
 			if step_off != standing:
 				target = step_off
 				force_trim_last = false
-	var route = _route(colonist)
+	var route: Variant = _route(colonist)
 	if route == null:
 		_record(record_as, "enter")
 		# path starts as the colonist's own current tile (a stationary
@@ -426,7 +426,7 @@ func _begin_go_to_reroute(colonist: Dictionary, job_id: String, target: Vector2i
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	var route: Dictionary = _route(colonist)
 	var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	var search = _route_search_factory.call(start, target, passable)
+	var search: Variant = _route_search_factory.call(start, target, passable)
 	_reroutes[colonist["id"]] = search
 	route["rerouting"] = search.summary()
 	return _resume_go_to_reroute(colonist, route, job_id, target, passable, record_as, on_arrive, force_trim_last)
@@ -434,7 +434,7 @@ func _begin_go_to_reroute(colonist: Dictionary, job_id: String, target: Vector2i
 func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: String, target: Vector2i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	var colonist_id: String = colonist["id"]
-	var search = _reroutes[colonist_id]
+	var search: Variant = _reroutes[colonist_id]
 	if not search.is_terminal() and not bool(_route_budget.get(colonist_id, false)):
 		search.resume()
 		_route_budget[colonist_id] = true
@@ -949,7 +949,7 @@ func _load_job_kinds() -> Dictionary:
 	var file := FileAccess.open(JOBS_CONTENT_PATH, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
 	if typeof(parsed) != TYPE_DICTIONARY or typeof(parsed.get("jobs")) != TYPE_ARRAY:
 		return {}

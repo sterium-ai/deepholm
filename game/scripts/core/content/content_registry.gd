@@ -247,7 +247,7 @@ func _read_json(path: String) -> Dictionary:
 	var parsed := _parse_json(text)
 	if not parsed["ok"]:
 		return {"ok": false, "message": "%s: %s" % [path, parsed["message"]]}
-	var value = parsed["value"]
+	var value: Variant = parsed["value"]
 	if typeof(value) != TYPE_DICTIONARY and typeof(value) != TYPE_ARRAY:
 		return {"ok": false, "message": "%s did not parse as a JSON object or array" % path}
 	return {"ok": true, "value": value}
@@ -264,7 +264,7 @@ func _read_json(path: String) -> Dictionary:
 ## GDScript int, everything else as a float.
 func _parse_json(text: String) -> Dictionary:
 	var cursor := _JsonCursor.new(text)
-	var value = _json_parse_value(cursor)
+	var value: Variant = _json_parse_value(cursor)
 	if cursor.failed():
 		return {"ok": false, "message": cursor.error_message}
 	cursor.skip_whitespace()
@@ -346,7 +346,7 @@ func _json_parse_object(c: _JsonCursor) -> Dictionary:
 			c.fail("expected ':' after object key")
 			return result
 		c.pos += 1
-		var value = _json_parse_value(c)
+		var value: Variant = _json_parse_value(c)
 		if c.failed():
 			return result
 		result[key] = value
@@ -370,7 +370,7 @@ func _json_parse_array(c: _JsonCursor) -> Array:
 		c.pos += 1
 		return result
 	while true:
-		var value = _json_parse_value(c)
+		var value: Variant = _json_parse_value(c)
 		if c.failed():
 			return result
 		result.append(value)
@@ -523,7 +523,7 @@ func _json_parse_null(c: _JsonCursor):
 ## _check_references(), which is reached for every relations value
 ## regardless of this validator's schema-valued additionalProperties support.
 func _validate_node(value, schema: Dictionary, path: String) -> Dictionary:
-	var type_field = schema.get("type", "")
+	var type_field: Variant = schema.get("type", "")
 	if typeof(type_field) == TYPE_ARRAY:
 		return _validate_node_against_type_options(value, schema, type_field as Array, path)
 	var type_name := String(type_field)
@@ -536,7 +536,7 @@ func _validate_node(value, schema: Dictionary, path: String) -> Dictionary:
 				if not dict.has(required_field):
 					return {"ok": false, "message": "%s: missing required field '%s'" % [path, required_field]}
 			var properties: Dictionary = schema.get("properties", {})
-			var additional_properties = schema.get("additionalProperties", true)
+			var additional_properties: Variant = schema.get("additionalProperties", true)
 			if typeof(additional_properties) == TYPE_BOOL and additional_properties == false:
 				for key in dict.keys():
 					if not properties.has(key):
@@ -666,7 +666,7 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 						"message": "job '%s' yields.always names an unknown item id '%s'" % [job_kind, always_id]}
 			for find_entry in (yields.get("find_table", []) as Array):
 				var find_dict: Dictionary = find_entry
-				var item_raw = find_dict.get("item")
+				var item_raw: Variant = find_dict.get("item")
 				if typeof(item_raw) == TYPE_NIL:
 					continue
 				var find_id: String = item_raw
@@ -702,7 +702,7 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 			if not known_faction_ids.has(other_id_str):
 				return {"ok": false, "file": "factions.json",
 					"message": "faction '%s' relations names an unknown faction id '%s'" % [faction_id, other_id_str]}
-			var relation_raw = relations[other_id]
+			var relation_raw: Variant = relations[other_id]
 			if typeof(relation_raw) != TYPE_STRING:
 				return {"ok": false, "file": "factions.json",
 					"message": "faction '%s' relation to '%s' must be a string, got %s (%s)"

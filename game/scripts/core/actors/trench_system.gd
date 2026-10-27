@@ -113,7 +113,7 @@ func rescue_candidates() -> Array[Dictionary]:
 func trapped_rescue_victims() -> Array[Dictionary]:
 	var victims: Array[Dictionary] = []
 	for colonist in _get_colonists.call():
-		var trapped = colonist.get("trapped")
+		var trapped: Variant = colonist.get("trapped")
 		if trapped == null or (trapped as Dictionary).has("ticksRemaining"): continue
 		victims.append(colonist)
 	return victims

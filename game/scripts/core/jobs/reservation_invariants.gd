@@ -82,8 +82,8 @@ static func find_idle_colonists_with_available_work(
 	if not work_available:
 		return idle
 	for colonist in colonists:
-		var mover_component = ActorTableType.get_component(colonist, "mover", content_registry)
-		var route = mover_component.get("route") if mover_component != null else null
+		var mover_component: Variant = ActorTableType.get_component(colonist, "mover", content_registry)
+		var route: Variant = mover_component.get("route") if mover_component != null else null
 		if route == null and colonist.get("work") == null:
 			idle.append(String(colonist.get("id", "")))
 	return idle

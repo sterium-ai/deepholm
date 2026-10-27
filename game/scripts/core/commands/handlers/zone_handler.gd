@@ -56,7 +56,7 @@ func _fail_haul_jobs_targeting_removed_zone(x: int, y: int, width: int, height: 
 	for job in _scheduler.queue.get_jobs():
 		if String(job["kind"]) != "haul" or job["status"] != "active":
 			continue
-		var cell = job.get("cell")
+		var cell: Variant = job.get("cell")
 		if cell == null:
 			continue
 		var cx: int = cell.x

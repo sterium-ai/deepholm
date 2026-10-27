@@ -406,7 +406,7 @@ func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dic
 ## own faction, reservation-eligible, not already another job's live target
 ## reservation, and region-reachable from `start` -- null when none qualify.
 func _best_adjacent_tile(actor_id: String, start: Vector2i, target_tile: Vector2i):
-	var best = null
+	var best: Variant = null
 	var best_distance := -1
 	for offset in NEIGHBOR_OFFSETS:
 		var candidate := target_tile + offset
@@ -452,7 +452,7 @@ func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary
 	var start := Vector2i(int(actor["x"]), int(actor["y"]))
 	var candidates: Array = []
 	for target in _hostile_targets(actor, actors):
-		var tile = _best_adjacent_tile(actor_id, start, target["tile"])
+		var tile: Variant = _best_adjacent_tile(actor_id, start, target["tile"])
 		if tile == null:
 			continue
 		var distance: int = maxi(absi(tile.x - start.x), absi(tile.y - start.y))

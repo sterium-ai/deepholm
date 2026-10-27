@@ -20,7 +20,7 @@ extends RefCounted
 static func validate(tunables: Dictionary) -> bool:
 	if not tunables.has("rates"):
 		return false
-	var rates = tunables["rates"]
+	var rates: Variant = tunables["rates"]
 	if not (rates is Dictionary):
 		return false
 	for rate in (rates as Dictionary).values():
@@ -50,10 +50,10 @@ static func build_full_accumulator(registry) -> Dictionary:
 ## reduced by day_length_ticks and the need drops by one point, clamped at 0.
 ## Integer-only and platform-independent by construction (no float division).
 static func apply_tick(actor: Dictionary, tunables: Dictionary) -> void:
-	var needs = actor.get("needs")
+	var needs: Variant = actor.get("needs")
 	if not (needs is Dictionary):
 		return
-	var accumulator = actor.get("needsAccumulator")
+	var accumulator: Variant = actor.get("needsAccumulator")
 	if not (accumulator is Dictionary):
 		return
 	var rates: Dictionary = tunables.get("rates", {})

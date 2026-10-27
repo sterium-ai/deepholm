@@ -150,7 +150,7 @@ func resume() -> String:
 				continue
 			if neighbor.x < min_x or neighbor.x > max_x or neighbor.y < min_y or neighbor.y > max_y:
 				continue
-			var result = _cost_fn.call(neighbor)
+			var result: Variant = _cost_fn.call(neighbor)
 			var edge_cost: float
 			if typeof(result) == TYPE_BOOL:
 				edge_cost = 1.0 if result else 0.0
@@ -223,7 +223,7 @@ func _reconstruct_path(end: Vector2i) -> Array[Vector2i]:
 ## this module's original contract (true = cost 1, false = impassable/cost
 ## 0); any numeric result is used as-is. resume() inlines the same rule.
 func _cost_of(tile: Vector2i) -> float:
-	var result = _cost_fn.call(tile)
+	var result: Variant = _cost_fn.call(tile)
 	if typeof(result) == TYPE_BOOL:
 		return 1.0 if result else 0.0
 	return float(result)

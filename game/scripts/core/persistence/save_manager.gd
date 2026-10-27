@@ -56,7 +56,7 @@ const AUTOSAVE_FILES := ["autosave-1.json", "autosave-2.json", "autosave-3.json"
 const MANUAL_SLOT := "manual"
 
 var _save_dir: String
-var _last_known_good = null
+var _last_known_good: Variant = null
 
 func _init(save_dir: String = DEFAULT_SAVE_DIR) -> void:
 	_save_dir = save_dir
@@ -120,7 +120,7 @@ func get_last_known_good():
 func highest_known_epoch() -> int:
 	var highest := -1
 	for path in _all_slot_paths():
-		var peeked = _peek_epoch_tick(path)
+		var peeked: Variant = _peek_epoch_tick(path)
 		if peeked != null and int(peeked["epoch"]) > highest:
 			highest = int(peeked["epoch"])
 	return highest
@@ -155,10 +155,10 @@ static func _epoch_tick_before(epoch_a: int, tick_a: int, epoch_b: int, tick_b: 
 ## is treated as older than any recorded pair and is picked immediately.
 func _pick_autosave_slot() -> int:
 	var oldest_index := 0
-	var oldest = null
+	var oldest: Variant = null
 	for i in AUTOSAVE_FILES.size():
 		var path := _autosave_path(i)
-		var peeked = _peek_epoch_tick(path)
+		var peeked: Variant = _peek_epoch_tick(path)
 		if peeked == null:
 			return i
 		if oldest == null or _epoch_tick_before(int(peeked["epoch"]), int(peeked["tick"]), int(oldest["epoch"]), int(oldest["tick"])):
@@ -175,7 +175,7 @@ func _order_candidates_newest_first() -> Array[Dictionary]:
 	for candidate in candidates:
 		if not FileAccess.file_exists(candidate["file"]):
 			continue
-		var peeked = _peek_epoch_tick(candidate["file"])
+		var peeked: Variant = _peek_epoch_tick(candidate["file"])
 		present.append({
 			"slot": candidate["slot"], "file": candidate["file"],
 			"sort_epoch": int(peeked["epoch"]) if peeked != null else -1,
@@ -201,16 +201,16 @@ static func _peek_epoch_tick(path: String):
 		return null
 	var text := file.get_as_text()
 	file.close()
-	var parsed = JSON.parse_string(text)
+	var parsed: Variant = JSON.parse_string(text)
 	if not (parsed is Dictionary):
 		return null
-	var state = parsed.get("state")
+	var state: Variant = parsed.get("state")
 	if not (state is Dictionary):
 		return null
-	var tick = state.get("tick")
+	var tick: Variant = state.get("tick")
 	if typeof(tick) != TYPE_INT and typeof(tick) != TYPE_FLOAT:
 		return null
-	var epoch = state.get("epoch", 0)
+	var epoch: Variant = state.get("epoch", 0)
 	if typeof(epoch) != TYPE_INT and typeof(epoch) != TYPE_FLOAT:
 		epoch = 0
 	return {"epoch": int(epoch), "tick": int(tick)}

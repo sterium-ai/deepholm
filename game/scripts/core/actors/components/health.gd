@@ -49,6 +49,6 @@ static func clamp_bounds(health: Dictionary) -> void:
 ## key. Re-clamps every tick so bounds hold under any future sequence of
 ## apply_tick() calls even before anything changes hp.
 static func apply_tick(actor: Dictionary) -> void:
-	var health = actor.get("health")
+	var health: Variant = actor.get("health")
 	if health is Dictionary:
 		clamp_bounds(health)

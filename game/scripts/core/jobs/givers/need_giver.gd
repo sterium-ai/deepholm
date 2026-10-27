@@ -144,11 +144,11 @@ func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, 
 ## Reads a colonist's "needs"/"mover" component through ActorTable (ADR 012)
 ## rather than indexing the colonist dict directly.
 func _needs(colonist: Dictionary) -> Dictionary:
-	var needs_component = ActorTableType.get_component(colonist, "needs", _content)
+	var needs_component: Variant = ActorTableType.get_component(colonist, "needs", _content)
 	return needs_component if needs_component != null else {}
 
 func _route(colonist: Dictionary):
-	var mover_component = ActorTableType.get_component(colonist, "mover", _content)
+	var mover_component: Variant = ActorTableType.get_component(colonist, "mover", _content)
 	return mover_component.get("route") if mover_component != null else null
 
 func searching_colonist_ids() -> Array[String]:

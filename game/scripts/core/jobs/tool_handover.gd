@@ -36,7 +36,7 @@ static func apply(job: Dictionary, assignments: Dictionary, toils) -> void:
 	var wait: Dictionary = toils.waiting_for_handover(colonist_id, job_id)
 	if wait.is_empty():
 		return
-	var holder_assignment = assignments.get(String(wait["holder_colonist_id"]))
+	var holder_assignment: Variant = assignments.get(String(wait["holder_colonist_id"]))
 	job["reason"] = REASON
 	job["remedy"] = REMEDY
 	job["item_id"] = String(wait["item_id"])

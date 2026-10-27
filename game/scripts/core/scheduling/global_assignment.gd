@@ -74,7 +74,7 @@ func _init(random_source: RandomNumberGenerator, content_registry) -> void:
 ## Reads a colonist's "worker" component labourTable through ActorTable
 ## (ADR 012) rather than indexing the colonist dict directly.
 func _labour_table(colonist: Dictionary) -> Dictionary:
-	var worker_component = ActorTableType.get_component(colonist, "worker", _content)
+	var worker_component: Variant = ActorTableType.get_component(colonist, "worker", _content)
 	return worker_component.get("labourTable", {}) if worker_component != null else {}
 
 func set_route_budget(budget: Dictionary) -> void:
@@ -575,7 +575,7 @@ func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Ve
 	for worker in state["pending"]:
 		var saved: Dictionary = state["pending"][worker]
 		var request: Dictionary = saved.duplicate(true)
-		var route_state = saved["route"]
+		var route_state: Variant = saved["route"]
 		if route_state == null:
 			request["route"] = null
 		else:
@@ -622,7 +622,7 @@ func snapshot() -> Dictionary:
 func _routable(target: Vector2i, cost_fn: Callable) -> Callable:
 	return func(tile: Vector2i):
 		if tile == target:
-			var underlying = cost_fn.call(tile)
+			var underlying: Variant = cost_fn.call(tile)
 			return underlying if _is_passable_value(underlying) else 1
 		return cost_fn.call(tile)
 

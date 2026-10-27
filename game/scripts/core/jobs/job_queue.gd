@@ -390,7 +390,7 @@ func _tick_haul(job: Dictionary) -> void:
 	if not reachable:
 		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
 		return
-	var cell = _find_haul_destination.call(String(job["item_id"])) if _find_haul_destination.is_valid() else null
+	var cell: Variant = _find_haul_destination.call(String(job["item_id"])) if _find_haul_destination.is_valid() else null
 	_emit("haul_destination_attempt", job["id"], {"attempt_tick": _tick})
 	if cell == null:
 		var backoff: int = int(job["backoff_ticks"])
@@ -703,7 +703,7 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 			continue
 		if String(job["kind"]) == HAUL_KIND:
 			_table.acquire(ITEM_KEY_PREFIX + String(job["item_id"]), job["id"])
-			var cell = job.get("cell")
+			var cell: Variant = job.get("cell")
 			if cell != null:
 				_table.acquire(_cell_key(cell), job["id"])
 		elif String(job["kind"]) == SITE_FETCH_KIND:
