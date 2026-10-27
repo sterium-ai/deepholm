@@ -356,7 +356,7 @@ target is measured with the same `bench_*.gd` on the same host and quoted before
 the handoff. Entries that edit `world_state.gd` run between R steps, never in parallel with
 one.
 
-#### A1 — Benchmark runner and baseline report · `todo` · *parallel-safe (tools/docs only)*
+#### A1 — Benchmark runner and baseline report · `review (antonelmejor50-hub/a1-benchmark-runner-and-baseline)` · *parallel-safe (tools/docs only)*
 
 - **Goal:** `tools/run_benches.ps1` (promoted from `docs/orca/handoffs/A0-run-benches.ps1`)
   runs every `bench_*.gd` and writes `docs/architecture/bench-baseline.md` (one table per
@@ -364,6 +364,8 @@ one.
   lines from it.
 - **Owned paths:** `tools/run_benches.ps1` (new), `docs/architecture/bench-baseline.md` (new),
   `docs/orca/README.md` (one paragraph), `game/scripts/tests/bench_*.gd` (output format only).
+  Scope amendment approved by the owner, 2026-10-27: repair bench calls broken by R6
+  (`BenchCommon.profiled_tick()` in `bench_common.gd` follows `TrenchSystem`).
 - **Acceptance:** the runner reproduces the A0 lines on the host; `run_tests` still ignores
   `bench_*`; no CI gate is added (timings are host-dependent).
 - **Non-goals:** performance thresholds in CI; changing what the benchmarks measure.

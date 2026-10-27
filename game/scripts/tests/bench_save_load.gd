@@ -77,6 +77,13 @@ func _run(actor_count: int) -> void:
 		read_usec / 1000.0, decode_usec / 1000.0, (encode_usec + write_usec) / 1000.0,
 		(read_usec + decode_usec) / 1000.0, read_result.get("ok", false), hash_match, _short(write_result)])
 	print("bench_save_load: actors=%d largest sections (JSON chars): %s" % [world._colonists.size(), sections])
+	BenchCommon.row("bench_save_load", "round trip", "actors=%d" % world._colonists.size(), {
+		"ticks": TICKS, "file KB": "%.1f" % (file_bytes / 1024.0), "encode ms": "%.1f" % (encode_usec / 1000.0),
+		"write_atomic ms": "%.1f" % (write_usec / 1000.0), "_validate_state ms": "%.1f" % (validate_usec / 1000.0),
+		"one JSON.stringify ms": "%.1f" % (stringify_usec / 1000.0), "read+integrity ms": "%.1f" % (read_usec / 1000.0),
+		"decode ms": "%.1f" % (decode_usec / 1000.0), "total save ms": "%.1f" % ((encode_usec + write_usec) / 1000.0),
+		"total load ms": "%.1f" % ((read_usec + decode_usec) / 1000.0), "read ok": read_result.get("ok", false),
+		"hash match": hash_match, "write": _short(write_result), "largest sections": sections})
 	_remove_save()
 
 ## The five largest top-level (and one level down) sections of the encoded state.
@@ -108,6 +115,8 @@ func _leak_check() -> void:
 	var after := int(Performance.get_monitor(Performance.OBJECT_COUNT))
 	print("bench_save_load: leak check: Object count before=%d after building+dropping 3 WorldStates=%d (delta=%d)" % [
 		before, after, after - before])
+	BenchCommon.row("bench_save_load", "leak check", "build and drop 3 WorldStates (64x64)", {
+		"objects before": before, "objects after": after, "delta": after - before})
 
 func _short(value) -> String:
 	if value is Dictionary:

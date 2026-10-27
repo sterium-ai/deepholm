@@ -6,6 +6,8 @@ extends RefCounted
 ## profiled/real state_hash() check fails). They are named bench_*.gd so
 ## tools/run_tests.* (which only globs test_*.gd) never runs them.
 ##
+## Run all of them, and rewrite docs/architecture/bench-baseline.md, with:
+##   tools\run_benches.ps1
 ## Run one with:
 ##   & $env:GODOT --headless --path game --script res://scripts/tests/bench_tick_scaling.gd
 
@@ -49,6 +51,24 @@ static func stats_ms(samples_usec: Array) -> Dictionary:
 static func format_stats(stats: Dictionary) -> String:
 	return "mean=%.2fms p50=%.2fms p95=%.2fms max=%.2fms n=%d" % [stats["mean"], stats["p50"],
 		stats["p95"], stats["max"], stats["n"]]
+
+## stats_ms() as row() columns, formatted like format_stats(); `prefix` names
+## the series when a row carries two (e.g. "real " and "profiled ").
+static func stats_values(stats: Dictionary, prefix: String = "") -> Dictionary:
+	return {
+		prefix + "mean ms": "%.2f" % stats["mean"], prefix + "p50 ms": "%.2f" % stats["p50"],
+		prefix + "p95 ms": "%.2f" % stats["p95"], prefix + "max ms": "%.2f" % stats["max"],
+		prefix + "n": stats["n"],
+	}
+
+## Machine-readable twin of a "bench_*:" result line, for tools/run_benches.ps1,
+## which turns them into the tables of docs/architecture/bench-baseline.md
+## (one table per `table` name, one row per call). Printed as "@row <json>" so
+## that filters on "^bench_" keep only the human lines. `values` keeps its
+## insertion order, which becomes the column order; floats are passed already
+## formatted as strings so the table shows the same digits as the line.
+static func row(bench_name: String, table: String, case_label: String, values: Dictionary) -> void:
+	print("@row " + JSON.stringify({"bench": bench_name, "table": table, "case": case_label, "values": values}, "", false))
 
 ## Passable tiles in breadth-first order from `origin` (4-neighbour, the
 ## colony's own passability rule), skipping tiles that already hold an
@@ -120,7 +140,8 @@ static func submit_till_orders(world: WorldStateType, count: int) -> int:
 ## bench_tick_scaling.gd proves it by comparing state_hash() against a twin
 ## world advanced with the real tick(). Adds the elapsed microseconds per
 ## phase into `totals`. If tick() changes, this copy must follow it (the
-## hash check fails loudly otherwise).
+## hash check fails loudly otherwise, and tools/run_benches.ps1 fails any
+## benchmark whose output has a SCRIPT ERROR, e.g. a call to a moved method).
 static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	var t := Time.get_ticks_usec()
 	world._clock.advance(1)
@@ -141,11 +162,11 @@ static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	t = _lap(totals, "scheduler", t)
 	world._construction.resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
 	t = _lap(totals, "site_fetch_resolve", t)
-	world._rescue_giver.advance(world._rescue_candidates(), world._trapped_rescue_victims(), world._clock.tick)
+	world._rescue_giver.advance(world._trench.rescue_candidates(), world._trench.trapped_rescue_victims(), world._clock.tick)
 	t = _lap(totals, "rescue_giver", t)
 	world._incidents.activate_pending()
 	t = _lap(totals, "incidents_activate", t)
-	world._activate_pending_escapes()
+	world._trench.activate_pending_escapes()
 	t = _lap(totals, "escapes_activate", t)
 	world._advance_colonists()
 	t = _lap(totals, "advance_colonists", t)

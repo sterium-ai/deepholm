@@ -78,6 +78,10 @@ func _time_search(label: String, start: Vector2i, target: Vector2i, distance: in
 	print("bench_route_search: %s from=%s to=%s path_distance=%d status=%s path_len=%d expansions=%d resume_calls(ticks)=%d time=%.2fms us/expansion=%.2f snapshot_json=%dB" % [
 		label, start, target, distance, search.get_status(), search.get_path().size(), search.expansions,
 		search.resume_calls, usec / 1000.0, float(usec) / maxi(1, search.expansions), snapshot_size])
+	BenchCommon.row("bench_route_search", "routes", "%s d=%d" % [label, distance], {
+		"from": str(start), "to": str(target), "status": search.get_status(), "path len": search.get_path().size(),
+		"expansions": search.expansions, "resume calls (ticks)": search.resume_calls, "time ms": "%.2f" % (usec / 1000.0),
+		"us/expansion": "%.2f" % (float(usec) / maxi(1, search.expansions)), "snapshot json B": snapshot_size})
 
 func _open_cost(tile: Vector2i) -> float:
 	return float(_open_grid[tile.y * SIZE + tile.x])
@@ -107,21 +111,18 @@ func _tiles_at_distances(passable: Callable, start: Vector2i) -> Dictionary:
 func _bench_regions(world: WorldStateType) -> void:
 	var t := Time.get_ticks_usec()
 	world._tile_grid.get_regions()
-	print("bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=%.2fms" % [
-		(Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("regions full build (generated map, TileGrid.get_regions())", t)
 	t = Time.get_ticks_usec()
 	var regions := RegionMapType.new(SIZE, SIZE, func(x: int, y: int) -> bool: return _open_grid[y * SIZE + x] == 1)
-	print("bench_route_search: regions full build (open grid, array callable) time=%.2fms" % [(Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("regions full build (open grid, array callable)", t)
 	_open_grid[128 * SIZE + 128] = 0
 	t = Time.get_ticks_usec()
 	regions.on_passability_changed(128, 128)
-	print("bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=%.2fms" % [
-		(Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("regions on_passability_changed (block one tile mid open 256x256 region)", t)
 	_open_grid[128 * SIZE + 128] = 1
 	t = Time.get_ticks_usec()
 	regions.on_passability_changed(128, 128)
-	print("bench_route_search: regions on_passability_changed (unblock it again) time=%.2fms" % [
-		(Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("regions on_passability_changed (unblock it again)", t)
 	# Rooms (game/scripts/core/map/rooms.gd): WorldState calls
 	# _tile_grid.get_rooms().on_passability_changed() after every tile-kind change of a
 	# completed work job (_toil_on_work_complete), even when passability did
@@ -130,12 +131,16 @@ func _bench_regions(world: WorldStateType) -> void:
 	var tile := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
 	t = Time.get_ticks_usec()
 	var rooms = world._tile_grid.get_rooms()
-	print("bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=%.2fms" % [
-		(Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("rooms full build (generated map, TileGrid.get_rooms())", t)
 	t = Time.get_ticks_usec()
 	rooms.on_passability_changed(tile.x, tile.y)
-	print("bench_route_search: rooms on_passability_changed at %s (no passability change, open area) time=%.2fms" % [
-		tile, (Time.get_ticks_usec() - t) / 1000.0])
+	_print_map_time("rooms on_passability_changed at %s (no passability change, open area)" % tile, t)
+
+## One region/room timing: its "bench_route_search: <label> time=" line and its row.
+func _print_map_time(label: String, since_usec: int) -> void:
+	var ms := (Time.get_ticks_usec() - since_usec) / 1000.0
+	print("bench_route_search: %s time=%.2fms" % [label, ms])
+	BenchCommon.row("bench_route_search", "regions and rooms", label, {"time ms": "%.2f" % ms})
 
 ## Vector2i keys/values -> "x,y" strings, only to measure the snapshot's JSON size.
 func _json_safe(value):
