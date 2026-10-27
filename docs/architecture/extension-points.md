@@ -219,6 +219,35 @@ boundaries and are not a separate extension point.
   `_apply_construction_submission()`/`ConstructionGiver`/`ConstructionSiteTable` already
   generalize over every `build_cost`-bearing kind.
 
+## Story rule
+
+*Accepted in [ADR 046](../decisions/046-story-layer.md) (2026-10-27); not implemented yet. Until its code
+tasks land, a story beat has no extension point and must not be added as code in
+`WorldState`.*
+
+- Files: add a rule to `game/content/story.json` (`{id, trigger, conditions, chance_percent,
+  repeat, effects}`) and, for a quest, its declaration in `game/content/quests.json` (`{id,
+  title, visible, stages}`), validated against their schemas and cross-checked by
+  `ContentRegistry` like any other collection. A trigger is `day_start` or a core event (with an
+  optional `match` on its `data`); conditions are an AND list over a closed fact vocabulary
+  (`day`, `colonist_count`, `actor_count`, `food_count`, `item_count`, `object_count`, `flag`,
+  `quest_stage`, `days_in_stage`, `window_open`, `days_until_window`); effects are ordinary
+  commands from a whitelist (`spawn_incident`, `set_faction`, `set_story_flag`,
+  `set_quest_stage`, `story_message`, `end_scenario`). One `StoryGiver`
+  (`game/scripts/core/story/story_giver.gd`) keeps the triggers it still has to process in a
+  persisted inbox. Once per tick it takes them in order, offers each one to the matching rules
+  in ascending id order, and sends their effects through `apply()`, so every story change is
+  validated,
+  previewable and logged like a player command. An incident is one effect kind
+  (`spawn_incident`); an incident row marked `"draw": "story"` arrives only from a rule. A
+  new beat is content only; a new fact or a new effect command is a small code change with
+  its own test.
+- Test: a headless scenario per rule chain driven by real ticks (not a direct call into the
+  giver), a same-seed `state_hash()` check, and `test_content_registry.gd` for the schema and
+  cross-checks.
+- Example: ADR 046's three worked examples (a migrant chain, a raid warning, a first-winter
+  quest) use only this vocabulary.
+
 Keep core classes scene-independent and deterministic. A new job giver or
 toil must flow through the existing queue, scheduler, and consolidated toil
 executor. A per-colonist loop, re-route path, or job-state machine elsewhere is
