@@ -199,7 +199,7 @@ Orca helper scripts, this backlog.
 
 ## Phase B — bugs found by the owner's playtests
 
-### B1 — Large area orders freeze the game and the selection lags the cursor · `review (antonelmejor50-hub/b1-large-area-orders-freeze)` · *parallel-safe (coordinate with R4 on world_state.gd)*
+### B1 — Large area orders freeze the game and the selection lags the cursor · `done (PR #13)` · *parallel-safe (coordinate with R4 on world_state.gd)*
 
 - **Symptom (owner, 2026-10-25, main `e0a9f56`, native Windows build 1600×900):** dragging a
   large rectangle for an order (dig/mine/chop/cancel/zone) makes the game stutter and then
@@ -245,7 +245,7 @@ Orca helper scripts, this backlog.
 
 ---
 
-### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `review` (branch `antonelmejor50-hub/b2-colonists-and-later-everything`) · *parallel-safe (viewer + assets only)*
+### B2 — Colonists (and later everything) drawn with the Pixel Crawler pack, not placeholders · `done (PR #7)` · *parallel-safe (viewer + assets only)*
 
 - **Owner (2026-10-25):** "el pixelart de los colonos no es muy bonito, se debería parecer más
   al pixelart del pack que descargamos". Visual target stays Dwarf Fortress-like flat top-down
@@ -280,7 +280,7 @@ Orca helper scripts, this backlog.
 - **Non-goals:** touching the core; changing tile size or colonist size; redrawing anything by
   hand or with AI (owner rule: art comes from the pack or PixelLab, never agent pixels).
 
-### B4 — Two visual bugs from the owner's playtest: progress bar offset, chopped tree shows wall art · `review (antonelmejor50-hub/b4-two-visual-bugs-from)` · *parallel-safe (viewer/tileset only)*
+### B4 — Two visual bugs from the owner's playtest: progress bar offset, chopped tree shows wall art · `done (PR #8)` · *parallel-safe (viewer/tileset only)*
 
 - **Owner (2026-10-25, main `052d8c4`, native build):**
   1. The construction progress bar is drawn "a bit above where it should be" for every
@@ -303,6 +303,54 @@ Orca helper scripts, this backlog.
   `tiles.json` maps to an atlas region; full suite passes; the owner confirms on the native
   build.
 - **Non-goals:** new art; changing what chopping yields.
+
+### B5 — Three persistence bugs found by the R2/R4 probes (save refused, berries) · `todo` · *parallel-safe (persistence + WorkProgress/ItemTable only; coordinate: R9 in flight touches combat, not these)*
+
+- **Bugs (pre-existing on `main`, diagnosed in `handoffs/R2.md` and `handoffs/R4.md`):**
+  1. **Save refused.** `work_progress.gd` / `state_codec.gd` reconstruct work-progress *owners*
+     by parsing the `"x:y"` key; a rescue job's job-scoped key (e.g. `"120:44"` → `{x: 0,
+     y: 12044}`) yields an out-of-map tile and `SaveIO.write_atomic()` rejects the save with
+     `invalid tile coordinates`. R4's proposed fix: persist owners as explicit records
+     (`{tile, ownerJobId}`), never re-parse keys. Schema bump + migration + fixture.
+  2. **Ground berries not hashed.** `state_hash()` ignores `groundBerries` although it is
+     persisted and drives `eat_food`; two worlds differing only there hash equal. Add to
+     `ItemTable.hash_into`.
+  3. **Berry factions not persisted.** `get_ground_berries_faction_id()` returns `""` after a
+     load for berries that were `"colony"`. Persist in `ItemTable.encode/decode` (schema bump
+     shared with 1).
+- **Owned paths:** `game/scripts/core/jobs/work_progress.gd`, `game/scripts/core/items/item_table.gd`,
+  `game/scripts/core/persistence/` (`state_codec.gd`, `save_io.gd` validation,
+  `save_migrations.gd`), `docs/architecture/contracts/game-state.schema.json`,
+  `docs/architecture/save-system.md`, fixtures + tests, an ADR for the owner-record format.
+- **Acceptance:** the R2 scenario probe (`handoffs/R2-scenario_dump.gd`) and the R4 probe save and
+  reload at every tick without rejection (quote the run); a headless test with a rescue job mid
+  work saves → loads → identical `state_hash`; a test that `groundBerries` changes the hash; a
+  test that berry factions survive save/load; old fixtures migrate; full suite passes.
+- **Non-goals:** anything else in persistence (R14 comes later); gameplay changes.
+
+### B3 — Props, trees, rock, walls, workbench, berries, tools and animals from the Pixel Crawler pack · `todo` · *parallel-safe (viewer + pack assets + sprite-frame data only)*
+
+- **Owner (2026-10-25):** everything should look like the pack, as the colonists now do (B2).
+  Same mechanism as B2: sheets listed in `game/data/sprite_frames/pack_manifest.json`, copied by
+  `tools/sync_pack_assets.ps1` into git-ignored `game/assets/pack/`, loaded by
+  `viewer/pack_assets.gd` with placeholder fallback. Visual target: Dwarf Fortress-like flat
+  top-down, 16 px tiles, hard silhouettes (`docs/art/style.md`); props ≤ 1 tile except trees;
+  the wolf from `Mobs/Wolf`, raiders from `Orc Crew`, the trader from `Npc's/Citizen_F/Peasant_A`
+  (earlier owner picks, recorded in the pipeline notes; owner may swap).
+- **Scope:** terrain tiles (grass/sand/dirt/water with the autotile the viewer already uses),
+  trees (3 sizes if the pack has them), rock outcrops, wooden/stone walls and doors, bed, table,
+  chair, workbench (both orientations), berry bush, ground items (wood, stone, tools from
+  `Weapons/Wood`), construction-site ghost, and the three non-colonist actors. Every mapping
+  measured from the real sheets (alpha bounding boxes), stored in JSON next to the colonist one.
+- **Owned paths:** `game/scripts/viewer/` (tile atlas map, map view, object/actor sprites,
+  pack_assets), `game/data/sprite_frames/`, `game/data/tilesets/`, `tools/sync_pack_assets.ps1`,
+  `docs/art/*.md`, `game/assets/CREDITS.md`, tests for the loader/mapping.
+- **Acceptance:** with the pack synced, a native-build screenshot of a scene containing every
+  listed kind (use `handoffs/B2-capture.gd` as the base) attached to the handoff; without the
+  pack, placeholders and the full suite unchanged; a test that every object/actor/tile kind in
+  content has either a pack mapping or an explicit placeholder entry (no silent gaps);
+  `git status` never shows a pack PNG; owner confirms on the native build after merge.
+- **Non-goals:** touching the core; new content kinds; UI panels.
 
 ---
 
