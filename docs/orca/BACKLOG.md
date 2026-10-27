@@ -594,7 +594,7 @@ one.
   checkpoint; a planted nondeterminism is reported at the right tick.
 - **Non-goals:** network play; a replay viewer UI.
 
-#### A12 — Map layers: coordinate model ADR · `todo` · *parallel-safe (docs only)* · before F4
+#### A12 — Map layers: coordinate model ADR · `review (antonelmejor50-hub/a12-map-layers-coordinate-model)` · *parallel-safe (docs only)* · before F4
 
 - **Goal:** an ADR that chooses how a tile is addressed across layers (layer next to
   `Vector2i`, `Vector3i`, or one flat index with per-layer offsets). It covers how
@@ -705,6 +705,14 @@ Questions: first recipes (planks? stone blocks?), queue vs. target counts, who c
 
 The largest gap and the game's identity. Needs a map model that supports several layers
 (prepared by R3's `TileGrid`).
+
+- **Coordinate model:** [ADR 045](../decisions/045-map-layers.md) (A12; *accepted* by the owner
+  on 2026-10-27). Tiles are `Vector3i(x, y, layer)`, stored by one flat index owned by
+  `TileGrid`; layers move only through vertical links (stairs, ramps, tunnel). The ADR's
+  steps A2 → L1 (one index owner) → L2 (`Vector3i` sweep, save bump and single-layer
+  migration) → L3 (links, region graph, routing) → L4 (viewer active layer) come before F4's
+  gameplay. The Design block cites the ADR and answers what it leaves to F4: how many layers,
+  when a layer is discovered, the tunnel building and drill item, ores, supports, cave-ins.
 
 ### F5 — Stockpile filters, remaining labours, happiness/thoughts · `todo` · Design: *pending*
 
