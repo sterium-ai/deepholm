@@ -5,7 +5,7 @@
 > number that counts across all layers, so layer 0 keeps today's numbers and saves. Stairs,
 > ramps and tunnels are the only way between layers, and they always go straight up or down.
 
-- **Status:** proposed (needs the owner's sign-off before F4's Design block cites it)
+- **Status:** accepted (signed off by the owner on 2026-10-27, review round 2)
 - **Date:** 2026-10-26
 - **Scope:** simulation (map, passability, regions, rooms, routing, distance rules),
   persistence (tile shape and the single-layer migration), presentation (one visible layer).
@@ -146,8 +146,23 @@ index(c) = c.z * width * height + c.y * width + c.x
 - **Distance ranking:** a planar distance (`absi`, Chebyshev, `_distance_sq`) is only
   defined between two tiles on the same layer. A "nearest" search that may cross layers
   ranks by route cost (as ADR 038/043 already do) or restricts its candidates to the
-  actor's layer. One helper, `TileGrid.planar_distance(a, b)`, asserts `a.z == b.z`; the 17
-  existing lines route through it.
+  actor's layer.
+- **The three metrics stay three helpers.** The 17 lines use three different metrics, and
+  each keeps its exact formula. L1 must not merge them into one "distance".
+
+  | Helper (on `TileGrid`, static) | Formula | Used today for | Sites |
+  | --- | --- | --- | --- |
+  | `manhattan(a, b)` | `absi(dx) + absi(dy)` | nearest-candidate ranking and travel penalty | `approach_giver.gd:423`, `combat_targeting.gd:96`, `need_giver.gd:322-334`, `rescue_giver.gd:341-342`, `tool_drop_toil.gd:399`, `tool_matching.gd:40`, `global_assignment.gd:438` |
+  | `chebyshev(a, b)` | `maxi(absi(dx), absi(dy))` | the `<= 1` "next to" test (8 neighbours) and square rings | `approach_giver.gd:458`, `toil_executor.gd:509/589/885`, `tool_fetch_toil.gd:322`, `world_state.gd:1451`, `world_generator.gd:1125` |
+  | `distance_sq(a, b)` | `dx * dx + dy * dy` | flee-candidate comparison | `combat_giver.gd:372-393` |
+
+  - All three take `Vector3i` and assert `a.z == b.z`, so a call across layers fails
+    loudly. A ranking that may cross layers uses route cost instead.
+  - On one layer, each helper returns the same integer as the expression it replaces, so
+    L1's scenario dump stays byte-identical.
+  - `world_generator.gd:1125` works on plain `x`/`y` ints inside one layer's generation and
+    may keep its inline form.
+  - Line numbers are as of `279b42f`.
 - **Incidents and spawn** stay on the surface (`z = 0`) until an F-task says otherwise;
   map-edge entry is a surface concept.
 
@@ -216,7 +231,7 @@ Order of work (each step its own task, suite green and hash-checked):
 1. **A2** — integer tile keys and packed cost arrays (already in the backlog). Removes most
    String keys while there is still one layer.
 2. **L1** — `TileGrid` becomes the only index owner (`index_of`/`coord_of`/`in_bounds`,
-   `planar_distance`), every remaining key goes through it. No save change; scenario dump
+   `manhattan`/`chebyshev`/`distance_sq`), every remaining key goes through it. No save change; scenario dump
    byte-identical to `main`.
 3. **L2** — the `Vector2i` → `Vector3i` sweep with `layer_count = 1`, the save bump and the
    single-layer migration with its fixture. Scenario dump identical apart from the schema
@@ -275,6 +290,5 @@ Order of work (each step its own task, suite green and hash-checked):
 - [x] Save/migration impact is specified (§5); implemented in L2.
 - [x] The source-of-truth index still points to the authoritative location
       (`docs/decisions/` is indexed as a folder).
-- [ ] The owner signs this ADR off; F4's Design block then cites it. **Pending:** only the
-      owner can tick this. On sign-off, the status line becomes `accepted` with the date.
-      Until then the ADR stays `proposed` and A12 stays in `review`.
+- [x] The owner signs this ADR off: signed off on 2026-10-27, so F4's Design block can cite
+      it.
