@@ -1,7 +1,11 @@
 {
-  "_note": "The composed-core size rule (ADR 048), checked in CI by tools/check_core_budgets.py: no .gd file under game/scripts/core above max_file_lines total lines, no function above max_function_lines code lines (from its func line to the next, comments and blanks excluded; tools/measure_core.ps1's FuncLines). The exceptions are the files and functions that were already over the rule when it landed, frozen at their size then; a cap is never raised, and an exception the code no longer needs fails the check until it is removed.",
+  "_note": "The composed-core size rule (ADR 048), checked in CI by tools/check_core_budgets.py: no .gd file under game/scripts/core above max_file_lines total lines, no function above max_function_lines code lines (from its func line to the next, comments and blanks excluded; tools/measure_core.ps1's FuncLines). stricter_file_caps keeps the old caps that were already below the rule (a cap is never raised). The exceptions are the files and functions that were already over the rule when it landed, frozen at their size then; a cap is never raised, and an exception the code no longer needs fails the check until it is removed.",
   "max_file_lines": 800,
   "max_function_lines": 80,
+  "stricter_file_caps": {
+    "game/scripts/core/jobs/job_queue.gd": {"cap": 790, "why": "pre-ADR 048 cap, below the rule; never raised"},
+    "game/scripts/core/scheduling/global_assignment.gd": {"cap": 688, "why": "pre-ADR 048 cap, below the rule; never raised"}
+  },
   "file_exceptions": {
     "game/scripts/core/persistence/save_io.gd": {"cap": 2287, "until": "R14"},
     "game/scripts/core/persistence/save_migrations.gd": {"cap": 1532, "until": "R14"},

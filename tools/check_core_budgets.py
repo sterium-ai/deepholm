@@ -2,9 +2,10 @@
 
 The rule: no file above max_file_lines (total lines) and no function above
 max_function_lines (code lines from a func declaration to the next one, comment and
-blank lines excluded -- the FuncLines column of tools/measure_core.ps1). The listed
-exceptions are frozen at a cap of their own, and an exception that the code no
-longer needs is an error, so the list only shrinks.
+blank lines excluded -- the FuncLines column of tools/measure_core.ps1). Files with an
+older, stricter cap keep it (stricter_file_caps). The listed exceptions are frozen at a
+cap of their own, and an exception that the code no longer needs is an error, so the
+list only shrinks.
 
 Usage: python tools/check_core_budgets.py
 """
@@ -43,13 +44,20 @@ def main() -> int:
     # Each exception is {"cap": N, "until": "<task that removes it>"}.
     file_exceptions: dict[str, int] = {k: int(v["cap"]) for k, v in budgets["file_exceptions"].items()}
     func_exceptions: dict[str, int] = {k: int(v["cap"]) for k, v in budgets["function_exceptions"].items()}
+    stricter: dict[str, int] = {k: int(v["cap"]) for k, v in budgets["stricter_file_caps"].items()}
+    for rel, cap in stricter.items():
+        if cap >= max_file or rel in file_exceptions:
+            print(f"{rel}: a stricter cap must be below {max_file} and not also an exception")
+            return 1
     errors: list[str] = []
     seen_files: set[str] = set()
     seen_funcs: set[str] = set()
     for path in sorted(CORE.rglob("*.gd")):
         rel = path.relative_to(ROOT).as_posix()
         total, functions = measure(path)
-        cap = max_file
+        cap = stricter.get(rel, max_file)
+        if rel in stricter:
+            seen_files.add(rel)
         if rel in file_exceptions:
             seen_files.add(rel)
             cap = file_exceptions[rel]
@@ -67,8 +75,8 @@ def main() -> int:
                     errors.append(f"{key}: {length} lines is within {max_func}; remove its function exception")
             if length > func_cap:
                 errors.append(f"{key}: {length} lines > cap {func_cap}")
-    for rel in sorted(set(file_exceptions) - seen_files):
-        errors.append(f"{rel}: file exception names a file that does not exist")
+    for rel in sorted((set(file_exceptions) | set(stricter)) - seen_files):
+        errors.append(f"{rel}: file cap names a file that does not exist")
     for key in sorted(set(func_exceptions) - seen_funcs):
         errors.append(f"{key}: function exception names a function that does not exist")
     for error in errors:
@@ -77,7 +85,7 @@ def main() -> int:
         print(f"check_core_budgets: {len(errors)} violation(s)")
         return 1
     print(f"check_core_budgets: OK (files <= {max_file} lines, functions <= {max_func} code lines, "
-          f"{len(file_exceptions)} file and {len(func_exceptions)} function exception(s))")
+          f"{len(stricter)} stricter file cap(s), {len(file_exceptions)} file and {len(func_exceptions)} function exception(s))")
     return 0
 
 

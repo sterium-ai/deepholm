@@ -58,7 +58,7 @@ toil executor is a defect, whatever the acceptance checks say.
 
 No file under `game/scripts/core/` may exceed 800 lines and no function 80
 lines of code (ADR 048). `docs/architecture/core-budgets.json` holds the rule and
-the few frozen exceptions; `python tools/check_core_budgets.py` checks it, in CI
+the few frozen exceptions (and two older caps stricter than 800); `python tools/check_core_budgets.py` checks it, in CI
 and before review. Code that does not fit goes into a new module or an extension
 point. Raising an exception's cap or adding one needs an ADR in the same change.
 

@@ -33,19 +33,22 @@ A per-file list is no longer what keeps the core small.
    `max_function_lines` (80) code lines. A function's length runs from its `func`
    line to the next one, without comment and blank lines: the `FuncLines` column of
    `tools/measure_core.ps1`.
-2. **Frozen exceptions.** A file or function that was already over the rule when it
+2. **Old caps below the rule stay.** A file whose pre-ADR cap was already stricter
+   than 800 keeps that cap in `stricter_file_caps` (`job_queue.gd` 790,
+   `global_assignment.gd` 688): replacing it with 800 would raise it.
+3. **Frozen exceptions.** A file or function that was already over the rule when it
    landed is listed in `core-budgets.json` with `cap` set to its size at that point,
    plus `until`, the task that removes it (`R14` for persistence, or `unassigned`).
    A cap is never raised. An exception the code no longer needs (the file or
    function is back within the rule, or is gone) fails the check until someone
    deletes it, so the list only ever shrinks.
-3. **`tools/check_core_budgets.py`** enforces 1 and 2 and runs in CI in place of the
+4. **`tools/check_core_budgets.py`** enforces 1 to 3 and runs in CI in place of the
    old per-file loop. It also runs locally: `python tools/check_core_budgets.py`.
-4. **No budget ADRs.** Code that would push a file over the rule goes into a new
+5. **No budget ADRs.** Code that would push a file over the rule goes into a new
    module or an extension point (`extension-points.md`). An exception is never
    added for new code. Adding one, or raising a cap, needs an ADR that supersedes
    this one.
-5. **`WorldState.tick()` runs `TickPipeline`**, whose `PHASES` list names the per-tick
+6. **`WorldState.tick()` runs `TickPipeline`**, whose `PHASES` list names the per-tick
    phases in order. A new per-tick system adds a phase there (ADR 046's `story`
    phase is the first planned one), not a line in `world_state.gd`.
 
@@ -71,7 +74,7 @@ A per-file list is no longer what keeps the core small.
 
 ## Acceptance criteria
 
-- [x] `core-budgets.json` holds the rule and the frozen exceptions; CI runs
+- [x] `core-budgets.json` holds the rule, the stricter old caps and the frozen exceptions; CI runs
       `tools/check_core_budgets.py`.
 - [x] `tools/measure_core.ps1` shows no core file above 800 lines outside the
       exceptions, and no function above 80.
