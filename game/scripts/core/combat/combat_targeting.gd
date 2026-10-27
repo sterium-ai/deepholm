@@ -31,33 +31,42 @@ static func _is_hostile(relations, a_faction: String, b_faction: String) -> bool
 static func _is_dead(actor: Dictionary) -> bool:
 	return bool((actor.get("health", {}) as Dictionary).get("dead", false))
 
+## Every living actor with a health component, by tile (Vector2i -> Array, roster
+## order), built once per pass (A4) instead of once per attacker. An array per tile,
+## not a single overwritten entry: movement does not enforce exclusive actor
+## occupancy, so a friendly actor appended after an adjacent enemy must never hide
+## that enemy from targeting. Valid while no actor moves; an actor that dies after
+## the build is skipped at lookup (nearest_adjacent_hostile()).
+static func actors_by_tile(actors: Array) -> Dictionary:
+	var by_tile: Dictionary = {}
+	for other: Dictionary in actors:
+		if _is_dead(other) or not other.has("health"):
+			continue
+		var x: int = other["x"]
+		var y: int = other["y"]
+		var tile := Vector2i(x, y)
+		if not by_tile.has(tile):
+			by_tile[tile] = []
+		(by_tile[tile] as Array).append(other)
+	return by_tile
+
 ## The nearest adjacent (Chebyshev distance 1) hostile target with a health
 ## component -- an actor or a placed object -- for `actor`'s own attack rule.
-## {} when none. `object_at(x,y)->String`, `object_health_at(x,y)->Dictionary`
+## {} when none. `by_tile` must be actors_by_tile() over the live roster, built
+## after the last move. `object_at(x,y)->String`, `object_health_at(x,y)->Dictionary`
 ## ({} for no health) and `object_faction_at(x,y)->String` must be
 ## WorldState's own get_object/_object_health_at/get_object_faction_id.
-static func nearest_adjacent_hostile(actor: Dictionary, actors: Array, relations,
+static func nearest_adjacent_hostile(actor: Dictionary, by_tile: Dictionary, relations,
 		object_at: Callable, object_health_at: Callable, object_faction_at: Callable) -> Dictionary:
 	var ax := int(actor["x"])
 	var ay := int(actor["y"])
 	var own_faction := actor_faction(actor)
-	# Array per tile, not a single overwritten entry: movement
-	# does not enforce exclusive actor occupancy, so a friendly actor appended
-	# after an adjacent enemy must never hide that enemy from targeting.
-	var actors_by_pos: Dictionary = {}
-	for other in actors:
-		if other == actor or _is_dead(other) or not other.has("health"):
-			continue
-		var key := "%d_%d" % [int(other["x"]), int(other["y"])]
-		if not actors_by_pos.has(key):
-			actors_by_pos[key] = []
-		(actors_by_pos[key] as Array).append(other)
 	for offset in NEIGHBOR_OFFSETS:
 		var x := ax + offset.x
 		var y := ay + offset.y
-		var key := "%d_%d" % [x, y]
-		if actors_by_pos.has(key):
-			var other := _pick_hostile_occupant(actors_by_pos[key] as Array, relations, own_faction)
+		var occupants: Array = by_tile.get(Vector2i(x, y), [])
+		if not occupants.is_empty():
+			var other := _pick_hostile_occupant(occupants, relations, own_faction)
 			if not other.is_empty():
 				return {"type": "actor", "x": x, "y": y, "actor": other}
 		if not String(object_at.call(x, y)).is_empty():
@@ -72,7 +81,9 @@ static func nearest_adjacent_hostile(actor: Dictionary, actors: Array, relations
 ## legally share a tile today. {} when none of the occupants are hostile.
 static func _pick_hostile_occupant(occupants: Array, relations, own_faction: String) -> Dictionary:
 	var best: Dictionary = {}
-	for occupant in occupants:
+	for occupant: Dictionary in occupants:
+		if _is_dead(occupant):
+			continue
 		if not _is_hostile(relations, own_faction, actor_faction(occupant)):
 			continue
 		if best.is_empty() or String(occupant["id"]) < String(best["id"]):

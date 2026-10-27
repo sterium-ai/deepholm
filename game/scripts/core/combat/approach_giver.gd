@@ -289,7 +289,10 @@ func restore_job_targets(data: Dictionary) -> void:
 
 ## Runs once per tick, after CombatResolver.resolve_tick() and
 ## CombatGiver.advance() (see CombatSystem.apply_combat()).
+## Nothing here moves or removes an actor (cancelling an approach job despawns
+## nobody), so one actors_by_tile() map serves the whole pass (A4).
 func advance(actors: Array[Dictionary], tick: int) -> void:
+	var by_tile := TargetingType.actors_by_tile(actors)
 	for actor in actors:
 		if not (actor.get("combat") is Dictionary):
 			continue
@@ -349,7 +352,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 				_tracking.erase(actor_id)
 				_job_targets.erase(job_id)
 				_job_actor.erase(job_id)
-		if not TargetingType.nearest_adjacent_hostile(actor, actors, _relations,
+		if not TargetingType.nearest_adjacent_hostile(actor, by_tile, _relations,
 				_object_at, _object_health_at, _object_faction_at).is_empty():
 			continue # rule 1: the attack rule already covers whichever hostile this actor now stands adjacent to
 		if _searching.has(actor_id):

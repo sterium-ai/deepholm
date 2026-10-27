@@ -28,6 +28,7 @@ const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const ToolItemStoreType = preload("res://scripts/core/items/tool_item_store.gd")
 const ItemTableType = preload("res://scripts/core/items/item_table.gd")
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
+const RegionMapType = preload("res://scripts/core/map/regions.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
@@ -67,6 +68,9 @@ var _labour_table: Callable
 var _default_labour_table: Callable
 var _ensure_health: Callable
 var _ensure_combat: Callable
+## (old, new) -> void when ensure_needs() swaps a roster entry for a rebuilt Dictionary:
+## WorldState's ActorIndex.replaced (A4).
+var on_actor_replaced: Callable = func(_old: Dictionary, _new: Dictionary) -> void: pass
 
 ## need_definitions is WorldState's live Dictionary (by reference); event_priority is
 ## WorldState.PRIORITY_TICK. get_colonists is a lambda: StateCodec.decode() reassigns
@@ -157,6 +161,7 @@ func ensure_needs() -> void:
 				"factionId": String(colonist.get("factionId", "colony")) }
 			if not health_missing:
 				colonist["health"] = health_component
+			on_actor_replaced.call(colonists[i], colonist)
 			colonists[i] = colonist
 		var needs: Dictionary = _needs(colonist)
 		for kind in _need_definitions.keys():
@@ -300,8 +305,29 @@ func emit_need_unmet_event(colonist_id: String, kind: String) -> void:
 	})
 
 ## Kind-aware sources (a ground-berries tile for food, water tiles, a bed for rest),
-## never in toil_executor.gd or NeedGiver.
+## never in toil_executor.gd or NeedGiver, minus those no colonist can reach: NeedGiver's
+## search would flood-fill the whole component before giving up on one. Every colonist
+## gets this same list, including sources only another colonist reaches (a walled-in
+## colonist still searches them; test_combat's flee-during-need-search check relies on it).
+## A4: reachability goes through region ids, once per source (O(sources)), instead
+## of RegionMap.reachable() per source per colonist; NeedGiver calls this once per
+## kind per pass. A passable source belongs to its own region, an impassable one
+## (water) to each region among its orthogonal neighbours: reachable()'s own rule.
 func need_source_candidates(kind: String) -> Array[Vector2i]:
+	var candidates := _raw_need_sources(kind)
+	if _get_colonists.call().is_empty():
+		return candidates
+	var regions := _tile_grid.get_regions()
+	var colonist_regions: Dictionary = {}
+	for colonist: Dictionary in _get_colonists.call():
+		var x: int = colonist["x"]
+		var y: int = colonist["y"]
+		colonist_regions[regions.region_id(x, y)] = true
+	colonist_regions.erase(0) # reachable() is false from a tile with no region
+	return candidates.filter(func(candidate: Vector2i) -> bool:
+		return _regions_reaching(regions, candidate).any(func(region: int) -> bool: return colonist_regions.has(region)))
+
+func _raw_need_sources(kind: String) -> Array[Vector2i]:
 	var candidates: Array[Vector2i] = []
 	match kind:
 		"food":
@@ -317,17 +343,22 @@ func need_source_candidates(kind: String) -> Array[Vector2i]:
 				if String(_object_table.objects[key]) == "bed":
 					var coords := String(key).split("_")
 					candidates.append(Vector2i(int(coords[0]), int(coords[1])))
-	return _reachable_candidates_only(candidates)
+	return candidates
 
-## Drops candidates no colonist can reach (RegionMap, O(1) each): NeedGiver's search
-## would flood-fill the whole component before giving up on one.
-func _reachable_candidates_only(candidates: Array[Vector2i]) -> Array[Vector2i]:
-	if _get_colonists.call().is_empty():
-		return candidates
-	var regions := _tile_grid.get_regions()
-	return candidates.filter(func(candidate):
-		return _get_colonists.call().any(func(colonist):
-			return regions.reachable(Vector2i(int(colonist["x"]), int(colonist["y"])), candidate)))
+## The distinct nonzero region ids `regions.reachable(from, target)` is true from.
+func _regions_reaching(regions: RegionMapType, target: Vector2i) -> Array[int]:
+	var reached_by: Array[int] = []
+	if target.x < 0 or target.y < 0 or target.x >= _tile_grid.width or target.y >= _tile_grid.height:
+		return reached_by
+	var own := regions.region_id(target.x, target.y)
+	if own != 0:
+		reached_by.append(own)
+		return reached_by
+	for offset: Vector2i in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
+		var region := regions.region_id(target.x + offset.x, target.y + offset.y)
+		if region != 0 and not reached_by.has(region):
+			reached_by.append(region)
+	return reached_by
 
 ## claimed_targets callable for NeedGiver: targets of queued/active need jobs, so two
 ## concurrent searches never pick the same not-yet-reserved source (colonist-ai.md 3.4).

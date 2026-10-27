@@ -67,6 +67,7 @@ static func resolve_tick(actors: Array[Dictionary], content, relations, tick: in
 		insert_event: Callable, next_sequence: Callable) -> Dictionary:
 	var dead_actors: Array[Dictionary] = []
 	var fighting: Array[String] = []
+	var by_tile := TargetingType.actors_by_tile(actors) # nothing moves during resolution
 	for actor in actors:
 		if not (actor.get("combat") is Dictionary):
 			continue
@@ -79,7 +80,7 @@ static func resolve_tick(actors: Array[Dictionary], content, relations, tick: in
 			combat["cooldown_remaining"] = int(combat["cooldown_remaining"]) - 1
 		if _hp_fraction(actor) < _flee_hp_fraction(actor, content):
 			continue # rule 4: strictly below its own flee threshold, this actor stops fighting
-		var target := TargetingType.nearest_adjacent_hostile(actor, actors, relations, object_at, object_health_at, object_faction_at)
+		var target := TargetingType.nearest_adjacent_hostile(actor, by_tile, relations, object_at, object_health_at, object_faction_at)
 		if target.is_empty():
 			continue
 		var attacker_id := String(actor["id"])

@@ -26,6 +26,12 @@ extends RefCounted
 ##   resolve_dig_finds() in ascending job-id order, so the find sequence never
 ##   depends on colonist iteration order. Always empty between ticks; not saved.
 ## - roll draws exactly one randi_range() per staged find, whatever the outcome.
+## - _ids_at (tile -> ground item ids, A4) is trusted only between begin_tick() and
+##   end_tick(): WorldState.tick() brackets itself with them, and inside a tick every
+##   item is placed through _place_ground_item() and removed through
+##   _remove_ground_item(). Outside a tick (the viewer's debug scenario and tests
+##   write items directly) has_item_at()/get_ground_wood() scan items as before.
+##   Derived, never saved or hashed.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -38,6 +44,9 @@ var ground_berries: Dictionary = {}
 var ground_berries_factions: Dictionary = {}
 var pending_dig_finds: Array[Dictionary] = []
 var dig_find_random: RandomNumberGenerator
+## Vector2i -> Array[String] of ground item ids there; see the class doc.
+var _ids_at: Dictionary = {}
+var _ids_at_trusted := false
 
 var _content: ContentRegistryType
 ## () -> Array[Dictionary]: WorldState's live colonist list (replaced wholesale on load).
@@ -103,15 +112,43 @@ func get_items() -> Array[Dictionary]:
 		copy.append(item)
 	return copy
 
+func begin_tick() -> void:
+	_ids_at.clear()
+	for item: Dictionary in items.values():
+		var item_id: String = item["id"]
+		var x: int = item["x"]
+		var y: int = item["y"]
+		_file(item_id, x, y)
+	_ids_at_trusted = true
+
+func end_tick() -> void:
+	_ids_at_trusted = false
+	_ids_at.clear()
+
+func _file(item_id: String, x: int, y: int) -> void:
+	var tile := Vector2i(x, y)
+	if not _ids_at.has(tile):
+		_ids_at[tile] = []
+	(_ids_at[tile] as Array).append(item_id)
+
 ## Sum over ground "wood" items at (x, y).
 func get_ground_wood(x: int, y: int) -> int:
 	var total := 0
+	if _ids_at_trusted:
+		for item_id: String in _ids_at.get(Vector2i(x, y), []):
+			var item: Dictionary = items[item_id]
+			if item["kind"] == "wood":
+				var count: int = item["count"]
+				total += count
+		return total
 	for item in items.values():
 		if int(item["x"]) == x and int(item["y"]) == y and String(item["kind"]) == "wood":
 			total += int(item["count"])
 	return total
 
 func has_item_at(x: int, y: int) -> bool:
+	if _ids_at_trusted:
+		return _ids_at.has(Vector2i(x, y))
 	for item in items.values():
 		if int(item["x"]) == x and int(item["y"]) == y:
 			return true
@@ -124,6 +161,15 @@ func item_lookup(item_id: String) -> Dictionary:
 	return (items[item_id] as Dictionary).duplicate(true)
 
 func _remove_ground_item(item_id: String) -> void:
+	if _ids_at_trusted and items.has(item_id):
+		var item: Dictionary = items[item_id]
+		var x: int = item["x"]
+		var y: int = item["y"]
+		var tile := Vector2i(x, y)
+		var ids: Array = _ids_at.get(tile, [])
+		ids.erase(item_id)
+		if ids.is_empty():
+			_ids_at.erase(tile)
 	items.erase(item_id)
 	item_factions.erase(item_id)
 
@@ -142,6 +188,8 @@ func remove_ground_item_units(item_id: String, count: int) -> void:
 func _place_ground_item(item_id: String, kind: String, count: int, x: int, y: int) -> void:
 	items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
 	item_factions[item_id] = "colony"
+	if _ids_at_trusted:
+		_file(item_id, x, y)
 
 ## ToilExecutor's place and every drop: one fresh item per call, off next_item_id.
 func place_new_ground_item(kind: String, count: int, x: int, y: int) -> String:
@@ -151,23 +199,14 @@ func place_new_ground_item(kind: String, count: int, x: int, y: int) -> String:
 	return item_id
 
 func spawn_wood_item(x: int, y: int) -> void:
-	var item_id := "item_%d" % next_item_id
-	next_item_id += 1
-	items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
-	item_factions[item_id] = "colony"
+	place_new_ground_item("wood", 1, x, y)
 
 ## One unit of any content/items.json kind (ADR 026: dig's sand and finds, trade goods).
 func spawn_item(kind: String, x: int, y: int) -> void:
-	var item_id := "item_%d" % next_item_id
-	next_item_id += 1
-	items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": 1}
-	item_factions[item_id] = "colony"
+	place_new_ground_item(kind, 1, x, y)
 
 func spawn_stone_item(x: int, y: int) -> void:
-	var item_id := "item_%d" % next_item_id
-	next_item_id += 1
-	items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "stone", "count": 1}
-	item_factions[item_id] = "colony"
+	place_new_ground_item("stone", 1, x, y)
 
 func spawn_berries_item(x: int, y: int) -> void:
 	var key := _ground_berries_key(x, y)
@@ -217,8 +256,7 @@ func remove_one_item_of_kind(kind: String) -> bool:
 		if count > 1:
 			item["count"] = count - 1
 		else:
-			items.erase(id)
-			item_factions.erase(id)
+			_remove_ground_item(str(id))
 			_fail_haul_jobs_referencing_item.call(String(id))
 		return true
 	return _consume_carried_item_of_kind(kind)
@@ -261,8 +299,7 @@ func remove_stockpiled_item_unit(item_id: String) -> Vector2i:
 	if count > 1:
 		item["count"] = count - 1
 	else:
-		items.erase(item_id)
-		item_factions.erase(item_id)
+		_remove_ground_item(item_id)
 		_fail_haul_jobs_referencing_item.call(item_id)
 	return tile
 

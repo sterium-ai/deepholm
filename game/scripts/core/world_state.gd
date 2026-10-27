@@ -42,6 +42,7 @@ const ConstructionHandlerType = preload("res://scripts/core/commands/handlers/co
 const ZoneHandlerType = preload("res://scripts/core/commands/handlers/zone_handler.gd")
 const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_handler.gd")
 const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
+const ActorIndexType = preload("res://scripts/core/actors/actor_index.gd")
 
 ## Default/fixture map size: every existing test and the debug scenario
 ## construct WorldState with no explicit width/height and must keep getting
@@ -135,6 +136,8 @@ var _pending_berry_bush_tiles: Array[Vector2i] = []
 ## Empty ({}) on a StateCodec.decode()d world, which never calls _spawn_colonists().
 var _spawn_clearing: Dictionary = {}
 var _colonists: Array[Dictionary] = []
+## Id and tile lookups over _colonists, trusted only inside tick() (actor_index.gd).
+var _actor_index := ActorIndexType.new()
 ## Ground items, ground berries, their factions and dig's find roll (ADR 026).
 var _item_table: ItemTableType
 ## Read-through accessors kept for viewer/debug_scenario.gd, which seeds its
@@ -341,6 +344,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		get_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
 		_work_target_for, _construction.construction_site_exists, _construction.construction_site_deposit)
+	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
 	# Built after _toils; CombatGiver and ToilExecutor above reach it through lambdas.
 	_needs_system = NeedsSystemType.new(_content, _need_definitions, _need_full, PRIORITY_TICK, _clock, _calendar, _scheduler,
 		_toils, _progress_table, _tool_store, _item_table, _tile_grid, _object_table, _event_log, _trench,
@@ -348,6 +352,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		_combat_giver.owns, _route, _labour_table, _default_labour_table,
 		func() -> void: CombatSystemType.ensure_health(_colonists, _content),
 		func() -> void: CombatSystemType.ensure_combat(_colonists, _content))
+	_needs_system.on_actor_replaced = _actor_index.replaced
 	# After NeedsSystem (it detaches paused jobs on death); ApproachGiver through a lambda:
 	# _build_dimension_services() rebuilds it.
 	_combat_system = CombatSystemType.new(_content, _relations, PRIORITY_TICK, _scheduler, _progress_table, _tool_store,
@@ -426,6 +431,7 @@ func apply(command) -> Dictionary:
 
 ## Only mutator alongside apply(): advances exactly one tick.
 func tick() -> void:
+	_actor_index.begin_tick(_colonists); _item_table.begin_tick()
 	_area_orders.advance() # commands of tick T, applied before it advances
 	_clock.advance(1)
 	_needs_system.decay_needs()
@@ -494,6 +500,7 @@ func tick() -> void:
 		"sequence": _event_log.next_sequence(),
 		"data": {}
 	})
+	_actor_index.end_tick(); _item_table.end_tick()
 
 ## Every colonist not currently mid-search for a need source (colonist-ai.md
 ## 3.1), except one CombatGiver already tracks as fleeing.
@@ -1011,12 +1018,7 @@ func enable_incidents() -> void:
 
 ## cell_occupied callable for _toils's place precondition.
 func _is_cell_occupied(x: int, y: int, excluding_colonist_id: String) -> bool:
-	for colonist in _colonists:
-		if String(colonist["id"]) != excluding_colonist_id and int(colonist["x"]) == x and int(colonist["y"]) == y:
-			return true
-	if _item_table.has_item_at(x, y):
-		return true
-	return false
+	return _actor_index.any_at(_colonists, x, y, excluding_colonist_id) or _item_table.has_item_at(x, y)
 
 ## command_checks.gd's sow precondition reads this name through the world.
 func _has_item_of_kind(kind: String) -> bool:
@@ -1370,22 +1372,17 @@ func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
 	return route.get_path().size() - 1
 
 func _colonist_at(x: int, y: int) -> bool:
-	for colonist in _colonists:
-		if int(colonist["x"]) == x and int(colonist["y"]) == y:
-			return true
-	return false
+	return _actor_index.any_at(_colonists, x, y)
 
 ## The live colonist Dictionary reference for colonist_id (mutating it mutates
 ## _colonists in place), or {} when unknown.
 func _find_colonist(colonist_id: String) -> Dictionary:
-	for colonist in _colonists:
-		if String(colonist["id"]) == colonist_id:
-			return colonist
-	return {}
+	return _actor_index.find(_colonists, colonist_id)
 
 func _append_colonist(actor: Dictionary) -> void: # IncidentScheduler append/remove callables
 	if not actor.has("trapped"): actor["trapped"] = null
 	_colonists.append(actor)
+	_actor_index.added(actor)
 
 ## The one path that removes an actor from the roster, called by
 ## CombatSystem.apply_actor_death() (rule 2, is_death=true) and by
@@ -1407,6 +1404,7 @@ func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void
 		if String(_colonists[i]["id"]) == colonist_id:
 			if not is_death and _colonists[i].get("trapped") != null: # trapped, not despawned
 				return
+			_actor_index.removed(_colonists[i])
 			_colonists.remove_at(i)
 			# A despawned actor gets no further _advance_colonists() pass to release its own in-flight reroute -- release it here instead.
 			_reroutes.erase(colonist_id)
