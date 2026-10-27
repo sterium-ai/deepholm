@@ -587,7 +587,7 @@ one.
   suite PASS.
 - **Non-goals:** typed entity classes (a data-model change, not a gate).
 
-#### A11 — Command recording and headless replay · `todo` · *parallel-safe*
+#### A11 — Command recording and headless replay · `review (antonelmejor50-hub/a11-command-recording-and-headless)` · *parallel-safe*
 
 - **Goal:** the viewer can record a session's seed, content version and command stream to a
   file. `tools/replay.ps1` replays it headless and checks `state_hash()` checkpoints recorded
@@ -597,6 +597,14 @@ one.
 - **Acceptance:** a test records 500 ticks with mixed commands, replays them and matches every
   checkpoint; a planted nondeterminism is reported at the right tick.
 - **Non-goals:** network play; a replay viewer UI.
+- **Scope extension (owner decision, 2026-10-27):** the live viewer needs one capture point the
+  owned paths do not cover, because the viewer modules call `world.apply()` directly. The owner
+  allowed an optional command observer in `WorldState.apply()` (1–3 lines), plus the hookup and a
+  record/stop key in `boot.gd`, to be built on R12's new `WorldState` façade once R12 is in
+  `main`. R12 was not in `main` at handoff (`origin/main` = `89d44a0`, and `633233d` after review round 1), so this branch ships
+  without the hook. **Follow-up after R12:** add the observer, call
+  `CommandRecorder.observe_command()` and `observe_tick()` from `boot.gd`, and switch
+  `test_command_replay.gd` to record through the observer. See `docs/orca/handoffs/A11.md`.
 
 #### A12 — Map layers: coordinate model ADR · `review (antonelmejor50-hub/a12-map-layers-coordinate-model)` · *parallel-safe (docs only)* · before F4
 

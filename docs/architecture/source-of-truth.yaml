@@ -21,6 +21,9 @@ canonical:
   orders_and_movement:
     path: docs/architecture/orders-and-movement.md
     authority: dig/chop/cancel_job order contract, tick-cost constants, and route/work movement semantics
+  command_replay:
+    path: docs/architecture/replay.md
+    authority: command recording, replay file format, and checkpoint/divergence rules
   map_experience:
     path: docs/architecture/map-experience.md
     authority: PC camera, HUD isolation, coordinate conversion, and designation presentation
