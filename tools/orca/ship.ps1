@@ -26,7 +26,11 @@ if ($existing) {
     # Title = the branch's first commit (the task itself), not the last fix-up; it becomes the squash title.
     $title = (git log --reverse --pretty=%s "origin/main..HEAD" | Select-Object -First 1)
     $body = (git log "origin/main..HEAD" --pretty="- %s%n%n%b") -join "`n"
-    gh pr create --base main --head $branch --title $title --body $body
+    # Body via file: commit text can contain lines gh would parse as flags.
+    $bodyFile = Join-Path $env:TEMP ("pr-body-" + [guid]::NewGuid().ToString("N") + ".md")
+    [IO.File]::WriteAllText($bodyFile, $body, (New-Object Text.UTF8Encoding $false))
+    gh pr create --base main --head $branch --title "$title" --body-file $bodyFile
+    Remove-Item $bodyFile -ErrorAction SilentlyContinue
     $existing = gh pr view --json url --jq .url
     Write-Output "ship: PR created: $existing"
 }
