@@ -66,6 +66,29 @@ and produce the same path. No randomness is used or needed; this module
 never calls `randi()`, reads wall-clock/engine time, or runs on
 `_process`/`_physics_process`.
 
+## Frontier structure and snapshots
+
+The frontier is ordered by (accumulated cost, insertion order). It is kept
+as a binary min-heap of the distinct costs still waiting plus, per cost, a
+FIFO of tiles; insertion numbers only grow, so each FIFO is already in
+insertion order and the head of the cheapest FIFO is exactly the tile the
+earlier linear scan picked. Neighbors come from the constant
+`NEIGHBOR_OFFSETS` table (already row-major), so a step allocates nothing.
+`test_route_search_recorded.gd` pins paths, statuses, expansion counts and a
+mid-search `snapshot()` digest for every A0 benchmark case against values
+recorded from the linear-scan implementation.
+
+`snapshot()` copies the whole search (frontier in insertion order, visited,
+came_from, path) and is meant for save and hash time. `summary()` is the
+constant-size part (`start`, `target`, `status`; `MeasuredRoute` adds
+`expansions` and `resume_calls`): `ToilExecutor` keeps it on a colonist's
+`route.rerouting` while a re-route is live, and `StateCodec` writes the live
+search's full `snapshot()` when a save encodes, so the save format is
+unchanged. `WorldState.state_hash()` hashes that same full `snapshot()` in
+place of the summary (`StateCodec._hash_colonists()`), so two in-flight
+re-routes that differ only in their frontier, visited set or parent map
+never hash equal (`test_reroute_state_hash.gd`).
+
 ## Invalid endpoints
 
 A `start` tile that is out of bounds or whose `cost_fn` result is impassable

@@ -50,7 +50,7 @@ static func encode(world: WorldState) -> Dictionary:
 			"tiles": world._tile_grid.encode()["tiles"],
 			"generatorVersion": world.get_generator_version(),
 		},
-		"entities": _encode_entities(world._colonists),
+		"entities": _encode_entities(world._colonists, world._reroutes),
 		"inventory": {},
 		"jobs": _encode_jobs(world._scheduler.queue.get_jobs()),
 		"scheduling": _encode_scheduling(world),
@@ -321,6 +321,8 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 			cost_fn, Vector2i.ZERO, bounds_max)
 		search.restore(snapshot)
 		world._reroutes[colonist["id"]] = search
+		# Back to the live shape: the full snapshot stays on the search.
+		route["rerouting"] = search.summary()
 
 # --- tiles ---------------------------------------------------------------
 
@@ -837,13 +839,13 @@ static func _encode_incident_scheduler(world: WorldState) -> Dictionary:
 ## game-state.schema.json's per-kind required set. "work"/"route" ride along
 ## for every kind (a spawned actor's own walk/wait uses the same fields a
 ## colonist's job does), present once spawn()/start_work() actually add them.
-static func _encode_entities(colonists: Array[Dictionary]) -> Array:
+static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
 	var entities: Array = []
 	for colonist in colonists:
 		var entity: Dictionary = {
 			"id": colonist["id"], "kind": colonist["kind"],
 			"x": colonist["x"], "y": colonist["y"],
-			"route": _encode_route_field(colonist.get("route")),
+			"route": _encode_route_field(colonist.get("route"), reroutes.get(colonist["id"])),
 			"factionId": String(colonist.get("factionId", "colony")),
 			"health": _encode_health(colonist.get("health", {})),
 			"trapped": _encode_trapped_field(colonist.get("trapped")),
@@ -1000,7 +1002,9 @@ static func _decode_labour_table(labour_table: Dictionary) -> Dictionary:
 ## original 4 keys for the common non-rerouting case is what lets an
 ## existing schemaVersion-4 consumer's own field allow-list keep accepting
 ## every save except the one genuinely new case this schema version adds.
-static func _encode_route_field(route):
+## The live route only carries the search's summary() (ToilExecutor), so the
+## persisted value is the live search's full snapshot(), taken here.
+static func _encode_route_field(route, live_search):
 	if route == null:
 		return null
 	var encoded := {
@@ -1011,8 +1015,29 @@ static func _encode_route_field(route):
 	}
 	var rerouting = route.get("rerouting")
 	if rerouting != null:
-		encoded["rerouting"] = _encode_route(rerouting)
+		encoded["rerouting"] = _encode_route(live_search.snapshot() if live_search != null else rerouting)
 	return encoded
+
+## state_hash()'s view of the colonists: a colonist whose route.rerouting is
+## the live search's summary() is hashed with that search's full snapshot()
+## instead, so two in-flight re-routes that differ only in their frontier,
+## visited set or parent map never hash equal (the same value a save
+## persists). Returns the array itself, uncopied, when nothing is rerouting.
+static func _hash_colonists(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
+	if reroutes.is_empty():
+		return colonists
+	var hashed: Array = []
+	for colonist in colonists:
+		var route = colonist.get("route")
+		var search = reroutes.get(colonist["id"])
+		if route == null or route.get("rerouting") == null or search == null:
+			hashed.append(colonist)
+			continue
+		var copy: Dictionary = colonist.duplicate()
+		copy["route"] = route.duplicate()
+		copy["route"]["rerouting"] = search.snapshot()
+		hashed.append(copy)
+	return hashed
 
 static func _decode_route_field(route):
 	if route == null:

@@ -306,10 +306,17 @@ built when the path was clear can still be interrupted by a `place_object`
 command landing on it mid-walk; the next tile becoming impassable starts a
 re-route instead of letting the colonist walk into it or stall silently.
 
-`route.rerouting` (`null` when not rerouting) holds the in-flight bounded
-search's own snapshot, persisted the same way as any other route search in
-this codebase (see `game/scripts/core/routing/README.md`) so a save/load
-mid-reroute resumes rather than restarts:
+`route.rerouting` (`null` when not rerouting) is non-null exactly while a
+bounded re-route search is in flight. In memory it holds only that search's
+constant-size `summary()` (start, target, status and the `MeasuredRoute`
+counters), refreshed every tick; the search itself (frontier, visited set,
+parent map) lives in `WorldState._reroutes`. The persisted continuation is
+the search's full `snapshot()`, which `StateCodec` writes into
+`route.rerouting` when a save encodes and turns back into a live search plus
+summary when it decodes, the same way as any other route search in this
+codebase (see `game/scripts/core/routing/README.md`), so a save/load
+mid-reroute resumes rather than restarts. `state_hash()` hashes that same
+full `snapshot()`, not the summary:
 
 - `_begin_reroute()` starts a `MeasuredRoute` search from the colonist's
   current tile to the job's target and stores it (keyed by colonist id) in
