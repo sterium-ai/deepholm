@@ -1,0 +1,1117 @@
+{
+ "source": "Pixel Crawler by Anokolisa; local pack, never committed (tools/sync_pack_assets.ps1)",
+ "measured_by": "docs/orca/handoffs/B3-measure_pack_world.py",
+ "layout": "each source's texture is composed at runtime by pack_assets.gd: a grid of cell_size cells at the placeholder's coords, each rect bottom-centred in its cell; texture_origin.y = (cell height - grounded_on) / 2 when grounded_on is set",
+ "sources": [
+  {
+   "source_id": 0,
+   "name": "terrain",
+   "cell_size": [
+    16,
+    16
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      2,
+      4
+     ],
+     "label": "grass edge N",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      32,
+      64,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      2,
+      0
+     ],
+     "label": "grass edge S",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      32,
+      0,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      0,
+      2
+     ],
+     "label": "grass edge E",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      0,
+      32,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      4,
+      2
+     ],
+     "label": "grass edge W",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      64,
+      32,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      3
+     ],
+     "label": "grass corner NE",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      16,
+      48,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      3
+     ],
+     "label": "grass corner NW",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      48,
+      48,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      1
+     ],
+     "label": "grass corner SE",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      16,
+      16,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      1
+     ],
+     "label": "grass corner SW",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      48,
+      16,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      4
+     ],
+     "label": "grass concave NE",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      16,
+      64,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      4
+     ],
+     "label": "grass concave NW",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      48,
+      64,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      0
+     ],
+     "label": "grass concave SE",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      16,
+      0,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      0
+     ],
+     "label": "grass concave SW",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      48,
+      0,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      0,
+      5
+     ],
+     "label": "grass variant 0",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      16,
+      160,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      5
+     ],
+     "label": "grass variant 1",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      32,
+      160,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      2,
+      5
+     ],
+     "label": "grass variant 2",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      48,
+      160,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      5
+     ],
+     "label": "trench (dug pit floor)",
+     "sheet": "Environment/Tilesets/Wall_Tiles.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      32,
+      352,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      4,
+      5
+     ],
+     "label": "built floor (stone bricks)",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      272,
+      32,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      0,
+      6
+     ],
+     "label": "plowed soil (dirt)",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      176,
+      160,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      1,
+      6
+     ],
+     "label": "planted base (dirt)",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      192,
+      176,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      2,
+      6
+     ],
+     "label": "hazard base (cobbles)",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      112,
+      160,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      3,
+      6
+     ],
+     "label": "forest floor (grass)",
+     "sheet": "Environment/Tilesets/Floors_Tiles.png",
+     "sheet_size": [
+      400,
+      416
+     ],
+     "rect": [
+      32,
+      176,
+      16,
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 1,
+   "name": "water",
+   "cell_size": [
+    16,
+    16
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "water",
+     "sheet": "Environment/Tilesets/Water_tiles.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      32,
+      112,
+      16,
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 2,
+   "name": "rock",
+   "cell_size": [
+    16,
+    16
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "rock (grey cliff top)",
+     "sheet": "Environment/Tilesets/Wall_Tiles.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      128,
+      48,
+      16,
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 3,
+   "name": "wooden_wall",
+   "cell_size": [
+    16,
+    16
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "wooden wall (planks)",
+     "sheet": "Environment/Tilesets/Wall_Tiles.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      16,
+      256,
+      16,
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 15,
+   "name": "stone_wall",
+   "cell_size": [
+    16,
+    16
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "stone wall (stone courses)",
+     "sheet": "Environment/Tilesets/Wall_Tiles.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      112,
+      256,
+      16,
+      16
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 4,
+   "name": "chair",
+   "cell_size": [
+    12,
+    23
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "chair",
+     "sheet": "Environment/Props/Static/Furniture.png",
+     "sheet_size": [
+      800,
+      864
+     ],
+     "rect": [
+      114,
+      489,
+      12,
+      23
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 5,
+   "name": "table",
+   "cell_size": [
+    16,
+    14
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "table",
+     "sheet": "Environment/Props/Static/Furniture.png",
+     "sheet_size": [
+      800,
+      864
+     ],
+     "rect": [
+      112,
+      514,
+      16,
+      14
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 8,
+   "name": "berry_bush",
+   "cell_size": [
+    16,
+    18
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "berry bush (red-fruit crop)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      80,
+      46,
+      16,
+      18
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 9,
+   "name": "sprout",
+   "cell_size": [
+    7,
+    8
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "sprout (seedling)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      53,
+      24,
+      7,
+      8
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 10,
+   "name": "tree",
+   "cell_size": [
+    32,
+    62
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "tree small",
+     "sheet": "Environment/Props/Static/Trees/Model_03/Size_02.png",
+     "sheet_size": [
+      128,
+      160
+     ],
+     "rect": [
+      52,
+      55,
+      9,
+      25
+     ]
+    },
+    {
+     "coords": [
+      1,
+      0
+     ],
+     "label": "tree medium",
+     "sheet": "Environment/Props/Static/Trees/Model_03/Size_02.png",
+     "sheet_size": [
+      128,
+      160
+     ],
+     "rect": [
+      32,
+      48,
+      16,
+      32
+     ]
+    },
+    {
+     "coords": [
+      2,
+      0
+     ],
+     "label": "tree large",
+     "sheet": "Environment/Props/Static/Trees/Model_01/Size_02.png",
+     "sheet_size": [
+      256,
+      128
+     ],
+     "rect": [
+      32,
+      2,
+      32,
+      62
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 11,
+   "name": "resources",
+   "cell_size": [
+    32,
+    25
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "hazard (crystal)",
+     "sheet": "Environment/Props/Static/Rocks.png",
+     "sheet_size": [
+      208,
+      304
+     ],
+     "rect": [
+      146,
+      279,
+      12,
+      25
+     ]
+    },
+    {
+     "coords": [
+      1,
+      0
+     ],
+     "label": "stone",
+     "sheet": "Environment/Props/Static/Rocks.png",
+     "sheet_size": [
+      208,
+      304
+     ],
+     "rect": [
+      176,
+      17,
+      16,
+      14
+     ]
+    },
+    {
+     "coords": [
+      2,
+      0
+     ],
+     "label": "wood (log)",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      32,
+      68,
+      32,
+      7
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 12,
+   "name": "workbench",
+   "cell_size": [
+    32,
+    28
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "workbench (horizontal)",
+     "sheet": "Environment/Structures/Stations/Workbench/Workbench.png",
+     "sheet_size": [
+      192,
+      352
+     ],
+     "rect": [
+      0,
+      84,
+      32,
+      28
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 14,
+   "name": "tools",
+   "cell_size": [
+    16,
+    31
+   ],
+   "grounded_on": null,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "pick (wooden pickaxe)",
+     "sheet": "Weapons/Wood/Wood.png",
+     "sheet_size": [
+      192,
+      112
+     ],
+     "rect": [
+      0,
+      50,
+      16,
+      28
+     ]
+    },
+    {
+     "coords": [
+      1,
+      0
+     ],
+     "label": "axe (wooden axe)",
+     "sheet": "Weapons/Wood/Wood.png",
+     "sheet_size": [
+      192,
+      112
+     ],
+     "rect": [
+      32,
+      49,
+      16,
+      31
+     ]
+    }
+   ]
+  }
+ ],
+ "actors": {
+  "wolf": {
+   "animations": {
+    "idle": {
+     "sheet": "Entities/Mobs/Wolf/Idle/Idle_Side-Sheet.png",
+     "sheet_size": [
+      256,
+      64
+     ],
+     "frames": 4,
+     "fps": 2.0,
+     "feet_y": 49,
+     "alpha_bboxes": [
+      [
+       11,
+       17,
+       54,
+       50
+      ],
+      [
+       12,
+       17,
+       54,
+       50
+      ],
+      [
+       12,
+       16,
+       54,
+       50
+      ],
+      [
+       11,
+       16,
+       54,
+       50
+      ]
+     ]
+    },
+    "walk": {
+     "sheet": "Entities/Mobs/Wolf/Walk/Walk_Side-Sheet.png",
+     "sheet_size": [
+      384,
+      64
+     ],
+     "frames": 6,
+     "fps": 3.0,
+     "feet_y": 49,
+     "alpha_bboxes": [
+      [
+       11,
+       17,
+       54,
+       50
+      ],
+      [
+       12,
+       16,
+       54,
+       50
+      ],
+      [
+       12,
+       17,
+       54,
+       50
+      ],
+      [
+       11,
+       17,
+       54,
+       50
+      ],
+      [
+       10,
+       16,
+       54,
+       49
+      ],
+      [
+       10,
+       17,
+       54,
+       50
+      ]
+     ]
+    }
+   }
+  },
+  "raider": {
+   "animations": {
+    "idle": {
+     "sheet": "Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+     "sheet_size": [
+      128,
+      32
+     ],
+     "frames": 4,
+     "fps": 2.0,
+     "feet_y": 31,
+     "alpha_bboxes": [
+      [
+       5,
+       2,
+       25,
+       32
+      ],
+      [
+       5,
+       4,
+       25,
+       32
+      ],
+      [
+       5,
+       4,
+       25,
+       32
+      ],
+      [
+       5,
+       3,
+       25,
+       32
+      ]
+     ]
+    },
+    "walk": {
+     "sheet": "Entities/Mobs/Orc Crew/Orc/Run/Run-Sheet.png",
+     "sheet_size": [
+      384,
+      64
+     ],
+     "frames": 6,
+     "fps": 3.0,
+     "feet_y": 63,
+     "alpha_bboxes": [
+      [
+       21,
+       34,
+       45,
+       64
+      ],
+      [
+       22,
+       32,
+       41,
+       64
+      ],
+      [
+       22,
+       33,
+       41,
+       64
+      ],
+      [
+       21,
+       34,
+       44,
+       64
+      ],
+      [
+       22,
+       32,
+       41,
+       64
+      ],
+      [
+       22,
+       33,
+       41,
+       64
+      ]
+     ]
+    }
+   }
+  },
+  "trader": {
+   "animations": {
+    "idle": {
+     "sheet": "Entities/Npc's/Citizen_F/Peasant_A/Idle/Idle-Sheet.png",
+     "sheet_size": [
+      256,
+      64
+     ],
+     "frames": 4,
+     "fps": 2.0,
+     "feet_y": 47,
+     "alpha_bboxes": [
+      [
+       24,
+       18,
+       40,
+       48
+      ],
+      [
+       24,
+       19,
+       40,
+       48
+      ],
+      [
+       24,
+       20,
+       40,
+       48
+      ],
+      [
+       24,
+       19,
+       40,
+       48
+      ]
+     ]
+    },
+    "walk": {
+     "sheet": "Entities/Npc's/Citizen_F/Peasant_A/Walk/Walk-Sheet.png",
+     "sheet_size": [
+      384,
+      64
+     ],
+     "frames": 6,
+     "fps": 3.0,
+     "feet_y": 47,
+     "alpha_bboxes": [
+      [
+       24,
+       18,
+       40,
+       48
+      ],
+      [
+       24,
+       18,
+       40,
+       48
+      ],
+      [
+       24,
+       17,
+       40,
+       48
+      ],
+      [
+       24,
+       18,
+       40,
+       48
+      ],
+      [
+       24,
+       18,
+       40,
+       48
+      ],
+      [
+       24,
+       17,
+       40,
+       48
+      ]
+     ]
+    }
+   }
+  }
+ },
+ "side_faces": "right",
+ "placeholder": {
+  "objects": {
+   "bed": "every pack bed is about 2 tiles tall (Interior_Props_01, Furniture); owner rule: props <= 1 tile",
+   "door": "the pack's doors are about 18x38 px (Structures/Buildings/Props); owner rule: props <= 1 tile",
+   "workbench_vertical": "the pack has no vertical workbench; rotating art is not allowed",
+   "test_multi_source_crate": "test-only content kind, never placed by the game; no art at all",
+   "test_footprint_crate": "test-only content kind, never placed by the game; no art at all"
+  },
+  "items": {
+   "seed": "no ground icon today (not in ITEM_ATLAS_MAP)",
+   "sand": "no ground icon today (not in ITEM_ATLAS_MAP)",
+   "gold_coin": "no ground icon today (not in ITEM_ATLAS_MAP)",
+   "flint": "no ground icon today (not in ITEM_ATLAS_MAP)",
+   "coal": "no ground icon today (not in ITEM_ATLAS_MAP)"
+  }
+ }
+}

@@ -18,6 +18,23 @@
   "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Up-Sheet.png",
   "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Down-Sheet.png",
   "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Side-Sheet.png",
-  "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Up-Sheet.png"
+  "Entities/Characters/Body_A/Animations/Walk_Base/Walk_Up-Sheet.png",
+  "Entities/Mobs/Orc Crew/Orc/Idle/Idle-Sheet.png",
+  "Entities/Mobs/Orc Crew/Orc/Run/Run-Sheet.png",
+  "Entities/Mobs/Wolf/Idle/Idle_Side-Sheet.png",
+  "Entities/Mobs/Wolf/Walk/Walk_Side-Sheet.png",
+  "Entities/Npc's/Citizen_F/Peasant_A/Idle/Idle-Sheet.png",
+  "Entities/Npc's/Citizen_F/Peasant_A/Walk/Walk-Sheet.png",
+  "Environment/Props/Static/Farm.png",
+  "Environment/Props/Static/Furniture.png",
+  "Environment/Props/Static/Resources.png",
+  "Environment/Props/Static/Rocks.png",
+  "Environment/Props/Static/Trees/Model_01/Size_02.png",
+  "Environment/Props/Static/Trees/Model_03/Size_02.png",
+  "Environment/Structures/Stations/Workbench/Workbench.png",
+  "Environment/Tilesets/Floors_Tiles.png",
+  "Environment/Tilesets/Wall_Tiles.png",
+  "Environment/Tilesets/Water_tiles.png",
+  "Weapons/Wood/Wood.png"
  ]
 }

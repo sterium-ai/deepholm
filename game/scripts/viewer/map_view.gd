@@ -14,6 +14,8 @@ const TileAtlasMapType = preload("res://scripts/viewer/tile_atlas_map.gd")
 const ColonistSpritesType = preload("res://scripts/viewer/colonist_sprites.gd")
 const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay.gd")
 const DragPreviewType = preload("res://scripts/viewer/drag_preview.gd")
+const ActorSpritesType = preload("res://scripts/viewer/actor_sprites.gd")
+const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
 
 const TILE_SIZE := 16.0
 const GROUND_ITEM_ICON_SIZE := TILE_SIZE * 0.6
@@ -148,12 +150,21 @@ var _tile_map_layer: TileMapLayer
 var _grass_overlay_layer: TileMapLayer
 var _object_tile_map_layer: TileMapLayer
 var _colonist_sprites: Node2D
+var _actor_sprites: Node2D
 var _designation_overlay: Node2D
 
 ## Raw-sheet textures cached once per registered item kind.
 var _item_atlas_textures: Dictionary = {}
+## With the pack (B3): item kind -> {texture, rect} from the pack TileSet
+## (pack_assets.gd's item_icons()); empty with the placeholder art.
+var _pack_item_icons: Dictionary = {}
 
-func _init() -> void:
+## `pack_root` is where the synced Pixel Crawler sheets live (tests pass a
+## fixture or a missing root). With every sheet world_pack.json names present,
+## the TileSet is the pack's (pack_assets.gd's world_tile_set()), laid out on
+## the placeholder's source ids and coords; otherwise the placeholder TileSet,
+## exactly as before.
+func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	custom_minimum_size = Vector2(
 		WorldStateType.MAP_WIDTH * TILE_SIZE,
@@ -164,6 +175,10 @@ func _init() -> void:
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
 		_item_atlas_textures[kind] = load(TileAtlasMapType.ITEM_ATLAS_MAP[kind]["texture_path"])
 	var tile_set_resource: TileSet = load(TILE_SET_PATH)
+	var pack_tile_set := PackAssetsType.world_tile_set(tile_set_resource, pack_root)
+	if pack_tile_set != null:
+		tile_set_resource = pack_tile_set
+		_pack_item_icons = PackAssetsType.item_icons(pack_tile_set, TileAtlasMapType.ITEM_ATLAS_MAP)
 	_tile_map_layer = TileMapLayer.new()
 	_tile_map_layer.tile_set = tile_set_resource
 	_tile_map_layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -195,8 +210,15 @@ func _init() -> void:
 	# markers this Control draws directly in _draw().
 	_object_tile_map_layer.show_behind_parent = true
 	add_child(_object_tile_map_layer)
-	_colonist_sprites = ColonistSpritesType.new()
+	# Wolves, raiders and traders: pack sprites only (nothing without the pack).
+	# Added before the colonist layer so its health bars (every actor's) draw on top.
+	_actor_sprites = ActorSpritesType.new(pack_root)
+	_actor_sprites.set_visible_for_art(_art_enabled)
+	add_child(_actor_sprites)
+	_colonist_sprites = ColonistSpritesType.new(pack_root)
 	_colonist_sprites.set_visible_for_art(_art_enabled)
+	if not _pack_item_icons.is_empty():
+		_colonist_sprites.use_item_icons(_pack_item_icons)
 	add_child(_colonist_sprites)
 	# Added last (and never hidden by art mode) so the designation outline is
 	# drawn on top of both tile renderers and the colonists, in either mode --
@@ -217,12 +239,14 @@ var _dirty_cells_consumed: int = 0
 ## this once both are constructed; no other map_view.gd behaviour changes.
 func set_tick_driver(driver) -> void:
 	_colonist_sprites.set_tick_driver(driver)
+	_actor_sprites.set_tick_driver(driver)
 
 func set_world(world_ref: WorldStateType) -> void:
 	cancel_selection()
 	world = world_ref
 	_resize_for_world()
 	_colonist_sprites.set_world(world_ref)
+	_actor_sprites.set_world(world_ref)
 	_designation_overlay.set_world(world_ref)
 	# Skip straight past the log's current length: the full rebuild below
 	# already covers everything recorded so far, so none of it needs to be
@@ -250,6 +274,7 @@ func refresh() -> void:
 	_update_preview()
 	_refresh_tile_map(false)
 	_colonist_sprites.refresh()
+	_actor_sprites.refresh()
 	_designation_overlay.refresh()
 	queue_redraw()
 
@@ -261,6 +286,7 @@ func set_art_enabled(enabled: bool) -> void:
 	_grass_overlay_layer.visible = enabled
 	_object_tile_map_layer.visible = enabled
 	_colonist_sprites.set_visible_for_art(enabled)
+	_actor_sprites.set_visible_for_art(enabled)
 	_refresh_tile_map(true)
 	queue_redraw()
 
@@ -749,9 +775,27 @@ func _set_decor_or_object_cell(x: int, y: int, tile_kind: String, object_kind: S
 			return
 	var decor = TileAtlasMapType.TILE_DECOR_MAP.get(tile_kind)
 	if decor != null:
-		_object_tile_map_layer.set_cell(coords, int(decor["source_id"]), decor["coords"])
+		_object_tile_map_layer.set_cell(coords, int(decor["source_id"]), _decor_variant_coords(x, y, decor))
 		return
 	_object_tile_map_layer.erase_cell(coords)
+
+## The tree decor shows one of its source's tiles per map tile (the pack's
+## three sizes), chosen by hash(seed, x, y) like the grass variants, never by
+## frame; the placeholder tree source has one tile, so it keeps its coords.
+## Other decor (the hazard shares the resources source) keeps its own coords.
+## Hashes a Vector3i, not a "seed:x:y" string: the string hash multiplies by
+## 33 per character, so modulo 3 it would only see the last character.
+func _decor_variant_coords(x: int, y: int, decor: Dictionary) -> Vector2i:
+	if int(decor["source_id"]) != TileAtlasMapType.SOURCE_TREE:
+		return decor["coords"]
+	var source := _object_tile_map_layer.tile_set.get_source(TileAtlasMapType.SOURCE_TREE) as TileSetAtlasSource
+	if source == null or source.get_tiles_count() <= 1:
+		return decor["coords"]
+	var seed_value: int = world.get_seed() if world != null else 0
+	return source.get_tile_id(hash(Vector3i(seed_value, x, y)) % source.get_tiles_count())
+
+func is_pack_art() -> bool:
+	return not _pack_item_icons.is_empty()
 
 func _draw() -> void:
 	if world == null:
@@ -898,13 +942,24 @@ func _draw_stockpile_counts() -> void:
 			var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
 			var origin := Vector2(cell.x * TILE_SIZE, cell.y * TILE_SIZE + row * TILE_SIZE)
 			var icon_rect := Rect2(origin, Vector2(icon_size, icon_size))
-			if _art_enabled or kind == "wood":
+			var pack_icon: Dictionary = _pack_item_icons.get(kind, {})
+			if not pack_icon.is_empty() and (_art_enabled or kind == "wood"):
+				# Pack icons keep their own proportions inside the icon square.
+				draw_texture_rect_region(pack_icon["texture"], fit_rect(icon_rect, pack_icon["rect"].size), pack_icon["rect"])
+			elif _art_enabled or kind == "wood":
 				draw_texture_rect_region(_item_atlas_textures[kind], icon_rect, atlas["rect"])
 			else:
 				draw_rect(icon_rect, GROUND_ITEM_COLORS.get(kind, Color.MAGENTA), true)
 			draw_string(font, origin + Vector2(icon_size + 1.0, TILE_SIZE - 2.0), str(count),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, STOCKPILE_COUNT_FONT_SIZE, STOCKPILE_COUNT_TEXT_COLOR)
 			row += 1
+
+## The largest rect of `content`'s proportions centred in `box` (pack icons
+## are never squashed; style.md "Native size, never squashed").
+static func fit_rect(box: Rect2, content: Vector2) -> Rect2:
+	var factor := minf(box.size.x / content.x, box.size.y / content.y)
+	var fitted := content * factor
+	return Rect2(box.position + (box.size - fitted) / 2.0, fitted)
 
 ## The cells of `counts` inside a zone, ordered by zone (get_zones() order),
 ## then row-major -- each cell once, under the first zone containing it.

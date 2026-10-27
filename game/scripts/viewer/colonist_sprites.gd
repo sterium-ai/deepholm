@@ -116,6 +116,9 @@ var _health_bar_fills: Dictionary = {}
 var _item_atlas_texture: Texture2D
 var _item_region: Rect2
 var _cargo_textures: Dictionary = {}
+## With the pack (B3): item kind -> {texture, rect}, set by map_view.gd through
+## use_item_icons(); a badge then keeps the icon's proportions.
+var _pack_icons: Dictionary = {}
 
 ## `pack_root` is where the synced pack sheets live; tests pass a fixture
 ## root or a missing one.
@@ -131,6 +134,25 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	if wood_atlas != null:
 		_item_atlas_texture = load(wood_atlas["texture_path"])
 		_item_region = wood_atlas["rect"]
+
+## Cargo and held-tool badges draw these pack icons (pack_assets.gd's
+## item_icons()) instead of the placeholder sheets.
+func use_item_icons(icons: Dictionary) -> void:
+	_pack_icons = icons
+
+## Points `badge` at `kind`'s icon and sizes it to `box`: the placeholder
+## region stretched to the box as before, a pack icon uniformly scaled.
+func _set_badge(badge: Sprite2D, kind: String, placeholder_rect: Rect2, box: Vector2) -> void:
+	var icon: Dictionary = _pack_icons.get(kind, {})
+	if icon.is_empty():
+		badge.texture = _cargo_textures[kind]
+		badge.region_rect = placeholder_rect
+		badge.scale = box / badge.region_rect.size
+		return
+	badge.texture = icon["texture"]
+	badge.region_rect = icon["rect"]
+	var factor := minf(box.x / badge.region_rect.size.x, box.y / badge.region_rect.size.y)
+	badge.scale = Vector2(factor, factor)
 
 func set_world(world_ref) -> void:
 	world = world_ref
@@ -223,9 +245,7 @@ func _refresh() -> void:
 		var cargo: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP.get(String(carrying["kind"]), {}) if carrying != null else {}
 		marker.visible = not cargo.is_empty()
 		if marker.visible:
-			marker.texture = _cargo_textures[String(carrying["kind"])]
-			marker.region_rect = cargo["rect"]
-			marker.scale = CARRIED_MARKER_SIZE / marker.region_rect.size
+			_set_badge(marker, String(carrying["kind"]), cargo["rect"], CARRIED_MARKER_SIZE)
 
 		var tool_marker: Sprite2D = _tool_markers.get(colonist_id)
 		if tool_marker == null:
@@ -240,9 +260,7 @@ func _refresh() -> void:
 		var tool_art: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP.get(String(tool.get("kind", "")), {})
 		tool_marker.visible = not tool_art.is_empty()
 		if tool_marker.visible:
-			tool_marker.texture = _cargo_textures[String(tool["kind"])]
-			tool_marker.region_rect = tool_art["rect"]
-			tool_marker.scale = TOOL_MARKER_SIZE / tool_marker.region_rect.size
+			_set_badge(tool_marker, String(tool["kind"]), tool_art["rect"], TOOL_MARKER_SIZE)
 
 		var trapped_marker: Sprite2D = _trapped_markers.get(colonist_id)
 		if trapped_marker == null:
