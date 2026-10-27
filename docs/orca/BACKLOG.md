@@ -141,7 +141,7 @@ Orca helper scripts, this backlog.
   `command_checks.gd` stays the single place for pre-mutation checks.
 - **Acceptance:** as R1; every rejection reason string unchanged (grep the tests).
 
-### R11 — `ToilBindings` · `todo`
+### R11 — `ToilBindings` · `review (antonelmejor50-hub/r11-toilbindings)`
 
 - **Goal:** `jobs/toil_bindings.gd` owns every `_toil_*` callback and the carried-item
   drop/deposit helpers, and wires them into `ToilExecutor` the way `_toil_hooks` does today.
