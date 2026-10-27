@@ -436,6 +436,8 @@ one.
   no passability change` ≤ 1 ms).
 - **Non-goals:** changing passability rules or door semantics; layers.
 - **Scope amendment approved by the owner (2026-10-27, in the A2 terminal):** `actors/needs_system.gd`, where the "rest" need candidates read `ObjectTable.objects` keys as `"%d_%d"` Strings (now `ObjectTable.tiles_of_kind("bed")`).
+- **Scope amendment approved by the owner (2026-10-28, in the A2 terminal, on the rebase onto R12):** `worldgen/world_seeding.gd`, where R12 moved WorldState's generated berry-bush writes (`"%d_%d"` keys into `ObjectTable.objects`); the same change A2 had made in `world_state.gd`, now `object_table.place_generated(pos.x, pos.y, "berry_bush")`.
+- **Acceptance clarification approved by the owner (2026-10-27, in the A2 terminal, after review round 1):** the `bench_route_search` "µs/expansion on the generated map ≤ 2" line is measured on the long searches, d ≥ 64 (the rows A0's "~8" baseline comes from). The short searches (d=8, d=32) are recorded, not gated: for them `RouteSearch`'s own per-search cost is the floor (2.97–3.45 µs at d=8 with no map query at all), which is routing work for A8.
 
 #### A3 — `RouteSearch` with a binary heap and no per-step allocation · `review (antonelmejor50-hub/a3-routesearch-with-a-binary)` · *parallel-safe (routing only)*
 

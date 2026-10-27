@@ -79,7 +79,7 @@ func _trace_line(world) -> Dictionary:
 	line["retargeted"] = world._construction.site_fetch_source_retargeted
 	line["picked_kind"] = world._construction.site_fetch_picked_kind
 	line["sites"] = world.get_construction_sites()
-	line["dirty"] = world.get_dirty_cells().size()
+	line["dirty"] = world.get_dirty_cells_since(0)["next"]
 	line["map"] = _map_line(world)
 	line["hash"] = world.state_hash()
 	return line.duplicate(true)
