@@ -29,9 +29,12 @@ var _feet: Dictionary = {}
 ## actor id -> {sprite, key, tile, moved, flip_h, elapsed}
 var _actors: Dictionary = {}
 
-func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
+## `frames` is pack_assets.gd's actor_frames() (map_view.gd passes the one
+## from world_pack(), so actors and terrain switch to the pack together), or
+## {} to draw nothing.
+func _init(frames: Dictionary = {}) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_frames = PackAssetsType.actor_frames(pack_root)
+	_frames = frames
 	for key: String in _frames:
 		_feet[key] = {}
 		for animation in (_frames[key] as SpriteFrames).get_animation_names():

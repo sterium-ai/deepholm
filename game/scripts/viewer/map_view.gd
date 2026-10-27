@@ -161,8 +161,9 @@ var _pack_item_icons: Dictionary = {}
 
 ## `pack_root` is where the synced Pixel Crawler sheets live (tests pass a
 ## fixture or a missing root). With every sheet world_pack.json names present,
-## the TileSet is the pack's (pack_assets.gd's world_tile_set()), laid out on
-## the placeholder's source ids and coords; otherwise the placeholder TileSet,
+## terrain and actor sheets alike (pack_assets.gd's world_pack()), the TileSet
+## is the pack's, laid out on the placeholder's source ids and coords, and the
+## actors are drawn; otherwise the placeholder TileSet and no actor sprites,
 ## exactly as before.
 func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -175,10 +176,10 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
 		_item_atlas_textures[kind] = load(TileAtlasMapType.ITEM_ATLAS_MAP[kind]["texture_path"])
 	var tile_set_resource: TileSet = load(TILE_SET_PATH)
-	var pack_tile_set := PackAssetsType.world_tile_set(tile_set_resource, pack_root)
-	if pack_tile_set != null:
-		tile_set_resource = pack_tile_set
-		_pack_item_icons = PackAssetsType.item_icons(pack_tile_set, TileAtlasMapType.ITEM_ATLAS_MAP)
+	var world_pack := PackAssetsType.world_pack(tile_set_resource, pack_root)
+	if not world_pack.is_empty():
+		tile_set_resource = world_pack["tile_set"]
+		_pack_item_icons = PackAssetsType.item_icons(tile_set_resource, TileAtlasMapType.ITEM_ATLAS_MAP)
 	_tile_map_layer = TileMapLayer.new()
 	_tile_map_layer.tile_set = tile_set_resource
 	_tile_map_layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -212,7 +213,7 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	add_child(_object_tile_map_layer)
 	# Wolves, raiders and traders: pack sprites only (nothing without the pack).
 	# Added before the colonist layer so its health bars (every actor's) draw on top.
-	_actor_sprites = ActorSpritesType.new(pack_root)
+	_actor_sprites = ActorSpritesType.new(world_pack.get("actor_frames", {}))
 	_actor_sprites.set_visible_for_art(_art_enabled)
 	add_child(_actor_sprites)
 	_colonist_sprites = ColonistSpritesType.new(pack_root)

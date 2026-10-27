@@ -190,6 +190,19 @@ static func item_icons(tile_set: TileSet, item_map: Dictionary, json_path: Strin
 					"rect": Rect2(content_rect(atlas["coords"], cell, Vector2i(int(rect[2]), int(rect[3]))))}
 	return icons
 
+## The whole world from the pack, or {} to keep the placeholder everywhere:
+## {"tile_set": world_tile_set(), "actor_frames": actor_frames()} only when
+## BOTH are complete, so one missing or resized sheet (terrain, prop or actor)
+## never leaves the map half pack, half placeholder.
+static func world_pack(placeholder: TileSet, root: String = DEFAULT_ROOT, json_path: String = WORLD_JSON) -> Dictionary:
+	var tile_set := world_tile_set(placeholder, root, json_path)
+	if tile_set == null:
+		return {}
+	var frames := actor_frames(root, json_path)
+	if frames.is_empty():
+		return {}
+	return {"tile_set": tile_set, "actor_frames": frames}
+
 ## SpriteFrames per non-colonist actor art key ("wolf", "raider", "trader"),
 ## each with "idle" and "walk", or {} to keep the placeholder (which draws no
 ## sprite for them). All or nothing across the three, like the colonists.

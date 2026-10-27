@@ -146,7 +146,9 @@ func _check_missing_pack_falls_back() -> void:
 	_expect(map_view._tile_map_layer.tile_set == _placeholder, "no pack -> the placeholder TileSet, unchanged")
 	_expect(not map_view.is_pack_art(), "no pack -> placeholder item icons")
 	map_view.free()
-	var actors := ActorSpritesType.new(MISSING_ROOT)
+	_expect(PackAssetsType.world_pack(_placeholder, MISSING_ROOT).is_empty(), "no pack -> no world pack")
+	_expect(not _map_view_has_actor_art(MISSING_ROOT), "no pack -> map_view draws no actor sprites")
+	var actors := ActorSpritesType.new()
 	var world := FakeWorld.new()
 	world.actors = [{"id": "wolf_1", "kind": "wolf", "x": 3, "y": 3, "factionId": "predators"}]
 	actors.set_world(world)
@@ -214,6 +216,7 @@ func _source_entry(source_id: int) -> Dictionary:
 func _check_map_view_uses_pack() -> void:
 	var map_view = MapViewType.new(FIXTURE_ROOT)
 	_expect(map_view.is_pack_art(), "pack present -> pack item icons")
+	_expect(map_view._actor_sprites.has_pack_art(), "pack present -> map_view draws the actors")
 	_expect(map_view._tile_map_layer.tile_set != _placeholder, "pack present -> the pack TileSet")
 	_expect(map_view._colonist_sprites._pack_icons.has("axe"), "colonist badges use the pack icons")
 	var decor: Dictionary = TileAtlasMapType.TILE_DECOR_MAP[WorldStateType.TILE_TREE]
@@ -233,7 +236,7 @@ func _check_map_view_uses_pack() -> void:
 	placeholder_view.free()
 
 func _check_actor_sprites() -> void:
-	var actors := ActorSpritesType.new(FIXTURE_ROOT)
+	var actors := ActorSpritesType.new(PackAssetsType.actor_frames(FIXTURE_ROOT))
 	_expect(actors.has_pack_art(), "pack present -> actor frames")
 	var driver := FakeDriver.new()
 	actors.set_tick_driver(driver)
@@ -275,21 +278,61 @@ func _check_actor_sprites() -> void:
 	actors.free()
 
 ## One missing sheet, or one of the wrong size, keeps the whole world on the
-## placeholder (never a mix).
+## placeholder (never a mix): terrain/prop sheets and actor sheets alike, and
+## either group failing turns off the other too.
 func _check_partial_and_wrong_size_fall_back() -> void:
-	var first: Dictionary = _mapping["sources"][0]["tiles"][0]
+	var terrain_sheet := String(_mapping["sources"][0]["tiles"][0]["sheet"])
+	var wolf_idle: Dictionary = _mapping["actors"]["wolf"]["animations"]["idle"]
+	var actor_sheet := String(wolf_idle["sheet"])
 	var partial := "user://world_pack_partial/"
 	_write_fixture(partial)
-	DirAccess.remove_absolute(partial + String(first["sheet"]))
+	DirAccess.remove_absolute(partial + terrain_sheet)
 	_expect(PackAssetsType.world_tile_set(_placeholder, partial) == null, "a partial pack keeps the placeholder TileSet")
+	_expect(not PackAssetsType.actor_frames(partial).is_empty(), "the actor sheets alone still build")
+	_expect_whole_placeholder(partial, "missing terrain sheet")
+	_write_fixture(partial)
+	DirAccess.remove_absolute(partial + actor_sheet)
+	_expect(PackAssetsType.world_tile_set(_placeholder, partial) != null, "the terrain sheets alone still compose")
+	_expect(PackAssetsType.actor_frames(partial).is_empty(), "a missing wolf sheet -> no actor frames")
+	_expect_whole_placeholder(partial, "missing actor sheet")
 	var wrong := "user://world_pack_wrong_size/"
 	_write_fixture(wrong)
-	var short := Image.create(int(first["sheet_size"][0]) - 16, int(first["sheet_size"][1]), false, Image.FORMAT_RGBA8)
-	_expect(short.save_png(wrong + String(first["sheet"])) == OK, "wrong-size fixture written")
+	_write_sheet(wrong + terrain_sheet, _sheet_size(terrain_sheet) - Vector2i(16, 0))
 	_expect(PackAssetsType.world_tile_set(_placeholder, wrong) == null, "a wrong-size sheet keeps the placeholder TileSet")
-	var map_view = MapViewType.new(wrong)
-	_expect(not map_view.is_pack_art() and map_view._tile_map_layer.tile_set == _placeholder, "map_view stays on placeholders")
+	_expect_whole_placeholder(wrong, "resized terrain sheet")
+	_write_fixture(wrong)
+	_write_sheet(wrong + actor_sheet, Vector2i(int(wolf_idle["sheet_size"][0]) - 64, int(wolf_idle["sheet_size"][1])))
+	_expect(PackAssetsType.actor_frames(wrong).is_empty(), "a resized wolf sheet -> no actor frames")
+	_expect_whole_placeholder(wrong, "resized actor sheet")
+
+## world_pack() and map_view.gd at `root` show no pack art at all: placeholder
+## TileSet and icons, no actor sprites.
+func _expect_whole_placeholder(root: String, label: String) -> void:
+	_expect(PackAssetsType.world_pack(_placeholder, root).is_empty(), label + ": no world pack")
+	var map_view = MapViewType.new(root)
+	_expect(not map_view.is_pack_art() and map_view._tile_map_layer.tile_set == _placeholder,
+		label + ": map_view keeps the placeholder TileSet and icons")
+	_expect(not map_view._actor_sprites.has_pack_art(), label + ": map_view draws no actor sprites")
 	map_view.free()
+
+func _map_view_has_actor_art(root: String) -> bool:
+	var map_view = MapViewType.new(root)
+	var has_art: bool = map_view._actor_sprites.has_pack_art()
+	map_view.free()
+	return has_art
+
+func _sheet_size(sheet: String) -> Vector2i:
+	for source: Dictionary in _mapping["sources"]:
+		for tile: Dictionary in source["tiles"]:
+			if String(tile["sheet"]) == sheet:
+				return Vector2i(int(tile["sheet_size"][0]), int(tile["sheet_size"][1]))
+	return Vector2i.ZERO
+
+func _write_sheet(path: String, sheet_size: Vector2i) -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var image := Image.create(sheet_size.x, sheet_size.y, false, Image.FORMAT_RGBA8)
+	image.fill(Color.DARK_OLIVE_GREEN)
+	_expect(image.save_png(path) == OK, "fixture sheet written: " + path)
 
 func _write_fixture(root: String) -> void:
 	var sizes := {}
@@ -300,11 +343,7 @@ func _write_fixture(root: String) -> void:
 		for animation: Dictionary in _mapping["actors"][key]["animations"].values():
 			sizes[animation["sheet"]] = animation["sheet_size"]
 	for sheet: String in sizes:
-		var path := root + sheet
-		DirAccess.make_dir_recursive_absolute(path.get_base_dir())
-		var image := Image.create(int(sizes[sheet][0]), int(sizes[sheet][1]), false, Image.FORMAT_RGBA8)
-		image.fill(Color.DARK_OLIVE_GREEN)
-		_expect(image.save_png(path) == OK, "fixture sheet written: " + path)
+		_write_sheet(root + sheet, Vector2i(int(sizes[sheet][0]), int(sizes[sheet][1])))
 
 func _remove_dir(path: String) -> void:
 	var dir := DirAccess.open(path)

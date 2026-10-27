@@ -184,8 +184,9 @@ on the side its name says, props inside the owner's ceilings.
   `tile_atlas_map.gd`'s tables, the shoreline rule, the incremental refresh
   and the construction-site ghosts (drawn from the TileSet) work unchanged.
   Sources the JSON does not map are copied from the placeholder TileSet.
-  All or nothing: one missing or resized sheet keeps the whole map on the
-  placeholder TileSet.
+  All or nothing across the whole world (`pack_assets.gd`'s `world_pack()`):
+  one missing or resized sheet, terrain, prop or actor, keeps the map on the
+  placeholder TileSet and the actors undrawn, never half and half.
 - **The pack's grass blob has the placeholder's layout** (`Floors_Tiles.png`
   rows 0-4, columns 0-4, checked from alpha), so the 12 shoreline cells map
   coordinate for coordinate.
