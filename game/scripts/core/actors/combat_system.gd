@@ -155,7 +155,7 @@ func cleanup_actor_scheduling(colonist_id: String) -> void:
 	if _needs_system.paused_jobs.has(colonist_id):
 		paused_job_id = String(_needs_system.paused_jobs[colonist_id])
 		_needs_system.paused_jobs.erase(colonist_id)
-	var assignment = _scheduler.get_assignments().get(colonist_id)
+	var assignment: Variant = _scheduler.get_assignments().get(colonist_id)
 	if assignment != null:
 		_cancel_job_for_death(String(assignment["job_id"]))
 	if not paused_job_id.is_empty():
@@ -191,7 +191,7 @@ func _drop_inventory_contents(actor: Dictionary) -> void:
 	var held_tool_id := WorkerType.get_held_tool(actor)
 	if not held_tool_id.is_empty():
 		_tool_store.set_ground(held_tool_id, x, y)
-	var inventory = actor.get("inventory")
+	var inventory: Variant = actor.get("inventory")
 	if inventory is Dictionary:
 		for raw_item in (inventory.get("items", []) as Array):
 			var item: Dictionary = raw_item

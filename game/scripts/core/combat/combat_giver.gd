@@ -307,7 +307,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 		var threat := TargetingType.nearest_hostile_actor(actor, actors, _relations)
 		if threat.is_empty():
 			continue
-		var target = _pick_flee_target(actor, actors, threat, _episodes.get(actor_id, {}))
+		var target: Variant = _pick_flee_target(actor, actors, threat, _episodes.get(actor_id, {}))
 		if target == null:
 			# Destination exhaustion: the episode (and its owed recovery)
 			# stays open -- nothing is erased here.

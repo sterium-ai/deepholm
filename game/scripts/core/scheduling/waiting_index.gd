@@ -29,7 +29,7 @@ func restore(waiting: Array[Dictionary], activated_entries: Dictionary) -> void:
 
 ## job_id's index in `waiting`, or -1.
 func index_of(waiting: Array[Dictionary], job_id: String, entry_before: Callable) -> int:
-	var key = _keys.get(job_id)
+	var key: Variant = _keys.get(job_id)
 	if key == null:
 		for index in waiting.size():
 			if waiting[index]["id"] == job_id:

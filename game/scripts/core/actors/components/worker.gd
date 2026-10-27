@@ -15,7 +15,7 @@ extends RefCounted
 ## level assigned to each.
 
 static func validate(tunables: Dictionary) -> bool:
-	var labours = tunables.get("labours", [])
+	var labours: Variant = tunables.get("labours", [])
 	if not (labours is Array) or (labours as Array).is_empty():
 		return false
 	for labour in (labours as Array):
@@ -80,7 +80,7 @@ static func is_valid_labour_value(tunables: Dictionary, kind: String, level: int
 ## colonist's labour-table value is written, so WorldState's set_labour
 ## command routes through this instead of indexing the field inline.
 static func set_labour_level(actor: Dictionary, kind: String, level: int) -> void:
-	var labour_table = actor.get("labourTable")
+	var labour_table: Variant = actor.get("labourTable")
 	if not (labour_table is Dictionary):
 		labour_table = {}
 		actor["labourTable"] = labour_table

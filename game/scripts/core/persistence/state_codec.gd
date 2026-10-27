@@ -293,10 +293,10 @@ static func decode(state: Dictionary) -> WorldState:
 ## untouched.
 static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 	for colonist in world._colonists:
-		var route = colonist.get("route")
+		var route: Variant = colonist.get("route")
 		if route == null:
 			continue
-		var snapshot = route.get("rerouting")
+		var snapshot: Variant = route.get("rerouting")
 		if snapshot == null:
 			continue
 		var job_id: String = route["job_id"]
@@ -1011,7 +1011,7 @@ static func _encode_route_field(route, live_search):
 		"step": route["step"],
 		"moveTicksRemaining": route["move_ticks_remaining"],
 	}
-	var rerouting = route.get("rerouting")
+	var rerouting: Variant = route.get("rerouting")
 	if rerouting != null:
 		encoded["rerouting"] = _encode_route(live_search.snapshot() if live_search != null else rerouting)
 	return encoded
@@ -1026,8 +1026,8 @@ static func _hash_colonists(colonists: Array[Dictionary], reroutes: Dictionary) 
 		return colonists
 	var hashed: Array = []
 	for colonist in colonists:
-		var route = colonist.get("route")
-		var search = reroutes.get(colonist["id"])
+		var route: Variant = colonist.get("route")
+		var search: Variant = reroutes.get(colonist["id"])
 		if route == null or route.get("rerouting") == null or search == null:
 			hashed.append(colonist)
 			continue
@@ -1115,8 +1115,8 @@ static func _decode_trapped_field(trapped):
 static func _encode_jobs(jobs: Array[Dictionary]) -> Array:
 	var encoded: Array = []
 	for job in jobs:
-		var cell = job.get("cell")
-		var site = job.get("site")
+		var cell: Variant = job.get("cell")
+		var site: Variant = job.get("site")
 		encoded.append({
 			"id": job["id"], "kind": job["kind"], "status": job["status"],
 			"priority": job["priority"], "target": _encode_tile(job["target"]),
@@ -1133,8 +1133,8 @@ static func _encode_jobs(jobs: Array[Dictionary]) -> Array:
 static func _decode_jobs(jobs: Array) -> Array[Dictionary]:
 	var decoded: Array[Dictionary] = []
 	for job in jobs:
-		var cell = job.get("cell")
-		var site = job.get("site")
+		var cell: Variant = job.get("cell")
+		var site: Variant = job.get("site")
 		decoded.append({
 			"id": job["id"], "kind": job["kind"], "status": job["status"],
 			"priority": int(job["priority"]), "target": _decode_tile(job["target"]),
@@ -1210,7 +1210,7 @@ static func _next_construction_site_id(sites: Array[Dictionary]) -> int:
 # --- scheduling (waiting/cursors/pending/assignments + counters) -------
 
 static func _encode_scheduling(world: WorldState) -> Dictionary:
-	var scheduler = world._scheduler
+	var scheduler: WorldState.AssignmentType = world._scheduler
 	var event_log := world._event_log.encode()
 	return {
 		"nextJobId": scheduler.queue.get_next_id(),

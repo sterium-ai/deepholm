@@ -86,7 +86,7 @@ func advance(tick: int) -> void:
 			continue
 		if not (String(job.get("status", "")) in ["queued", "active"]):
 			continue
-		var site = job.get("site")
+		var site: Variant = job.get("site")
 		if site == null:
 			continue
 		var key := _site_key(site)

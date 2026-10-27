@@ -98,7 +98,7 @@ func _read_content_file(content_path: String) -> Dictionary:
 	var file := FileAccess.open(content_path, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return {}

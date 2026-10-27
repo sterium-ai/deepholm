@@ -594,7 +594,7 @@ func _scheduler_workers() -> Array[Dictionary]:
 ## wholesale replacement (colonist["route"] = ...) must still assign the
 ## colonist dict directly, since ActorTable has no setter.
 func _route(colonist: Dictionary):
-	var mover_component = ActorTableType.get_component(colonist, "mover", _content)
+	var mover_component: Variant = ActorTableType.get_component(colonist, "mover", _content)
 	return mover_component.get("route") if mover_component != null else null
 
 ## Reads the "worker" component's labourTable through ActorTable (ADR 012):
@@ -602,7 +602,7 @@ func _route(colonist: Dictionary):
 ## same live Dictionary colonist["labourTable"] holds, so mutating a value on
 ## the return still mutates the colonist's real state.
 func _labour_table(colonist: Dictionary) -> Dictionary:
-	var worker_component = ActorTableType.get_component(colonist, "worker", _content)
+	var worker_component: Variant = ActorTableType.get_component(colonist, "worker", _content)
 	return worker_component.get("labourTable", {}) if worker_component != null else {}
 
 func state_hash(include_incidents: bool = true) -> int:
@@ -1065,7 +1065,7 @@ func _cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
 		job_id = String(_needs_system.paused_jobs[colonist_id])
 		was_paused = true
 	else:
-		var assignment = _scheduler.get_assignments().get(colonist_id)
+		var assignment: Variant = _scheduler.get_assignments().get(colonist_id)
 		if assignment != null:
 			job_id = String(assignment["job_id"])
 	if job_id.is_empty():
@@ -1157,7 +1157,7 @@ func _advance_colonists() -> void:
 	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
 	for colonist in ordered:
 		var colonist_id: String = colonist["id"]
-		var assignment = assignments.get(colonist_id)
+		var assignment: Variant = assignments.get(colonist_id)
 		if assignment == null:
 			if _route(colonist) != null or colonist.get("work") != null:
 				_progress_table.suspend(colonist.get("work"))
@@ -1175,8 +1175,8 @@ func _advance_colonists() -> void:
 		# null-ness: stale route/work naming a job other than the current
 		# assignment is cleared here so the colonist starts the new job fresh
 		# instead of continuing to walk or work the cancelled one.
-		var route = _route(colonist)
-		var work = colonist.get("work")
+		var route: Variant = _route(colonist)
+		var work: Variant = colonist.get("work")
 		if (route != null and route["job_id"] != job_id) or (work != null and work["job_id"] != job_id):
 			if work != null and work["job_id"] != job_id:
 				_progress_table.suspend(work)

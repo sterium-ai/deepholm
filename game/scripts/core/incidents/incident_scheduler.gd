@@ -349,7 +349,7 @@ func _spawn_one(actor_def: String, faction_id: String, edge: String, wait_ticks:
 ## (GlobalAssignment's autonomous passability), then reports it unreachable
 ## and activate_pending() retires the job before the actor ever spawns.
 func _pick_reachable_target(from: Vector2i, faction_id: String) -> Vector2i:
-	var regions = _get_regions.call()
+	var regions: Variant = _get_regions.call()
 	var candidates: Array[Vector2i] = []
 	for y in _map_height:
 		for x in _map_width:

@@ -1258,7 +1258,7 @@ static func _migrate_v24_to_v25(state: Dictionary) -> Dictionary:
 	for entity in migrated["entities"]:
 		var updated: Dictionary = (entity as Dictionary).duplicate(true)
 		if updated.has("carrying"):
-			var carrying = updated["carrying"]
+			var carrying: Variant = updated["carrying"]
 			updated["hands"] = [] if carrying == null else [{"kind": carrying["kind"], "count": carrying["count"]}]
 			updated.erase("carrying")
 		entities.append(updated)
@@ -1474,7 +1474,7 @@ static func resolve_content_version(state: Dictionary, to_content_version: Strin
 ## (SaveIO's job kind enum no longer needs to carry "build" as a permanently
 ## accepted legacy value), but no site is fabricated for it.
 static func migrate_legacy_build_jobs(state: Dictionary) -> Dictionary:
-	var jobs = state.get("jobs")
+	var jobs: Variant = state.get("jobs")
 	if typeof(jobs) != TYPE_ARRAY:
 		return state
 	var has_legacy_build := false
@@ -1501,7 +1501,7 @@ static func migrate_legacy_build_jobs(state: Dictionary) -> Dictionary:
 	for job_value in (migrated["jobs"] as Array):
 		var job: Dictionary = (job_value as Dictionary).duplicate(true)
 		if String(job.get("kind", "")) == "build":
-			var site_tile = job.get("site")
+			var site_tile: Variant = job.get("site")
 			if site_tile is Dictionary and String(job.get("status", "")) in ["queued", "active"]:
 				var origin_key := _legacy_build_site_origin_key(site_tile)
 				if not known_origins.has(origin_key):

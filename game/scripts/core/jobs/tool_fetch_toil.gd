@@ -158,7 +158,7 @@ func _colonist_busy(colonist_id: String) -> bool:
 ## the tile a colonist's current, possibly-still-resolving route is actually
 ## walking toward.
 func _route_effective_target(route: Dictionary) -> Vector2i:
-	var rerouting = route.get("rerouting")
+	var rerouting: Variant = route.get("rerouting")
 	if rerouting != null:
 		return rerouting["target"]
 	var path: Array = route["path"]
@@ -246,7 +246,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	# here, before any travel/pickup starts, not merely on the next call.
 	if not _held_by_busy_foreign(item_id, String(colonist["id"])).is_empty():
 		return
-	var target = ToolMatchingType.item_target(reserved, _colonist_position_map())
+	var target: Variant = ToolMatchingType.item_target(reserved, _colonist_position_map())
 	if target == null:
 		_exclude_candidate(job_id, item_id)
 		return
@@ -262,7 +262,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	# releasing/re-reserving), and that ordinary case must keep following the
 	# same already-in-flight route rather than restarting it every tick.
 	if freshly_reserved:
-		var route = colonist.get("route")
+		var route: Variant = colonist.get("route")
 		if route != null and _route_effective_target(route) != target:
 			colonist["route"] = null
 	var passable: Callable = (hooks["go_to_passable"] as Callable).call(job, true, target)
@@ -300,7 +300,7 @@ func _report_no_tool_found(job_id: String, colonist_id: String, kind: String, ho
 func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String, hooks: Dictionary) -> void:
 	var item: Dictionary = _get_tool_item.call(item_id)
 	var owner := String(_tool_reservation_of.call(item_id))
-	var target = ToolMatchingType.item_target(item, _colonist_position_map()) if not item.is_empty() else null
+	var target: Variant = ToolMatchingType.item_target(item, _colonist_position_map()) if not item.is_empty() else null
 	if item.is_empty() or owner != job_id or target == null or not _within_reach(colonist, target):
 		_release_tool.call(item_id, job_id)
 		_report_no_tool_found(job_id, String(colonist["id"]), kind, hooks)

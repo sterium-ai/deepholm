@@ -47,7 +47,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 	# the pre-parse dict (real ints) can never match one taken over the
 	# parsed-back dict on read. Hash the round-tripped form here so both sides
 	# hash the same representation.
-	var round_tripped = JSON.parse_string(body)
+	var round_tripped: Variant = JSON.parse_string(body)
 	var hash := _sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var envelope := {"format": FORMAT, "integrity": hash, "state": json_safe}
 	var encoded := JSON.stringify(envelope)
@@ -104,13 +104,13 @@ static func _read_and_verify(path: String) -> Dictionary:
 		return {"ok": false, "code": "read_failed", "message": "could not open save", "file": path}
 	var text := file.get_as_text()
 	file.close()
-	var parsed = JSON.parse_string(text)
+	var parsed: Variant = JSON.parse_string(text)
 	if parsed == null or not (parsed is Dictionary):
 		return {"ok": false, "code": "parse_error", "message": "save JSON is unparseable or truncated", "file": path}
 	var envelope: Dictionary = parsed
 	if envelope.get("format") != FORMAT or not envelope.has("integrity") or not envelope.has("state"):
 		return {"ok": false, "code": "invalid_envelope", "message": "save envelope is missing or invalid", "file": path}
-	var state = envelope["state"]
+	var state: Variant = envelope["state"]
 	if not (state is Dictionary):
 		return {"ok": false, "code": "schema_error", "message": "save state is not an object", "file": path}
 	# Inspect the version before checking the body hash. A newer producer must
@@ -129,7 +129,7 @@ static func _read_and_verify(path: String) -> Dictionary:
 	var seed_restore := _restore_exact_seed(state, located_state)
 	var incident_rng_restore := _restore_exact_incident_rng(state, located_state)
 	var dig_find_rng_restore := _restore_exact_dig_find_rng(state, located_state)
-	var version_value = state.get("schemaVersion")
+	var version_value: Variant = state.get("schemaVersion")
 	if _is_int(version_value) and int(version_value) > SCHEMA_VERSION:
 		return {"ok": false, "code": "save_from_newer_version", "message": "save schema is newer than this build", "file": path}
 	if str(envelope["integrity"]) != stored_state_hash:
@@ -179,7 +179,7 @@ static func _read_and_verify(path: String) -> Dictionary:
 	# own "missing required field"/"invalid contentVersion" error, rather than
 	# a misleading content_version_mismatch.
 	var current_content_version := StateCodecType.content_version()
-	var content_version_value = state.get("contentVersion")
+	var content_version_value: Variant = state.get("contentVersion")
 	if content_version_value is String and String(content_version_value) != current_content_version:
 		var resolved := SaveMigrationsType.resolve_content_version(state, current_content_version)
 		if not resolved.get("ok", false):
@@ -699,14 +699,14 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 static func _coerce_floats_to_ints(value) -> void:
 	if value is Dictionary:
 		for key in value.keys():
-			var entry = value[key]
+			var entry: Variant = value[key]
 			if typeof(entry) == TYPE_FLOAT and float(entry) == int(entry):
 				value[key] = int(entry)
 			elif entry is Dictionary or entry is Array:
 				_coerce_floats_to_ints(entry)
 	elif value is Array:
 		for i in range(value.size()):
-			var entry = value[i]
+			var entry: Variant = value[i]
 			if typeof(entry) == TYPE_FLOAT and float(entry) == int(entry):
 				value[i] = int(entry)
 			elif entry is Dictionary or entry is Array:
@@ -928,7 +928,7 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 		if not health_check["ok"]:
 			return health_check
 		if entity.has("needs"):
-			var needs = entity["needs"]
+			var needs: Variant = entity["needs"]
 			if not (needs is Dictionary):
 				return _fail("invalid entity needs type")
 			var needs_check := _require_fields(needs, ["food", "water", "rest"], "entity needs")
@@ -938,7 +938,7 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 				if not _is_int(needs[need_key]) or int(needs[need_key]) < 0 or int(needs[need_key]) > 100:
 					return _fail("invalid entity need '%s'" % need_key)
 		if entity.has("needsAccumulator"):
-			var accumulator = entity["needsAccumulator"]
+			var accumulator: Variant = entity["needsAccumulator"]
 			if not (accumulator is Dictionary):
 				return _fail("invalid entity needsAccumulator type")
 			var accumulator_check := _require_fields(accumulator, ["food", "water", "rest"], "entity needsAccumulator")
@@ -1320,7 +1320,7 @@ static func _valid_pending_entry(value, map_width: int, map_height: int) -> Dict
 	var start_check := _valid_tile(pending["start"], map_width, map_height)
 	if not start_check["ok"]:
 		return start_check
-	var route = pending["route"]
+	var route: Variant = pending["route"]
 	if route == null:
 		return {"ok": true}
 	return _valid_route_state(route, map_width, map_height)

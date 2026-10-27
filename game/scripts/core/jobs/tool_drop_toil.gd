@@ -303,7 +303,7 @@ func is_dropping(colonist: Dictionary, job_id: String, _job: Dictionary = {}, _h
 		and marked == String(colonist.get("held_tool", ""))
 
 func _route_effective_target(route: Dictionary) -> Vector2i:
-	var rerouting = route.get("rerouting")
+	var rerouting: Variant = route.get("rerouting")
 	if rerouting != null:
 		return rerouting["target"]
 	var path: Array = route["path"]
@@ -328,11 +328,11 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	if held_id.is_empty():
 		colonist["route"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, ""); return
 	_set_active_item.call(job_id, held_id)
-	var route = colonist.get("route")
+	var route: Variant = colonist.get("route")
 	var target: Vector2i
 	if route == null:
 		var from := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		var cell = _find_drop_cell(from)
+		var cell: Variant = _find_drop_cell(from)
 		if cell == null:
 			_drop_tool_ground.call(held_id, from.x, from.y)
 			_record.call(TOIL_DROP_TOOL, "complete")
@@ -388,7 +388,7 @@ func _in_any_zone(cell: Vector2i) -> bool:
 func _find_drop_cell(from: Vector2i) -> Variant:
 	if not _get_zones.is_valid():
 		return null
-	var best = null
+	var best: Variant = null
 	var best_distance := -1
 	for zone in (_get_zones.call() as Array):
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):

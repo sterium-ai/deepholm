@@ -119,7 +119,7 @@ func get_colonist_need_reason(colonist_id: String) -> String:
 
 ## The colonist's live "needs" component (ADR 012): mutating it mutates the colonist.
 func _needs(colonist: Dictionary) -> Dictionary:
-	var needs_component = ActorTableType.get_component(colonist, "needs", _content)
+	var needs_component: Variant = ActorTableType.get_component(colonist, "needs", _content)
 	return needs_component if needs_component != null else {}
 
 ## Backfills every declared need kind to full and every declared labour kind to its
@@ -133,10 +133,10 @@ func ensure_needs() -> void:
 		# A generic actor (wolf/trader) has no worker component: rebuilding it would drop its own fields.
 		if not ActorTableType.has_component(colonist, "worker", _content):
 			continue
-		var needs_component = ActorTableType.get_component(colonist, "needs", _content)
-		var worker_component = ActorTableType.get_component(colonist, "worker", _content)
-		var health_component = ActorTableType.get_component(colonist, "health", _content)
-		var accumulator_component = colonist.get("needsAccumulator")
+		var needs_component: Variant = ActorTableType.get_component(colonist, "needs", _content)
+		var worker_component: Variant = ActorTableType.get_component(colonist, "worker", _content)
+		var health_component: Variant = ActorTableType.get_component(colonist, "health", _content)
+		var accumulator_component: Variant = colonist.get("needsAccumulator")
 		var needs_missing := not (colonist.has("needs") and needs_component is Dictionary)
 		var labour_table_missing := not (colonist.has("labourTable") and worker_component is Dictionary
 			and worker_component["labourTable"] is Dictionary)
@@ -193,13 +193,13 @@ func decay_needs() -> void:
 ## scheduler assignment. A no-op when the colonist holds no assignment.
 func pause_work_job(colonist: Dictionary) -> void:
 	var colonist_id: String = colonist["id"]
-	var work = colonist.get("work")
+	var work: Variant = colonist.get("work")
 	if work != null:
 		paused_jobs[colonist_id] = String(work["job_id"])
 		_progress_table.suspend(work)
 		colonist["work"] = null
 		return
-	var assignment = _scheduler.get_assignments().get(colonist_id)
+	var assignment: Variant = _scheduler.get_assignments().get(colonist_id)
 	if assignment != null:
 		paused_jobs[colonist_id] = String(assignment["job_id"])
 

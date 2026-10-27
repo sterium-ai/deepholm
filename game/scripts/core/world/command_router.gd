@@ -143,7 +143,7 @@ func validate_command(command, record: bool = true) -> Dictionary:
 	for key in command["payload"].keys():
 		if command["type"] == "build_line" and key == "tiles":
 			continue
-		var value = command["payload"][key]
+		var value: Variant = command["payload"][key]
 		if typeof(value) != TYPE_STRING and typeof(value) != TYPE_INT:
 			return _event_log.reject(command["command_id"], command["actor"], "invalid_payload",
 				"Payload values must be String or int.", record)

@@ -272,7 +272,7 @@ func decode(state: Dictionary) -> void:
 	for entry in state.get("list", []):
 		var order: Dictionary = {}
 		for key in entry:
-			var value = entry[key]
+			var value: Variant = entry[key]
 			order[key] = value if value is String else (_ints(value) if value is Array else int(value))
 		_orders.append(order)
 	_created = []
