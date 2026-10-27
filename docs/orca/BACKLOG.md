@@ -147,7 +147,7 @@ Orca helper scripts, this backlog.
   drop/deposit helpers, and wires them into `ToilExecutor` the way `_toil_hooks` does today.
 - **Acceptance:** as R1; `test_tool_items`, haul and site-fetch tests unchanged.
 
-### R12 — `TickPipeline` and façade cleanup · `todo`
+### R12 — `TickPipeline` and façade cleanup · `review (antonelmejor50-hub/r12-tickpipeline-and-fa-ade)`
 
 - **Goal:** `world/tick_pipeline.gd` lists the per-tick phases in order (needs → givers →
   scheduler → toils → combat → incidents → calendar → caches); `WorldState.tick()` runs it.

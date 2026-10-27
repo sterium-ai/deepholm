@@ -2,7 +2,7 @@
 
 > **In short:** Trading now really exchanges goods in both directions, and a trader's offer disappears when the trader leaves. These fixes slightly enlarged the main world-state file, so its size limit was raised again.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-25
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`.
 - **Supersedes:** ADR 035's line count (its budget reasoning still holds; the file has since grown).

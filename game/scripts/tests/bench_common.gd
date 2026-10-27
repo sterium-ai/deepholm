@@ -13,11 +13,10 @@ extends RefCounted
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
+const TickPipelineType = preload("res://scripts/core/world/tick_pipeline.gd")
+
 ## Phase names of profiled_tick(), in WorldState.tick()'s own order.
-const PHASES: Array[String] = ["needs_decay", "need_giver", "haul_giver", "construction_giver",
-	"combat", "scheduler", "site_fetch_resolve", "rescue_giver", "incidents_activate",
-	"escapes_activate", "advance_colonists", "approach_giver", "dig_finds", "refused_reservations",
-	"collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event"]
+const PHASES: Array[String] = TickPipelineType.PHASES
 
 static func header(bench_name: String) -> String:
 	var info := Engine.get_version_info()
@@ -135,62 +134,17 @@ static func submit_till_orders(world: WorldStateType, count: int) -> int:
 			accepted += 1
 	return accepted
 
-## WorldState.tick() (game/scripts/core/world_state.gd, func tick()) with a
-## timer around each phase. The body is the same calls in the same order;
-## bench_tick_scaling.gd proves it by comparing state_hash() against a twin
-## world advanced with the real tick(). Adds the elapsed microseconds per
-## phase into `totals`. If tick() changes, this copy must follow it (the
-## hash check fails loudly otherwise, and tools/run_benches.ps1 fails any
-## benchmark whose output has a SCRIPT ERROR, e.g. a call to a moved method).
+## WorldState.tick() with a timer around each phase: runs the world's own
+## TickPipeline phases (game/scripts/core/world/tick_pipeline.gd) in order, so
+## it cannot drift from tick(); bench_tick_scaling.gd still compares
+## state_hash() against a twin world advanced with the real tick(). Adds the
+## elapsed microseconds per phase into `totals`.
 static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
+	var phases: Array[Callable] = world._tick_pipeline.phases()
 	var t := Time.get_ticks_usec()
-	world._clock.advance(1)
-	world._needs_system.decay_needs()
-	t = _lap(totals, "needs_decay", t)
-	world._need_giver.advance(world._colonists_not_combat_owned(), world._clock.tick)
-	t = _lap(totals, "need_giver", t)
-	world._haul_giver.advance(world._clock.tick)
-	t = _lap(totals, "haul_giver", t)
-	world._construction_giver.advance(world._clock.tick)
-	t = _lap(totals, "construction_giver", t)
-	world._combat_system.apply_combat(world._clock.tick)
-	t = _lap(totals, "combat", t)
-	var active_site_fetch_jobs_before: Dictionary = world._construction.active_site_fetch_job_ids()
-	world._scheduler.tick(world._clock.tick, world._scheduler_workers(), world._passability.is_passable, Vector2i.ZERO,
-		Vector2i(world._tile_grid.width - 1, world._tile_grid.height - 1), world._toils.get_labour, world._calendar.active_boost,
-		world._colonists, world._committed_jobs(), world._tile_grid.get_regions().reachable)
-	t = _lap(totals, "scheduler", t)
-	world._construction.resolve_freshly_activated_site_fetch_sources(active_site_fetch_jobs_before)
-	t = _lap(totals, "site_fetch_resolve", t)
-	world._rescue_giver.advance(world._trench.rescue_candidates(), world._trench.trapped_rescue_victims(), world._clock.tick)
-	t = _lap(totals, "rescue_giver", t)
-	world._incidents.activate_pending()
-	t = _lap(totals, "incidents_activate", t)
-	world._trench.activate_pending_escapes()
-	t = _lap(totals, "escapes_activate", t)
-	world._advance_colonists()
-	t = _lap(totals, "advance_colonists", t)
-	world._approach_giver.advance(world._colonists, world._clock.tick)
-	t = _lap(totals, "approach_giver", t)
-	world._item_table.resolve_dig_finds()
-	t = _lap(totals, "dig_finds", t)
-	world._resolve_refused_reservations()
-	t = _lap(totals, "refused_reservations", t)
-	world._event_log.collect_queue_events()
-	t = _lap(totals, "collect_queue_events", t)
-	world._calendar_alert_giver.advance(world._clock.tick, world._calendar, world._calendar_alerts_fired)
-	t = _lap(totals, "calendar_alerts", t)
-	world._incidents.advance(world._clock.tick)
-	t = _lap(totals, "incidents_advance", t)
-	world._event_log.insert_event({
-		"type": "tick_advanced",
-		"tick": world._clock.tick,
-		"system_priority": WorldStateType.PRIORITY_TICK,
-		"entity_id": "world",
-		"sequence": world._event_log.next_sequence(),
-		"data": {}
-	})
-	_lap(totals, "tick_event", t)
+	for i in phases.size():
+		phases[i].call()
+		t = _lap(totals, PHASES[i], t)
 
 static func _lap(totals: Dictionary, phase: String, since: int) -> int:
 	var now := Time.get_ticks_usec()

@@ -411,10 +411,3 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 	if String(job["kind"]) == "eat_food":
 		var target: Vector2i = job["target"]
 		_item_table.consume_ground_berry(target.x, target.y)
-
-## Every declared need at full. No caller today (spawning uses NeedsType.build_full_needs()).
-func _full_needs() -> Dictionary:
-	var needs: Dictionary = {}
-	for kind in _need_definitions.keys():
-		needs[kind] = _need_full
-	return needs

@@ -4,7 +4,7 @@
 > at the same spot never mix up each other's progress. The fixes needed more room in one
 > size-limited core file.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-24
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`;
   `game/scripts/core/jobs/givers/rescue_giver.gd`.

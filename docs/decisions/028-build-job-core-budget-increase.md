@@ -4,7 +4,7 @@
 > carry it to the building spot, work for a while, and the object appears. Orders are checked so
 > they never trap anyone inside walls, and interrupted or saved builds pick up where they left off.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-23
 - **Scope:** a new `build` job kind (`content/jobs.json`), a `build_cost` field on buildable
   `content/objects.json` entries (`content/schemas/objects.schema.json`), a `build {kind, x, y}`

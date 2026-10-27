@@ -30,7 +30,7 @@ with a short plain-language summary.
 | [Extension points](architecture/extension-points.md) | The five ways new behaviour may enter the code |
 | [Foundation for breadth](architecture/foundation-for-breadth.md) | Content registry, actors, factions, regions, rooms and incidents |
 | [Game-state contract](architecture/contracts/game-state.schema.json) | JSON Schema of the serialized game state |
-| [Core size budgets](architecture/core-budgets.json) | Line-count caps for the largest core files (checked in CI) |
+| [Core size budgets](architecture/core-budgets.json) | 800 lines per core file, 80 per function, and the frozen exceptions (checked in CI, ADR 048) |
 | [Command contract](../game/scripts/core/commands/README.md) | Command envelope, rejections and the read-only query surface |
 | [Job queue](../game/scripts/core/jobs/README.md) | Job lifecycle, blocking reasons and remedies |
 | [Route search](../game/scripts/core/routing/README.md) | Budgeted, resumable path search |
@@ -40,8 +40,8 @@ with a short plain-language summary.
 Architecture decision records (ADRs) in [`decisions/`](decisions/), numbered in
 the order they were accepted. New ones start from the
 [ADR template](architecture/adr/000-template.md). ADRs whose titles end in
-"raise(s) … core budget" record why a file in
-[core-budgets.json](architecture/core-budgets.json) was allowed to grow.
+"raise(s) … core budget" record why a file was allowed to grow under the old
+per-file caps; [ADR 048](decisions/048-composed-core.md) supersedes them all.
 
 | ADR | Title |
 | --- | --- |
@@ -89,6 +89,7 @@ the order they were accepted. New ones start from the
 | [042](decisions/042-build-line-batch-command.md) | `build_line` submits a whole wall/rectangle drag as one atomic command |
 | [043](decisions/043-site-fetch-chained-deposit.md) | `site_fetch`'s `deposit` completion chains onto further same-kind sites |
 | [044](decisions/044-area-order-expansion-queue.md) | Area orders expand through a saved per-tick queue |
+| [048](decisions/048-composed-core.md) | Composed core — one size rule replaces per-file budgets |
 
 ## Content and data
 

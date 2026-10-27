@@ -80,13 +80,13 @@ const EXCLUDED_DIRS: Array[String] = [
 ]
 
 ## file -> Array[String] of function names exempt from the "colonist" string-
-## literal check: _spawn_colonists() is the actor spawn path itself. There is
+## literal check: _spawn_colonists() (worldgen/world_seeding.gd since R12) is the actor spawn path itself. There is
 ## no equivalent field-access exemption table: every scanned function must
 ## route needs/labourTable/route/held_tool reads through the accessor,
 ## including WorldState's own repair helpers (_ensure_needs/_ensure_held_tool
 ## do so -- see their doc comments).
 const COLONIST_LITERAL_EXEMPT_FUNCS := {
-	"res://scripts/core/world_state.gd": ["_spawn_colonists"],
+	"res://scripts/core/worldgen/world_seeding.gd": ["_spawn_colonists"],
 }
 
 ## A receiver's base identifier counts as a colonist/actor anchor when one of

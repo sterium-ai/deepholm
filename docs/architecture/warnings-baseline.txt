@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 3209
-untyped_declaration 608
+total 3207
+untyped_declaration 607
 unsafe_property_access 0
 unsafe_method_access 272
-unsafe_call_argument 2296
+unsafe_call_argument 2295
 other 33
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -17,7 +17,7 @@ file game/scripts/core/actors/components/mover.gd 1
 file game/scripts/core/actors/components/needs.gd 16
 file game/scripts/core/actors/components/wild.gd 1
 file game/scripts/core/actors/components/worker.gd 12
-file game/scripts/core/actors/needs_system.gd 42
+file game/scripts/core/actors/needs_system.gd 41
 file game/scripts/core/actors/trench_system.gd 52
 file game/scripts/core/calendar/calendar_service.gd 9
 file game/scripts/core/combat/approach_giver.gd 87
@@ -32,6 +32,7 @@ file game/scripts/core/commands/handlers/incident_handler.gd 5
 file game/scripts/core/commands/handlers/order_handler.gd 25
 file game/scripts/core/commands/handlers/zone_handler.gd 17
 file game/scripts/core/content/content_registry.gd 115
+file game/scripts/core/content/content_tables.gd 14
 file game/scripts/core/economy/trade_system.gd 21
 file game/scripts/core/incidents/incident_scheduler.gd 46
 file game/scripts/core/items/item_table.gd 52
@@ -71,5 +72,7 @@ file game/scripts/core/scheduling/measured_route.gd 2
 file game/scripts/core/scheduling/waiting_index.gd 13
 file game/scripts/core/world/command_router.gd 54
 file game/scripts/core/world/event_log.gd 16
-file game/scripts/core/world_state.gd 101
+file game/scripts/core/world/tick_pipeline.gd 14
+file game/scripts/core/world_state.gd 66
 file game/scripts/core/worldgen/world_generator.gd 97
+file game/scripts/core/worldgen/world_seeding.gd 6

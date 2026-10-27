@@ -3,7 +3,7 @@
 > **In short:** When a colonist is stuck in a trench, another colonist now comes to pull them out.
 > Wiring this rescue behaviour into the simulation needed more room in one size-limited core file.
 
-- **Status:** accepted
+- **Status:** superseded by [ADR 048](048-composed-core.md) (the per-file cap this raised no longer exists)
 - **Date:** 2026-09-23
 - **Scope:** `docs/architecture/core-budgets.json` cap for `game/scripts/core/world_state.gd`;
   new `game/scripts/core/jobs/givers/rescue_giver.gd`.
