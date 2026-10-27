@@ -2039,8 +2039,7 @@ func _cancel_job_for_death(job_id: String) -> void:
 		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association(job_id, String(job.get("kind", "")))
 
-## restrict_to_for(), else the waiting entry's restriction for a never-activated job, so a still-queued job
-## restricted to a just-killed actor (a flee job submitted the same tick it died) cannot survive _apply_actor_death()'s cleanup below.
+## restrict_to_for(), else the waiting entry's restriction for a never-activated job, so a still-queued job restricted to a just-killed actor (a flee job submitted the same tick it died) cannot survive _apply_actor_death()'s cleanup below.
 func _job_restricted_to(job_id: String) -> String:
 	var restrict_to := _scheduler.restrict_to_for(job_id)
 	if not restrict_to.is_empty():
@@ -2151,8 +2150,7 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 	else:
 		if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
 			return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload", "A non-empty job_id is required.")
-		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry drops the carried item (colonist-ai.md 3.3);
-		# "complete_job" already went through the job's own completion effect; a site_work job never carries anything.
+		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry drops the carried item (colonist-ai.md 3.3); "complete_job" already went through the job's own completion effect; a site_work job never carries anything.
 		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
 			if String(target_job.get("kind", "")) in ["haul", "site_fetch"]:
@@ -2164,8 +2162,7 @@ func _apply_job_command(command: Dictionary) -> Dictionary:
 		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
 			_progress_table.clear_terminated_job(String(payload["job_id"]), terminal_job, terminal_was_active)
 		# Shares _resolve_giver_association() with _toil_on_work_complete()/TrenchSystem._trap_actor()/_cancel_job_for_death()/
-		# _resolve_refused_reservations(): a command ending a rescue job must tell RescueGiver too, or its _pending/
-		# _job_victim association keeps naming a dead job and the rescuer never takes other work or another rescue.
+		# _resolve_refused_reservations(): a command ending a rescue job must tell RescueGiver too, or its _pending/_job_victim association keeps naming a dead job and the rescuer never takes other work or another rescue.
 		if result["ok"]:
 			_resolve_giver_association(String(payload["job_id"]), String(terminal_job.get("kind", "")))
 	# F3: a cancel/fail/invalidate_job command above can
