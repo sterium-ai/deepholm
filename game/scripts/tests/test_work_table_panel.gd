@@ -137,11 +137,12 @@ func _check_calendar_boost_reflected_in_column_header() -> void:
 ## formerly a raw _events.append()) -- a test-only poke, same as test_calendar.gd's own direct
 ## WorldState-field setup, and outside scripts/viewer/'s purity scan since
 ## this file lives under scripts/tests/. The panel must reflect it without
-## any special wiring beyond world.get_events().
+## any special wiring beyond world.get_events_since(). It draws a real sequence
+## (next_sequence()), like every core emitter, so a cursor reader sees it.
 func _fire_synthetic_alert(world: WorldStateType, tick: int, days_until: int, id: String = "sow", label: String = "sowing window") -> void:
 	world._event_log.insert_event({
 		"type": "calendar_alert", "tick": tick, "system_priority": 0,
-		"entity_id": "world", "sequence": world.get_events().size(),
+		"entity_id": "world", "sequence": world._event_log.next_sequence(),
 		"data": {"id": id, "label": label, "days_until": days_until},
 	})
 

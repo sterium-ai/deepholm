@@ -8,6 +8,16 @@ extends RefCounted
 ## whole for every collected command O(N^2).
 ##
 ## Invariant: _events[i]["sequence"] == _first_sequence + i.
+##
+## Bounded retention (A6): trim() drops the oldest events (by sequence) down
+## to RETAINED_EVENTS once more than MAX_EVENTS are held. JobQueue calls it
+## only at the start of its own tick(), never mid-command or mid-tick. Events
+## EventLog.collect_queue_events() has not copied yet are the newest ones, so
+## they survive a trim unless more than RETAINED_EVENTS were emitted since the
+## last collection (every command handler and WorldState tick collects).
+
+const MAX_EVENTS := 4096
+const RETAINED_EVENTS := 3072
 
 var _events: Array[Dictionary] = []
 var _first_sequence: int = 0
@@ -19,6 +29,25 @@ func reset(first_sequence: int) -> void:
 
 func append(event: Dictionary) -> void:
 	_events.append(event)
+
+## Drops the oldest events down to RETAINED_EVENTS once more than MAX_EVENTS are held.
+func trim() -> void:
+	if _events.size() <= MAX_EVENTS:
+		return
+	var drop := _events.size() - RETAINED_EVENTS
+	_events = _events.slice(drop)
+	_first_sequence += drop
+
+## Number of retained events.
+func size() -> int:
+	return _events.size()
+
+## {"events", "next", "truncated"}: "events" are get_after(sequence - 1);
+## "next" (the queue's next sequence) is the cursor for the following call;
+## "truncated" is true when trim() already dropped an event at or after
+## `sequence`.
+func since(sequence: int, next: int) -> Dictionary:
+	return {"events": get_after(sequence - 1), "next": next, "truncated": sequence < _first_sequence}
 
 ## Deep copy of the whole log, sorted.
 func get_all() -> Array[Dictionary]:

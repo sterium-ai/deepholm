@@ -48,7 +48,7 @@ func _check_chop_leaves_soil(world_seed: int) -> void:
 	_expect(after == WorldStateType.TILE_SOIL,
 		"seed %d: chopped tree at (%d, %d) must become soil, got '%s' after %d ticks" % [world_seed, tree.x, tree.y, after, ticks])
 	_expect(world.get_ground_wood(tree.x, tree.y) == 1, "seed %d: chop must still leave exactly one ground wood" % world_seed)
-	_expect(world.get_dirty_cells().has(tree), "seed %d: the chopped tile must be marked dirty so the viewer repaints it" % world_seed)
+	_expect((world.get_dirty_cells_since(0)["cells"] as Array).has(tree), "seed %d: the chopped tile must be marked dirty so the viewer repaints it" % world_seed)
 	var till: Dictionary = world.apply({"actor": "test", "command_id": "till_%d" % world_seed,
 		"tick": world.get_tick(), "type": "till", "payload": {"x": tree.x, "y": tree.y, "priority": 1}})
 	_expect(bool(till.get("ok", false)), "seed %d: a chopped tile is soil, so till on it must be accepted: %s" % [world_seed, till])

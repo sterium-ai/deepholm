@@ -31,7 +31,7 @@ extends Control
 ## injected into WorldState's own calendar service; a second, panel-local
 ## read of the same file would be exactly the drift ADR 010 forbids. The only
 ## calendar-shaped fact read here is get_active_calendar_boost() plus
-## whatever world.get_events() already replayed.
+## whatever world.get_events_since() already replayed.
 ##
 ## Refresh performance: boot.gd calls refresh() on
 ## every simulation tick. Queueing every cell button for deletion and
@@ -46,6 +46,7 @@ extends Control
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
+const StatusTextType = preload("res://scripts/viewer/status_text.gd")
 
 const LABOUR_KINDS = WorldStateType.LABOUR_KINDS
 
@@ -74,6 +75,13 @@ var _header_labels: Dictionary = {}
 ## calls _rebuild_grid() again when this set has actually changed.
 var _known_colonist_ids: Array[String] = []
 var _command_sequence: int = 0
+## A6: _most_recent_calendar_alert() reads only the calendar_alert events
+## world.get_events_since() returns past _alert_cursor, keeping the best one
+## seen so far in _latest_alert. _alert_world_id restarts both when
+## info_panel.gd swaps in another world.
+var _alert_world_id: int = 0
+var _alert_cursor: int = 0
+var _latest_alert: Dictionary = {}
 
 func setup(world_ref: WorldStateType, text_table: TextTableType) -> void:
 	world = world_ref
@@ -220,17 +228,25 @@ func _find_colonist(colonist_id: String) -> Dictionary:
 			return colonist
 	return {}
 
-## Finds the calendar_alert event with the highest tick in world.get_events()
-## (the soonest-upcoming-window alert most recently fired); {} when none has
-## fired yet.
+## Finds the calendar_alert event with the highest tick (the latest in log
+## order on a tie) among those world.get_events_since() has returned (the
+## soonest-upcoming-window alert most recently fired); {} when none has fired
+## yet.
 func _most_recent_calendar_alert() -> Dictionary:
-	var best: Dictionary = {}
-	for event in world.get_events(["calendar_alert"]):
+	if world.get_instance_id() != _alert_world_id:
+		_alert_world_id = world.get_instance_id()
+		_alert_cursor = 0
+		_latest_alert = {}
+	var stream: Dictionary = world.get_events_since(_alert_cursor, ["calendar_alert"])
+	for event in stream["events"]:
 		if String(event.get("type", "")) != "calendar_alert":
 			continue
-		if best.is_empty() or int(event["tick"]) >= int(best["tick"]):
-			best = event
-	return best
+		var tick := int(event["tick"])
+		if _latest_alert.is_empty() or tick > int(_latest_alert["tick"]) \
+				or (tick == int(_latest_alert["tick"]) and not StatusTextType.event_log_less(event, _latest_alert)):
+			_latest_alert = event
+	_alert_cursor = int(stream["next"])
+	return _latest_alert
 
 func _alert_key(event: Dictionary) -> String:
 	var data: Dictionary = event.get("data", {})

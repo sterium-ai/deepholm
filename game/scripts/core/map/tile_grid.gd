@@ -15,9 +15,11 @@ extends RefCounted
 ##   _init(), so StateCodec.decode()'s direct tiles/objects overwrite never
 ##   leaves them stale. Every later tile/object change keeps them in sync
 ##   (on_passability_changed(), update_water_tile_cache()).
-## - dirty_cells is append-only and never cleared or persisted: a viewer
-##   tracks how much of it it consumed, like get_events(). Colonist/item
-##   movement never appends here.
+## - dirty_cells is append-only, never cleared on read and never persisted: a
+##   viewer keeps a cursor into it (get_dirty_cells_since(), A6). Retention is
+##   bounded: past MAX_DIRTY_CELLS the oldest entries are dropped down to
+##   RETAINED_DIRTY_CELLS and dirty_base, the absolute cursor of
+##   dirty_cells[0], moves past them. Colonist/item movement never appends here.
 ## - state_hash() covers width, height and tiles (hash_into()); the caches
 ##   and the dirty-cell log are derived and deliberately left out.
 
@@ -32,7 +34,12 @@ var height: int
 var tiles: Array[String] = []
 var water_tile_cache: Array[Vector2i] = []
 var water_tile_cache_built := false
+const MAX_DIRTY_CELLS := 4096
+const RETAINED_DIRTY_CELLS := 3072
+
 var dirty_cells: Array[Vector2i] = []
+## Absolute cursor of dirty_cells[0]: how many entries retention dropped.
+var dirty_base: int = 0
 var regions: RegionMapType
 var rooms: RoomMapType
 
@@ -77,12 +84,24 @@ func tile_index(x: int, y: int) -> int:
 ## on is two real changes); a reader keys its consumed index by Array size.
 func mark_dirty(x: int, y: int) -> void:
 	dirty_cells.append(Vector2i(x, y))
+	if dirty_cells.size() > MAX_DIRTY_CELLS:
+		var drop := dirty_cells.size() - RETAINED_DIRTY_CELLS
+		dirty_cells = dirty_cells.slice(drop)
+		dirty_base += drop
 
-## Every cell whose tile kind or object changed, in order, since this world
-## was created: append-only, never cleared (the viewer-purity rule allows only
-## get_*/apply/tick/get_events, so this cannot be a clear-on-read drain).
+## The retained cells whose tile kind or object changed, in order: append-only,
+## never cleared (the viewer-purity rule allows only get_*/apply/tick/get_events,
+## so this cannot be a clear-on-read drain).
 func get_dirty_cells() -> Array[Vector2i]:
 	return dirty_cells.duplicate()
+
+## The dirty-cell log as a cursor stream (A6): {"cells", "next", "truncated"}.
+## "cells" are the retained entries from absolute position `cursor` on, in
+## order; "next" is the cursor for the following call; "truncated" is true when
+## retention already dropped entries at or after `cursor`.
+func get_dirty_cells_since(cursor: int) -> Dictionary:
+	var start := clampi(cursor - dirty_base, 0, dirty_cells.size())
+	return {"cells": dirty_cells.slice(start), "next": dirty_base + dirty_cells.size(), "truncated": cursor < dirty_base}
 
 func get_regions() -> RegionMapType:
 	if regions == null:

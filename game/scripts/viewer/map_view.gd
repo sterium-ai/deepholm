@@ -98,7 +98,7 @@ var _list_valid: Array[bool] = []
 ## drag_preview.gd) instead of re-validating the whole rectangle per move.
 var _preview_per_tile := false
 var _drag_preview := DragPreviewType.new()
-## The tick and log positions (world.get_dirty_cells(),
+## The tick and log cursors (world.get_dirty_cells_since(),
 ## world.get_designation_changes()) _drag_preview's changed tiles were last
 ## read up to; see _drag_preview_changes().
 var _drag_preview_changes_tick := -1
@@ -227,12 +227,12 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	_designation_overlay = DesignationOverlayType.new()
 	add_child(_designation_overlay)
 
-## world.get_dirty_cells() is an append-only log, never cleared by WorldState
-## itself (test_architecture_rules.gd's viewer-purity rule permits only
-## get_*/apply/tick/get_events calls on world from game/scripts/viewer/*.gd,
-## so this Control tracks its own already-consumed prefix length instead of
-## asking WorldState to drain it -- mirroring how a get_events() consumer
-## would track a sequence cursor).
+## world.get_dirty_cells_since() is a cursor stream over an append-only,
+## bounded log, never cleared by WorldState itself (test_architecture_rules.gd's
+## viewer-purity rule permits only get_*/apply/tick/get_events calls on world
+## from game/scripts/viewer/*.gd, so this Control keeps its own cursor instead
+## of asking WorldState to drain it). A "truncated" read -- retention dropped
+## cells this cursor had not consumed yet -- falls back to a full rebuild.
 var _dirty_cells_consumed: int = 0
 
 ## Hands the shared TickDriver to the colonist sprite layer, so
@@ -252,7 +252,7 @@ func set_world(world_ref: WorldStateType) -> void:
 	# Skip straight past the log's current length: the full rebuild below
 	# already covers everything recorded so far, so none of it needs to be
 	# replayed as an incremental touch later.
-	_dirty_cells_consumed = world.get_dirty_cells().size() if world != null else 0
+	_dirty_cells_consumed = int(world.get_dirty_cells_since(0)["next"]) if world != null else 0
 	_refresh_tile_map(true)
 	queue_redraw()
 
@@ -463,14 +463,17 @@ func _drag_preview_changes() -> Array[Vector2i]:
 	var changed: Array[Vector2i] = []
 	if world == null or (_drag_preview.is_active() and world.get_tick() == _drag_preview_changes_tick):
 		return changed
-	var cells := world.get_dirty_cells()
+	var dirty: Dictionary = world.get_dirty_cells_since(_drag_preview_cells_read)
 	var designations: Dictionary = world.get_designation_changes(_drag_preview_designations_read if _drag_preview.is_active() else -1)
 	if _drag_preview.is_active():
-		changed.append_array(cells.slice(_drag_preview_cells_read))
+		# Cells retention dropped unread are unknown: re-validate the whole drag.
+		if bool(dirty["truncated"]):
+			changed.append_array(tiles_in_rectangle(_drag_start, _drag_current))
+		changed.append_array(dirty["cells"])
 		for tile in designations["tiles"]:
 			changed.append(tile)
 	_drag_preview_changes_tick = world.get_tick()
-	_drag_preview_cells_read = cells.size()
+	_drag_preview_cells_read = int(dirty["next"])
 	_drag_preview_designations_read = int(designations["next"])
 	return changed
 
@@ -604,7 +607,7 @@ func _commit_build(tile: Vector2i) -> void:
 ## Number of TileMapLayer cells actually touched by the most recent
 ## _refresh_tile_map() call (instrumentation): a full rebuild
 ## touches every cell, an incremental refresh touches only the cells newly
-## appended to world.get_dirty_cells() since the last call.
+## appended to world.get_dirty_cells_since() since the last call.
 ## test_map_view_incremental.gd asserts this stays far below width*height on
 ## a tick with no terrain change, instead of the whole TileMapLayer being
 ## cleared and rebuilt every tick.
@@ -614,10 +617,10 @@ var last_tile_map_cells_touched: int = 0
 ## while art is disabled, so toggling to colour mode leaves the layer's last
 ## contents untouched (it is hidden, not drawn) instead of doing wasted work
 ## every tick. `force_full` rebuilds every cell (set_world(), an art-mode
-## toggle); otherwise only the newly-appended tail of world.get_dirty_cells()
-## (see _dirty_cells_consumed above) is touched, so a tick with no dig/chop/
-## forage/till/sow/place_object/remove_object never reconstructs the whole
-## map (65536 cells on a 256x256 world).
+## toggle, a truncated dirty-cell read); otherwise only the cells
+## world.get_dirty_cells_since(_dirty_cells_consumed) returns are touched, so
+## a tick with no dig/chop/forage/till/sow/place_object/remove_object never
+## reconstructs the whole map (65536 cells on a 256x256 world).
 func _refresh_tile_map(force_full: bool) -> void:
 	if not _art_enabled or world == null:
 		return
@@ -641,12 +644,14 @@ func _refresh_tile_map(force_full: bool) -> void:
 			_set_decor_or_object_cell(ox, oy, tiles[oy * width + ox], String(object_entry["kind"]))
 			touched += 1
 		last_tile_map_cells_touched = touched
-		_dirty_cells_consumed = world.get_dirty_cells().size()
+		_dirty_cells_consumed = int(world.get_dirty_cells_since(0)["next"])
 		return
-	var dirty_log := world.get_dirty_cells()
+	var dirty: Dictionary = world.get_dirty_cells_since(_dirty_cells_consumed)
+	if bool(dirty["truncated"]):
+		_refresh_tile_map(true)
+		return
 	var touched := 0
-	for i in range(_dirty_cells_consumed, dirty_log.size()):
-		var cell: Vector2i = dirty_log[i]
+	for cell: Vector2i in dirty["cells"]:
 		var kind := world.get_tile(cell.x, cell.y)
 		_set_tile_map_cell(cell.x, cell.y, kind)
 		_set_decor_or_object_cell(cell.x, cell.y, kind, world.get_object(cell.x, cell.y))
@@ -667,7 +672,7 @@ func _refresh_tile_map(force_full: bool) -> void:
 			if world.get_tile(neighbor.x, neighbor.y) == WorldStateType.TILE_SOIL:
 				_set_soil_cell(neighbor.x, neighbor.y)
 		touched += 1
-	_dirty_cells_consumed = dirty_log.size()
+	_dirty_cells_consumed = int(dirty["next"])
 	last_tile_map_cells_touched = touched
 
 ## Base terrain cell: TILE_ATLAS_MAP's plain/opaque entry for `kind`, except
