@@ -3,11 +3,9 @@ extends RefCounted
 
 const SeededClockType = preload("res://scripts/core/seeded_clock.gd")
 const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.gd")
-const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const ToolHandoverType = preload("res://scripts/core/jobs/tool_handover.gd")
-const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
 const ToolItemStoreType = preload("res://scripts/core/items/tool_item_store.gd")
 const ItemTableType = preload("res://scripts/core/items/item_table.gd")
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
@@ -37,6 +35,7 @@ const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
 const TradeSystemType = preload("res://scripts/core/economy/trade_system.gd")
 const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
 const CombatSystemType = preload("res://scripts/core/actors/combat_system.gd")
+const ToilBindingsType = preload("res://scripts/core/jobs/toil_bindings.gd")
 const CommandRouterType = preload("res://scripts/core/world/command_router.gd")
 const OrderHandlerType = preload("res://scripts/core/commands/handlers/order_handler.gd")
 const ConstructionHandlerType = preload("res://scripts/core/commands/handlers/construction_handler.gd")
@@ -168,7 +167,9 @@ var _need_full: int = 0 # see _load_need_config()
 var _mapgen: Dictionary = {}
 var _scheduler: AssignmentType
 var _toils: ToilExecutorType
-## Callables ToilExecutor.advance() cannot resolve itself, keyed by hook name.
+## The per-kind toil callbacks and carried-item drops (jobs/toil_bindings.gd).
+var _toil_bindings: ToilBindingsType
+## _toil_bindings.hooks: ToilExecutor.advance()'s hooks (StateCodec reads it too).
 var _toil_hooks: Dictionary = {}
 ## Events, their sequence counter and the command envelopes (world/event_log.gd).
 var _event_log: EventLogType
@@ -182,9 +183,6 @@ var _reroutes: Dictionary = {}
 var _progress_table: WorkProgressType
 ## job kind -> its needs_tool item kind, from content/jobs.json.
 var _needs_tool_by_kind: Dictionary = {}
-## job kind -> {"kind","retry_base_ticks","retry_cap_ticks"} for JobQueue's
-## own tool-availability activation gate.
-var _tool_requirements_by_kind: Dictionary = {}
 ## colonist_id -> true once its per-tick routing allowance is spent,
 ## shared by reference with ToilExecutor/GlobalAssignment.
 var _route_budget: Dictionary = {}
@@ -316,6 +314,8 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		ActorHandlerType.new(_event_log, check, _find_colonist),
 		IncidentHandlerType.new(_clock, _event_log, _trade, check,
 			func(incident_id: String, tick: int) -> Array: return _incidents.force_spawn(incident_id, tick)))
+	# job kind -> {"kind","retry_base_ticks","retry_cap_ticks"}: JobQueue's tool gate, through ToilBindings.
+	var tool_requirements_by_kind: Dictionary = {}
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -323,7 +323,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 				_fail_startup("jobs.json's '%s' entry declares needs_tool but is missing retry_base_ticks/retry_cap_ticks" % job_def["kind"])
 				return
 			_needs_tool_by_kind[String(job_def["kind"])] = needs_tool
-			_tool_requirements_by_kind[String(job_def["kind"])] = {
+			tool_requirements_by_kind[String(job_def["kind"])] = {
 				"kind": needs_tool,
 				"retry_base_ticks": int(job_def["retry_base_ticks"]),
 				"retry_cap_ticks": int(job_def["retry_cap_ticks"]),
@@ -354,35 +354,15 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 		_item_table, _object_table, _event_log, _needs_system, _combat_giver, func() -> Array[Dictionary]: return _colonists,
 		func(actor_id: String) -> void: _approach_giver.forget(actor_id), _job_restricted_to, _finish_job,
 		_resolve_giver_association, _remove_colonist_by_id, is_tool_kind, spawn_ground_tool_item)
+	# Last of the modules: its hooks reach every system above. The giver lambdas: _build_dimension_services()
+	# rebuilds NeedGiver/RescueGiver.
+	_toil_bindings = ToilBindingsType.new(_scheduler, _toils, _item_table, _tool_store, _tile_grid, _object_table, _passability,
+		_construction, _trench, _needs_system, _reroutes, tool_requirements_by_kind, func() -> Array[Dictionary]: return _colonists,
+		_find_colonist, _find_job_colonist, _finish_job, _resubmit_unreachable_job, _routable_to, _route_cost,
+		func(job_id: String) -> void: _need_giver.resolve_job(job_id), func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
 	_scheduler.set_route_budget(_route_budget)
-	_scheduler.queue.set_tool_requirement(_tool_requirement_for_kind, _tool_exists)
-	_toil_hooks = {
-		"go_to_target": _toil_go_to_target,
-		"go_to_passable": _toil_go_to_passable,
-		"go_to_force_trim_last": _toil_go_to_force_trim_last,
-		"on_unreachable": _toil_on_unreachable,
-		"item_id_for": _toil_item_id_for,
-		"cell_for": _toil_cell_for,
-		"on_toil_fail": _toil_on_toil_fail,
-		"on_place_success": _toil_on_place_success,
-		"on_work_complete": _toil_on_work_complete,
-		"on_consume_success": _toil_on_consume_success,
-		"on_no_tool_found": _toil_on_no_tool_found,
-		# site_fetch's own deposit-toil destination and success
-		# hook; pick_up_count_for clamps a site_fetch pick_up to what the
-		# site still needs of that source's own kind. Every other kind's
-		# hooks ignore these (unset, "site_fetch"-only checks inside each).
-		"pick_up_count_for": _toil_pick_up_count_for,
-		"site_id_for": _toil_site_id_for,
-		"on_deposit_success": _toil_on_deposit_success,
-		"go_to_skip_assignment_path": _toil_go_to_skip_assignment_path,
-		# Hands-filling rules: a site_fetch job's own
-		# "still fetching vs. now delivering" state (_toil_is_first_leg()) and
-		# its per-hop nearest-source/partial-load decision
-		# (_toil_on_pick_up_success()). Every other kind's hooks ignore these.
-		"is_first_leg": _toil_is_first_leg,
-		"on_pick_up_success": _toil_on_pick_up_success,
-	}
+	_scheduler.queue.set_tool_requirement(_toil_bindings.tool_requirement_for_kind, _toil_bindings.tool_exists)
+	_toil_hooks = _toil_bindings.hooks
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
@@ -924,7 +904,7 @@ func _flee_target_reserved(x: int, y: int) -> bool:
 ## destination reserved by another job the instant this actor tried to
 ## commit to it, or genuinely unreachable through a faction-forbidden door
 ## despite passing the coarser region-connectivity check) without waiting on
-## _toil_on_unreachable(), which only ever fires once a job has actually
+## ToilBindings.toil_on_unreachable(), which only ever fires once a job has actually
 ## activated and started its go_to leg.
 func _cancel_autonomous_job(job_id: String) -> void:
 	_finish_job(job_id, "cancel_job")
@@ -1101,7 +1081,7 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 	# A site_work job never writes into the shared tile-keyed
 	# cache below at all -- ConstructionSiteTable.progress is the one
 	# persisted, authoritative counter (summed across every active builder).
-	# Checked here too, not only in _toil_on_work_complete()'s final-tick
+	# Checked here too, not only in ToilBindings' on_work_complete final-tick
 	# case: with more than one builder, combined contributions can cross
 	# build_ticks before any single job's own locally-seeded countdown would,
 	# so this non-final tick must finalize immediately for genuine N-builder
@@ -1140,7 +1120,7 @@ func _resolve_refused_reservations() -> void:
 			if String(job.get("kind", "")) in ["haul", "site_fetch"]:
 				var refused_colonist := _find_colonist(worker)
 				if not refused_colonist.is_empty():
-					_drop_carried_item_from(refused_colonist)
+					_toil_bindings.drop_carried_item_from(refused_colonist)
 			_scheduler.queue.set_pending_fail_reason(job_id, REASON_NOT_ORDERED_BY_PLAYER, "assign_an_orderable_actor")
 			if _finish_job(job_id, "fail_job").get("ok", false):
 				_progress_table.clear_terminated_job(job_id, job, false)
@@ -1199,7 +1179,7 @@ func _advance_colonists() -> void:
 		_trench.check_trench_arrival(colonist, job_id, tile_before)
 
 ## Steps the go_to toil toward target; on "unreachable", routes through the
-## same kind-aware _toil_on_unreachable() boundary every other first-leg
+## same kind-aware ToilBindings.toil_on_unreachable() boundary every other first-leg
 ## unreachable case uses rather than
 ## unconditionally resubmitting -- an incident or flee job recovering here
 ## must be cancelled-only, never resubmitted: _resubmit_unreachable_job()
@@ -1214,17 +1194,10 @@ func _advance_colonists() -> void:
 ## never auto-start the work timer on arrival here either -- the same bug
 ## ADR 028 traced on the ordinary path.
 func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dictionary, target: Vector2i) -> void:
-	var on_arrive := Callable(_toils, "start_work") if _toils.leads_into_work(String(job["kind"]), true) else Callable(self, "_toil_no_op_arrive")
+	var on_arrive := Callable(_toils, "start_work") if _toils.leads_into_work(String(job["kind"]), true) else Callable(_toil_bindings, "toil_no_op_arrive")
 	if _toils.advance_go_to(colonist, job_id, target, _routable_to(target, String(colonist.get("factionId", "colony"))), "go_to", on_arrive) != "unreachable":
 		return
-	_toil_on_unreachable(job_id, job, true)
-
-## on_arrive no-op for a resumed go_to leg that must not auto-start work (see
-## _advance_go_to_or_resubmit() above): arrival simply clears route, same as
-## ToilExecutor's own internal _no_op_arrive(), leaving the next toil
-## (pick_up, for a haul/build leg one) to the ordinary advance() dispatch.
-func _toil_no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
-	pass
+	_toil_bindings.toil_on_unreachable(job_id, job, true)
 
 ## Shared "unreachable" consequence for a job's first go_to leg: cancels and
 ## resubmits the same target as a fresh job, letting the scheduler's own
@@ -1265,7 +1238,7 @@ func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable
 ## re-route search may terminate on its own job's target tile even when that
 ## tile's base kind is otherwise impassable (a chop job's tree). faction_id
 ## (F5) defaults "colony" so every pre-existing colony-only call
-## site is unchanged; _toil_go_to_passable() below passes the acting actor's
+## site is unchanged; ToilBindings' go_to_passable hook passes the acting actor's
 ## own factionId instead.
 func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
 	return func(tile: Vector2i) -> float:
@@ -1290,540 +1263,12 @@ func _find_job_colonist(job_id: String) -> Dictionary:
 					return colonist
 	return {}
 
-## Shared by the two callers below: places any carried item on colonist's own
-## tile (colonist-ai.md 3.3) and clears route/work/reroute state. _toils.place()
-## re-validates the destination (passability, occupancy) same as any ordinary
-## drop; when another actor or ground item happens to occupy the colonist's
-## own tile at the exact tick a refusal terminates the job, that re-validation
-## fails and _force_drop_carried_item() below deposits the item unconditionally
-## instead of leaving it stranded in "carrying" -- the same terminal-drop
-## guarantee ToolDropToil's _drop_tool_ground already gives a tool item that
-## has nowhere valid to go.
-func _drop_carried_item_from(colonist: Dictionary) -> void:
-	_deposit_carried_item(colonist)
-	colonist["route"] = null
-	colonist["work"] = null
-	_reroutes.erase(colonist["id"])
-
-## The deposit half of _drop_carried_item_from() alone -- ordinary place()
-## onto the colonist's own tile, unconditional fallback when that is refused
-## -- with no route/work reset, for a carrier whose route/work currently
-## belong to a different (need) job than the one being terminated
-## (_drop_carried_haul_item()'s suspended-owner branch below).
-func _deposit_carried_item(colonist: Dictionary) -> void:
-	if not InventoryType.is_carrying(colonist):
-		return
-	var result := _toils.place(colonist, Vector2i(int(colonist["x"]), int(colonist["y"])))
-	if not bool(result.get("ok", false)):
-		_force_drop_carried_item(colonist)
-
-## Unconditional terminal drop for a refused/terminated job whose ordinary
-## place() was refused (occupied or impassable current tile): writes every
-## hands entry straight to the ground at the colonist's own tile (one fresh
-## item per distinct kind, same as place() itself), bypassing its occupancy/
-## passability re-validation. Mirrors tool_drop_toil.gd's own
-## _drop_tool_ground fallback, which already accepts landing a tool on top of
-## whatever is there rather than losing it -- conservation of the item across
-## a forced termination matters more than the destination cell staying tidy.
-func _force_drop_carried_item(colonist: Dictionary) -> void:
-	for entry in InventoryType.hands_snapshot(colonist):
-		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), int(colonist["x"]), int(colonist["y"]))
-	InventoryType.clear_hands(colonist)
-
-## Drops a haul/build job's carried item at the shared terminal boundary
-## (cancel/fail/invalidate commands, an unreachable second leg, a refused
-## build completion): the live-assignment path first, where job_id still
-## names a worker; otherwise the suspended-owner path --
-## a job paused by a critical-need interrupt is only recorded in
-## NeedsSystem.paused_jobs, so its carrier is resolved there and deposits the cargo
-## without touching its route/work, which now belong to the need job driving
-## it. The pause entry is cleared too: the job is about to be terminal, so
-## there is nothing left to resume.
-func _drop_carried_haul_item(job_id: String) -> void:
-	var colonist := _find_job_colonist(job_id)
-	if not colonist.is_empty():
-		_drop_carried_item_from(colonist)
-		return
-	for colonist_id in _needs_system.paused_jobs.keys():
-		if String(_needs_system.paused_jobs[colonist_id]) != job_id:
-			continue
-		_needs_system.paused_jobs.erase(colonist_id)
-		var carrier := _find_colonist(String(colonist_id))
-		if not carrier.is_empty():
-			_deposit_carried_item(carrier)
-		return
-
-## Terminal haul failure with a specific typed reason: not retried, since its
-## own failure is permanent; HaulGiver.advance() submits a fresh job next tick
-## if the item is still on the ground.
-func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void:
-	_drop_carried_haul_item(job_id)
-	_scheduler.queue.set_pending_fail_reason(job_id, reason, remedy)
-	_finish_job(job_id, "fail_job")
-
-## work_target_for callable injected into _toils (ToilExecutor's own
-## start_work()/advance_work_step()): the tile a job's `work` toil actually
-## operates on/completes at. Every kind's own job["target"] already names it
-## directly -- a site_work job's "target" is the site's own origin tile (its
-## only leg, attach_site()) -- so this is a plain passthrough today; kept as
-## its own function since _toil_on_work_complete() and every other
-## work-in-progress-key reader (TrenchSystem._trap_actor(), OrderHandler.apply_job_command()'s
-## terminal-command cleanup) call it rather than reading job["target"]
-## themselves, so a future kind needing a second destination has one place to
-## redirect from.
-func _work_target_for(job: Dictionary) -> Vector2i:
-	return job["target"]
-
-## go_to_target hook for _toils: the item's tile for a haul/site_fetch job's
-## first leg, or job["cell"]/job["site"] for its second leg (site_fetch's
-## second leg mirrors haul's own "target"/"cell" split, but through
-## job_queue.gd's own "site" field). A site_work job has only one
-## leg, straight to its own origin tile (already job["target"]). Any other
-## kind always uses its own single target.
-func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector2i:
-	var kind := String(job["kind"])
-	if kind == "haul":
-		return job["target"] if is_first else job["cell"]
-	if kind == "site_fetch" and not is_first:
-		return job["site"]
-	return job["target"]
-
-## is_first_leg hook (hands-filling rules): every kind
-## but site_fetch keeps ToilExecutor's original is_carrying()-based default
-## unchanged. A site_fetch job's own "cell" field -- always null for
-## site_fetch otherwise, since it never drives a `place` toil (it ends in
-## `deposit`) -- doubles as the "done fetching, now delivering"
-## flag: null while _toil_on_pick_up_success() still finds more worth
-## visiting, stamped with the site's origin the moment it decides otherwise
-## (JobQueue.mark_site_fetch_delivering()). This is what lets a single
-## site_fetch job's [go_to, pick_up] pair revisit more than one source before
-## its later [go_to, deposit] pair ever runs.
-func _toil_is_first_leg(job: Dictionary, colonist: Dictionary) -> bool:
-	if String(job.get("kind", "")) != "site_fetch":
-		return not InventoryType.is_carrying(colonist)
-	return job.get("cell") == null
-
-## go_to_passable hook: haul's first leg reuses _routable_to() so an
-## impassable target still terminates the search; its second leg uses plain
-## passability (HaulGiver.find_free_haul_cell() already guarantees it passable).
-## site_fetch's second leg and site_work's only leg also reuse _routable_to()
-## (the branch below already applies it to every non-haul kind): the
-## target-tile exception lets the search walk right up to/onto the site even
-## though the declared object isn't placed yet, and
-## _toil_go_to_force_trim_last() below then decides whether the final tile is
-## kept (site_fetch's deposit, staying passable) or trimmed to land the
-## colonist adjacent instead (site_work, about to sit next to what may become
-## an impassable object).
-## faction_id (F5) is ToilExecutor's own acting-colonist factionId, threaded through so a non-colony actor's route search is gated by its own faction's door permissions; every pre-existing (colony) caller still gets "colony" by default.
-func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, faction_id: String = "colony") -> Callable:
-	# An incident's destination needs actual arrival on a faction-passable tile, never _routable_to()'s dig/chop/forage impassable-target exception -- a door or wall must make it genuinely unreachable.
-	if String(job["kind"]) == "incident":
-		return func(tile: Vector2i) -> float: return _passability.passable_for_faction(tile, faction_id)
-	# A rescuer's every re-route (a
-	# corridor blocked mid-travel, a resume after a need interrupt) runs under
-	# rescue's own trench-excluding, no-target-exception passability, so it
-	# can never be routed through a trench nor trimmed to start work off-target.
-	if String(job["kind"]) == "rescue":
-		return _trench.rescue_routable_to(target, faction_id)
-	return _routable_to(target, faction_id) if is_first or String(job["kind"]) != "haul" else _passability.is_passable
-
-## go_to_force_trim_last hook: a site_work job's only leg, and a
-## site_fetch job's own second (delivery) leg, both target the site's own
-## origin tile, which is still genuinely passable at travel time -- nothing is
-## placed there until progress reaches build_ticks -- so the ordinary "trim
-## only a target that's impassable right now" rule
-## (ToilExecutor._resume_go_to_reroute()) never fires for it, and a builder
-## would otherwise walk onto and stand on the exact tile that may become an
-## impassable object. Forcing the trim for both (a builder already standing
-## on the site is stepped off by ToilExecutor.advance_go_to()'s own step-off
-## rule) lands every builder adjacent instead, exactly like chop/forage's own
-## already-impassable target -- and, critically, keeps a site_fetch delivery
-## from ever parking a colonist exactly on the origin tile, which would
-## otherwise let start_assignment()'s own "already at target" shortcut skip
-## the trim entirely for the very next site_work leg and let the colonist
-## wall itself in the instant that site completes.
-func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
-	var kind := String(job["kind"])
-	return kind == "site_work" or (kind == "site_fetch" and not is_first)
-
-## go_to_skip_assignment_path hook: a site_work job's single leg
-## is always "is_first" (_is_first_leg() short-circuits true for any kind
-## whose toils have no pick_up, before ever consulting a hook), so
-## _start_current_toil() would otherwise walk GlobalAssignmentScheduler's own
-## precomputed path via start_assignment() -- which knows nothing about
-## go_to_force_trim_last above and, unlike chop/forage's target, never trims a
-## site's own origin tile itself (still genuinely passable at scheduling time).
-## Forcing every site_work go_to through the fresh bounded search
-## (_continue_go_to()/advance_go_to()) instead is what actually applies the
-## trim, so a builder's work leg lands adjacent to the site exactly like its
-## own delivery leg already does, never on the tile about to become an object.
-## A site_fetch job's own fetch leg may visit more than one source before
-## delivering (the hands-filling rules), so a job this
-## tick's or an earlier hop's resolve_freshly_activated_site_fetch_sources()/
-## _toil_on_pick_up_success() has ever retargeted away from
-## GlobalAssignment's own precomputed path (site_fetch_source_retargeted)
-## must also run the same fresh bounded search every later hop already uses,
-## rather than walking a path toward a target this leg no longer targets.
-func _toil_go_to_skip_assignment_path(job: Dictionary) -> bool:
-	var kind := String(job.get("kind", ""))
-	if kind == "site_work":
-		return true
-	return kind == "site_fetch" and _construction.site_fetch_source_retargeted.has(String(job.get("id", "")))
-
-## on_unreachable hook: a first-leg target may still be reachable elsewhere, so
-## it is cancelled and resubmitted; a second-leg haul destination fails outright.
-## An incident actor's target is never resubmitted (F5): the
-## job is cancelled through the shared finish boundary, whose incident
-## cleanup despawns the actor. A flee target is likewise never resubmitted
-## here: _resubmit_unreachable_job() replaces a job
-## through the ordinary, may_be_ordered-gated submit() -- refused outright for
-## a hostile actor, and stripped of the autonomous flag even when accepted,
-## leaving CombatGiver's own `_fleeing` association pointing at a cancelled
-## id while a second, ungoverned job exists. Cancelling only and leaving it
-## alone lets CombatGiver's own advance() -- which already treats any
-## non-active/queued tracked job as free -- pick a fresh, freshly-reachable
-## candidate through the one submit_autonomous() path the very next tick.
-func _toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> void:
-	if String(job["kind"]) in ["incident", CombatGiverType.FLEE_KIND, ApproachGiverType.APPROACH_KIND]:
-		_finish_job(job_id, "cancel_job")
-	elif String(job["kind"]) == "rescue":
-		# Never resubmitted under the same
-		# rescuer -- retired, so another available rescuer may be chosen.
-		_trench.retire_rescue_job(job_id, job)
-	elif String(job["kind"]) == "site_fetch":
-		# Never resubmitted (unlike dig/chop/mine's first leg): a fresh fetch
-		# job would need its own source resolution, which
-		# _resubmit_unreachable_job() knows nothing about; ConstructionGiver's
-		# own per-tick scan submits a replacement once this one terminates.
-		# Fails outright instead, exactly like haul's own second leg --
-		# dropping any carried item and releasing the item reservation through
-		# the existing terminal path.
-		_terminate_haul_job_by_id(job_id, "blocked_target_unreachable", "restore_target_access")
-	elif String(job["kind"]) == "site_work":
-		# No cargo, no reservation of its own to release; ConstructionGiver
-		# tops the site back up to max_builders on a later tick once this
-		# job's own terminal transition frees its builder slot.
-		_finish_job(job_id, "cancel_job")
-	elif is_first or String(job["kind"]) != "haul":
-		_resubmit_unreachable_job(job_id, job)
-	else:
-		_terminate_haul_job_by_id(job_id, "blocked_destination_gone", "choose_reachable_destination")
-
-## item_id_for hook for _toils's pick_up toil.
-func _toil_item_id_for(job: Dictionary) -> String:
-	return String(job["item_id"])
-
-## cell_for hook for _toils's place toil: haul's own destination cell.
-## site_fetch never drives a `place` toil at all (it ends in `deposit`
-## instead), so this hook is never called for it.
-func _toil_cell_for(job: Dictionary) -> Vector2i:
-	return job["cell"]
-
-## site_id_for hook for _toils's deposit toil: the construction site
-## site_fetch's second leg is delivering to, resolved from job["site"] (the
-## origin tile attach_site() recorded) via ConstructionSiteTable.
-## find_at_origin(). "" for any other kind (deposit is never their toil).
-func _toil_site_id_for(job: Dictionary) -> String:
-	if job.get("site") == null:
-		return ""
-	return _construction.site_table.find_at_origin(job["site"])
-
-## pick_up_count_for hook (construction sites, extended for the hands-filling
-## rules and chained delivery): clamps a site_fetch pick_up to what the
-## current target site still needs of that source's own kind
-## (ConstructionSiteTable.remaining()), plus every other reachable,
-## still-short, not-already-at-capacity sibling site's own remaining need of
-## the same kind (reachable_short_sibling_sites(): sized so a hands-load can
-## actually carry enough to chain onto more than one block, not just the site
-## job["site"] currently names -- see _toil_on_deposit_success() below, the
-## other half of this design; a sibling already holding its own max_builders
-## worth of queued-or-active fetch-plus-work jobs, per ConstructionSystem._site_fetch_work_busy(),
-## is excluded from this sum too, since it could never actually accept a
-## chained delivery), minus whatever of that same kind colonist's
-## hands already hold from an earlier hop this same job -- taking a generous
-## source's whole remaining-need could otherwise, on a second or later hop,
-## request more than every reachable site combined actually still needs,
-## over-filling hands with units no site the colonist could plausibly chain
-## onto will ever accept (deposit() only transfers up to what a site still
-## needs, leaving any unaccepted remainder stuck in hands with no drop path of
-## its own). -1 (pick_up()'s own "take the whole reachable stack" default) for
-## any other kind, or when the site is already gone.
-func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
-	if String(job.get("kind", "")) != "site_fetch":
-		return -1
-	var site_id := _toil_site_id_for(job)
-	if site_id.is_empty():
-		return -1
-	var item := _item_table.item_lookup(String(job.get("item_id", "")))
-	if item.is_empty():
-		return -1
-	var kind := String(item.get("kind", ""))
-	# Cached for _toil_on_pick_up_success(): the
-	# pick_up this count gates for may exhaust and delete item's own entry
-	# from the item table entirely, so that hook cannot re-derive kind the same way
-	# once it runs.
-	_construction.site_fetch_picked_kind[String(job.get("id", ""))] = kind
-	var site := _construction.site_table.get_site(site_id)
-	var need := _construction.site_table.remaining(site, kind)
-	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	for sibling in _construction.reachable_short_sibling_sites(colonist, kind, current, site_id):
-		need += _construction.site_table.remaining(sibling, kind)
-	need -= InventoryType.count_of_kind(colonist, kind)
-	return need if need > 0 else -1
-
-## on_pick_up_success hook (hands-filling rules): a
-## site_fetch job's own per-hop decision, made once right after each pick_up
-## completes (never re-evaluated mid-travel, so a colonist walking toward an
-## already-chosen source never flip-flops): deliver now
-## (JobQueue.mark_site_fetch_delivering(), flips _toil_is_first_leg() to
-## false) once hands already cover the site's own remaining need of that
-## kind, hands are full, no further eligible unclaimed source of the same
-## kind exists, or -- the "very close" rule, this design's one behavioural
-## branch point -- the site's own deterministic route cost (_route_cost(),
-## not open-field Chebyshev) from the colonist's current tile is no farther
-## than the next unreserved source's; otherwise reserve that next source
-## directly on the shared ReservationTable and retarget the job at it
-## (retarget_site_fetch_source()), continuing to fill hands rather than ever
-## delivering a partial load while a nearer top-up is still available. A
-## no-op for any other job kind, a colonist no longer findable (job already
-## terminating), or a site already gone (delivers with whatever hands hold;
-## on_deposit_success/deposit() tolerate a since-vanished site as a no-op).
-func _toil_on_pick_up_success(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
-	if String(job.get("kind", "")) != "site_fetch":
-		return
-	var colonist := _find_job_colonist(job_id)
-	if colonist.is_empty():
-		return
-	var site_id := _toil_site_id_for(job)
-	if site_id.is_empty():
-		_scheduler.queue.mark_site_fetch_delivering(job_id)
-		return
-	var site := _construction.site_table.get_site(site_id)
-	# Not _item_table.item_lookup(job["item_id"]): a pick_up that exactly
-	# exhausts its source's remaining count deletes that item from the item table
-	# before this hook ever runs (ToilExecutor.pick_up()'s own _remove_item
-	# call), which would silently resolve kind as "" here instead -- see
-	# ConstructionSystem.site_fetch_picked_kind's own doc comment.
-	var kind := String(_construction.site_fetch_picked_kind.get(job_id, ""))
-	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	if (InventoryType.count_of_kind(colonist, kind) >= _construction.site_table.remaining(site, kind)
-			or InventoryType.free_capacity(colonist) <= 0):
-		_scheduler.queue.mark_site_fetch_delivering(job_id)
-		return
-	var next_id := _construction.next_site_fetch_source(colonist, job, kind, current)
-	if next_id.is_empty():
-		_scheduler.queue.mark_site_fetch_delivering(job_id)
-		return
-	var next_item := _item_table.item_lookup(next_id)
-	var next_tile := Vector2i(int(next_item["x"]), int(next_item["y"]))
-	var faction_id := String(colonist.get("factionId", "colony"))
-	var site_cost := _route_cost(current, site["origin"], faction_id)
-	if site_cost < 0: site_cost = _UNREACHABLE_ROUTE_COST
-	var next_cost := _route_cost(current, next_tile, faction_id)
-	if next_cost < 0: next_cost = _UNREACHABLE_ROUTE_COST
-	if site_cost <= next_cost:
-		_scheduler.queue.mark_site_fetch_delivering(job_id)
-		return
-	_scheduler.queue.get_reservation_table().acquire(JobQueueType.ITEM_KEY_PREFIX + next_id, job_id)
-	_scheduler.queue.retarget_site_fetch_source(job_id, next_id, next_tile)
-	_construction.site_fetch_source_retargeted[job_id] = true
-
-## on_toil_fail hook: pick_up/place/deposit are haul-shaped (haul, site_fetch),
-## so a failed one always permanently fails the job. A failed consume belongs
-## to a need job instead: no carried item to drop, and NeedGiver must hear
-## about the resolution.
-func _toil_on_toil_fail(job_id: String, reason: String) -> void:
-	var job := _get_job(job_id)
-	if _needs_system.need_kind_for_job(String(job.get("kind", ""))).is_empty():
-		_terminate_haul_job_by_id(job_id, reason, "resubmit_order")
-		return
-	_scheduler.queue.set_pending_fail_reason(job_id, reason, "resubmit_need")
-	_finish_job(job_id, "fail_job")
-	_need_giver.resolve_job(job_id)
-
-## on_place_success hook: an ordinary haul job simply completes once its item
-## lands in its stockpile cell. site_fetch never drives a `place` toil at all
-## (it ends in `deposit` instead), so this hook is never called
-## for it.
-func _toil_on_place_success(job_id: String) -> void:
-	_finish_job(job_id, "complete_job")
-
-## on_deposit_success hook (construction sites, extended for chained
-## delivery): a site_fetch job completes once its hands are transferred into
-## the site's held_materials -- unless hands still hold units of the job's own
-## kind (the deposit toil itself already clamped to what the just-delivered
-## site still needed, so any leftover means that site is now fully served for
-## this kind) and a reachable, still-short, same-kind, not-already-at-capacity
-## sibling site exists (next_site_fetch_site(), the same deterministic
-## route-cost search next_site_fetch_source() uses for sources, applied to
-## sites): retarget the same job onto it (JobQueue.retarget_site_fetch_site())
-## and let the ordinary per-tick advance() drive a fresh go_to/deposit pair
-## there instead of completing, rather than ending the job and forcing a fresh
-## trip back to a stockpile for every further block a hands-load could still
-## serve. job["site"] always names whichever site the job is currently
-## delivering to either way -- no new persisted field, so a mid-chain
-## save/load round-trips exactly like a single-site delivery already did.
-## `kind` is read straight off the colonist's own (persisted) hands rather
-## than a runtime cache: a source item a pick_up exhausted and deleted, or a
-## save/load between hops, can never leave it unresolved (the
-## `site_fetch_picked_kind` cache is never saved and is empty right after a
-## load, which would silently end a chain early). When leftover exists but no
-## sibling qualifies, it is dropped through the same live-assignment
-## terminal-drop path cancel_job/cancel_site already use
-## (_drop_carried_item_from()) before completing, so no material is ever
-## stranded in hands past the job's own end. A colonist no longer findable
-## (job already terminating) falls through to the ordinary completion,
-## mirroring on_place_success's own "the toil already did the work" shape.
-func _toil_on_deposit_success(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
-	var colonist := _find_job_colonist(job_id)
-	if not colonist.is_empty() and InventoryType.is_carrying(colonist):
-		var kind := String((InventoryType.hands_snapshot(colonist)[0] as Dictionary)["kind"])
-		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		var delivered_site_id := _toil_site_id_for(job)
-		var next_site := _construction.next_site_fetch_site(colonist, kind, current, delivered_site_id)
-		if not next_site.is_empty():
-			_scheduler.queue.retarget_site_fetch_site(job_id, next_site["origin"])
-			return
-		_drop_carried_item_from(colonist)
-	_finish_job(job_id, "complete_job")
-
-## on_work_complete hook: applies this job kind's completion effect -- what
-## "work" produces for dig/chop/forage/mine/till/sow, or the need sleep restores --
-## then finishes the job. till/sow/mine re-check their own target tile kind here
-## even though submission already checked it, since a paused job's released
-## tile reservation can let another order complete on the same target first
-## (e.g. two mine orders on one rock tile: the second's target is TILE_FLOOR
-## by the time it would spawn a second stone).
-## Dirty-cell/region/room hooks fire only when the target tile actually changed kind:
-## sleep/incident transform nothing, and RoomMap re-floods the outdoors (~200 ms at 256x256).
-func _toil_on_work_complete(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
-	var target: Vector2i = _work_target_for(job)
-	# ADR 026: trapping on a same-tick arrival pre-empts the completion effect below.
-	if _trench.trap_on_work_complete(job_id, job, target):
-		return
-	var tile_before: String = _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)]
-	match job["kind"]:
-		"dig":
-			if get_tile(target.x, target.y) != TILE_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_TRENCH
-			var sand_at := _item_table.dig_item_placement(target.x, target.y)
-			_item_table.spawn_item("sand", sand_at.x, sand_at.y)
-			_item_table.stage_dig_find(job_id, target.x, target.y)
-		"chop":
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_SOIL  # trees only grow on soil
-			_item_table.spawn_wood_item(target.x, target.y)
-		"mine":
-			if get_tile(target.x, target.y) != TILE_ROCK:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
-			_item_table.spawn_stone_item(target.x, target.y)
-		"forage":
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
-			_object_table.set_object(target.x, target.y, "")
-			_item_table.spawn_berries_item(target.x, target.y)
-		"till":
-			if get_tile(target.x, target.y) != TILE_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLOWED_SOIL
-		"sow":
-			if get_tile(target.x, target.y) != TILE_PLOWED_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job(job_id, "fail_job")
-				return
-			if not _item_table.remove_one_item_of_kind("seed"):
-				# Seed was consumed by another sow/haul after this job committed.
-				_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
-				_finish_job(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLANTED
-		"site_work":
-			# Every builder's own site_work job adds one tick of
-			# progress per tick it works (ConstructionSiteTable.add_progress(),
-			# not a private per-job counter -- this final tick included, the
-			# ones before it via _set_work_progress()'s own site_work branch),
-			# so the mechanism already sums correctly for more than one
-			# concurrent builder.
-			# Once accumulated progress meets the site's own declared
-			# build_ticks, ConstructionSystem finalizes the site: places the
-			# declared object, releases the site's footprint reservation, and
-			# removes the site record.
-			_construction.add_site_work(target, job_id)
-		"sleep":
-			var colonist := _find_job_colonist(job_id)
-			if not colonist.is_empty():
-				_needs_system.apply_need_effect(colonist, job)
-		"escape_trench":
-			_trench.complete_escape(job_id, target)
-		"rescue":
-			_trench.complete_rescue(job_id)
-	if _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] != tile_before:
-		_tile_grid.update_water_tile_cache(target.x, target.y, tile_before == TILE_WATER, _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] == TILE_WATER)
-		_tile_grid.mark_dirty(target.x, target.y)
-		_tile_grid.get_regions().on_passability_changed(target.x, target.y)
-		_tile_grid.get_rooms().on_passability_changed(target.x, target.y)
-	_finish_job(job_id, "complete_job")
-	_resolve_giver_association(job_id, String(job["kind"]))
-
-## Tells whichever job-giver owns job_id (NeedGiver for a need job, RescueGiver
-## for a rescue job) that it resolved -- shared by _toil_on_work_complete()'s
-## own completion path, TrenchSystem._trap_actor(), CombatSystem._cancel_job_for_death() and
-## _resolve_refused_reservations(), everywhere a job terminates outside its
-## giver's own advance()/resolve_job() call.
-func _resolve_giver_association(job_id: String, kind: String) -> void:
-	if not _needs_system.need_kind_for_job(kind).is_empty():
-		_need_giver.resolve_job(job_id)
-	elif kind == "rescue":
-		_rescue_giver.resolve_job(job_id)
-	elif kind == "site_work":
-		_construction.release_site_builder(job_id)
-
-## on_consume_success hook (eat_food/drink_water): restores the need,
-## finishes the job, and tells NeedGiver this resolved so a paused colonist
-## resumes.
-func _toil_on_consume_success(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
-	var colonist := _find_job_colonist(job_id)
-	if not colonist.is_empty():
-		_needs_system.apply_need_effect(colonist, job)
-	_finish_job(job_id, "complete_job")
-	_need_giver.resolve_job(job_id)
-
-## on_no_tool_found hook: requeue_assignment(), not
-## suspend_assignment(), so the job keeps its original restrict_to (empty for
-## an ordinary order) instead of getting pinned to a colonist whose own fetch
-## just failed -- letting any still-eligible colonist pick it back up.
-## JobQueue.block_no_tool() then applies this kind's own backoff/reason.
-func _toil_on_no_tool_found(job_id: String, colonist_id: String, kind: String) -> void:
-	_scheduler.requeue_assignment(colonist_id, job_id)
-	_scheduler.queue.block_no_tool(job_id)
-
-## tool_available callable for JobQueue.set_tool_requirement(): true when a
-## matching tool is free, or already reserved by
-## job_id itself -- a still-queued job normally holds no tool reservation
-## yet (fetch_tool only ever reserves one once its job is active, and
-## _toil_on_no_tool_found()'s callers already release any reservation before
-## suspending), but the public reserve_tool_item() surface lets a caller
-## reserve one ahead of activation, and this gate must not then treat the
-## job's own reservation as proof no tool exists.
-func _tool_exists(job_id: String, kind: String) -> bool:
-	return bool(ToolMatchingType.find_nearest_free_tool(kind, Vector2i.ZERO, job_id,
-		get_tool_items(), get_tool_item_reservation, ToolMatchingType.colonist_position_map(_colonists)).get("found", false))
-
-## tool_requirement_of callable for JobQueue.set_tool_requirement(): {} for a job kind with no needs_tool requirement, else
-## {"kind","retry_base_ticks","retry_cap_ticks"} straight from the
-## content-loaded table _init() built alongside _needs_tool_by_kind.
-func _tool_requirement_for_kind(kind: String) -> Dictionary:
-	return _tool_requirements_by_kind.get(kind, {})
+## Callables handed to modules built before _toil_bindings (and to the command paths
+## below): one-line delegations to ToilBindings.
+func _work_target_for(job: Dictionary) -> Vector2i: return _toil_bindings.work_target_for(job)
+func _drop_carried_haul_item(job_id: String) -> void: _toil_bindings.drop_carried_haul_item(job_id)
+func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void: _toil_bindings.terminate_haul_job_by_id(job_id, reason, remedy)
+func _resolve_giver_association(job_id: String, kind: String) -> void: _toil_bindings.resolve_giver_association(job_id, kind)
 
 ## Append-only log of every cell whose tile kind or object changed (map/tile_grid.gd).
 func get_dirty_cells() -> Array[Vector2i]:
@@ -1910,14 +1355,9 @@ func _index_by_field(entries: Array, field: String) -> Dictionary:
 		indexed[String(entry_dict[field])] = entry_dict.duplicate(true)
 	return indexed
 
-## Comparison-only stand-in for "unreachable" (hands-filling rules):
-## _route_cost() itself returns -1; call sites substitute this instead where
-## they need a total order against a real cost.
-const _UNREACHABLE_ROUTE_COST := 1 << 30
-
 ## Deterministic travel cost from `from` to `to` for `faction_id`, reusing the
 ## same bounded RouteSearch and _routable_to() target-tile exception the
-## colonist's own go_to toil actually travels under (_toil_go_to_passable()),
+## colonist's own go_to toil actually travels under (ToilBindings' go_to_passable hook),
 ## so a candidate ranked nearest is guaranteed reachable by the identical rule
 ## that later moves the colonist. Run to completion: safe since the search
 ## space is bounded by the map itself, same as GlobalAssignment._resolve_path().
