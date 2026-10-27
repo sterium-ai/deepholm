@@ -519,6 +519,21 @@ const V25_FIXTURE_STATE := {
 	"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1471024, "state": 0}},
 }
 
+## ADR 047: V25_FIXTURE_STATE one version up (built by _v26_fixture_state()):
+## "areaOrders" is present, a plain-tile workProgress entry has its
+## workProgressOwners record, and groundBerries entries have no "factionId"
+## yet. Migrating must give each berry pile factionId "colony" and touch
+## nothing else.
+const V26_FIXTURE_DIR := "user://test-save-migration-v26-fixture"
+
+## Regression: _migrate_v26_to_v27() casts every groundBerries entry to a
+## Dictionary, so _is_schema_v26_state() must reject a groundBerries that is
+## not an array of dictionaries ([null] would crash the cast; {} would be
+## iterated as an empty list and silently become []). Used by
+## _check_malformed_v26_ground_berries_rejected_through_save_io().
+const V26_BERRIES_NULL_ENTRY_FIXTURE_DIR := "user://test-save-migration-v26-berries-null-entry-fixture"
+const V26_BERRIES_DICTIONARY_FIXTURE_DIR := "user://test-save-migration-v26-berries-dictionary-fixture"
+
 ## Regression: calendar window ids come from content/calendar.json,
 ## whose own schema (game/content/schemas/calendar.schema.json) allows any
 ## non-empty string, not the stricter ^[a-z0-9_-]+$ pattern _matches_id_pattern()
@@ -560,6 +575,7 @@ var _v22_fixture_path := ""
 var _v23_fixture_path := ""
 var _v24_fixture_path := ""
 var _v25_fixture_path := ""
+var _v26_fixture_path := ""
 
 func _init() -> void:
 	_v13_fixture_path = _write_state_fixture(V13_FIXTURE_DIR, V13_FIXTURE_STATE)
@@ -571,6 +587,7 @@ func _init() -> void:
 	_v23_fixture_path = _write_state_fixture(V23_FIXTURE_DIR, V23_FIXTURE_STATE)
 	_v24_fixture_path = _write_state_fixture(V24_FIXTURE_DIR, V24_FIXTURE_STATE)
 	_v25_fixture_path = _write_state_fixture(V25_FIXTURE_DIR, V25_FIXTURE_STATE)
+	_v26_fixture_path = _write_state_fixture(V26_FIXTURE_DIR, _v26_fixture_state())
 	_check_v1_fixture_migrates_through_full_chain()
 	_check_v2_fixture_migrates_to_v3()
 	_check_v3_fixture_migrates_to_v4()
@@ -609,6 +626,10 @@ func _init() -> void:
 	_check_v24_fixture_loads_through_save_io()
 	_check_v25_fixture_migrates_to_v26()
 	_check_v25_fixture_loads_through_save_io()
+	_check_v26_fixture_migrates_to_v27()
+	_check_v26_fixture_loads_through_save_io()
+	_check_malformed_v26_ground_berries_is_rejected()
+	_check_malformed_v26_ground_berries_rejected_through_save_io()
 	_check_dig_find_rng_continuation_survives_save_load_round_trip()
 	_check_multi_tile_object_round_trips_through_save_load()
 	_check_object_without_orientation_field_loads_unchanged()
@@ -675,6 +696,7 @@ func _init() -> void:
 	_cleanup_dir(V23_FIXTURE_DIR)
 	_cleanup_dir(V24_FIXTURE_DIR)
 	_cleanup_dir(V25_FIXTURE_DIR)
+	_cleanup_dir(V26_FIXTURE_DIR)
 	if _failed:
 		quit(1)
 		return
@@ -1856,6 +1878,80 @@ func _check_v25_fixture_loads_through_save_io() -> void:
 	var world := WorldStateType.from_save_state(state)
 	_expect(world.to_save_state()["areaOrders"] == {"nextId": 1, "list": [], "created": []},
 		"a world loaded from a v25 save must start with no pending area orders")
+
+func _v26_fixture_state() -> Dictionary:
+	var state: Dictionary = V25_FIXTURE_STATE.duplicate(true)
+	state["schemaVersion"] = 26
+	state["areaOrders"] = {"nextId": 1, "list": [], "created": []}
+	state["groundBerries"] = [{"target": {"x": 0, "y": 1}, "berries": 2}, {"target": {"x": 1, "y": 1}, "berries": 1}]
+	state["jobs"] = [{
+		"id": "job_1", "kind": "dig", "status": "queued", "priority": 1, "target": {"x": 2, "y": 0},
+		"reason": "", "remedy": "", "blockingJobId": "", "itemId": "", "cell": null,
+		"retryAt": 0, "backoffTicks": 0,
+	}]
+	state["scheduling"]["nextJobId"] = 2
+	state["workProgress"] = [{"target": {"x": 2, "y": 0}, "ticksRemaining": 4}]
+	state["workProgressOwners"] = [{"target": {"x": 2, "y": 0}, "jobId": "job_1"}]
+	return state
+
+func _check_v26_fixture_migrates_to_v27() -> void:
+	var raw_state := _load_fixture_state(_v26_fixture_path)
+	var result := SaveMigrationsType.migrate(raw_state, 26, 27)
+	_expect(result["ok"], "schemaVersion-26 fixture must migrate to schemaVersion 27: %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	_expect(state["schemaVersion"] == 27, "v26 fixture must migrate to schemaVersion 27")
+	_expect(state["groundBerries"] == [
+		{"target": {"x": 0, "y": 1}, "berries": 2, "factionId": "colony"},
+		{"target": {"x": 1, "y": 1}, "berries": 1, "factionId": "colony"},
+	], "migration must give every ground-berries entry factionId 'colony', got %s" % [state["groundBerries"]])
+	for key in raw_state.keys():
+		if key != "schemaVersion" and key != "groundBerries":
+			_expect(state[key] == raw_state[key], "migration must preserve v26 fixture field '%s'" % key)
+	_expect(state.size() == raw_state.size(), "migration must add no top-level field")
+	_expect(not (raw_state["groundBerries"][0] as Dictionary).has("factionId"), "migration must not mutate its input")
+	var validation := SaveIOType._validate_state(state)
+	_expect(validation["ok"], "a migrated v26 fixture must pass SaveIO's current-schema validation: %s" % validation.get("message", ""))
+
+func _check_v26_fixture_loads_through_save_io() -> void:
+	var result := SaveIOType.read(_v26_fixture_path)
+	_expect(result["ok"], "v26 fixture must load through SaveIO.read(): %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	_expect(state["schemaVersion"] == StateCodecType.SCHEMA_VERSION, "SaveIO-loaded v26 fixture must report the current schemaVersion")
+	var world := WorldStateType.from_save_state(state)
+	_expect(world.get_ground_berries(0, 1) == 2 and world.get_ground_berries_faction_id(0, 1) == "colony",
+		"a world loaded from a v26 save must keep its berries and read them as 'colony'")
+	_expect(world._progress_table.owners == {"2_0": "job_1"}, "a v26 plain-tile owner record must restore unchanged, got %s" % [world._progress_table.owners])
+	var resaved := world.to_save_state()
+	_expect(resaved["workProgressOwners"] == [{"target": {"x": 2, "y": 0}, "jobId": "job_1"}],
+		"a plain-tile owner must re-encode in the same v26 shape (no ownerJobId)")
+
+## Regression: a v26 groundBerries that is not an array of dictionaries must
+## be a typed no_migration_available rejection, not a script error in
+## _migrate_v26_to_v27()'s Dictionary cast nor a silent rewrite to [].
+func _check_malformed_v26_ground_berries_is_rejected() -> void:
+	for malformed in [[null], [3], {}, {"0_1": 2}, null, "berries"]:
+		var state := _load_fixture_state(_v26_fixture_path)
+		state["groundBerries"] = malformed
+		var result := SaveMigrationsType.migrate(state, 26, 27)
+		_expect(not result["ok"] and result["code"] == "no_migration_available",
+			"malformed v26 groundBerries %s must be rejected, not crash or migrate: %s" % [str(malformed), result])
+
+## Same rejection through a real integrity-valid save file: SaveIO.read()
+## must verify the hash, then return the typed migration failure.
+func _check_malformed_v26_ground_berries_rejected_through_save_io() -> void:
+	var cases := {V26_BERRIES_NULL_ENTRY_FIXTURE_DIR: [null], V26_BERRIES_DICTIONARY_FIXTURE_DIR: {}}
+	for dir_path in cases:
+		var state := _load_fixture_state(_v26_fixture_path)
+		state["groundBerries"] = cases[dir_path]
+		var path := _write_state_fixture(dir_path, state)
+		var result := SaveIOType.read(path)
+		_cleanup_dir(dir_path)
+		_expect(not result["ok"] and result["code"] == "no_migration_available",
+			"an integrity-valid v26 save with groundBerries %s must be rejected through SaveIO.read(): %s" % [str(cases[dir_path]), result])
 
 ## Proves the dig-find RNG's own continuation --
 ## a non-freshly-seeded stream (distinct seed and state from a brand-new

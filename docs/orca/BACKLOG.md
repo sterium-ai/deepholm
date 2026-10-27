@@ -304,7 +304,7 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
-### B5 — Three persistence bugs found by the R2/R4 probes (save refused, berries) · `todo` · *parallel-safe (persistence + WorkProgress/ItemTable only; coordinate: R9 in flight touches combat, not these)*
+### B5 — Three persistence bugs found by the R2/R4 probes (save refused, berries) · `review (antonelmejor50-hub/b5-three-persistence-bugs-found)` · *parallel-safe (persistence + WorkProgress/ItemTable only; coordinate: R9 in flight touches combat, not these)*
 
 - **Bugs (pre-existing on `main`, diagnosed in `handoffs/R2.md` and `handoffs/R4.md`):**
   1. **Save refused.** `work_progress.gd` / `state_codec.gd` reconstruct work-progress *owners*

@@ -99,7 +99,7 @@ codes are:
 
 ## Schema history and migration
 
-The current persisted schema is version 26 (`StateCodec.SCHEMA_VERSION`).
+The current persisted schema is version 27 (`StateCodec.SCHEMA_VERSION`).
 Version 1 saves are migrated
 explicitly to version 2: scheduler continuation fields are initialized to the
 v1 starting values and the RNG state is reconstructed from the saved
@@ -372,6 +372,13 @@ field, but the validator keeps it optional like `constructionSites`, so a hand-b
 current-schema state without it still loads (with an empty queue). `state_hash()` covers it
 while an order is pending (an idle queue's `nextId` is not observable outside the save).
 
+Version 26 saves are migrated explicitly to version 27 (ADR 047): every `groundBerries` entry
+gains `factionId: "colony"` (the only writer, `ItemTable.spawn_berries_item()`, has always
+stamped `"colony"`), and nothing else changes. Version 27 also gives `workProgressOwners`
+entries an optional `ownerJobId` (see "Critical-need interrupts and tile work progress"
+below); a v26 file needs no rewrite there, because a job-scoped owner made the v26 write fail,
+so only plain-tile owners ever reached disk.
+
 Schema version 25 stays current for object footprint/rotation (ADR 039): no
 migration step or version bump was needed. Each `objects` entry gains an *optional*
 `orientation: "" | "horizontal" | "vertical"` field (`StateCodec._encode_objects()`/`_decode_objects()`,
@@ -553,6 +560,14 @@ restore them. A save migrated up from before this version gets `factionId:
 above) — no object or item could ever have belonged to another faction on a
 save this old.
 
+Ground berries (`groundBerries`, a per-tile counter rather than an item) gained the same
+required `factionId` at schemaVersion 27 (ADR 047): `ItemTable` keeps it in the parallel
+`ground_berries_factions` map, `StateCodec._encode_ground_berries()` writes it (defaulting to
+`"colony"`) and `_decode_ground_berries()` restores it, so
+`WorldState.get_ground_berries_faction_id()` reads the same value after a load.
+`state_hash()` covers `ground_berries` (`ItemTable.hash_into()`); the faction map stays out of
+the hash, like `item_factions`.
+
 ## Tile objects
 
 The top-level `objects` array holds at most one *logical* object per
@@ -693,8 +708,14 @@ ever interrupted directly; a multi-toil job with no `work` phase at all
 progress count — is what gets suspended and later resumed or reactivated.
 
 The optional top-level `workProgressOwners` field is an array of
-`{target, jobId}` entries naming, for each `workProgress` key, the exact job
-that owns it. Two different job kinds can
+`{target, jobId, ownerJobId?}` entries naming, for each `workProgress` key, the exact job
+that owns it. `target` and `ownerJobId` name the key exactly as a `workProgress` entry does:
+`ownerJobId` is present only for a job-scoped key (a `rescue`, keyed `"<jobId>:<x>_<y>"` in
+memory so two rescues can share a target), and `SaveIO` rejects a duplicate
+*(ownerJobId, target)* pair rather than a duplicate target. Both arrays are encoded and decoded
+through `WorkProgress.key_parts()`/`key_of()`, the single codec of the in-memory key (ADR 047);
+before schema 27 the owner encoder split a job-scoped key by hand and wrote an out-of-map tile,
+so `SaveIO.write_atomic()` refused every save taken while a rescue was mid-work. Two different job kinds can
 legitimately target the same tile at once — a `dig` submitted at a `build`'s
 own site while the build is still mid-haul, for instance — so on load the
 owner cannot be re-derived by asking "which job currently targets this key",

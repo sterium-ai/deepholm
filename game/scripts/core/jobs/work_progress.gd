@@ -9,6 +9,8 @@ extends RefCounted
 ## Invariants:
 ## - progress is keyed "%d_%d", or "<job_id>:%d_%d" for a "rescue" job (two
 ##   rescues can share a target); every other kind keeps the plain tile key.
+##   key_of() builds a key and key_parts() is its inverse; nothing else
+##   formats or splits one (ADR 047: the save codec goes through them too).
 ## - owners records the job_id that last wrote a progress key, so a job paused
 ##   mid-work (status back to "queued") still owns its progress and only the
 ##   owner's termination drops it. "incident" never has an owner: its wait is
@@ -25,6 +27,8 @@ extends RefCounted
 ##   left without an owner are dropped, except an active incident's wait.
 ## - state_hash() covers suspended only (hash_into()); progress and owners are
 ##   deliberately left out.
+## - Owners persist as explicit {target, jobId, ownerJobId?} records naming the
+##   key's tile and scope (ADR 047), never a re-split of the key.
 
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 
@@ -66,23 +70,42 @@ func decode(state: Dictionary) -> Dictionary:
 func hash_into(snapshot: Dictionary) -> void:
 	snapshot["suspended_work_progress"] = StateCodec._encode_suspended_work_progress(suspended)
 
+## The progress key of `tile`: the plain tile key when scope_job_id is empty,
+## else the job-scoped "<job_id>:<x>_<y>".
+static func key_of(tile: Vector2i, scope_job_id: String = "") -> String:
+	if scope_job_id.is_empty():
+		return "%d_%d" % [tile.x, tile.y]
+	return "%s:%d_%d" % [scope_job_id, tile.x, tile.y]
+
+## key_of()'s inverse: {tile: Vector2i, scope: String}. Job ids never contain
+## ":" (the `^[a-z0-9_-]+$` id pattern), so the last ":" separates the scope.
+static func key_parts(progress_key: String) -> Dictionary:
+	var scope := ""
+	var coord_part := progress_key
+	var colon_index := progress_key.rfind(":")
+	if colon_index >= 0:
+		scope = progress_key.substr(0, colon_index)
+		coord_part = progress_key.substr(colon_index + 1)
+	var coords := coord_part.split("_")
+	return {"tile": Vector2i(int(coords[0]), int(coords[1])), "scope": scope}
+
 ## The progress key of a specific job, by its own identity, never the tile's
 ## current reservation owner: terminal cleanup runs after the reservation is released.
 func key_for_job(job_id: String, job: Dictionary) -> String:
 	var target: Vector2i = job["target"]
 	if String(job.get("kind", "")) != "rescue":
-		return "%d_%d" % [target.x, target.y]
-	return "%s:%d_%d" % [job_id, target.x, target.y]
+		return key_of(target)
+	return key_of(target, job_id)
 
 ## The tile-addressed key used mid-work: resolves the tile's reservation owner.
 func key(x: int, y: int) -> String:
 	var owning_job_id: String = _queue.get_reservation_table().owner(_tile_key.call(x, y))
 	if owning_job_id.is_empty():
-		return "%d_%d" % [x, y]
+		return key_of(Vector2i(x, y))
 	# A construction site's footprint is owned by "site:<id>", not a job id.
 	var owning_job := _queue.get_job(owning_job_id)
 	if owning_job.is_empty():
-		return "%d_%d" % [x, y]
+		return key_of(Vector2i(x, y))
 	return key_for_job(owning_job_id, owning_job)
 
 ## Cleanup for a job that just took a terminal transition: a rescue's own key
