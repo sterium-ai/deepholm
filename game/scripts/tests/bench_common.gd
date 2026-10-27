@@ -153,7 +153,7 @@ static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	t = _lap(totals, "haul_giver", t)
 	world._construction_giver.advance(world._clock.tick)
 	t = _lap(totals, "construction_giver", t)
-	world._apply_combat(world._clock.tick)
+	world._combat_system.apply_combat(world._clock.tick)
 	t = _lap(totals, "combat", t)
 	var active_site_fetch_jobs_before: Dictionary = world._construction.active_site_fetch_job_ids()
 	world._scheduler.tick(world._clock.tick, world._scheduler_workers(), world._passability.is_passable, Vector2i.ZERO,

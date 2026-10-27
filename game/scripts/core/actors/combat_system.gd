@@ -1,0 +1,220 @@
+class_name CombatSystem
+extends RefCounted
+
+## F5 combat (ADR 021): runs CombatResolver once per tick (rule 1), applies its deaths
+## (rule 2: inventory drop, then removal through WorldState's one roster-removal path) and
+## lets CombatGiver decide flee jobs (rule 4); also owns the death/despawn scheduling
+## cleanup, the exposed combat reason and the health/combat component backfills.
+## CombatResolver/CombatGiver/ApproachGiver decide; this module is what applies them.
+##
+## Invariants:
+## - combat_status is runtime only: rebuilt every tick by apply_combat(), never saved or
+##   hashed; a loaded world starts empty.
+## - This module persists nothing: the combat/health components live on the entity records
+##   and the flee/approach associations in CombatGiver/ApproachGiver.
+## - cleanup_actor_scheduling() detaches the actor's paused job before cancelling its
+##   active one, so a cancelled need job's resume never reactivates work for a removed actor.
+## - ensure_combat() appends "combat" last on every colonist missing it (never a rebuild), so
+##   state_hash()'s JSON.stringify(colonists) key order is the same on every run.
+## - The backfills are static: WorldState._init() needs ensure_combat() right after
+##   spawning, before the services this module depends on exist.
+
+const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
+const RelationsType = preload("res://scripts/core/relations/relations.gd")
+const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
+const HealthType = preload("res://scripts/core/actors/components/health.gd")
+const CombatType = preload("res://scripts/core/actors/components/combat.gd")
+const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
+const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const CombatResolverType = preload("res://scripts/core/combat/combat_resolver.gd")
+const CombatGiverType = preload("res://scripts/core/combat/combat_giver.gd")
+const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.gd")
+const ToolItemStoreType = preload("res://scripts/core/items/tool_item_store.gd")
+const ItemTableType = preload("res://scripts/core/items/item_table.gd")
+const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
+const EventLogType = preload("res://scripts/core/world/event_log.gd")
+const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
+const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
+
+## F5 combat (orders-and-movement.md's typed reason vocabulary): exposed while an actor
+## has an adjacent hostile target this tick.
+const REASON_FIGHTING := "fighting"
+
+## actor_id -> REASON_FIGHTING while it has an adjacent hostile target this tick.
+var combat_status: Dictionary = {}
+
+var _content: ContentRegistryType
+var _relations: RelationsType
+var _event_priority: int
+var _scheduler: AssignmentType
+var _progress_table: WorkProgressType
+var _tool_store: ToolItemStoreType
+var _item_table: ItemTableType
+var _object_table: ObjectTableType
+var _event_log: EventLogType
+var _needs_system: NeedsSystemType
+var _combat_giver: CombatGiverType
+var _get_colonists: Callable
+var _approach_forget: Callable
+var _job_restricted_to: Callable
+var _finish_job: Callable
+var _resolve_giver_association: Callable
+var _remove_colonist_by_id: Callable
+var _is_tool_kind: Callable
+var _spawn_ground_tool_item: Callable
+
+## event_priority is WorldState.PRIORITY_TICK. get_colonists and approach_forget are
+## lambdas: StateCodec.decode() reassigns WorldState._colonists and rebuilds ApproachGiver.
+func _init(content: ContentRegistryType, relations: RelationsType, event_priority: int, scheduler: AssignmentType,
+		progress_table: WorkProgressType, tool_store: ToolItemStoreType, item_table: ItemTableType,
+		object_table: ObjectTableType, event_log: EventLogType, needs_system: NeedsSystemType,
+		combat_giver: CombatGiverType, get_colonists: Callable, approach_forget: Callable,
+		job_restricted_to: Callable, finish_job: Callable, resolve_giver_association: Callable,
+		remove_colonist_by_id: Callable, is_tool_kind: Callable, spawn_ground_tool_item: Callable) -> void:
+	_content = content
+	_relations = relations
+	_event_priority = event_priority
+	_scheduler = scheduler
+	_progress_table = progress_table
+	_tool_store = tool_store
+	_item_table = item_table
+	_object_table = object_table
+	_event_log = event_log
+	_needs_system = needs_system
+	_combat_giver = combat_giver
+	_get_colonists = get_colonists
+	_approach_forget = approach_forget
+	_job_restricted_to = job_restricted_to
+	_finish_job = finish_job
+	_resolve_giver_association = resolve_giver_association
+	_remove_colonist_by_id = remove_colonist_by_id
+	_is_tool_kind = is_tool_kind
+	_spawn_ground_tool_item = spawn_ground_tool_item
+
+## Backfills a missing "health" (ActorTable.spawn()'s default) and "factionId" (only one
+## faction exists) with "colony", plus "trapped" to null (no component builds it), so
+## state_hash() never diverges from a freshly decoded StateCodec entity.
+static func ensure_health(colonists: Array[Dictionary], content: ContentRegistryType) -> void:
+	for colonist in colonists:
+		if not colonist.has("factionId"): colonist["factionId"] = "colony"
+		if not colonist.has("trapped"): colonist["trapped"] = null
+		if ActorTableType.get_component(colonist, "health", content) is Dictionary:
+			continue
+		var definition: Dictionary = content.get_entry("actors", String(colonist.get("kind", "colonist")))
+		colonist["health"] = HealthType.build_full(definition.get("tunables", {}).get("health", {}))
+
+## Backfills "combat" onto a colonist whose definition declares one: ActorTable's colonist
+## spawn path (ADR 012) never builds it. Appended last (class doc). A generic actor
+## (wolf/trader) already gets its "combat" key from ActorTable._spawn_generic_actor().
+static func ensure_combat(colonists: Array[Dictionary], content: ContentRegistryType) -> void:
+	for colonist in colonists:
+		if not ActorTableType.has_component(colonist, "worker", content):
+			continue
+		if colonist.has("combat") or not ActorTableType.has_component(colonist, "combat", content):
+			continue
+		var definition: Dictionary = content.get_entry("actors", String(colonist.get("kind", "colonist")))
+		colonist["combat"] = CombatType.build(definition.get("tunables", {}).get("combat", {}))
+
+## Once per tick before the scheduler sees any colonist: attacks (rule 1), deaths (rule 2),
+## then CombatGiver's flee decision (rule 4). Per ADR 011 this calls both, implements neither.
+func apply_combat(tick: int) -> void:
+	var result := CombatResolverType.resolve_tick(_get_colonists.call(), _content, _relations, tick, _event_priority,
+		_object_table.get_object, _object_table.object_health_at, _object_table.get_object_faction_id, _object_table.damage_object, _event_log.insert_event, _event_log.next_sequence)
+	combat_status.clear()
+	for actor_id in (result["fighting"] as Array):
+		combat_status[String(actor_id)] = REASON_FIGHTING
+	for dead_actor in (result["dead_actors"] as Array):
+		apply_actor_death(dead_actor)
+	_combat_giver.advance(_get_colonists.call(), tick)
+
+## "" when actor_id names no known actor or has no adjacent hostile target this tick.
+func get_actor_combat_reason(actor_id: String) -> String:
+	return String(combat_status.get(actor_id, ""))
+
+## Rule 2: drops the dead actor's inventory on its tile (death-specific, so not part of the
+## shared cleanup an ordinary incident despawn also runs), then removes it through
+## WorldState._remove_colonist_by_id(), which runs cleanup_actor_scheduling().
+func apply_actor_death(actor: Dictionary) -> void:
+	var colonist_id: String = String(actor["id"])
+	_drop_inventory_contents(actor)
+	_remove_colonist_by_id.call(colonist_id, true)
+
+## Cancels every nonterminal job restricted to colonist_id (active, paused, queued or
+## routing) through the shared finish boundary, and tells NeedGiver/CombatGiver/
+## ApproachGiver so none keeps an association pointing at a removed actor. Shared by death
+## and incident despawn: a flee episode's job would otherwise be orphaned.
+##
+## The paused job is detached first (class doc). Re-cancelling the incident job this runs
+## inside of is a no-op: finish() rejects a terminal job and the loop skips it.
+func cleanup_actor_scheduling(colonist_id: String) -> void:
+	# Retires the actor's own in-flight scheduler route-search batch, if any,
+	# so an unrestricted candidate job it was still mid-searching does not
+	# stay marked claimed forever, starving every other worker of it.
+	_scheduler.retire_worker(colonist_id)
+	var paused_job_id := ""
+	if _needs_system.paused_jobs.has(colonist_id):
+		paused_job_id = String(_needs_system.paused_jobs[colonist_id])
+		_needs_system.paused_jobs.erase(colonist_id)
+	var assignment = _scheduler.get_assignments().get(colonist_id)
+	if assignment != null:
+		_cancel_job_for_death(String(assignment["job_id"]))
+	if not paused_job_id.is_empty():
+		_cancel_job_for_death(paused_job_id)
+	for job in _scheduler.queue.get_jobs():
+		if String(job.get("status", "")) not in ["queued", "active"]:
+			continue
+		var job_id: String = String(job["id"])
+		if _job_restricted_to.call(job_id) != colonist_id:
+			continue
+		_cancel_job_for_death(job_id)
+	_combat_giver.forget(colonist_id)
+	_approach_forget.call(colonist_id)
+
+## Cancels job_id and tells its giver (the _resolve_refused_reservations() pairing), so a
+## dead actor's need job never leaves NeedGiver's _pending pointing at a removed actor.
+func _cancel_job_for_death(job_id: String) -> void:
+	var job := _scheduler.queue.get_job(job_id)
+	# Only a rescue's own job-scoped key is dropped here; an ordinary job's tile progress outlives its actor's death
+	# exactly as before, so a successor order on that tile inherits it.
+	if _finish_job.call(job_id, "cancel_job").get("ok", false):
+		_progress_table.clear_terminated_job(job_id, job, false)
+	_resolve_giver_association.call(job_id, String(job.get("kind", "")))
+
+## Drops what `actor` holds as loose items on its tile: hands contents (one item per kind),
+## the held tool (moved in ToolItemStore, not duplicated, so its identity and reservation
+## survive and it stays reachable), and a generic actor's "inventory" items and tool slot.
+func _drop_inventory_contents(actor: Dictionary) -> void:
+	var x := int(actor["x"])
+	var y := int(actor["y"])
+	for entry in InventoryType.hands_snapshot(actor):
+		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), x, y)
+	var held_tool_id := WorkerType.get_held_tool(actor)
+	if not held_tool_id.is_empty():
+		_tool_store.set_ground(held_tool_id, x, y)
+	var inventory = actor.get("inventory")
+	if inventory is Dictionary:
+		for raw_item in (inventory.get("items", []) as Array):
+			var item: Dictionary = raw_item
+			_drop_inventory_item(String(item.get("kind", "")), int(item.get("count", 1)), x, y)
+		var carried_tool_kind := String(inventory.get("tool", ""))
+		if not carried_tool_kind.is_empty():
+			_drop_inventory_item(carried_tool_kind, 1, x, y)
+
+## A declared tool kind goes to ToolItemStore (the only store a worker's fetch_tool search
+## reads), one ground tool per unit since tools carry identity, never a count; any other
+## kind is an ordinary ItemTable stack.
+func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
+	if _is_tool_kind.call(kind):
+		for _unit in count:
+			_spawn_ground_tool_item.call(kind, x, y)
+		return
+	_item_table.place_new_ground_item(kind, count, x, y)
+
+## Every actor with a `health` component, worker or not (unlike get_colonists()), so the
+## viewer can draw a health bar for a wolf or trader. Deep copies.
+func get_actors_with_health() -> Array[Dictionary]:
+	var copy: Array[Dictionary] = []
+	for actor in _get_colonists.call():
+		if actor.get("health") is Dictionary:
+			copy.append(actor.duplicate(true))
+	return copy

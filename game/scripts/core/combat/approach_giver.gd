@@ -8,10 +8,10 @@ extends RefCounted
 ## `Relations.is_hostile()`, which reads the wrong content key per ADR 021's
 ## documented pitfall) should walk toward a hostile target it is not already
 ## adjacent to. Runs once per tick, after `CombatResolver.resolve_tick()` and
-## `CombatGiver.advance()` (both inside `WorldState._apply_combat()`, earlier
+## `CombatGiver.advance()` (both inside `CombatSystem.apply_combat()`, earlier
 ## in `tick()`), so the adjacent-only attack rule and the flee decision both
 ## get first say. Wired from `WorldState.tick()` itself, after
-## `_advance_colonists()` (not alongside `_apply_combat()`): its own rule-1
+## `_advance_colonists()` (not alongside `CombatSystem.apply_combat()`): its own rule-1
 ## adjacency check must see this tick's post-movement positions -- the exact
 ## ones `CombatResolver.resolve_tick()` will check first thing next tick,
 ## since nothing moves in between -- and running after `_advance_colonists()`
@@ -288,7 +288,7 @@ func restore_job_targets(data: Dictionary) -> void:
 		_job_actor[String(job["id"])] = actor_id
 
 ## Runs once per tick, after CombatResolver.resolve_tick() and
-## CombatGiver.advance() (see WorldState._apply_combat()).
+## CombatGiver.advance() (see CombatSystem.apply_combat()).
 func advance(actors: Array[Dictionary], tick: int) -> void:
 	for actor in actors:
 		if not (actor.get("combat") is Dictionary):
