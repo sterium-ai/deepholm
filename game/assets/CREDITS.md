@@ -1,6 +1,6 @@
 # Asset credits
 
-> **In short:** Every image stored in this repository is simple placeholder art drawn by a script, so it is all original and covered by the same licence as the code. When the owner's copy of the Pixel Crawler pack by Anokolisa is present, the game draws its colonists with that pack instead; those files are never stored here.
+> **In short:** Every image stored in this repository is simple placeholder art drawn by a script, so it is all original and covered by the same licence as the code. When the owner's copy of the Pixel Crawler pack by Anokolisa is present, the game draws its colonists, terrain, props, trees, items and the other creatures with that pack instead; those files are never stored here.
 
 All art currently shipped in this repository is **original placeholder pixel
 art generated from code** by [`tools/generate_placeholder_art.py`](../../tools/generate_placeholder_art.py).
@@ -29,7 +29,7 @@ godot --headless --path game --script res://scripts/tools/build_colonist_frames.
 
 ## Pixel Crawler pack (not in this repository)
 
-Colonist sprites, when available, come from **Pixel Crawler** by
+Colonists, terrain, props, trees, items, wolves, raiders and traders, when available, come from **Pixel Crawler** by
 **Anokolisa** (https://www.patreon.com/Anokolisa), used under the pack's
 terms: free for commercial projects, not to be sold or redistributed as
 assets. For that reason none of its files are committed: `game/assets/pack/`
@@ -40,5 +40,8 @@ here gladly.
 | Local path (git-ignored) | What it is | Author | Licence |
 | --- | --- | --- | --- |
 | `pack/Entities/Characters/Body_A/Animations/**` | Colonist idle, walk, carry, Slice (chop) and Crush (mine, dig, build) sheets, 64x64 frames, feet on y = 47 (list: `game/data/sprite_frames/pack_manifest.json`) | Anokolisa | Pixel Crawler terms (`Terms.txt` in the pack) |
+| `pack/Environment/Tilesets/{Floors,Water,Wall}_Tiles.png` | Terrain (grass blob, grass, dirt, bricks, cobbles, water, rock, trench) and wooden/stone wall cells | Anokolisa | Pixel Crawler terms |
+| `pack/Environment/Props/Static/{Furniture,Farm,Rocks,Resources}.png`, `pack/Environment/Props/Static/Trees/Model_0{1,3}/Size_02.png`, `pack/Environment/Structures/Stations/Workbench/Workbench.png`, `pack/Weapons/Wood/Wood.png` | Chair, table, berry bush, sprout, hazard crystal, stone, wood log, three tree sizes, workbench, pick and axe (regions: `game/data/sprite_frames/world_pack.json`) | Anokolisa | Pixel Crawler terms |
+| `pack/Entities/Mobs/Wolf/**`, `pack/Entities/Mobs/Orc Crew/Orc/**`, `pack/Entities/Npc's/Citizen_F/Peasant_A/**` | Wolf, raider (orc) and trader idle/walk sheets | Anokolisa | Pixel Crawler terms |
 
 Fonts: the viewer uses Godot's built-in default font (part of the engine, MIT).

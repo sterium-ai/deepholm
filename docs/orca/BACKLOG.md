@@ -328,7 +328,7 @@ Orca helper scripts, this backlog.
   test that berry factions survive save/load; old fixtures migrate; full suite passes.
 - **Non-goals:** anything else in persistence (R14 comes later); gameplay changes.
 
-### B3 — Props, trees, rock, walls, workbench, berries, tools and animals from the Pixel Crawler pack · `todo` · *parallel-safe (viewer + pack assets + sprite-frame data only)*
+### B3 — Props, trees, rock, walls, workbench, berries, tools and animals from the Pixel Crawler pack · `review (antonelmejor50-hub/b3-props-trees-rock-walls)` · *parallel-safe (viewer + pack assets + sprite-frame data only)*
 
 - **Owner (2026-10-25):** everything should look like the pack, as the colonists now do (B2).
   Same mechanism as B2: sheets listed in `game/data/sprite_frames/pack_manifest.json`, copied by
