@@ -23,7 +23,9 @@ Any other payload value shape (float, bool, array, nested dictionary,
 object) is rejected as `invalid_payload`. The `noop` command type records a
 `command_applied` event and echoes the payload back; it exists to exercise
 the mechanism, not as gameplay content. Every other command type has its own
-`match` arm in `apply()`; a new type that introduces rejection reasons or
+`match` arm in `CommandRouter.apply()` (`game/scripts/core/world/command_router.gd`),
+which hands it to its family's handler under `handlers/` (orders, construction,
+zones, actors, incidents); a new type that introduces rejection reasons or
 event `data` shapes documents them here.
 
 ## apply() result
@@ -76,9 +78,10 @@ a hover/drag preview can never disagree with what committing the same command
 would do. `dig`, `chop`, `forage`, `till`, `sow`, `mine`, `complete_job`,
 `cancel_job`, `fail_job`, `invalidate_job`, `place_object`, `remove_object`,
 `set_labour`, `set_faction`, `spawn_incident`, `zone_add` and `zone_remove`
-each have a check function. `build`, `build_line`, `cancel_site` and
-`place_object` are previewed through `WorldState`'s own construction and
-placement checks, the same functions their `apply()` handlers run. `noop`
+each have a check function. `build` and `build_line` are previewed through
+`ConstructionSystem`'s own checks, and `cancel_site` through
+`CommandChecks.check_cancel_site_command()`: the same functions their `apply()`
+handlers run. `noop`
 always previews `{"ok": true}` once envelope validation
 passes (its own `apply()` handler never rejects); an unrecognized type
 previews the same `unknown_command_type` rejection `apply()`'s dispatch
@@ -94,7 +97,7 @@ mirroring it, so the rule stays in exactly one place:
   dig/chop/forage/till/sow job -- so an unsupported priority previews the
   same rejection `apply()` will get from `JobQueue.submit_dig()`. It is
   consulted by `preview()`'s dispatcher only: `apply()`'s
-  `_apply_job_command()` always calls through to `JobQueue.submit_dig()`
+  `OrderHandler.apply_job_command()` always calls through to `JobQueue.submit_dig()`
   itself for a target-valid command, so an unsupported priority still produces `JobQueue`'s own `job_rejected`
   event and advances its sequence counter, not just an early
   `WorldState`-level rejection.

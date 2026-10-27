@@ -133,7 +133,7 @@ Orca helper scripts, this backlog.
   cleanup (scheduling, inventory drop). `combat_giver.gd`/`approach_giver.gd` depend on it.
 - **Acceptance:** as R1; `test_combat`, `test_incidents` unchanged.
 
-### R10 — `CommandRouter` and command handlers · `todo`
+### R10 — `CommandRouter` and command handlers · `review (antonelmejor50-hub/r10-commandrouter-and-command-handlers)`
 
 - **Goal:** `world/command_router.gd` validates, dispatches to one handler per command
   family under `commands/handlers/`, and builds the applied/rejected envelope through

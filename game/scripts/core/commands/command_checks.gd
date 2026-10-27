@@ -1,18 +1,18 @@
 class_name CommandChecks
 extends RefCounted
 
-## Read-only pre-mutation rule set for WorldState.apply()'s job/place-object/remove-object/
-## zone command handlers, extracted so WorldState.preview() can run the exact
+## Read-only pre-mutation rule set for the command handlers under commands/handlers/
+## (dispatched by world/command_router.gd), shared so WorldState.preview() can run the exact
 ## same rules a hover/drag preview or Play-mode cursor needs without mutating state or
 ## round-tripping the whole world through StateCodec.encode()/decode() (~390ms on a 256x256
-## map). Every check function below mirrors its WorldState._apply_*_command() counterpart's
+## map). Every check function below mirrors its handler's apply_*_command() counterpart's
 ## own rejection order exactly and returns {} when the command may proceed, or
 ## {"reason": ..., "message": ...} when apply() would reject it -- never touches `world`'s
 ## state. Where the real rule lives in JobQueue (submission priority/target, terminal-transition
 ## status), this module calls JobQueue's own pure predicates (check_submission(), check_terminal(),
 ## game/scripts/core/jobs/job_queue.gd) rather than re-implementing them, so the rule stays in
 ## exactly one place (AGENTS.md "one work engine" applies here too): check_job_submission() is
-## consulted by preview()'s check() dispatcher only -- WorldState._apply_job_command() always
+## consulted by preview()'s check() dispatcher only -- OrderHandler.apply_job_command() always
 ## calls through to JobQueue.submit_dig() itself for a target-valid job command, so an
 ## unsupported priority still produces JobQueue's own job_rejected
 ## event and advances its sequence counter instead of being silently absorbed by an early
@@ -20,7 +20,7 @@ extends RefCounted
 ##
 ## Reaches into WorldState's own underscore-prefixed helpers/fields directly (_find_colonist,
 ## _has_item_of_kind, _faction_may_be_ordered, _colonist_at, _object_definitions,
-## _zones, _zone_overlaps, _content, _incidents, _scheduler), the same convention
+## _object_table, _tile_grid, _construction, _zone_table, _content, _incidents, _scheduler), the same convention
 ## game/scripts/core/persistence/state_codec.gd already uses for WorldState internals --
 ## GDScript's underscore prefix is a naming convention, not enforced access control, and this
 ## module is WorldState's own command-rule companion, not an external consumer.
@@ -63,7 +63,7 @@ static func check(world: WorldState, command: Dictionary) -> Dictionary:
 			return {"reason": "unknown_command_type", "message": "No handler for command type '%s'." % command["type"]}
 
 ## dig/chop/forage/till/sow target and assignee/faction rules -- mirrors
-## WorldState._apply_job_command()'s own target-validation branch exactly.
+## OrderHandler.apply_job_command()'s own target-validation branch exactly.
 static func check_target_job_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var type: String = command["type"]
@@ -127,7 +127,7 @@ static func check_job_submission(command: Dictionary) -> Dictionary:
 ## same pure predicate _finish() itself consults, so the rule lives in exactly one place. Never
 ## JobQueue._reject() itself, which mutates (appends a job_rejected event and advances JobQueue's
 ## own sequence counter) as a side effect preview() must never cause.
-## WorldState._apply_job_command()'s own terminal branch does not call this: it keeps its
+## OrderHandler.apply_job_command()'s own terminal branch does not call this: it keeps its
 ## original shape (payload check only, then _finish_job()) so a rejected terminal command still
 ## produces the exact job_rejected + command_rejected event pair apply() has always emitted,
 ## through JobQueue._finish()'s own check_terminal() + _reject() call, not this one.
@@ -141,19 +141,48 @@ static func check_terminal_job_command(world: WorldState, command: Dictionary) -
 		return {}
 	return {"reason": terminal_check["reason"], "message": terminal_check["remedy"]}
 
-## place_object target rule: delegates to
-## WorldState._check_place_object_command(), the one footprint/orientation-aware
-## implementation _apply_place_object_command() and preview() both already run
-## (world_state.gd, around _check_place_object_command()'s own doc comment),
-## so the rule stays in exactly one place, as the module doc comment
-## promises. A second, single-tile-only copy here would silently go stale
-## whenever footprint/orientation rules change. check() above still
-## dispatches "place_object" here so a direct CommandChecks.check() caller
-## gets the real, current rule too, not an older single-tile shape.
+## place_object's complete read-only rule, run by apply() (ConstructionHandler),
+## preview() and check() alike. orientation is optional ("horizontal" or
+## "vertical"); every tile of kind's footprint must be in bounds with no
+## colonist, no object, and neither TILE_TREE nor TILE_WATER. Deliberately
+## looser than build's ConstructionSystem._build_site_terrain_valid(): this is
+## the debug/map-gen path, and tests place objects on rock through it.
 static func check_place_object_command(world: WorldState, command: Dictionary) -> Dictionary:
-	return world._check_place_object_command(command["payload"])
+	var payload: Dictionary = command["payload"]
+	if (typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
+			or typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty()
+			or typeof(payload.get("orientation", "")) != TYPE_STRING):
+		return {"reason": "invalid_payload", "message": "place_object requires integer x, y, a non-empty string kind and an optional string orientation."}
+	var kind: String = payload["kind"]
+	if not world._object_definitions.has(kind):
+		return {"reason": "invalid_payload", "message": "Unknown object kind '%s'." % kind}
+	var orientation := String(payload.get("orientation", ""))
+	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
+		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
+	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
+	for tile in world._object_table.object_footprint_tiles(kind, origin, orientation):
+		if (tile.x < 0 or tile.x >= world._tile_grid.width or tile.y < 0 or tile.y >= world._tile_grid.height
+				or world._colonist_at(tile.x, tile.y)
+				or not world.get_object(tile.x, tile.y).is_empty()
+				or world.get_tile(tile.x, tile.y) == WorldState.TILE_TREE
+				or world.get_tile(tile.x, tile.y) == WorldState.TILE_WATER):
+			return {"reason": "invalid_target", "message": "Choose an empty, in-bounds tile with no colonist or tree."}
+	return {}
 
-## remove_object target rule -- mirrors WorldState._apply_remove_object_command().
+## cancel_site {x, y} rule, run by apply() (ConstructionHandler) and preview().
+## Not dispatched by check(): preview() calls it directly.
+static func check_cancel_site_command(world: WorldState, command: Dictionary) -> Dictionary:
+	var payload: Dictionary = command["payload"]
+	for key in payload.keys():
+		if key != "x" and key != "y":
+			return {"reason": "invalid_payload", "message": "cancel_site accepts only x and y."}
+	if typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT:
+		return {"reason": "invalid_payload", "message": "cancel_site requires integer x and y."}
+	if world._construction.construction_site_id_at(int(payload["x"]), int(payload["y"])).is_empty():
+		return {"reason": "invalid_target", "message": "No construction site occupies this tile."}
+	return {}
+
+## remove_object target rule -- mirrors ConstructionHandler.apply_remove_object_command().
 static func check_remove_object_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT:
@@ -164,7 +193,7 @@ static func check_remove_object_command(world: WorldState, command: Dictionary) 
 		return {"reason": "invalid_target", "message": "Choose a tile that holds an object."}
 	return {}
 
-## zone_add rectangle rules -- mirrors WorldState._apply_zone_add_command().
+## zone_add rectangle rules -- mirrors ZoneHandler.apply_zone_add_command().
 static func check_zone_add_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if (typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
@@ -180,7 +209,7 @@ static func check_zone_add_command(world: WorldState, command: Dictionary) -> Di
 		return {"reason": "invalid_target", "message": "Choose a non-degenerate, in-bounds rectangle that does not overlap an existing zone."}
 	return {}
 
-## zone_remove id rule -- mirrors WorldState._apply_zone_remove_command().
+## zone_remove id rule -- mirrors ZoneHandler.apply_zone_remove_command().
 static func check_zone_remove_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if typeof(payload.get("id")) != TYPE_STRING or String(payload.get("id")).is_empty():
@@ -189,7 +218,7 @@ static func check_zone_remove_command(world: WorldState, command: Dictionary) ->
 		return {"reason": "invalid_target", "message": "Choose an existing zone id."}
 	return {}
 
-## set_labour payload/target rule -- mirrors WorldState._apply_set_labour_command().
+## set_labour payload/target rule -- mirrors ActorHandler.apply_set_labour_command().
 static func check_set_labour_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if (typeof(payload.get("colonist")) != TYPE_STRING or String(payload.get("colonist")).is_empty()
@@ -204,7 +233,7 @@ static func check_set_labour_command(world: WorldState, command: Dictionary) -> 
 		return {"reason": "invalid_target", "message": "Choose an existing colonist id."}
 	return {}
 
-## set_faction payload/target rule -- mirrors WorldState._apply_set_faction_command().
+## set_faction payload/target rule -- mirrors ActorHandler.apply_set_faction_command().
 static func check_set_faction_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if (typeof(payload.get("target")) != TYPE_STRING or String(payload.get("target")).is_empty()
@@ -217,7 +246,7 @@ static func check_set_faction_command(world: WorldState, command: Dictionary) ->
 		return {"reason": "invalid_target", "message": "Choose an existing actor id."}
 	return {}
 
-## spawn_incident payload/enablement rule -- mirrors WorldState._apply_spawn_incident_command().
+## spawn_incident payload/enablement rule -- mirrors IncidentHandler.apply_spawn_incident_command().
 static func check_spawn_incident_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if typeof(payload.get("id")) != TYPE_STRING or String(payload.get("id")).is_empty():

@@ -37,6 +37,12 @@ const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
 const TradeSystemType = preload("res://scripts/core/economy/trade_system.gd")
 const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
 const CombatSystemType = preload("res://scripts/core/actors/combat_system.gd")
+const CommandRouterType = preload("res://scripts/core/world/command_router.gd")
+const OrderHandlerType = preload("res://scripts/core/commands/handlers/order_handler.gd")
+const ConstructionHandlerType = preload("res://scripts/core/commands/handlers/construction_handler.gd")
+const ZoneHandlerType = preload("res://scripts/core/commands/handlers/zone_handler.gd")
+const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_handler.gd")
+const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
 
 ## Default/fixture map size: every existing test and the debug scenario
 ## construct WorldState with no explicit width/height and must keep getting
@@ -75,7 +81,7 @@ static var NEED_FULL: int = 0
 const REASON_NEED_UNMET_PREFIX := NeedsSystemType.REASON_NEED_UNMET_PREFIX
 const REASON_BLOCKED_SOURCE_RESERVED := "blocked_source_reserved"
 const REASON_BLOCKED_SOURCE_UNREACHABLE := "blocked_source_unreachable"
-## F3: shared by _apply_job_command()'s assignee check and
+## F3: shared by OrderHandler.apply_job_command()'s assignee check and
 ## _resolve_refused_reservations()'s typed termination of a job
 ## GlobalAssignment's reservation gate refused (see set_reservation_gate()
 ## in _init() below).
@@ -166,6 +172,7 @@ var _toils: ToilExecutorType
 var _toil_hooks: Dictionary = {}
 ## Events, their sequence counter and the command envelopes (world/event_log.gd).
 var _event_log: EventLogType
+var _commands: CommandRouterType # apply()/preview(): validation, dispatch, envelopes
 var _area_orders: AreaOrders # pending area_order expansions, a budget per tick (commands/area_orders.gd, ADR 044)
 ## Live in-flight re-route searches, keyed by colonist id, shared by
 ## reference with _toils.
@@ -299,6 +306,16 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	_area_orders = AreaOrders.new(apply, get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
+	# Every CommandChecks rule takes the world; handlers get it only through this Callable.
+	var check := func(rule: Callable, command: Dictionary) -> Dictionary: return rule.call(self, command)
+	_commands = CommandRouterType.new(_clock, _event_log, _construction, check,
+		OrderHandlerType.new(_clock, _event_log, _scheduler, _progress_table, _construction, _area_orders, _tile_grid,
+			check, _drop_carried_haul_item, _finish_job, _resolve_giver_association, _resolve_refused_reservations),
+		ConstructionHandlerType.new(_event_log, _construction, _object_table, check),
+		ZoneHandlerType.new(_event_log, _scheduler, _zone_table, check, _terminate_haul_job_by_id),
+		ActorHandlerType.new(_event_log, check, _find_colonist),
+		IncidentHandlerType.new(_clock, _event_log, _trade, check,
+			func(incident_id: String, tick: int) -> Array: return _incidents.force_spawn(incident_id, tick)))
 	for job_def in _content.list("jobs"):
 		var needs_tool := String(job_def.get("needs_tool", ""))
 		if not needs_tool.is_empty():
@@ -419,86 +436,13 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_get_job, _finish_job.bind("cancel_job"), _set_work_progress,
 		_calendar.day_of_tick, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK, incidents_enabled)
 
-## Read-only dry run of apply()'s own rules: validates the envelope, then runs the
-## exact same pre-mutation check apply()'s own handler consults (CommandChecksType.check(), see
-## game/scripts/core/commands/command_checks.gd) without touching state, so a hover/drag
-## preview or Play-mode cursor can ask "would apply() accept this?" per tile without
-## StateCodec.encode()/decode()'s whole-world round trip. Never mutates _tile_grid.tiles, _colonists,
-## _jobs, the event log or any other field -- state_hash() is unchanged before and after a call, and
-## unlike apply() a rejected preview() never appends a command_rejected event or advances
-## the event sequence: _validate_command(command, false) and
-## _event_log.pure_rejection() build the same rejection Dictionary apply() would return without
-## either side effect.
+## Read-only dry run of apply()'s own rules (CommandRouter.preview()).
 func preview(command) -> Dictionary:
-	var validation := _validate_command(command, false)
-	if not validation["ok"]:
-		return validation
-	# build keeps its read-only rules in ConstructionSystem.check_construction_command()
-	# -- the exact same function apply_construction_submission() runs --
-	# so a hover preview and apply() always agree; cancel_site mirrors it via
-	# _check_cancel_site_command(). place_object calls _check_place_object_command()
-	# directly for the same reason; CommandChecks.check_place_object_command()
-	# delegates to this same function, so either path runs
-	# identical, current rules.
-	if command["type"] == "build_line":
-		var classification := _construction.classify_build_line_command(command["payload"])
-		if classification.has("reason"):
-			return _event_log.pure_rejection(command["command_id"], command["actor"], classification["reason"], classification["message"])
-		return {"ok": true, "skipped": classification["skipped"]}
-	var check: Dictionary
-	if command["type"] == "build":
-		check = _construction.check_construction_command(command["payload"])
-	elif command["type"] == "cancel_site":
-		check = _check_cancel_site_command(command["payload"])
-	elif command["type"] == "place_object":
-		check = _check_place_object_command(command["payload"])
-	else:
-		check = CommandChecks.check(self, command)
-	if not check.is_empty():
-		return _event_log.pure_rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	return {"ok": true}
+	return _commands.preview(command)
 
 ## Only mutator alongside tick(): validates and applies a command envelope.
 func apply(command) -> Dictionary:
-	var validation := _validate_command(command)
-	if not validation["ok"]:
-		return validation
-	match command["type"]:
-		"noop":
-			return _event_log.apply_noop(command)
-		"dig", "chop", "forage", "till", "sow", "mine", "complete_job", "fail_job", "invalidate_job":
-			return _apply_job_command(command)
-		"cancel_job":
-			return _apply_cancel_job_command(command)
-		"build":
-			return _construction.apply_construction_submission(command)
-		"build_line":
-			return _construction.apply_build_line_command(command)
-		"area_order":
-			return _area_orders.apply_command(command, get_map_width(), get_map_height())
-		"cancel_site":
-			return _apply_cancel_site_command(command)
-		"place_object":
-			return _apply_place_object_command(command)
-		"remove_object":
-			return _apply_remove_object_command(command)
-		"set_labour":
-			return _apply_set_labour_command(command)
-		"set_faction":
-			return _apply_set_faction_command(command)
-		"spawn_incident":
-			return _apply_spawn_incident_command(command)
-		"accept_trade":
-			return _trade.apply_accept_trade_command(command)
-		"zone_add":
-			return _apply_zone_add_command(command)
-		"zone_remove":
-			return _apply_zone_remove_command(command)
-		_:
-			return _event_log.rejection(
-				command["command_id"], command["actor"], "unknown_command_type",
-				"No handler for command type '%s'." % command["type"]
-			)
+	return _commands.apply(command)
 
 ## Only mutator alongside apply(): advances exactly one tick.
 func tick() -> void:
@@ -1182,7 +1126,7 @@ func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String =
 ## was ever acquired, so this only owns termination, returning a suspended
 ## haul's carried item, and telling NeedGiver a need job resolved. Looped:
 ## resolving one refusal may trigger another. Called at the end of both
-## tick() and _apply_job_command() (a command can resolve a need outside
+## tick() and OrderHandler.apply_job_command() (a command can resolve a need outside
 ## tick() too) since _refused_reservations is transient, never saved, so
 ## anything left undrained when either mutator returns would silently vanish
 ## across a save/load.
@@ -1423,7 +1367,7 @@ func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -
 ## directly -- a site_work job's "target" is the site's own origin tile (its
 ## only leg, attach_site()) -- so this is a plain passthrough today; kept as
 ## its own function since _toil_on_work_complete() and every other
-## work-in-progress-key reader (TrenchSystem._trap_actor(), _apply_job_command()'s
+## work-in-progress-key reader (TrenchSystem._trap_actor(), OrderHandler.apply_job_command()'s
 ## terminal-command cleanup) call it rather than reading job["target"]
 ## themselves, so a future kind needing a second destination has one place to
 ## redirect from.
@@ -1966,88 +1910,6 @@ func _index_by_field(entries: Array, field: String) -> Dictionary:
 		indexed[String(entry_dict[field])] = entry_dict.duplicate(true)
 	return indexed
 
-func _apply_job_command(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command["payload"]
-	var result: Dictionary
-	if command["type"] in ["dig", "chop", "forage", "till", "sow", "mine"]:
-		var check := CommandChecks.check_target_job_command(self, command)
-		if not check.is_empty():
-			return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-		var target := Vector2i(payload["x"], payload["y"])
-		# assignee (F3), dig/chop/forage/mine only: submit()'s restrict_to, as need_giver.gd uses it.
-		var assignee := String(payload.get("assignee", "")) if command["type"] in ["dig", "chop", "forage", "mine"] else ""
-		result = _scheduler.submit(target, payload.get("priority", 1), _clock.tick, command["type"], assignee)
-	else:
-		if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
-			return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload", "A non-empty job_id is required.")
-		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry drops the carried item (colonist-ai.md 3.3); "complete_job" already went through the job's own completion effect; a site_work job never carries anything.
-		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
-			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
-			if String(target_job.get("kind", "")) in ["haul", "site_fetch"]:
-				_drop_carried_haul_item(String(payload["job_id"]))
-		# Clear work_progress only once the transition succeeds, by the terminating job's own identity (WorkProgress.clear_terminated_job(): an ordinary job's plain tile key only when it was "active" before -- a queued competitor or a rejected/repeated terminal command must never erase another job's progress -- a rescue's own job-scoped key in every status).
-		var terminal_job := _scheduler.queue.get_job(String(payload["job_id"]))
-		var terminal_was_active: bool = String(terminal_job.get("status", "")) == "active"
-		result = _finish_job(payload["job_id"], command["type"])
-		if result["ok"] and command["type"] in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
-			_progress_table.clear_terminated_job(String(payload["job_id"]), terminal_job, terminal_was_active)
-		# Shares _resolve_giver_association() with _toil_on_work_complete()/TrenchSystem._trap_actor()/CombatSystem._cancel_job_for_death()/
-		# _resolve_refused_reservations(): a command ending a rescue job must tell RescueGiver too, or its _pending/_job_victim association keeps naming a dead job and the rescuer never takes other work or another rescue.
-		if result["ok"]:
-			_resolve_giver_association(String(payload["job_id"]), String(terminal_job.get("kind", "")))
-	# F3: a cancel/fail/invalidate_job command above can
-	# resolve a need and get a resume refused, entirely outside tick(); drain
-	# it now rather than leaving it for the next tick(). Harmless otherwise.
-	_resolve_refused_reservations()
-	_event_log.collect_queue_events()
-	if not result["ok"]:
-		return _event_log.rejection(command["command_id"], command["actor"], result["rejection"]["reason"], result["rejection"]["remedy"])
-	var applied := _event_log.applied(command)
-	applied["job_id"] = result["job_id"]
-	return applied
-
-## place_object's complete read-only rule, shared verbatim by
-## apply() (via _apply_place_object_command()), preview() and
-## CommandChecks.check_place_object_command() (which delegates here rather
-## than keeping its own copy) -- mirrors check_construction_command()'s
-## shape above. x/y/kind are exactly as strict as the old CommandChecks.
-## check_place_object_command(): integer x, y, a non-empty string kind naming
-## a declared object kind. orientation is new and optional: when present it
-## must be "horizontal" or "vertical" (invalid_payload otherwise); it is
-## otherwise unconsulted here, since ObjectTable.object_footprint_size() already ignores
-## it for a non-rotatable kind. Every tile of kind's footprint (default [1,1]
-## -- every existing kind today) is checked in bounds, no colonist, no
-## existing object, and neither TILE_TREE nor TILE_WATER (the strict,
-## build-only ConstructionSystem._build_site_terrain_valid() would also reject
-## TILE_ROCK/TILE_TRENCH/TILE_HAZARD, breaking test_debug_scenario_
-## objects.gd, test_faction_doors.gd, test_tool_items.gd and existing
-## test_water_cache_invalidation.gd fixtures that all place objects on rock
-## through this exact command -- this remains the permissive debug/map-gen
-## path _apply_place_object_command()'s own doc comment always described;
-## `build` keeps its own separate, stricter ConstructionSystem._build_site_terrain_valid() call
-## untouched) -- so a footprint >1 kind is rejected the instant any one of
-## its tiles would have been.
-func _check_place_object_command(payload: Dictionary) -> Dictionary:
-	if (typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
-			or typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty()
-			or typeof(payload.get("orientation", "")) != TYPE_STRING):
-		return {"reason": "invalid_payload", "message": "place_object requires integer x, y, a non-empty string kind and an optional string orientation."}
-	var kind: String = payload["kind"]
-	if not _object_definitions.has(kind):
-		return {"reason": "invalid_payload", "message": "Unknown object kind '%s'." % kind}
-	var orientation := String(payload.get("orientation", ""))
-	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
-	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
-	for tile in _object_table.object_footprint_tiles(kind, origin, orientation):
-		if (tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height
-				or _colonist_at(tile.x, tile.y)
-				or not get_object(tile.x, tile.y).is_empty()
-				or get_tile(tile.x, tile.y) == TILE_TREE
-				or get_tile(tile.x, tile.y) == TILE_WATER):
-			return {"reason": "invalid_target", "message": "Choose an empty, in-bounds tile with no colonist or tree."}
-	return {}
-
 ## Comparison-only stand-in for "unreachable" (hands-filling rules):
 ## _route_cost() itself returns -1; call sites substitute this instead where
 ## they need a total order against a real cost.
@@ -2066,146 +1928,6 @@ func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
 	while not route.is_terminal(): route.resume()
 	if route.get_status() != RerouteType.STATUS_FOUND: return -1
 	return route.get_path().size() - 1
-
-func _check_cancel_site_command(payload: Dictionary) -> Dictionary:
-	for key in payload.keys():
-		if key != "x" and key != "y":
-			return {"reason": "invalid_payload", "message": "cancel_site accepts only x and y."}
-	if typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT:
-		return {"reason": "invalid_payload", "message": "cancel_site requires integer x and y."}
-	if _construction.construction_site_id_at(int(payload["x"]), int(payload["y"])).is_empty():
-		return {"reason": "invalid_target", "message": "No construction site occupies this tile."}
-	return {}
-
-## cancel_job {job_id}: boot.gd's Cancel tool still
-## resolves a pending build order by "job_id" (test_order_input.gd; the
-## toolbar has not yet been rewired onto the dedicated cancel_site {x,y}
-## command). A site has no job at order time
-## (ADR 040), so apply_construction_submission() hands its own id back as
-## both site_id and job_id; recognising that id here and tearing the site
-## down through the exact same cancel_construction_site() cancel_site
-## {x,y} uses keeps the two entry points equivalent rather than adding a
-## second cancellation path. Any id that does not name a live site is an
-## ordinary job id and goes to _apply_job_command() unchanged.
-func _apply_cancel_job_command(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command.get("payload", {})
-	var site_id := String(payload.get("job_id", ""))
-	if not site_id.is_empty() and _construction.site_table.has(site_id):
-		_construction.cancel_construction_site(site_id)
-		_event_log.collect_queue_events()
-		var applied := _event_log.applied(command)
-		applied["site_id"] = site_id
-		applied["job_id"] = site_id
-		return applied
-	return _apply_job_command(command)
-
-func _apply_cancel_site_command(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command["payload"]
-	var check := _check_cancel_site_command(payload)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var site_id := _construction.construction_site_id_at(int(payload["x"]), int(payload["y"]))
-	_construction.cancel_construction_site(site_id)
-	_event_log.collect_queue_events()
-	var applied := _event_log.applied(command)
-	applied["site_id"] = site_id
-	return applied
-
-## Applies immediately, no job queue involved. Rejected invalid_target for an
-## out-of-bounds/occupied/tree/water tile on any footprint tile;
-## rejected invalid_payload for an unknown kind or a malformed orientation.
-## This is the debug/map-gen placement path only (ADR 039) -- the
-## player-facing `build` order flow is ConstructionSystem.apply_construction_submission().
-func _apply_place_object_command(command: Dictionary) -> Dictionary:
-	var payload: Dictionary = command["payload"]
-	var check := _check_place_object_command(payload)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	_object_table.set_object(int(payload["x"]), int(payload["y"]), String(payload["kind"]), "colony", String(payload.get("orientation", "")))
-	return _event_log.applied(command)
-
-## Rejected invalid_target for an out-of-bounds tile or one holding no object.
-func _apply_remove_object_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_remove_object_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	_object_table.set_object(int(payload["x"]), int(payload["y"]), "")
-	return _event_log.applied(command)
-
-## Mutates one colonist's labour table (colonist-ai.md 3.2).
-func _apply_set_labour_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_set_labour_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	var colonist := _find_colonist(String(payload["colonist"]))
-	WorkerType.set_labour_level(colonist, String(payload["kind"]), int(payload["level"]))
-	return _event_log.applied(command)
-
-## Debug command (F3): mutates one actor's existing "factionId"
-## field, mirroring _apply_set_labour_command()'s validation shape. target is
-## looked up against the actor table (_colonists, per ADR 012 -- every
-## spawned actor lives there today, not just worker-component colonists), so
-## an actor without a worker component is still a valid target. Never
-## touches an object's or item's faction_id.
-func _apply_set_faction_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_set_faction_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	var actor := _find_colonist(String(payload["target"]))
-	actor["factionId"] = String(payload["faction_id"])
-	return _event_log.applied(command)
-
-## Proposes incident_id's actors now, bypassing min_day/cooldown/budget gating (tests, the viewer's
-## debug buttons); "actor_ids" lists the proposals, each spawned only once its job activates.
-func _apply_spawn_incident_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_spawn_incident_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	var applied := _event_log.applied(command)
-	applied["actor_ids"] = _incidents.force_spawn(String(payload["id"]), _clock.tick)
-	return applied
-
-## Draws a rectangular stockpile zone.
-func _apply_zone_add_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_zone_add_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]))
-	var applied := _event_log.applied(command)
-	applied["zone_id"] = zone_id
-	return applied
-
-## Removes a stockpile zone by id.
-func _apply_zone_remove_command(command: Dictionary) -> Dictionary:
-	var check := CommandChecks.check_zone_remove_command(self, command)
-	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
-	var payload: Dictionary = command["payload"]
-	var zone_id: String = payload["id"]
-	var removed := _zone_table.remove(zone_id)
-	_fail_haul_jobs_targeting_removed_zone(int(removed["x"]), int(removed["y"]), int(removed["width"]), int(removed["height"]))
-	_event_log.collect_queue_events()
-	return _event_log.applied(command)
-
-## Removing a zone mid-walk to one of its cells must fail the haul job that
-## reserved that cell with a typed reason and no leaked reservation. Scans
-## every active haul job since a zone is rarely removed.
-func _fail_haul_jobs_targeting_removed_zone(x: int, y: int, width: int, height: int) -> void:
-	for job in _scheduler.queue.get_jobs():
-		if String(job["kind"]) != "haul" or job["status"] != "active":
-			continue
-		var cell = job.get("cell")
-		if cell == null:
-			continue
-		var cx: int = cell.x
-		var cy: int = cell.y
-		if cx >= x and cx < x + width and cy >= y and cy < y + height:
-			_terminate_haul_job_by_id(job["id"], "blocked_destination_gone", "choose_reachable_destination")
 
 func _colonist_at(x: int, y: int) -> bool:
 	for colonist in _colonists:
@@ -2252,44 +1974,6 @@ func _remove_colonist_by_id(colonist_id: String, is_death: bool = false) -> void
 
 func get_events(types: Array = []) -> Array[Dictionary]:
 	return _event_log.get_events(types)
-
-## record=false (preview() only) builds every rejection through _event_log.pure_rejection() instead of
-## _event_log.rejection(), so an invalid envelope, a malformed payload or a tick mismatch previewed on an
-## otherwise-valid actor never appends a command_rejected event or advances the event sequence
-## -- apply() always passes record=true (the default), unchanged.
-func _validate_command(command, record: bool = true) -> Dictionary:
-	if typeof(command) != TYPE_DICTIONARY:
-		return _event_log.reject(null, null, "invalid_envelope", "Command must be a Dictionary.", record)
-	if not (command.has("actor") and typeof(command["actor"]) == TYPE_STRING and command["actor"] != ""):
-		return _event_log.reject(command.get("command_id"), command.get("actor"), "invalid_envelope",
-			"Command must include a non-empty string actor.", record)
-	if not (command.has("command_id") and typeof(command["command_id"]) == TYPE_STRING and command["command_id"] != ""):
-		return _event_log.reject(null, command["actor"], "invalid_envelope",
-			"Command must include a non-empty string command_id.", record)
-	if not (command.has("tick") and typeof(command["tick"]) == TYPE_INT):
-		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include an integer tick.", record)
-	if not (command.has("type") and typeof(command["type"]) == TYPE_STRING and command["type"] != ""):
-		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include a non-empty string type.", record)
-	if not (command.has("payload") and typeof(command["payload"]) == TYPE_DICTIONARY):
-		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include a Dictionary payload.", record)
-	# build_line's own "tiles" payload field is an Array of {x, y} Dictionaries
-	# -- the one deliberate exception to every other command's
-	# flat String/int payload shape, scoped by both type and key so no other
-	# command gains the exception by accident.
-	for key in command["payload"].keys():
-		if command["type"] == "build_line" and key == "tiles":
-			continue
-		var value = command["payload"][key]
-		if typeof(value) != TYPE_STRING and typeof(value) != TYPE_INT:
-			return _event_log.reject(command["command_id"], command["actor"], "invalid_payload",
-				"Payload values must be String or int.", record)
-	if command["tick"] != _clock.tick:
-		return _event_log.reject(command["command_id"], command["actor"], "tick_mismatch",
-			"Command tick %d does not match current tick %d." % [command["tick"], _clock.tick], record)
-	return {"ok": true}
 
 ## Delegates to WorldGeneratorType, a pure, scene-independent module so
 ## world_state.gd's own core-budgets.json cap has room for width/height
