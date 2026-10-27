@@ -15,7 +15,6 @@ extends SceneTree
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
-const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 const ITEMS_CONTENT_PATH := "res://content/items.json"
@@ -52,7 +51,6 @@ func _init() -> void:
 	_check_blocked_no_tool_reason_survives_backoff_window()
 	_check_blocked_no_tool_failure_frees_job_for_a_different_colonist()
 	_check_save_io_round_trip_after_candidate_excluded()
-	_check_v10_migration_to_v11()
 	_check_held_tool_skips_fetch_tool_travel()
 	_check_foreign_reservation_triggers_drop_tool_handover()
 	_check_drop_tool_prefers_nearby_stockpile_cell()
@@ -1091,58 +1089,6 @@ func _check_save_io_round_trip_after_candidate_excluded() -> void:
 	_expect(restored_completed, "the SaveIO-restored run must also complete by fetching the farther pick, without re-trying the excluded one")
 	_expect(world.state_hash() == restored.state_hash(),
 		"the source and SaveIO-restored runs must reach the identical final hash")
-
-## SaveMigrations.migrate() must turn an inline schemaVersion-10 Dictionary
-## literal (no workProgress/pausedJobs/toolItems/toolReservations keys, no
-## entity heldTool/labourTable) all the way to the current schema --
-## with workProgress/pausedJobs backfilled at the v10->v11 step, labourTable
-## at the v11->v12 step, and toolItems/toolReservations at the v12->v13
-## step -- and pass SaveIO's current-schema validation.
-func _check_v10_migration_to_v11() -> void:
-	var v10_state := {
-		"schemaVersion": 10,
-		"contentVersion": "vertical-slice-1",
-		"seed": 1,
-		"tick": 0,
-		"map": {"width": 1, "height": 1, "tiles": ["floor"]},
-		"entities": [{
-			"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
-			"needs": {"food": 100, "water": 100, "rest": 100},
-			"route": null, "work": null, "carrying": null,
-		}],
-		"inventory": {},
-		"jobs": [],
-		"scheduling": {
-			"nextJobId": 1, "jobSequence": 0, "jobTick": 0, "queueEventSequence": -1,
-			"eventSequence": 0, "waiting": [], "nextOrdinal": 0, "cursors": {},
-			"pending": {}, "assignments": {},
-		},
-		"rng": {"seed": 1, "state": 0},
-		"items": {"nextId": 1, "list": []},
-		"objects": [],
-		"zones": [],
-		"nextZoneId": 1,
-		"groundBerries": [],
-	}
-	var result := SaveMigrationsType.migrate(v10_state, 10, StateCodecType.SCHEMA_VERSION)
-	_expect(result["ok"], "migrating a schemaVersion-10 state to current schema must succeed: %s" % result.get("message", ""))
-	if not result["ok"]:
-		return
-	var migrated: Dictionary = result["state"]
-	_expect(int(migrated["schemaVersion"]) == StateCodecType.SCHEMA_VERSION,
-		"migrated state must report the current schema version")
-	_expect(migrated["workProgress"] == [], "migrated state's workProgress must be honestly empty")
-	_expect(migrated["pausedJobs"] == [], "migrated state's pausedJobs must be honestly empty")
-	_expect(migrated["toolItems"]["list"] == [], "migrated state's toolItems.list must be honestly empty")
-	_expect(migrated["toolReservations"] == {}, "migrated state's toolReservations must be honestly empty")
-	_expect(not (migrated["entities"][0] as Dictionary).has("heldTool"),
-		"a migrated pre-v13 entity must leave heldTool absent, not backfilled")
-	_expect((migrated["entities"][0] as Dictionary).get("labourTable") == {
-			"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3,
-		}, "a migrated pre-v12 entity must be backfilled to the default all-3 labourTable")
-
-	var validation := SaveIOType._validate_state(migrated)
-	_expect(validation["ok"], "a migrated state must pass SaveIO's current-schema validation: %s" % validation.get("message", ""))
 
 ## ADR 013's "Already held" fast path (satisfied() reserves
 ## a matching held tool for the job with no travel) proven directly against

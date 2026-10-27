@@ -7,15 +7,10 @@
     "game/scripts/core/scheduling/global_assignment.gd": {"cap": 688, "why": "pre-ADR 048 cap, below the rule; never raised"}
   },
   "file_exceptions": {
-    "game/scripts/core/persistence/save_io.gd": {"cap": 2287, "until": "R14"},
-    "game/scripts/core/persistence/save_migrations.gd": {"cap": 1532, "until": "R14"},
-    "game/scripts/core/persistence/state_codec.gd": {"cap": 1409, "until": "R14"},
     "game/scripts/core/worldgen/world_generator.gd": {"cap": 1178, "until": "unassigned"},
     "game/scripts/core/jobs/toil_executor.gd": {"cap": 963, "until": "unassigned"}
   },
   "function_exceptions": {
-    "game/scripts/core/persistence/save_io.gd::_validate_state": {"cap": 306, "until": "R14"},
-    "game/scripts/core/persistence/save_migrations.gd::_migrate_step": {"cap": 113, "until": "R14"},
     "game/scripts/core/scheduling/global_assignment.gd::tick": {"cap": 150, "until": "unassigned"},
     "game/scripts/core/worldgen/world_generator.gd::place_spawn": {"cap": 122, "until": "unassigned"},
     "game/scripts/core/content/content_registry.gd::_check_references": {"cap": 103, "until": "unassigned"}

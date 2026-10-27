@@ -90,6 +90,7 @@ per-file caps; [ADR 048](decisions/048-composed-core.md) supersedes them all.
 | [043](decisions/043-site-fetch-chained-deposit.md) | `site_fetch`'s `deposit` completion chains onto further same-kind sites |
 | [044](decisions/044-area-order-expansion-queue.md) | Area orders expand through a saved per-tick queue |
 | [048](decisions/048-composed-core.md) | Composed core — one size rule replaces per-file budgets |
+| [049](decisions/049-save-schema-reset-v1.md) | Save schema reset to v1 before release; pre-release saves refused |
 
 ## Content and data
 
