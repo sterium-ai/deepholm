@@ -47,8 +47,8 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 ## Runs the default boot world for `ticks` ticks, recording from `record_from`.
-## Every command goes through world.apply() and then the recorder, exactly the
-## path the viewer's command observer takes.
+## Commands only go through world.apply(): the recorder hears them through
+## WorldState.command_observer, the hook boot.gd's recording uses.
 func _record_session(interval: int, record_from: int, ticks: int) -> ReplayLogType:
 	var world: WorldStateType = BootType.build_default_world()
 	var recorder := CommandRecorderType.new()
@@ -57,13 +57,14 @@ func _record_session(interval: int, record_from: int, ticks: int) -> ReplayLogTy
 		if world.get_tick() == record_from and not recorder.is_recording():
 			recorder.start(world, interval)
 		for command in _commands_for_tick(world):
-			var result := world.apply(command)
-			recorder.observe_command(world, command, result)
+			world.apply(command)
 		world.tick()
 		recorder.observe_tick(world)
 	for command in _commands_for_tick(world):
-		recorder.observe_command(world, command, world.apply(command))
-	return recorder.stop()
+		world.apply(command)
+	var recording := recorder.stop()
+	_expect(not world.command_observer.is_valid(), "stop() must clear the world's command observer")
+	return recording
 
 ## The mixed command stream: orders, an area order, a zone, a wall, labour,
 ## incidents, a cancel and deliberately rejected commands, all keyed off the

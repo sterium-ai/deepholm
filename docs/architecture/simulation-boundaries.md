@@ -41,6 +41,12 @@ UI state, camera position, selected entity, animations, sound playback, network
 responses, and platform callbacks are not simulation state. They may reference
 simulation IDs but cannot mutate the core directly.
 
+The core also offers one optional listener: `WorldState.command_observer`, a
+`Callable(command, result)` called after each `apply()` from outside the core.
+Area-order expansion inside `tick()` goes straight to the command router and
+bypasses it. The listener must not mutate. The viewer's command recorder uses it
+to record a session for headless replay ([replay.md](replay.md)).
+
 ## Determinism and time
 
 - The simulation advances only through explicit ticks.

@@ -40,7 +40,7 @@ func _init() -> void:
 		for entry: Array in payloads:
 			n += 1
 			var command := {"actor": "player", "command_id": "sample_%d" % n, "tick": world.get_tick(), "type": entry[0], "payload": entry[1]}
-			recorder.observe_command(world, command, world.apply(command))
+			world.apply(command) # heard through world.command_observer, set by start()
 		world.tick()
 		recorder.observe_tick(world)
 	var recording := recorder.stop()

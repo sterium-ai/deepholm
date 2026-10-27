@@ -10,7 +10,9 @@
 | Piece | Role |
 | --- | --- |
 | `game/scripts/core/world/replay_log.gd` (`ReplayLog`) | The log, its JSON-safe form, and `replay()`. Core: reads the world it is handed (`state_hash()`, `to_save_state()`) and replays only through `apply()`/`tick()`. No file I/O. |
-| `game/scripts/viewer/command_recorder.gd` | Viewer side: `start(world, interval)`, `observe_command(world, command, result)`, `observe_tick(world)`, `stop()`, and `write_file()`/`read_file()`. |
+| `WorldState.command_observer` (`world_state.gd`) | Optional `Callable(command, result)` that `apply()` calls after every command. It must not mutate. Unset, it costs one `is_valid()` check. |
+| `game/scripts/viewer/command_recorder.gd` | Viewer side: `start(world, interval)` sets the observer to `observe_command(command, result, world)`, `observe_tick(world)` runs after each tick, `stop()` clears the observer and returns the log. Also `write_file()`/`read_file()`. |
+| `boot.gd` | **F9** starts and stops recording the live session. Stopping, or swapping worlds (New Game, Load, Debug scenario), writes `user://replays/replay-<seed>-t<start>-<end>-<date>.json` and prints its full path. |
 | `tools/replay.ps1` | Headless replay of a file. Exit 0 = every checkpoint matches, 1 = diverged, 2 = cannot replay. The small `SceneTree` script Godot runs is embedded in the `.ps1` and written to a temporary folder for each run. |
 | `game/scripts/tests/test_command_replay.gd` | The acceptance test (500 ticks, mixed commands, planted nondeterminism). |
 

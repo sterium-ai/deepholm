@@ -22,6 +22,7 @@ const SaveWiringType = preload("res://scripts/viewer/save_wiring.gd")
 const StatusTextType = preload("res://scripts/viewer/status_text.gd")
 const ControlBarType = preload("res://scripts/viewer/control_bar.gd")
 const InfoPanelType = preload("res://scripts/viewer/info_panel.gd")
+const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
 
 const Tool = OrderInputType.Tool
 const DEFAULT_BOOT_SEED := 20260915
@@ -31,6 +32,9 @@ var world: WorldStateType
 var tick_driver: TickDriverType
 var save_manager: SaveManagerType
 var autosave_trigger: AutosaveTriggerType
+## F9 records the live session for tools/replay.ps1 (A11, docs/architecture/replay.md).
+var command_recorder := CommandRecorderType.new()
+var last_recording_path: String = ""
 
 var _text_table: TextTableType
 var _orders := OrderInputType.new()
@@ -189,6 +193,7 @@ func _show_map_result(text: String) -> void:
 		_rejected_tiles_label.text = text
 
 func _on_ticked() -> void:
+	command_recorder.observe_tick(world) # first: the checkpoint is the state right after tick()
 	autosave_trigger.check(world.get_tick())
 	_refresh()
 
@@ -278,9 +283,39 @@ func _set_status(text: String) -> void:
 	if _status_label != null:
 		_status_label.text = text
 
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F9:
+		_toggle_recording()
+		get_viewport().set_input_as_handled()
+
+## F9: starts recording the running world from its current tick, or stops and
+## writes the recording to user://replays/.
+func _toggle_recording() -> void:
+	if command_recorder.is_recording():
+		_stop_recording()
+		return
+	command_recorder.start(world)
+	_set_status("Recording from tick %d; F9 stops and saves." % world.get_tick())
+
+## A recording never spans two worlds: _replace_world() stops and saves it first.
+func _stop_recording() -> void:
+	if not command_recorder.is_recording():
+		return
+	var recording := command_recorder.stop()
+	var written := CommandRecorderType.write_file(recording, CommandRecorderType.session_path(recording))
+	var text: String
+	if written.get("ok", false):
+		last_recording_path = written["path"]
+		text = "Recording saved (ticks %d..%d): %s" % [recording.start_tick, recording.end_tick, ProjectSettings.globalize_path(last_recording_path)]
+	else:
+		text = "Recording not saved: %s" % written.get("message", "")
+	print(text)
+	_set_status(text)
+
 ## Repoints presentation and the tick/autosave drivers at a newly loaded or
 ## created WorldState; mutates no simulation state.
 func _replace_world(new_world: WorldStateType) -> void:
+	_stop_recording()
 	world = new_world
 	tick_driver.world = new_world
 	autosave_trigger.attach(new_world, save_manager, _current_epoch)

@@ -597,17 +597,19 @@ one.
 - **Acceptance:** a test records 500 ticks with mixed commands, replays them and matches every
   checkpoint; a planted nondeterminism is reported at the right tick.
 - **Non-goals:** network play; a replay viewer UI.
-- **Scope extension (owner decision, 2026-10-27):** the live viewer needs one capture point the
-  owned paths do not cover, because the viewer modules call `world.apply()` directly. The owner
-  allowed an optional command observer in `WorldState.apply()` (1–3 lines), plus the hookup and a
-  record/stop key in `boot.gd`, to be built on R12's new `WorldState` façade once R12 is in
-  `main`. R12 was not in `main` at handoff (`origin/main` = `89d44a0`, and `633233d` after review round 1), so this branch ships
-  without the hook. **Follow-up after R12:** add the observer, call
-  `CommandRecorder.observe_command()` and `observe_tick()` from `boot.gd`, and switch
-  `test_command_replay.gd` to record through the observer. See `docs/orca/handoffs/A11.md`.
-- **Scope extension (owner decision, after review round 1):** `tools/replay.gd`, the helper
-  `tools/replay.ps1` runs, is approved. The branch currently embeds that script inside
-  `replay.ps1`, so the file does not exist, but splitting it back out is within scope.
+- **Approved scope extension (owner):** `game/scripts/core/world_state.gd`, `game/scripts/boot.gd`
+  and `tools/replay.gd`. The viewer modules call `world.apply()` directly, so the live viewer
+  needs a capture point outside the owned paths. The owner allowed an optional command
+  observer in `WorldState.apply()` (1–3 lines) on R12's new façade, plus the hookup and a
+  record/stop key in `boot.gd`. It was asked for on 2026-10-27 and built after R12 landed
+  (`63d3d5f`). `tools/replay.gd` is the helper `tools/replay.ps1` runs. The branch keeps that
+  script embedded in `replay.ps1`, so the file does not exist, but splitting it back out is
+  within scope.
+- **Done in this branch:** `WorldState.command_observer` (+3 lines). Area-order expansion inside
+  `tick()` now calls the command router directly, so the observer only hears commands from
+  outside. **F9** in `boot.gd` starts and stops recording to `user://replays/`, and a world swap
+  stops and saves first. `test_boot_command_recording.gd` drives F9 itself;
+  `test_command_replay.gd` records through the observer. See `docs/orca/handoffs/A11.md`.
 
 #### A12 — Map layers: coordinate model ADR · `review (antonelmejor50-hub/a12-map-layers-coordinate-model)` · *parallel-safe (docs only)* · before F4
 

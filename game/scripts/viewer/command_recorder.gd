@@ -1,9 +1,12 @@
 extends RefCounted
 
 ## Records a viewer session into a ReplayLog (A11) and owns its file. start()
-## begins a log on the current world, observe_command() takes every apply()
-## call with its result, observe_tick() runs after every tick(), stop()
-## closes the log; write_file()/read_file() move it to and from disk.
+## begins a log on the current world and sets that world's command_observer,
+## so observe_command() hears every apply() call with its result, wherever in
+## the viewer it came from; observe_tick() runs after every tick() (boot.gd's
+## ticked handler); stop() clears the observer and closes the log;
+## write_file()/read_file() move it to and from disk. One recorder owns the
+## world's single observer slot while it records.
 ## ReplayLog itself snapshots, hashes and replays the world (core side of
 ## the boundary); this module only routes the viewer's calls to it.
 ##
@@ -12,6 +15,8 @@ extends RefCounted
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ReplayLogType = preload("res://scripts/core/world/replay_log.gd")
+
+const REPLAY_DIR := "user://replays"
 
 var _world: WorldStateType = null
 var _log: ReplayLogType = null
@@ -24,10 +29,11 @@ func is_recording() -> bool:
 func start(world: WorldStateType, checkpoint_interval: int = ReplayLogType.DEFAULT_CHECKPOINT_INTERVAL, incidents_enabled: bool = true) -> void:
 	_world = world
 	_log = ReplayLogType.begin(world, checkpoint_interval, incidents_enabled)
+	world.command_observer = observe_command.bind(world)
 
-## Called with every command the recorded world applied and apply()'s result.
-## A command for another world (the viewer swapped worlds) is ignored.
-func observe_command(world: WorldStateType, command: Variant, result: Dictionary) -> void:
+## WorldState.command_observer, bound to the recorded world: every command it
+## applied and apply()'s result. A command for another world is ignored.
+func observe_command(command: Variant, result: Dictionary, world: WorldStateType) -> void:
 	if _log == null or world != _world or typeof(command) != TYPE_DICTIONARY:
 		return
 	_log.record_command(world.get_tick(), command, bool(result.get("ok", false)))
@@ -44,9 +50,17 @@ func stop() -> ReplayLogType:
 		return null
 	var finished := _log
 	finished.finish(_world)
+	_world.command_observer = Callable()
 	_log = null
 	_world = null
 	return finished
+
+## REPLAY_DIR/replay-<seed>-t<start>-<end tick>-<local date and time>.json, creating
+## the folder. The wall clock only names the file; it never reaches the log.
+static func session_path(replay_log: ReplayLogType) -> String:
+	DirAccess.make_dir_recursive_absolute(REPLAY_DIR)
+	var stamp := Time.get_datetime_string_from_system().replace("-", "").replace(":", "").replace("T", "-")
+	return "%s/replay-%d-t%d-%d-%s.json" % [REPLAY_DIR, replay_log.world_seed, replay_log.start_tick, replay_log.end_tick, stamp]
 
 static func write_file(replay_log: ReplayLogType, path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.WRITE)
