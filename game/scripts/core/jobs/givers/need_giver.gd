@@ -3,8 +3,8 @@ extends RefCounted
 
 ## Job-giver for eat_food/drink_water/sleep (colonist-ai.md 3.1/3.6/3.8):
 ## decides when a need job should exist. Needs decay/thresholds are content
-## data (content/needs.json) and needs *state* stays on WorldState
-## (colonist.needs) -- this module only reads both, injected below -- and,
+## data (content/needs.json) and needs *state* stays on the colonist
+## (colonist.needs, decayed by NeedsSystem) -- this module only reads both, injected below -- and,
 ## once a threshold is crossed, submits a job through the exact same
 ## scheduler entry point (submit_job) any order-driven dig/chop/haul job
 ## uses. From there the existing job-queue -> scheduler -> toil-executor
@@ -18,7 +18,7 @@ extends RefCounted
 ## Critical needs (colonist-ai.md 3.6) interrupt a colonist's in-progress
 ## `work` toil immediately: interrupt_current_job frees the colonist's
 ## scheduler assignment (the paused job itself is left "active", untouched,
-## by WorldState._pause_work_job()) so the fair scheduler may offer this
+## by NeedsSystem.pause_work_job()) so the fair scheduler may offer this
 ## colonist the need job about to be searched for; resume_interrupted_job
 ## puts it back once that need job resolves. Urgent needs only ever reach
 ## this module's evaluation when the colonist is already idle (no route, no
@@ -90,26 +90,26 @@ var _alerted: Dictionary = {}
 ## reservation_table must be the scheduler's shared ReservationTable (jobs/
 ## reservation_table.gd) -- peeked, never acquired, here (JobQueue's own
 ## activation acquires it once a submitted job is chosen). claimed_targets()
-## -> Dictionary (Vector2i -> true) must be WorldState._need_job_targets():
+## -> Dictionary (Vector2i -> true) must be NeedsSystem.need_job_targets():
 ## every target already named by a queued-or-active need job, mirroring
 ## HaulGiver.advance()'s own "claimed" de-duplication -- a job's target
 ## is not reservation-acquired until the scheduler actually activates it
 ## (colonist-ai.md 3.4), so without this a second colonist's independent
 ## search can find the very same not-yet-reserved candidate and submit a
 ## duplicate job for it. source_candidates(kind: String) -> Array[Vector2i]
-## must be WorldState._need_source_candidates. tile_key(x: int, y: int) ->
+## must be NeedsSystem.need_source_candidates. tile_key(x: int, y: int) ->
 ## String must be WorldState._tile_key. routable_to(target: Vector2i) ->
 ## Callable must be WorldState._routable_to. submit_job(target: Vector2i,
 ## priority: int, tick: int, kind: String) -> Dictionary must be WorldState's
 ## scheduler entry point (_scheduler.submit), the same one dig/chop/forage
 ## orders use. set_reason(colonist_id: String, reason: String) -> void must
-## write WorldState's own exposed reason cache (_need_status) so
+## write NeedsSystem's exposed reason cache (need_status) so
 ## get_colonist_need_reason() keeps working unchanged. emit_need_unmet(
 ## colonist_id: String, kind: String) -> void must record the need_unmet
 ## event exactly once per onset. interrupt_current_job(colonist: Dictionary)
 ## -> void and resume_interrupted_job(colonist_id: String) -> void must be
-## WorldState's _pause_work_job()/_resume_paused_job() wrappers (see
-## world_state.gd's _interrupt_current_job()/_resume_interrupted_job()).
+## NeedsSystem's pause_work_job()/resume_paused_job() wrappers (see
+## needs_system.gd's interrupt_current_job()/resume_interrupted_job()).
 func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, retry_cap_ticks: int,
 		priority: int, bounds_max: Vector2i, reservation_table, claimed_targets: Callable,
 		source_candidates: Callable, tile_key: Callable, routable_to: Callable, submit_job: Callable,

@@ -671,7 +671,7 @@ func _check_cancel_mid_fetch_leaks_no_reservation() -> void:
 	_assert_no_orphaned_reservations(world, "after site_fetch cancel")
 
 ## Cancelling a site_fetch that a critical-need interrupt has suspended after
-## pickup (WorldState._interrupt_current_job(), ADR 009: the job is queued
+## pickup (WorldState._needs_system.interrupt_current_job(), ADR 009: the job is queued
 ## again and only _paused_jobs remembers who carries its wood) must still find
 ## that carrier and return the cargo to the ground, leaving the colonist's
 ## other (need) work state untouched -- adapted from the old single-job
@@ -687,10 +687,10 @@ func _check_cancel_while_suspended_returns_cargo() -> void:
 		_fail("setup must catch the colonist carrying the wood mid-walk to the site")
 		return
 	var colonist: Dictionary = world._find_colonist("colonist_0")
-	world._interrupt_current_job(colonist)
+	world._needs_system.interrupt_current_job(colonist)
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry site_fetch must suspend it back to queued")
-	_expect(world._paused_jobs.get("colonist_0") == job_id,
+	_expect(world._needs_system.paused_jobs.get("colonist_0") == job_id,
 		"the interrupt must record the paused site_fetch job for its carrier")
 	_expect(InventoryType.is_carrying(colonist), "a suspended site_fetch's carrier still holds the wood until the job ends")
 	# Stand in for the need job that now drives this colonist: its own
@@ -705,7 +705,7 @@ func _check_cancel_while_suspended_returns_cargo() -> void:
 		"the suspended site_fetch's wood must return to the ground exactly once, at the carrier's tile")
 	_expect(colonist.get("work") != null and colonist["work"]["job_id"] == "need_stand_in",
 		"terminating a suspended site_fetch must not clear the work state now owned by another job")
-	_expect(not world._paused_jobs.has("colonist_0"), "a cancelled site_fetch must leave no pause entry behind")
+	_expect(not world._needs_system.paused_jobs.has("colonist_0"), "a cancelled site_fetch must leave no pause entry behind")
 	_assert_no_orphaned_reservations(world, "after cancelling a suspended site_fetch")
 
 ## A suspended site_fetch whose carrier is switched to a non-orderable faction
@@ -721,10 +721,10 @@ func _check_refused_resumption_returns_cargo() -> void:
 	if not _tick_until_carrying_mid_walk(world, Vector2i(0, 0)):
 		_fail("setup must catch the colonist carrying the wood mid-walk")
 		return
-	world._interrupt_current_job(world.get_colonists()[0])
+	world._needs_system.interrupt_current_job(world.get_colonists()[0])
 	_expect(_command(world, "set_raider_mid_carry", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
 		"set_faction while the site_fetch is suspended mid-carry must be accepted")
-	world._resume_interrupted_job("colonist_0")
+	world._needs_system.resume_interrupted_job("colonist_0")
 	world._resolve_refused_reservations()
 	var job := _job_by_id(world, job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
@@ -1076,10 +1076,10 @@ func _check_site_progress_survives_a_refused_builder_resumption() -> void:
 	var progress_before := int(world.get_construction_site(site.x, site.y).get("progress", 0))
 	_expect(progress_before > 0, "setup must have recorded genuine progress at the site")
 
-	world._interrupt_current_job(colonist)
+	world._needs_system.interrupt_current_job(colonist)
 	_expect(_command(world, "set_raider_mid_work", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
 		"set_faction while the builder is suspended mid-work must be accepted")
-	world._resume_interrupted_job("colonist_0")
+	world._needs_system.resume_interrupted_job("colonist_0")
 	world._resolve_refused_reservations()
 	var job := _job_by_id(world, work_job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",

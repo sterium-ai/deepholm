@@ -505,7 +505,7 @@ func _reach_mid_chain(seed_value: int) -> Dictionary:
 ## Requirement: a critical-need interrupt mid-chain must pause and
 ## resume at the same leg (the chained site the job had already retargeted
 ## onto, not the first one), losing no held material -- exercising the
-## ordinary ADR 009 interrupt boundary directly (world._interrupt_current_job/
+## ordinary ADR 009 interrupt boundary directly (world._needs_system.interrupt_current_job/
 ## _resume_interrupted_job(), test_build.gd's own established pattern),
 ## adapted to a job that has already retargeted mid-chain.
 func _check_critical_need_interrupt_mid_chain_resumes_same_leg_no_material_lost() -> void:
@@ -519,13 +519,13 @@ func _check_critical_need_interrupt_mid_chain_resumes_same_leg_no_material_lost(
 	var held_before: int = state["held"]
 	_expect(held_before > 0, "the mid-chain fixture must catch the colonist still carrying material")
 	var colonist := world._find_colonist("colonist_0")
-	world._interrupt_current_job(colonist)
+	world._needs_system.interrupt_current_job(colonist)
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
 		"a critical-need interrupt mid-chain must suspend the job back to queued")
 	_expect(InventoryType.count_of_kind(colonist, "wood") == held_before, "the interrupt must not lose any held material")
 	_expect(world._scheduler.queue.get_job(job_id)["site"] == chained_site,
 		"the suspended job must still name the chained site, not the first one")
-	world._resume_interrupted_job("colonist_0")
+	world._needs_system.resume_interrupted_job("colonist_0")
 	var resumed_job := world._scheduler.queue.get_job(job_id)
 	_expect(String(resumed_job.get("status", "")) == "active", "resuming a mid-chain interrupt must reactivate the same job")
 	_expect(resumed_job.get("site") == chained_site, "resuming must continue at the SAME chained leg, not the first site")

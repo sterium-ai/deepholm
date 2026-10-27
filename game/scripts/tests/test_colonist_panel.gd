@@ -374,7 +374,7 @@ func _check_blocked_source_reserved_colonist_shows_reason_and_remedy() -> void:
 func _check_need_source_missing_colonist_shows_reason_and_remedy() -> void:
 	var world := _build_world(60001)
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"water": 20})))
-	world._need_status["colonist_0"] = "need_source_missing:water"
+	world._needs_system.need_status["colonist_0"] = "need_source_missing:water"
 
 	var line: String = _panel_for(world)._line_for(_colonist_by_id(world, "colonist_0"))
 	_expect(line.find("Need reason: No water source exists anywhere on the map") >= 0,
@@ -395,7 +395,7 @@ func _check_need_source_missing_colonist_shows_reason_and_remedy() -> void:
 func _check_need_alert_list_dedupes_and_clears() -> void:
 	var world := _build_world(70001)
 	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"food": 20})))
-	world._need_status["colonist_0"] = "need_unmet:food"
+	world._needs_system.need_status["colonist_0"] = "need_unmet:food"
 	var boot := _boot_for(world)
 
 	boot._update_need_alerts_label()
@@ -407,7 +407,7 @@ func _check_need_alert_list_dedupes_and_clears() -> void:
 	_expect(boot._need_alerts_label.text.split("\n").count("colonist_0: Food need unmet") == 1,
 		"the alert list must list colonist_0 exactly once (got: %s)" % boot._need_alerts_label.text)
 
-	world._need_status["colonist_0"] = ""
+	world._needs_system.need_status["colonist_0"] = ""
 	boot._update_need_alerts_label()
 	_expect(boot._need_alerts_label.text.find("colonist_0") < 0,
 		"the alert list must clear once the colonist's need reason clears (got: %s)" % boot._need_alerts_label.text)

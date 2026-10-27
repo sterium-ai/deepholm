@@ -964,7 +964,7 @@ func _check_moving_candidate_cannot_starve_a_stationary_backup() -> void:
 ## side of the only passage for its own rescue target. Resuming must never
 ## blindly walk it back across; the stale commitment must be retired so a
 ## fresh search can find the still-safe target from the rescuer's new side.
-## world._interrupt_current_job()/_resume_interrupted_job() (the exact same
+## world._needs_system.interrupt_current_job()/_resume_interrupted_job() (the exact same
 ## wrappers a real critical need uses, see
 ## _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() below)
 ## reposition the rescuer directly rather than routing a real need job across
@@ -998,10 +998,10 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	_expect(working, "setup: the rescuer must reach its own active work toil")
 	_expect(world._scheduler.queue.get_job(job_id)["target"] == Vector2i(4, 0),
 		"setup: the west-side candidate must commit to the only route that never crosses the trench")
-	world._interrupt_current_job(rescuer)
+	world._needs_system.interrupt_current_job(rescuer)
 	rescuer["x"] = 10
 	rescuer["y"] = 0
-	world._resume_interrupted_job(rescuer_id)
+	world._needs_system.resume_interrupted_job(rescuer_id)
 	_expect(rescuer.get("work") == null,
 		"a resumed rescue whose only route back to its own stale target crosses the trench must never resume that work")
 	var rescued := false
@@ -1058,10 +1058,10 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 			break
 	_expect(working, "setup: the rescuer must reach its own active work toil")
 	_expect(job["target"] == Vector2i(3, 0), "setup: the only remaining target must be (3, 0)")
-	world._interrupt_current_job(rescuer)
+	world._needs_system.interrupt_current_job(rescuer)
 	rescuer["x"] = 4
 	rescuer["y"] = 1
-	world._resume_interrupted_job(rescuer_id)
+	world._needs_system.resume_interrupted_job(rescuer_id)
 	_expect(rescuer.get("work") == null,
 		"a rescuer merely Chebyshev-adjacent (not exactly on) the target must never start rescue work")
 	var rescued := false
@@ -1082,7 +1082,7 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 ## which decrements the very same tick it restarts, off by one from the
 ## value _work_progress_key() actually restores). The interrupt/resume comes
 ## from a real critical need (mirrors _check_need_preempts_an_already_active_rescue()'s
-## own setup) rather than calling world._interrupt_current_job() directly:
+## own setup) rather than calling world._needs_system.interrupt_current_job() directly:
 ## nothing else would then occupy rescuer A's own committed-assignment slot,
 ## so _committed_jobs() would keep re-proposing job A for it every tick and
 ## GlobalAssignment would reactivate it again the very next tick, undoing the
@@ -1337,7 +1337,7 @@ func _check_cancel_while_suspended_clears_the_rescue_progress_key() -> void:
 	var job_id: String = String(job["id"])
 	var key := _tick_until_rescue_progress(world, rescuer, job_id, RESCUE_TICK_BOUND)
 	_expect(not key.is_empty(), "setup: the rescue must be mid-work with parked progress")
-	world._interrupt_current_job(rescuer)
+	world._needs_system.interrupt_current_job(rescuer)
 	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued", "setup: the rescue must be suspended")
 	# Suspension moves this job's own progress out
 	# of _work_progress into job-id-keyed _suspended_work_progress (see
@@ -1489,10 +1489,10 @@ func _check_rescue_searches_share_the_per_colonist_route_budget() -> void:
 	_expect(retained_search_seen, "an unfinished search must be retained across ticks, never restarted")
 	var job_id: String = String(job["id"])
 	_expect(_tick_until_job_active(world, job_id, RESCUE_TICK_BOUND), "setup: the committed rescue must activate")
-	world._interrupt_current_job(rescuer)
+	world._needs_system.interrupt_current_job(rescuer)
 	rescuer["x"] = 47
 	rescuer["y"] = 0
-	world._resume_interrupted_job(rescuer_id)
+	world._needs_system.resume_interrupted_job(rescuer_id)
 	var route = rescuer.get("route")
 	_expect(route != null and route.get("rerouting") != null,
 		"a resumed rescue far from its target must leave a retained, in-progress re-route -- never a search run to completion synchronously")

@@ -250,7 +250,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 	var dig_job_mid_interrupt := world._scheduler.queue.get_job(dig_job_id)
 	_expect(dig_job_mid_interrupt["status"] == "queued",
 		"the interrupted job must go back to queued (never cancelled or resubmitted to a new id), releasing its reservation per ADR 009 (got '%s')" % dig_job_mid_interrupt["status"])
-	_expect(world._paused_jobs.get("colonist_0", "") == dig_job_id,
+	_expect(world._needs_system.paused_jobs.get("colonist_0", "") == dig_job_id,
 		"the interrupt must record the paused job for colonist_0")
 
 	# A suspended job's own progress moves OUT of
@@ -362,7 +362,7 @@ func _check_paused_job_and_work_progress_round_trip() -> void:
 	_expect(work_started, "the dig job's work toil must start within the tick budget")
 	_set_food(world, "colonist_0", 5)
 	world.tick()
-	_expect(not world._paused_jobs.is_empty(), "the colonist's job must be paused at the save point")
+	_expect(not world._needs_system.paused_jobs.is_empty(), "the colonist's job must be paused at the save point")
 	# A suspended job's own progress now lives in
 	# job-id-keyed _suspended_work_progress, not the shared tile-keyed
 	# _work_progress cache (world_state.gd's own _suspend_work_progress()).
@@ -371,7 +371,7 @@ func _check_paused_job_and_work_progress_round_trip() -> void:
 
 	var saved := world.to_save_state()
 	var restored := WorldType.from_save_state(saved)
-	_expect(restored._paused_jobs == world._paused_jobs,
+	_expect(restored._needs_system.paused_jobs == world._needs_system.paused_jobs,
 		"pausedJobs must round-trip through to_save_state()/from_save_state() unchanged")
 	_expect(restored._progress_table.progress == world._progress_table.progress,
 		"workProgress must round-trip through to_save_state()/from_save_state() unchanged")
@@ -419,11 +419,11 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 	_expect(work_started, "the dig job's work toil must start within the tick budget")
 
 	var colonist := _real_colonist_by_id(live, "colonist_0")
-	live._pause_work_job(colonist)
+	live._needs_system.pause_work_job(colonist)
 	_expect(colonist.get("work") == null, "_pause_work_job() must clear colonist.work")
-	_expect(live._paused_jobs.get("colonist_0", "") == dig_job_id, "_pause_work_job() must record the paused job")
-	live._resume_paused_job(colonist)
-	_expect(live._paused_jobs.is_empty(), "_resume_paused_job() must clear the paused job bookkeeping")
+	_expect(live._needs_system.paused_jobs.get("colonist_0", "") == dig_job_id, "_pause_work_job() must record the paused job")
+	live._needs_system.resume_paused_job(colonist)
+	_expect(live._needs_system.paused_jobs.is_empty(), "_resume_paused_job() must clear the paused job bookkeeping")
 	_expect(colonist.get("work") != null and String(colonist["work"]["job_id"]) == dig_job_id,
 		"_resume_paused_job() must resume the same job's work toil when the colonist is already within reach")
 	var dig_job_before_save := live._scheduler.queue.get_job(dig_job_id)
@@ -537,9 +537,9 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 	# assignment, which is what actually releases and re-acquires the tile
 	# reservation below.
 	var colonist := _real_colonist_by_id(world, "colonist_0")
-	world._interrupt_current_job(colonist)
+	world._needs_system.interrupt_current_job(colonist)
 	_expect(colonist.get("work") == null, "_interrupt_current_job() must clear colonist.work")
-	_expect(world._paused_jobs.get("colonist_0", "") == dig_job_id, "_interrupt_current_job() must record the paused job")
+	_expect(world._needs_system.paused_jobs.get("colonist_0", "") == dig_job_id, "_interrupt_current_job() must record the paused job")
 	_expect(not world._scheduler.queue.get_reservation_table().is_reserved("tile:3,0"),
 		"pausing the job must release its tile reservation")
 
@@ -548,8 +548,8 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldType.TILE_TRENCH
 	world._item_table.spawn_item("sand", 4, 0)
 
-	world._resume_interrupted_job("colonist_0")
-	_expect(world._paused_jobs.is_empty(), "_resume_interrupted_job() must clear the paused job bookkeeping")
+	world._needs_system.resume_interrupted_job("colonist_0")
+	_expect(world._needs_system.paused_jobs.is_empty(), "_resume_interrupted_job() must clear the paused job bookkeeping")
 	_expect(colonist.get("work") != null and String(colonist["work"]["job_id"]) == dig_job_id,
 		"_resume_interrupted_job() must resume the same job's work toil when the colonist is already within reach")
 

@@ -124,7 +124,7 @@ static func submit_till_orders(world: WorldStateType, count: int) -> int:
 static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
 	var t := Time.get_ticks_usec()
 	world._clock.advance(1)
-	world._decay_needs()
+	world._needs_system.decay_needs()
 	t = _lap(totals, "needs_decay", t)
 	world._need_giver.advance(world._colonists_not_combat_owned(), world._clock.tick)
 	t = _lap(totals, "need_giver", t)

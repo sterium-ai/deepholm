@@ -120,7 +120,7 @@ Orca helper scripts, this backlog.
 - **Goal:** `economy/trade_system.gd` owns pending offers and `accept_trade`.
 - **Acceptance:** as R1; trader tests unchanged.
 
-### R8 — Extract `NeedsSystem` · `todo`
+### R8 — Extract `NeedsSystem` · `review (antonelmejor50-hub/r8-extract-needssystem)`
 
 - **Goal:** `actors/needs_system.gd` owns decay, interrupt/suspend/resume of the current
   job for needs, need reasons/events, source candidates and need effects;
