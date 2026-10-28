@@ -17,6 +17,8 @@ const FIXTURE_ROOT := "user://pack_fixture/"
 const FACINGS := ["down", "up", "side"]
 const BASE_PREFIXES := ["idle", "walk", "carry_idle", "carry_walk"]
 const WORK_PREFIXES := ["chop", "mine", "dig", "build"]
+const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
+const ViewSnapshotStub = preload("res://scripts/tests/support/view_snapshot_stub.gd")
 
 ## Minimal stand-in for the getters colonist_sprites.gd reads, so a colonist
 ## can be put "in a work toil" of a given job kind without a simulation.
@@ -35,6 +37,15 @@ class FakeWorld:
 	func get_move_ticks_per_tile() -> int: return 4
 	func get_tool_item(_id: String) -> Dictionary: return {}
 	func get_actors_with_health() -> Array: return []
+	# WorldState.get_view_snapshot() (A9): the columns colonist_sprites.gd reads.
+	func get_view_snapshot(_detail_ids: Array = []) -> Dictionary:
+		var worker_ids := {}
+		for colonist: Dictionary in colonists:
+			worker_ids[String(colonist["id"])] = true
+		var job_kinds := {}
+		for job: Dictionary in jobs:
+			job_kinds[String(job["id"])] = String(job["kind"])
+		return ViewSnapshotStub.columns(colonists, worker_ids, job_kinds)
 
 class FakeDriver:
 	extends RefCounted
@@ -164,7 +175,7 @@ func _check_work_animations() -> void:
 		var sprites := ColonistSpritesType.new(case["root"])
 		sprites.set_tick_driver(FakeDriver.new())
 		sprites.set_world(world)
-		var sprite: AnimatedSprite2D = sprites._sprites["colonist_0"]
+		var sprite: SpriteRecordType = sprites._sprites["colonist_0"]
 		var label := "%s with %s" % [case["kind"], "pack" if case["root"] == FIXTURE_ROOT else "placeholder"]
 		_expect(sprite.animation == case["expected"],
 			"%s: animation %s, expected %s" % [label, sprite.animation, case["expected"]])

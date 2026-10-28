@@ -1,7 +1,7 @@
 extends Control
 
 ## Work-priority table (colonist-ai.md 3.2/3.7/3.8):
-## one row per colonist (world.get_colonists()), one column per labour kind
+## one row per colonist (the view snapshot's worker roster), one column per labour kind
 ## (WorldState.LABOUR_KINDS -- referenced, not copied, so this table always
 ## matches the core vocabulary), each cell showing that colonist's current
 ## labourTable level. Tapping/clicking a cell cycles its level in the
@@ -42,7 +42,13 @@ extends Control
 ## changes (a colonist added or removed); the common case -- an ordinary,
 ## tick-driven refresh -- just updates each already-alive button/label's
 ## text in place, so a button the player is mid-press on is always the exact
-## same node before and after.
+## same node before and after. A9: it reads the WorldState.get_view_snapshot()
+## boot.gd passes in, whose full records cover the colonist panel's window of rows
+## (colonist_panel.gd's detail_ids()); only those rows are compared, and a row's
+## cells are touched only when its labourTable differs from the one it last showed.
+## Labour levels change only through set_labour, and this table's own clicks
+## refresh their row at once; a rebuild (the roster changed) or a refresh() called
+## without a snapshot reads every row.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
@@ -74,6 +80,11 @@ var _header_labels: Dictionary = {}
 ## The colonist id set (sorted) the grid was last built for; refresh() only
 ## calls _rebuild_grid() again when this set has actually changed.
 var _known_colonist_ids: Array[String] = []
+## colonist id -> the labourTable its row's cells last showed.
+var _shown_tables: Dictionary = {}
+## The ids/worker columns _known_colonist_ids was last read from.
+var _seen_ids: Array = []
+var _seen_worker: Array = []
 var _command_sequence: int = 0
 ## A6: _most_recent_calendar_alert() reads only the calendar_alert events
 ## world.get_events_since() returns past _alert_cursor, keeping the best one
@@ -105,16 +116,22 @@ func setup(world_ref: WorldStateType, text_table: TextTableType) -> void:
 
 	refresh()
 
-func refresh() -> void:
+## `snapshot` is this tick's WorldState.get_view_snapshot(); {} takes a fresh one
+## with every row's full record.
+func refresh(snapshot: Dictionary = {}) -> void:
 	if world == null:
 		return
-	var colonists := _sorted_colonists()
-	var ids := _colonist_ids(colonists)
+	if snapshot.is_empty():
+		snapshot = world.get_view_snapshot(_known_colonist_ids)
+	var ids := _colonist_ids(snapshot)
 	if ids != _known_colonist_ids:
-		_rebuild_grid(colonists)
+		var details: Dictionary = snapshot["details"]
+		if details.size() < ids.size():
+			details = world.get_view_snapshot(ids)["details"]
+		_rebuild_grid(ids, details)
 		_known_colonist_ids = ids
 	else:
-		_update_grid_values(colonists)
+		_update_grid_values(snapshot["details"])
 	_update_banner()
 
 func cell_count() -> int:
@@ -126,26 +143,30 @@ func _cell_button(colonist_id: String, labour: String) -> Button:
 func _cell_key(colonist_id: String, labour: String) -> String:
 	return "%s:%s" % [colonist_id, labour]
 
-func _sorted_colonists() -> Array[Dictionary]:
-	var colonists: Array[Dictionary] = world.get_colonists()
-	colonists.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["id"]) < String(b["id"]))
-	return colonists
-
-func _colonist_ids(colonists: Array[Dictionary]) -> Array[String]:
+## The snapshot's colonist ids, sorted; re-read only when its ids or worker
+## columns differ from the last snapshot's.
+func _colonist_ids(snapshot: Dictionary) -> Array[String]:
+	var all_ids: Array = snapshot["ids"]
+	var worker: Array = snapshot["worker"]
+	if all_ids == _seen_ids and worker == _seen_worker:
+		return _known_colonist_ids
+	_seen_ids = all_ids
+	_seen_worker = worker
 	var ids: Array[String] = []
-	for colonist in colonists:
-		ids.append(String(colonist["id"]))
+	for row: int in snapshot["workers_by_id"]:
+		ids.append(all_ids[row])
 	return ids
 
 ## Builds the header row and one row per colonist from scratch. Only called
 ## from refresh() when the colonist id set has actually changed (a colonist
 ## added or removed) -- never on an ordinary tick-driven refresh, so a
 ## button the player is mid-press on is never torn down underneath them.
-func _rebuild_grid(colonists: Array[Dictionary]) -> void:
+func _rebuild_grid(ids: Array[String], details: Dictionary) -> void:
 	for child in _grid.get_children():
 		child.queue_free()
 	_cell_buttons.clear()
 	_header_labels.clear()
+	_shown_tables.clear()
 
 	var corner := Label.new()
 	corner.text = _text_table.get_string("work_table.colonist_header")
@@ -156,12 +177,12 @@ func _rebuild_grid(colonists: Array[Dictionary]) -> void:
 		_grid.add_child(header)
 		_header_labels[labour] = header
 
-	for colonist in colonists:
-		var colonist_id := String(colonist["id"])
+	for colonist_id in ids:
 		var id_label := Label.new()
 		id_label.text = colonist_id
 		_grid.add_child(id_label)
-		var labour_table: Dictionary = colonist.get("labourTable", {})
+		var labour_table: Dictionary = (details.get(colonist_id, {}) as Dictionary).get("labourTable", {})
+		_shown_tables[colonist_id] = labour_table
 		for labour in LABOUR_KINDS:
 			var level := int(labour_table.get(labour, 0))
 			var cell := Button.new()
@@ -173,15 +194,18 @@ func _rebuild_grid(colonists: Array[Dictionary]) -> void:
 
 ## Updates every already-built cell/header's displayed text in place, without
 ## touching a single Button/Label node's identity -- the counterpart to
-## _rebuild_grid() for the common case (colonist set unchanged).
-func _update_grid_values(colonists: Array[Dictionary]) -> void:
+## _rebuild_grid() for the common case (colonist set unchanged). `details` is the
+## snapshot's full records: only those colonists' rows are compared.
+func _update_grid_values(details: Dictionary) -> void:
 	for labour in LABOUR_KINDS:
 		var header: Label = _header_labels.get(labour)
 		if header != null:
 			header.text = _column_header_text(labour)
-	for colonist in colonists:
-		var colonist_id := String(colonist["id"])
-		var labour_table: Dictionary = colonist.get("labourTable", {})
+	for colonist_id: String in details:
+		var labour_table: Dictionary = (details[colonist_id] as Dictionary).get("labourTable", {})
+		if _shown_tables.get(colonist_id) == labour_table:
+			continue
+		_shown_tables[colonist_id] = labour_table
 		for labour in LABOUR_KINDS:
 			var cell: Button = _cell_buttons.get(_cell_key(colonist_id, labour))
 			if cell != null:
@@ -220,13 +244,10 @@ func _on_cell_pressed(colonist_id: String, labour: String) -> void:
 		"type": "set_labour",
 		"payload": {"colonist": colonist_id, "kind": labour, "level": next_level},
 	})
-	refresh()
+	refresh(world.get_view_snapshot([colonist_id]))
 
 func _find_colonist(colonist_id: String) -> Dictionary:
-	for colonist in world.get_colonists():
-		if String(colonist["id"]) == colonist_id:
-			return colonist
-	return {}
+	return (world.get_view_snapshot([colonist_id])["details"] as Dictionary).get(colonist_id, {})
 
 ## Finds the calendar_alert event with the highest tick (the latest in log
 ## order on a tie) among those world.get_events_since() has returned (the

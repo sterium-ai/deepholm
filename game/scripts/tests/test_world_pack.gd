@@ -17,6 +17,7 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 
 const MISSING_ROOT := "user://no_pack_here/"
 const FIXTURE_ROOT := "user://world_pack_fixture/"
+const ViewSnapshotStub = preload("res://scripts/tests/support/view_snapshot_stub.gd")
 
 class FakeWorld:
 	extends RefCounted
@@ -24,6 +25,18 @@ class FakeWorld:
 	var actors: Array = []
 	func get_colonists() -> Array: return colonists
 	func get_actors_with_health() -> Array: return actors
+	# WorldState.get_view_snapshot() (A9): the columns actor_sprites.gd reads; every
+	# actor here stands for one with health (get_actors_with_health() returned them all).
+	func get_view_snapshot(_detail_ids: Array = []) -> Dictionary:
+		var worker_ids := {}
+		for colonist: Dictionary in colonists:
+			worker_ids[String(colonist["id"])] = true
+		var with_health: Array = []
+		for actor: Dictionary in actors:
+			var entry := actor.duplicate()
+			entry["health"] = {"hp": 1, "maxHp": 1}
+			with_health.append(entry)
+		return ViewSnapshotStub.columns(with_health, worker_ids)
 
 class FakeDriver:
 	extends RefCounted

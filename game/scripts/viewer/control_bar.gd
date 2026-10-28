@@ -91,7 +91,7 @@ static func make_button(text: String, on_pressed: Callable) -> Button:
 ## boot.gd's _make_incident_buttons() (a headless test never runs _ready()).
 static func make_incident_buttons(world: WorldStateType, text_table: TextTableType, spawn_incident: Callable) -> Array[Button]:
 	var buttons: Array[Button] = []
-	for entry in world._content.list("incidents"):
+	for entry in world.get_content_list("incidents"):
 		var incident_id := String(entry["id"])
 		var button := Button.new()
 		button.text = StatusTextType.incident_display_name(text_table, incident_id)

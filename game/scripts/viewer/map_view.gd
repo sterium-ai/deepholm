@@ -152,6 +152,11 @@ var _object_tile_map_layer: TileMapLayer
 var _colonist_sprites: Node2D
 var _actor_sprites: Node2D
 var _designation_overlay: Node2D
+## A9: the WorldState.get_view_snapshot() of the last refresh() (or set_world()),
+## which both sprite layers and _draw() read instead of calling the getters.
+var _snapshot: Dictionary = {}
+## The world _snapshot was taken from: a world assigned without set_world() (tests) is re-read.
+var _snapshot_world: WorldStateType
 
 ## Raw-sheet textures cached once per registered item kind.
 var _item_atlas_textures: Dictionary = {}
@@ -245,6 +250,7 @@ func set_tick_driver(driver) -> void:
 func set_world(world_ref: WorldStateType) -> void:
 	cancel_selection()
 	world = world_ref
+	_take_snapshot({})
 	_resize_for_world()
 	_colonist_sprites.set_world(world_ref)
 	_actor_sprites.set_world(world_ref)
@@ -271,11 +277,14 @@ func _resize_for_world() -> void:
 ## once per tick instead of queue_redraw() directly so the TileMapLayer picks
 ## up tile changes (e.g. a dig turning rock into floor) exactly like the
 ## flat-colour path already does by re-reading world.get_tiles() every draw.
-func refresh() -> void:
+## `snapshot` is this tick's WorldState.get_view_snapshot() (boot.gd takes one per
+## tick and hands it to every panel); {} takes a fresh one.
+func refresh(snapshot: Dictionary = {}) -> void:
+	_take_snapshot(snapshot)
 	_update_preview()
 	_refresh_tile_map(false)
-	_colonist_sprites.refresh()
-	_actor_sprites.refresh()
+	_colonist_sprites.refresh(_snapshot)
+	_actor_sprites.refresh(_snapshot)
 	_designation_overlay.refresh()
 	queue_redraw()
 
@@ -803,9 +812,15 @@ func _decor_variant_coords(x: int, y: int, decor: Dictionary) -> Vector2i:
 func is_pack_art() -> bool:
 	return not _pack_item_icons.is_empty()
 
+func _take_snapshot(snapshot: Dictionary) -> void:
+	_snapshot_world = world
+	_snapshot = snapshot if not snapshot.is_empty() or world == null else world.get_view_snapshot()
+
 func _draw() -> void:
 	if world == null:
 		return
+	if _snapshot.is_empty() or _snapshot_world != world:
+		_take_snapshot({})
 	if not _art_enabled:
 		var tiles: Array[String] = world.get_tiles()
 		var width: int = world.get_map_width()
@@ -828,25 +843,31 @@ func _draw() -> void:
 			), object_color, true)
 	if not _art_enabled:
 		var inset := TILE_SIZE * 0.2
-		for colonist in world.get_colonists():
+		var ids: Array = _snapshot["ids"]
+		var worker: Array = _snapshot["worker"]
+		var xs: Array = _snapshot["x"]
+		var ys: Array = _snapshot["y"]
+		var carrying: Array = _snapshot["carrying"]
+		for row in ids.size():
+			if worker[row] == 0:
+				continue
 			draw_rect(Rect2(
-				colonist["x"] * TILE_SIZE + inset,
-				colonist["y"] * TILE_SIZE + inset,
+				xs[row] * TILE_SIZE + inset,
+				ys[row] * TILE_SIZE + inset,
 				TILE_SIZE - inset * 2.0,
 				TILE_SIZE - inset * 2.0
 			), COLONIST_COLOR, true)
 			# Colour-mode carried-item marker.
-			# The art-mode equivalent lives in colonist_sprites.gd, layered
-			# onto the colonist's own AnimatedSprite2D so it renders on top
-			# of the sprite in art mode instead of underneath it.
-			if colonist.get("carrying") != null:
+			# The art-mode equivalent lives in colonist_sprites.gd, whose badge
+			# layer draws over its bodies in art mode instead of underneath.
+			if carrying[row] != "":
 				var marker_size := TILE_SIZE * 0.35
 				draw_rect(Rect2(
-					colonist["x"] * TILE_SIZE + TILE_SIZE - marker_size,
-					colonist["y"] * TILE_SIZE,
+					xs[row] * TILE_SIZE + TILE_SIZE - marker_size,
+					ys[row] * TILE_SIZE,
 					marker_size,
 					marker_size
-				), GROUND_ITEM_COLORS.get(String(colonist["carrying"]["kind"]), Color.MAGENTA), true)
+				), GROUND_ITEM_COLORS.get(carrying[row], Color.MAGENTA), true)
 	_draw_stockpile_counts()
 	_draw_construction_sites()
 	_drag_preview.draw(self, TILE_SIZE, _visible_tile_rect())
@@ -861,7 +882,7 @@ func _draw() -> void:
 			draw_line(rect.position + Vector2(3, 3), rect.end - Vector2(3, 3), color, 1.0)
 
 func _draw_construction_sites() -> void:
-	for site in world.get_construction_sites():
+	for site: Dictionary in _snapshot["construction_sites"]:
 		var orientation := String(site.get("orientation", "horizontal"))
 		var kind := String(site["kind"])
 		var footprint_rect := construction_site_footprint_rect(site)
@@ -904,11 +925,11 @@ static func construction_bar_rect(footprint_rect: Rect2) -> Rect2:
 	return Rect2(footprint_rect.position.x, footprint_rect.position.y - CONSTRUCTION_BAR_GAP - CONSTRUCTION_BAR_HEIGHT,
 		footprint_rect.size.x, CONSTRUCTION_BAR_HEIGHT)
 
-## Sum the generic ground-item snapshot once, never scan all items per cell.
+## Sum the snapshot's ground items once, never scan all items per cell.
 ## Carried cargo is absent from get_items() and cannot inflate these counts.
 func _ground_item_counts() -> Dictionary:
 	var counts := {}
-	for item in world.get_items():
+	for item: Dictionary in _snapshot["items"]:
 		var kind := String(item["kind"])
 		if not TileAtlasMapType.ITEM_ATLAS_MAP.has(kind):
 			continue
@@ -916,7 +937,7 @@ func _ground_item_counts() -> Dictionary:
 		if not counts.has(cell):
 			counts[cell] = {}
 		counts[cell][kind] = int(counts[cell].get(kind, 0)) + int(item["count"])
-	for item in world.get_tool_items():
+	for item: Dictionary in _snapshot["tool_items"]:
 		var location: Dictionary = item["location"]
 		if location["type"] != "ground":
 			continue
@@ -970,7 +991,7 @@ static func fit_rect(box: Rect2, content: Vector2) -> Rect2:
 ## The cells of `counts` inside a zone, ordered by zone (get_zones() order),
 ## then row-major -- each cell once, under the first zone containing it.
 func _zoned_cells_in_draw_order(counts: Dictionary) -> Array[Vector2i]:
-	var zones := world.get_zones()
+	var zones: Array = _snapshot["zones"]
 	var keyed: Array = []
 	for cell in counts:
 		for zone_index in zones.size():

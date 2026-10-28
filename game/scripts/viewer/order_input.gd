@@ -295,7 +295,7 @@ func rotate_build(world: WorldStateType, map_view: MapViewType) -> void:
 static func build_kind_is_rotatable(world: WorldStateType, kind: String) -> bool:
 	if world == null:
 		return false
-	for entry in world._content.list("objects"):
+	for entry in world.get_content_list("objects"):
 		if String(entry.get("kind", "")) == kind:
 			return bool(entry.get("rotatable", false))
 	return false

@@ -13,6 +13,7 @@ const ColonistPanelType = preload("res://scripts/viewer/colonist_panel.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const TileAtlasMapType = preload("res://scripts/viewer/tile_atlas_map.gd")
+const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
 
 var _failed := false
 
@@ -74,7 +75,7 @@ func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	var colonist := world.get_colonists()[0]
 	var sprites = load("res://scripts/viewer/colonist_sprites.gd").new()
 	sprites.set_world(world)
-	var marker: Sprite2D = sprites._carried_markers["colonist_0"]
+	var marker: SpriteRecordType = sprites._carried_markers["colonist_0"]
 	var atlas: Dictionary = load("res://scripts/viewer/tile_atlas_map.gd").ITEM_ATLAS_MAP[item_kind]
 	_expect(marker.visible, "real haul must show the carried " + item_kind)
 	_expect(marker.texture.resource_path == atlas["texture_path"] and marker.region_rect == atlas["rect"], "cargo badge must resolve the actual carried kind: " + item_kind)
@@ -130,7 +131,7 @@ func _check_tool_display() -> void:
 		sprites.refresh()
 		_expect(panel._line_for(world.get_colonists()[0]).contains("Held tool: " + kind), "panel resolves held item kind")
 		_expect(sprites._tool_markers[id].visible, "held tool marker is visible")
-		var marker: Sprite2D = sprites._tool_markers[id]
+		var marker: SpriteRecordType = sprites._tool_markers[id]
 		var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
 		_expect(marker.region_rect == atlas["rect"], "tool marker resolves registered region: " + kind)
 		_expect(marker.texture.resource_path == atlas["texture_path"], "tool marker resolves registered texture: " + kind)

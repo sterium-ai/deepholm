@@ -49,6 +49,13 @@ to record a session for headless replay ([replay.md](replay.md)). Its rules
 (timing, no mutation, one owner, internal commands excluded) are set in
 [ADR 050](../decisions/050-command-observer.md).
 
+The viewer reads the core once per refresh through
+`WorldState.get_view_snapshot(detail_ids)`: per-actor columns for the map and the lists,
+full records only for the colonists whose panel rows it is rewriting, and one copy of each
+other collection it shows. Every container in it is read-only and it is never persisted or
+hashed ([ADR 054](../decisions/054-viewer-snapshot.md)). Viewer scripts and `boot.gd` never
+touch a private `WorldState` member (`world._x`); `test_architecture_rules.gd` enforces it.
+
 ## Determinism and time
 
 - The simulation advances only through explicit ticks.

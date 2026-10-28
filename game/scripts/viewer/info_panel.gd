@@ -36,12 +36,19 @@ func build(world: WorldStateType, text_table: TextTableType, labels: Array[Label
 	colonist_panel.setup(world, text_table)
 	content.add_child(colonist_panel)
 
-func refresh() -> void:
-	colonist_panel.refresh()
-	work_table_panel.refresh()
+## The colonist ids whose full records the next refresh() reads (the colonist
+## panel's window), for boot.gd's WorldState.get_view_snapshot(detail_ids).
+func detail_ids() -> Array:
+	return colonist_panel.detail_ids()
+
+## `snapshot` is this tick's WorldState.get_view_snapshot() (A9), shared by both panels.
+func refresh(snapshot: Dictionary = {}) -> void:
+	colonist_panel.refresh(snapshot)
+	work_table_panel.refresh(snapshot)
 
 func set_world(world: WorldStateType) -> void:
 	colonist_panel.world = world
+	colonist_panel.forget_rows()
 	colonist_panel.refresh()
 	work_table_panel.world = world
 	work_table_panel.refresh()

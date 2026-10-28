@@ -212,17 +212,19 @@ func _on_ticked() -> void:
 	autosave_trigger.check(world.get_tick())
 	_refresh()
 
+## One WorldState.get_view_snapshot() per refresh (A9), read by every panel and layer.
 func _refresh() -> void:
+	var snapshot := world.get_view_snapshot(_ui_scroll.detail_ids() if _ui_scroll != null else [])
 	if _map_view != null:
-		_map_view.refresh()
+		_map_view.refresh(snapshot)
 	if _ui_scroll != null:
-		_ui_scroll.refresh()
-	_update_need_alerts_label()
+		_ui_scroll.refresh(snapshot)
+	_update_need_alerts_label(snapshot)
 	_refresh_room_label()
 
-func _update_need_alerts_label() -> void:
+func _update_need_alerts_label(snapshot: Dictionary = {}) -> void:
 	if _need_alerts_label != null:
-		_need_alerts_label.text = StatusTextType.need_alerts_text(world, _text_table)
+		_need_alerts_label.text = StatusTextType.need_alerts_text(world, _text_table, snapshot)
 
 func _refresh_room_label() -> void:
 	if _room_label != null:
