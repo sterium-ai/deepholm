@@ -85,15 +85,18 @@ func _init() -> void:
 	_room_label = Label.new()
 
 ## The default boot world is a real New Game: scenarios.json's "new_game" entry (A16,
-## ADR 052) at mapgen.json's default size with incidents enabled (only the live viewer
+## ADR 053) at mapgen.json's default size with incidents enabled (only the live viewer
 ## wants spawn_incident reachable), never the debug scenario. Pure, so
 ## test_viewer_hash.gd can call it directly. content defaults to the session registry; a
-## test passes its own to build on a pack.
-static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: int = 10,
+## test passes its own to build on a pack. tick_rate null keeps the scenario's own rate.
+static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: Variant = null,
 		content: ContentRegistryType = null, scenario_id: String = ScenarioBuilderType.NEW_GAME_SCENARIO_ID) -> WorldStateType:
 	if content == null:
 		content = session_content()
-	return ScenarioBuilderType.build(content, scenario_id, {"seed": seed_value, "tick_rate": tick_rate})
+	var options := {"seed": seed_value}
+	if tick_rate != null:
+		options["tick_rate"] = int(tick_rate)
+	return ScenarioBuilderType.build(content, scenario_id, options)
 
 static func session_content() -> ContentRegistryType:
 	if _session_content == null:
@@ -277,7 +280,7 @@ func _on_debug_scenario_pressed() -> void:
 		_text_table.format("status.debug_scenario_started", [DebugScenarioType.scenario_seed()]))
 
 func _start_new_game(seed_value: int, scenario_id: String = ScenarioBuilderType.NEW_GAME_SCENARIO_ID) -> void:
-	var new_world := build_default_world(seed_value, 10, null, scenario_id)
+	var new_world := build_default_world(seed_value, null, null, scenario_id)
 	_swap_in_unsaved_world(new_world, _text_table.format("status.new_game_started", [seed_value, new_world.get_map_width(), new_world.get_map_height()]))
 
 ## Swaps in a fresh colony like Load does, never touching the previous save.

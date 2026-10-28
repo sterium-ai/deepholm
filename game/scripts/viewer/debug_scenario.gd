@@ -1,6 +1,6 @@
 extends RefCounted
 
-## The seeded debug-viewer scenario: content/scenarios.json's "debug" entry (A16, ADR 052),
+## The seeded debug-viewer scenario: content/scenarios.json's "debug" entry (A16, ADR 053),
 ## built by ScenarioBuilder. Its setup places a wall line with a door, chairs and tables, a
 ## berry bush and a bed around the spawn clearing, submits seeded dig orders, and, only for
 ## the entry's own seed, tills a starting plot and drops a seed stock. Never reads player/UI

@@ -2,7 +2,7 @@
   "scenarios": [
     {
       "id": "new_game",
-      "label": "New game",
+      "label": "scenario.new_game",
       "tick_rate": 10,
       "incidents_enabled": true,
       "setup": [
@@ -12,7 +12,7 @@
     },
     {
       "id": "debug",
-      "label": "Debug scenario",
+      "label": "scenario.debug",
       "seed": 20260915,
       "map": {"width": 48, "height": 48},
       "tick_rate": 10,

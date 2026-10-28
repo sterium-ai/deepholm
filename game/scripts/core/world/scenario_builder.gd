@@ -1,7 +1,7 @@
 class_name ScenarioBuilder
 extends RefCounted
 
-## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 052): the map
+## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 053): the map
 ## size, seed, tick rate and incident switch, then the entry's setup steps in order. A
 ## caller-side factory, not a WorldState module: it constructs the world and drives it only
 ## through apply()/tick() and the public spawn_ground_tool_item(), except for the two
@@ -35,6 +35,9 @@ class BuildContext:
 	var till_target := NO_TILE
 	var till_target_taken := false
 	var till_search_radius := 0
+	## How many spawn-pool tiles the needed_tools/per_colonist_objects steps so far claimed;
+	## each such step takes the tiles from here on, so no two of them share a tile.
+	var pool_cursor := 0
 
 ## The world scenario_id describes, built on content (the session registry). options may
 ## set "seed", "tick_rate" and "incidents_enabled" over the entry's own values; a scenario
@@ -79,10 +82,10 @@ static func _run_step(world: WorldStateType, content: ContentRegistryType, step:
 	var step_kind: String = step["step"]
 	match step_kind:
 		"needed_tools":
-			_run_needed_tools(world, content)
+			_run_needed_tools(world, content, context)
 		"per_colonist_objects":
 			var kind: String = step["kind"]
-			_run_per_colonist_objects(world, content, kind)
+			_run_per_colonist_objects(world, content, kind, context)
 		"object_rows":
 			_run_object_rows(world, step)
 		"dig_orders":
@@ -114,17 +117,19 @@ static func _till_target(world: WorldStateType, context: BuildContext) -> Vector
 ## One ground tool per needs_tool kind, kinds sorted so the placement order never depends on
 ## jobs.json's field order, through spawn_ground_tool_item() and the fetch_tool toil path a
 ## player-placed tool uses. Tiles come from the spawn clearing's vetted land pool
-## (get_spawn_clearing()'s "land_tiles", never water or a colonist's tile).
-static func _run_needed_tools(world: WorldStateType, content: ContentRegistryType) -> void:
+## (get_spawn_clearing()'s "land_tiles", never water or a colonist's tile), from the pool
+## cursor on.
+static func _run_needed_tools(world: WorldStateType, content: ContentRegistryType, context: BuildContext) -> void:
 	var tool_kinds := _needed_tool_kinds(content)
 	var mapgen := content.document("mapgen")
-	var tiles := _claim_starting_tiles(world, mapgen, tool_kinds.size() + world.get_colonists().size())
+	var first := context.pool_cursor
+	var tiles := _claim_starting_tiles(world, mapgen, first + tool_kinds.size())
 	for i in tool_kinds.size():
-		var tile: Vector2i = tiles[i] if i < tiles.size() else _fallback_anchor(world, mapgen)
+		var tile: Vector2i = tiles[first + i] if first + i < tiles.size() else _fallback_anchor(world, mapgen)
 		world.spawn_ground_tool_item(tool_kinds[i], tile.x, tile.y)
+	context.pool_cursor = first + tool_kinds.size()
 
-## Every job kind's needs_tool, deduplicated and sorted; both pool steps use it so they agree
-## on how many pool tiles the tools claim.
+## Every job kind's needs_tool, deduplicated and sorted.
 static func _needed_tool_kinds(content: ContentRegistryType) -> Array[String]:
 	var tool_kinds: Array[String] = []
 	for job_def: Dictionary in content.list("jobs"):
@@ -135,12 +140,15 @@ static func _needed_tool_kinds(content: ContentRegistryType) -> Array[String]:
 	return tool_kinds
 
 ## Exactly one `kind` object per colonist (a New Game's beds: nothing else meets the rest
-## need), placed through place_object on the pool tiles past those the tools claim.
-static func _run_per_colonist_objects(world: WorldStateType, content: ContentRegistryType, kind: String) -> void:
+## need), placed through place_object on the pool tiles from the cursor on, past those earlier
+## pool steps claimed (a New Game's tools).
+static func _run_per_colonist_objects(world: WorldStateType, content: ContentRegistryType, kind: String,
+		context: BuildContext) -> void:
 	var colonist_count := world.get_colonists().size()
-	var tool_count := _needed_tool_kinds(content).size()
-	var tiles := _claim_starting_tiles(world, content.document("mapgen"), tool_count + colonist_count)
-	var object_tiles := tiles.slice(tool_count, tool_count + colonist_count)
+	var first := context.pool_cursor
+	var tiles := _claim_starting_tiles(world, content.document("mapgen"), first + colonist_count)
+	var object_tiles := tiles.slice(first, first + colonist_count)
+	context.pool_cursor = first + colonist_count
 	for i in object_tiles.size():
 		var tile: Vector2i = object_tiles[i]
 		world.apply({

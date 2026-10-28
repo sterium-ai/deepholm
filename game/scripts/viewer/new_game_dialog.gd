@@ -1,7 +1,7 @@
 extends ConfirmationDialog
 
 ## The New Game confirmation: resolves the toolbar's seed field, lets the player pick a
-## scenarios.json entry (A16, ADR 052; "new_game" preselected) and asks before boot.gd
+## scenarios.json entry (A16, ADR 053; "new_game" preselected) and asks before boot.gd
 ## regenerates the live world with pending_seed and pending_scenario_id.
 
 const ScenarioBuilderType = preload("res://scripts/core/world/scenario_builder.gd")
@@ -20,11 +20,11 @@ func _init(text_table: TextTableType = null) -> void:
 	scenario_picker.item_selected.connect(_on_scenario_selected)
 
 ## One picker item per scenario entry (the registry's id-sorted list), labelled by its
-## "label"; the item metadata is the scenario id.
+## "label" text key through TextTable; the item metadata is the scenario id.
 func set_scenarios(scenarios: Array) -> void:
 	scenario_picker.clear()
 	for scenario: Dictionary in scenarios:
-		scenario_picker.add_item(String(scenario["label"]))
+		scenario_picker.add_item(_text_table.get_string(String(scenario["label"])))
 		var index := scenario_picker.item_count - 1
 		scenario_picker.set_item_metadata(index, String(scenario["id"]))
 		if scenario["id"] == pending_scenario_id:

@@ -1,12 +1,14 @@
 extends SceneTree
 
-## Covers scenarios as content (A16, ADR 052): 1) the base bundle ships the "new_game" and
+## Covers scenarios as content (A16, ADR 053): 1) the base bundle ships the "new_game" and
 ## "debug" scenarios; 2) both build headless with a deterministic state_hash(), the same
 ## after the same ticks, through ScenarioBuilder and through boot.gd/DebugScenario's entry
 ## points; 3) "when": "scenario_seed" steps run only for the scenario's own seed; 4) a
 ## scenario a pack adds builds, with its own size, seed and objects; 5) every scenario rule
 ## the registry enforces fails typed; 6) an unknown scenario or a missing seed builds
-## nothing; 7) the New Game dialog lists the scenarios and boot builds the one picked.
+## nothing; 7) the New Game dialog lists the scenarios and boot builds the one picked;
+## 8) New Game through the dialog keeps the picked scenario's own tick rate; 9) several
+## spawn-pool steps (tools, then two per_colonist_objects kinds) never share a tile.
 ## The byte-identity of the default New Game against main is shown by
 ## docs/orca/handoffs/A16-scenario_dump.gd, not here (there is no older builder to compare).
 
@@ -16,10 +18,15 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const BootType = preload("res://scripts/boot.gd")
 const DebugScenarioType = preload("res://scripts/viewer/debug_scenario.gd")
 const NewGameDialogType = preload("res://scripts/viewer/new_game_dialog.gd")
+const TickDriverType = preload("res://scripts/viewer/tick_driver.gd")
+const AutosaveTriggerType = preload("res://scripts/viewer/autosave_trigger.gd")
+const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
 
 const BASE := ContentRegistryType.DEFAULT_CONTENT_DIR
 const SCHEMAS := ContentRegistryType.DEFAULT_SCHEMA_DIR
 const PACK_DIR := "user://test-scenarios-pack"
+const SAVE_DIR := "user://test-scenarios-saves"
+const BOOT_SCENE_PATH := "res://scenes/boot.tscn"
 const TRACE_TICKS := 40
 const NEW_GAME_SEED := 42
 
@@ -35,6 +42,8 @@ func _init() -> void:
 	_check_registry_rejects_bad_scenarios()
 	_check_unknown_scenario_or_missing_seed_builds_nothing()
 	_check_dialog_picks_the_scenario_boot_builds()
+	_check_new_game_keeps_the_scenario_tick_rate()
+	_check_pool_steps_never_share_a_tile()
 
 	if _failed:
 		quit(1)
@@ -176,6 +185,98 @@ func _check_dialog_picks_the_scenario_boot_builds() -> void:
 	_expect(picked.get_seed() == 7 and picked.get_map_width() == 48, "boot must build the picked scenario with the dialog's seed")
 	_expect(picked.state_hash() == DebugScenarioType.build(7, 10, true).state_hash(),
 		"boot's debug build with seed 7 must match DebugScenario's with incidents on")
+
+## A pack scenario at tick rate 5 with no seed of its own, picked in the New Game dialog and
+## confirmed through boot.gd's own handler, must run at rate 5 on the dialog's seed (boot used
+## to force 10); the base new_game keeps its 10.
+func _check_new_game_keeps_the_scenario_tick_rate() -> void:
+	_write_pack({"scenarios": {"scenarios": [{
+		"id": "pack_slow", "label": "Pack slow", "map": {"width": 32, "height": 32},
+		"tick_rate": 5, "incidents_enabled": false, "setup": [{"step": "needed_tools"}],
+	}]}})
+	var registry := ContentRegistryType.new(BASE, SCHEMAS, [PACK_DIR] as Array[String])
+	_cleanup_pack()
+	_expect(registry.is_valid(), "the rate-5 pack must load: %s" % registry.get_error())
+	if not registry.is_valid():
+		return
+	var previous_content: ContentRegistryType = BootType._session_content
+	BootType._session_content = registry
+	var boot_node: Node = (load(BOOT_SCENE_PATH) as PackedScene).instantiate()
+	root.add_child(boot_node)
+	var manager := SaveManagerType.new(SAVE_DIR)
+	# _ready() does not run here; wire what _swap_in_unsaved_world() repoints (as test_incidents.gd).
+	boot_node.tick_driver = TickDriverType.new(boot_node.world)
+	boot_node.add_child(boot_node.tick_driver)
+	boot_node.save_manager = manager
+	boot_node.autosave_trigger = AutosaveTriggerType.new(boot_node.world, manager)
+	boot_node.add_child(boot_node.autosave_trigger)
+	var dialog := NewGameDialogType.new()
+	boot_node.add_child(dialog)
+	boot_node._new_game_confirm = dialog
+	dialog.set_scenarios(registry.list("scenarios"))
+	for i in dialog.scenario_picker.item_count:
+		if dialog.scenario_picker.get_item_metadata(i) == "pack_slow":
+			dialog.scenario_picker.select(i)
+			dialog.scenario_picker.item_selected.emit(i)
+	dialog.pending_seed = 7
+	boot_node._on_new_game_confirmed()
+	var world: WorldStateType = boot_node.get("world")
+	_expect(world._clock.tick_rate == 5, "New Game must keep the picked scenario's tick rate 5, got %d" % world._clock.tick_rate)
+	_expect(world.get_seed() == 7 and world.get_map_width() == 32, "New Game must build the picked scenario on the dialog's seed")
+	dialog.pending_scenario_id = ScenarioBuilderType.NEW_GAME_SCENARIO_ID
+	boot_node._on_new_game_confirmed()
+	var base_world: WorldStateType = boot_node.get("world")
+	_expect(base_world._clock.tick_rate == 10, "the base new_game must keep its tick rate 10, got %d" % base_world._clock.tick_rate)
+	root.remove_child(boot_node)
+	boot_node.free()
+	BootType._session_content = previous_content
+	_cleanup_dir(SAVE_DIR)
+
+## needed_tools, then beds, then chairs, one per colonist each: every tool, bed and chair
+## stands on its own spawn-pool tile (the second per_colonist_objects step used to reuse the
+## bed tiles, so every chair was refused).
+func _check_pool_steps_never_share_a_tile() -> void:
+	_write_pack({"scenarios": {"scenarios": [{
+		"id": "pack_pool", "label": "Pack pool", "seed": 5, "map": {"width": 48, "height": 48},
+		"tick_rate": 10, "incidents_enabled": false, "setup": [{"step": "needed_tools"},
+			{"step": "per_colonist_objects", "kind": "bed"}, {"step": "per_colonist_objects", "kind": "chair"}],
+	}]}})
+	var registry := ContentRegistryType.new(BASE, SCHEMAS, [PACK_DIR] as Array[String])
+	_cleanup_pack()
+	_expect(registry.is_valid(), "the pool pack must load: %s" % registry.get_error())
+	if not registry.is_valid():
+		return
+	var world := ScenarioBuilderType.build(registry, "pack_pool")
+	var colonists := world.get_colonists().size()
+	var tiles: Dictionary = {}
+	var counts := {"bed": 0, "chair": 0, "tool": 0}
+	for placed: Dictionary in world.get_objects():
+		if counts.has(placed["kind"]):
+			counts[placed["kind"]] += 1
+			tiles[Vector2i(int(placed["x"]), int(placed["y"]))] = true
+	for tool_item: Dictionary in world.get_tool_items():
+		counts["tool"] += 1
+		var location: Dictionary = tool_item["location"]
+		tiles[Vector2i(int(location["x"]), int(location["y"]))] = true
+	_expect(counts["bed"] == colonists and counts["chair"] == colonists,
+		"one bed and one chair per colonist must be placed, got %s for %d colonists" % [counts, colonists])
+	_expect(counts["tool"] > 0, "needed_tools must place the starting tools")
+	_expect(tiles.size() == counts["bed"] + counts["chair"] + counts["tool"],
+		"tools, beds and chairs must each stand on their own tile, got %d tiles for %s" % [tiles.size(), counts])
+	_expect_same_run([world, ScenarioBuilderType.build(registry, "pack_pool")], "pack_pool")
+
+func _cleanup_dir(dir_path: String) -> void:
+	var dir := DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var entry := dir.get_next()
+	while entry != "":
+		if not dir.current_is_dir():
+			dir.remove(entry)
+		entry = dir.get_next()
+	dir.list_dir_end()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir_path))
 
 func _expect_same_run(worlds: Array, what: String) -> void:
 	var reference: WorldStateType = worlds[0]

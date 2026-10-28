@@ -28,7 +28,7 @@ const DEFAULT_SCHEMA_DIR := "res://content/schemas/"
 ## frozen but not exposed through get()/list().
 const COLLECTION_KINDS: Array[String] = ["jobs", "needs", "objects", "items", "tiles", "actors", "factions", "incidents"]
 const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
-## A16 (ADR 052): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
+## A16 (ADR 053): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
 const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios"]
 const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id"}
 ## The fields each scenario setup step (world/scenario_builder.gd) reads besides step/when.
@@ -714,7 +714,7 @@ func _check_actor_component_tunables(raw_by_kind: Dictionary) -> Dictionary:
 						% [actor_id, component_name, component_tunables]}
 	return {"ok": true}
 
-## A16 (ADR 052): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
+## A16 (ADR 053): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
 ## no per-variant lists), "when" needs the scenario's seed, and every named object/item exists.
 func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 	if not raw_by_kind.has("scenarios"):

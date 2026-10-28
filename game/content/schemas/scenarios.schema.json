@@ -11,7 +11,7 @@
         "required": ["id", "label", "tick_rate", "incidents_enabled", "setup"],
         "properties": {
           "id": {"type": "string", "minLength": 1},
-          "label": {"type": "string", "minLength": 1},
+          "label": {"type": "string", "minLength": 1, "description": "A data/text key (for example \"scenario.new_game\"), never player text: the New Game dialog resolves it through TextTable (ADR 052, the localisation ADR)."},
           "seed": {"type": "integer"},
           "map": {
             "type": "object",
