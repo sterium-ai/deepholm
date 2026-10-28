@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2972
-untyped_declaration 523
+total 2956
+untyped_declaration 519
 unsafe_property_access 0
-unsafe_method_access 233
-unsafe_call_argument 2183
+unsafe_method_access 229
+unsafe_call_argument 2175
 other 33
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -32,11 +32,11 @@ file game/scripts/core/commands/handlers/incident_handler.gd 5
 file game/scripts/core/commands/handlers/order_handler.gd 24
 file game/scripts/core/commands/handlers/zone_handler.gd 17
 file game/scripts/core/content/content_json.gd 3
-file game/scripts/core/content/content_registry.gd 112
+file game/scripts/core/content/content_registry.gd 100
 file game/scripts/core/content/content_tables.gd 14
 file game/scripts/core/economy/trade_system.gd 21
 file game/scripts/core/incidents/incident_scheduler.gd 46
-file game/scripts/core/items/item_table.gd 52
+file game/scripts/core/items/item_table.gd 49
 file game/scripts/core/items/tool_item_store.gd 3
 file game/scripts/core/jobs/givers/calendar_alert_giver.gd 11
 file game/scripts/core/jobs/givers/construction_giver.gd 41
@@ -47,7 +47,7 @@ file game/scripts/core/jobs/job_index.gd 22
 file game/scripts/core/jobs/job_queue.gd 68
 file game/scripts/core/jobs/reservation_invariants.gd 16
 file game/scripts/core/jobs/reservation_table.gd 5
-file game/scripts/core/jobs/toil_bindings.gd 48
+file game/scripts/core/jobs/toil_bindings.gd 47
 file game/scripts/core/jobs/toil_executor.gd 83
 file game/scripts/core/jobs/tool_drop_toil.gd 65
 file game/scripts/core/jobs/tool_fetch_toil.gd 48

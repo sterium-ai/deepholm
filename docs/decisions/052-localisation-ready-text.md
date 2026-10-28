@@ -73,7 +73,11 @@ The foundation audit (3.7) found three things standing between the game and a tr
   change; the pseudo-locale test fails otherwise.
 - `rejection.<detail>` English is the old message text, so behaviour visible today is the same,
   except that the build-rejected and incident-not-started status lines now show the sentence
-  instead of the raw reason code.
+  instead of the raw reason code. One sentence differs in case: `job_order_payload` used to
+  capitalise the command type (`type.capitalize()`, "Dig requires ..."); it now shows the type
+  id as given ("dig requires ..."), like the other messages that start with an identifier
+  (`place_object requires ...`, `kind must be ...`). Capitalising is a language rule, so it
+  belongs in a translation's own sentence, not in code for one key.
 - Developer-facing diagnostics (save, content-registry and replay errors) keep their English
   `message` next to a `code`; the viewer already maps save codes to `save.reason.*` text.
 - Item, object, faction and actor ids still appear raw inside some lines (held tool kind,
