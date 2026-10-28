@@ -7,7 +7,8 @@ extends SceneTree
 ## is reported at the first checkpoint after it, with the last matching
 ## checkpoint before it; at interval 1 that is the planted tick itself. A
 ## tampered checkpoint, a dropped command and a content version mismatch are
-## each reported with their own code.
+## each reported with their own code. _check_observer_contract pins ADR 050's
+## command_observer rules.
 
 const BootType = preload("res://scripts/boot.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -32,6 +33,7 @@ func _init() -> void:
 	_check_malformed_checkpoints(recording)
 	_check_dropped_command(recording)
 	_check_content_version_mismatch(recording)
+	_check_observer_contract()
 	if _failed:
 		quit(1)
 		return
@@ -296,6 +298,56 @@ func _check_content_version_mismatch(recording: ReplayLogType) -> void:
 	other.content_version = "0.0.0-other"
 	var result := other.replay()
 	_expect(result.get("code") == "content_version_mismatch", "a different content version must be refused: %s" % [result])
+
+## ADR 050: one call per apply() from outside the core, after the command, with
+## apply()'s own result (rejections included); none from preview(); none while
+## an area_order expands inside tick(); the only call site is apply(), and
+## AreaOrders never receives the public apply.
+func _check_observer_contract() -> void:
+	var world: WorldStateType = BootType.build_default_world()
+	var heard: Array[Dictionary] = []
+	world.command_observer = func(command: Variant, result: Dictionary) -> void:
+		heard.append({"command": command, "result": result, "tick": world.get_tick()})
+	var noop := _command(world, "noop", {})
+	var accepted := world.apply(noop)
+	_expect(heard.size() == 1 and heard[0]["command"] == noop and heard[0]["result"] == accepted and bool(accepted.get("ok", false)),
+		"the observer must hear one accepted apply() with that call's own result: %s" % [heard])
+	var rejected := world.apply(_command(world, "bogus_type", {}))
+	_expect(heard.size() == 2 and heard[1]["result"] == rejected and not bool(rejected.get("ok", true)),
+		"a rejected apply() must be reported too, with ok false: %s" % [heard.slice(1)])
+	world.preview(_command(world, "noop", {}))
+	_expect(heard.size() == 2, "preview() must never call the observer")
+	var clearing := world.get_spawn_clearing()
+	var area := world.apply(_command(world, "area_order", {"order": "dig", "x": maxi(0, int(clearing["x"]) - 6),
+		"y": maxi(0, int(clearing["y"]) - 6), "width": 12, "height": 12}))
+	_expect(bool(area.get("ok", false)), "the area_order fixture must be accepted: %s" % [area])
+	var digs_before := world.get_jobs(["dig"]).size()
+	for i in 20:
+		world.tick()
+	_expect(world.get_jobs(["dig"]).size() > digs_before, "the area_order must have expanded into dig jobs inside tick()")
+	_expect(heard.size() == 3 and String(heard[2]["command"]["type"]) == "area_order",
+		"only the area_order itself may be heard, never its in-tick expansion: %d calls" % heard.size())
+	world.command_observer = Callable()
+	world.apply(_command(world, "noop", {}))
+	_expect(heard.size() == 3, "a cleared observer must not be called")
+	var source := FileAccess.get_file_as_string("res://scripts/core/world_state.gd")
+	_expect(source.count("command_observer.call(") == 1, "command_observer must be called from apply() only")
+	_expect(source.contains("AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command)"),
+		"AreaOrders must submit through the command router, never the public apply()")
+	var core_dir := DirAccess.open("res://scripts/core")
+	_expect(core_dir != null and not _core_mentions_observer(core_dir, "res://scripts/core"),
+		"no core module other than world_state.gd may touch command_observer")
+
+func _core_mentions_observer(dir: DirAccess, path: String) -> bool:
+	for file_name in dir.get_files():
+		var file_path := "%s/%s" % [path, file_name]
+		if file_name.ends_with(".gd") and file_path != "res://scripts/core/world_state.gd" and FileAccess.get_file_as_string(file_path).contains("command_observer"):
+			return true
+	for sub in dir.get_directories():
+		var sub_path := "%s/%s" % [path, sub]
+		if _core_mentions_observer(DirAccess.open(sub_path), sub_path):
+			return true
+	return false
 
 func _without(state: Dictionary, key: String) -> Dictionary:
 	var copy := state.duplicate(true)

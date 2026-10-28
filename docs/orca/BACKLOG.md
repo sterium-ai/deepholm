@@ -605,7 +605,8 @@ one.
   (`63d3d5f`). `tools/replay.gd` is the helper `tools/replay.ps1` runs. The branch keeps that
   script embedded in `replay.ps1`, so the file does not exist, but splitting it back out is
   within scope.
-- **Done in this branch:** `WorldState.command_observer` (+3 lines). Area-order expansion inside
+- **Done in this branch:** `WorldState.command_observer` (+3 lines; its rules are in
+  [ADR 050](../decisions/050-command-observer.md)). Area-order expansion inside
   `tick()` now calls the command router directly, so the observer only hears commands from
   outside. **F9** in `boot.gd` starts and stops recording to `user://replays/`, and a world swap
   stops and saves first. `test_boot_command_recording.gd` drives F9 itself;

@@ -45,7 +45,9 @@ The core also offers one optional listener: `WorldState.command_observer`, a
 `Callable(command, result)` called after each `apply()` from outside the core.
 Area-order expansion inside `tick()` goes straight to the command router and
 bypasses it. The listener must not mutate. The viewer's command recorder uses it
-to record a session for headless replay ([replay.md](replay.md)).
+to record a session for headless replay ([replay.md](replay.md)). Its rules
+(timing, no mutation, one owner, internal commands excluded) are set in
+[ADR 050](../decisions/050-command-observer.md).
 
 ## Determinism and time
 
