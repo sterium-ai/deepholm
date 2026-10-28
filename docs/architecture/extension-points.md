@@ -39,6 +39,15 @@ boundaries and are not a separate extension point.
   `test_need_jobs.gd` verifies the definitions and their execution. See
   [ADR 010](../decisions/010-content-registry.md) for the registry's own
   design.
+- Example (work effects): what a work job does when its `work` toil finishes is the
+  `effects` block of its `jobs.json` entry (`requires_tile`, `consumes`, `set_tile`,
+  `clear_object`, `yields` with `placement`, `always`, `ground_berries` and `find_table`).
+  `ToilBindings.apply_work_effects()` applies it for every kind, so dig, chop, mine, forage,
+  till and sow are content, and a new kind of the same shape needs no code there;
+  `test_work_effects_content.gd` adds one from a fixture bundle. Ordering a new kind still
+  needs the command and area-order modules to accept it. Completions owned by another system
+  (site_work, sleep, escape_trench, rescue) stay code. See
+  [ADR 051](../decisions/051-data-driven-work-effects.md).
 
 ### Actor definition / Component
 

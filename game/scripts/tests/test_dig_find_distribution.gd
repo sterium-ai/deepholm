@@ -210,7 +210,7 @@ func _kind_for_roll(find_table: Array, roll: int) -> String:
 ## bypassed, since tick-level timing is not what this test targets.
 func _check_simultaneous_resolution_order() -> void:
 	var probe := WorldType.new(1, 10)
-	var find_table: Array = probe._content.get_entry("jobs", "dig").get("yields", {}).get("find_table", [])
+	var find_table: Array = probe._content.get_entry("jobs", "dig").get("effects", {}).get("yields", {}).get("find_table", [])
 
 	# Search for a world seed whose first draw (the lower job id's, resolved
 	# first) lands on "no find", so that outcome is exercised explicitly
@@ -242,8 +242,8 @@ func _check_simultaneous_resolution_order() -> void:
 	# job_5 appended before job_2: the order a colonist array iterated out of
 	# job-id order would produce, not ascending job-id order.
 	world._item_table.pending_dig_finds = [
-		{"job_id": "job_5", "x": 9, "y": 9},
-		{"job_id": "job_2", "x": 1, "y": 0},
+		{"job_id": "job_5", "kind": "dig", "x": 9, "y": 9},
+		{"job_id": "job_2", "kind": "dig", "x": 1, "y": 0},
 	]
 	world._item_table.resolve_dig_finds()
 

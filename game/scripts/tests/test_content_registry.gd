@@ -102,10 +102,10 @@ func _check_real_bundle_loads_and_resolves() -> void:
 	_expect(not dig.is_empty(), "jobs collection must contain 'dig'")
 	_expect(String(dig.get("needs_tool", "")) == "pick", "dig's needs_tool must resolve to a declared tool item")
 
-	# Dig's yields.always/find_table must resolve and its
-	# find_table weights (5 + 20 + 10 + 10 + 55) must sum to 100.
-	var dig_yields: Dictionary = dig.get("yields", {})
-	_expect(not dig_yields.is_empty(), "dig must declare a yields field")
+	# Dig's effects.yields.always/find_table must resolve and its
+	# find_table weights (5 + 20 + 10 + 10 + 55) must sum to 100 (ADR 051).
+	var dig_yields: Dictionary = dig.get("effects", {}).get("yields", {})
+	_expect(not dig_yields.is_empty(), "dig must declare an effects.yields field")
 	_expect((dig_yields.get("always", []) as Array) == ["sand"], "dig's yields.always must be [\"sand\"]")
 	var dig_find_table := (dig_yields.get("find_table", []) as Array)
 	var dig_weight_total := 0
@@ -392,7 +392,7 @@ func _check_incident_fixtures_with_dangling_references_fail_construction() -> vo
 ## A jobs.json yields.find_table whose weights do not sum to 100
 ## must fail construction typed schema_violation, naming jobs.json -- the
 ## cross-field arithmetic rule _validate_node's minimal JSON Schema subset
-## cannot express (see ContentRegistry._check_job_yields()).
+## cannot express (see ContentRegistry._check_job_effects()).
 func _check_fixture_with_yields_weight_sum_not_100_fails_construction() -> void:
 	_write_yields_weight_sum_fixture_bundle()
 	var registry := ContentRegistryType.new(YIELDS_WEIGHT_SUM_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
@@ -404,6 +404,8 @@ func _check_fixture_with_yields_weight_sum_not_100_fails_construction() -> void:
 		"the weight-sum error must be typed as schema_violation, got %s" % error)
 	_expect(String(error.get("file", "")).ends_with("jobs.json"),
 		"the weight-sum error must name jobs.json as the offending file, got %s" % error)
+	_expect(String(error.get("message", "")).contains("sum to 100"),
+		"the weight-sum error must be the find_table rule, not another schema violation, got %s" % error)
 
 ## Same otherwise-valid bundle as _write_fixture_bundle(), except jobs.json's
 ## "chop" entry declares a yields.find_table whose weights (50 + 40) sum to 90,
@@ -424,7 +426,7 @@ func _write_yields_weight_sum_fixture_bundle() -> void:
 	_write_json(YIELDS_WEIGHT_SUM_FIXTURE_DIR + "/calendar.json", {"day_length_ticks": 100, "windows": []})
 	_write_json(YIELDS_WEIGHT_SUM_FIXTURE_DIR + "/jobs.json", {"jobs": [
 		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"],
-			"yields": {"always": ["sand"], "find_table": [{"item": "sand", "weight": 50}, {"item": null, "weight": 40}]}},
+			"effects": {"yields": {"placement": "target", "always": ["sand"], "find_table": [{"item": "sand", "weight": 50}, {"item": null, "weight": 40}]}}},
 	]})
 	_write_required_tiles_and_mapgen(YIELDS_WEIGHT_SUM_FIXTURE_DIR)
 
@@ -464,7 +466,7 @@ func _write_yields_dangling_fixture_bundle() -> void:
 	_write_json(YIELDS_DANGLING_FIXTURE_DIR + "/calendar.json", {"day_length_ticks": 100, "windows": []})
 	_write_json(YIELDS_DANGLING_FIXTURE_DIR + "/jobs.json", {"jobs": [
 		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"],
-			"yields": {"always": [], "find_table": [{"item": "does_not_exist", "weight": 100}]}},
+			"effects": {"yields": {"placement": "target", "always": [], "find_table": [{"item": "does_not_exist", "weight": 100}]}}},
 	]})
 	_write_required_tiles_and_mapgen(YIELDS_DANGLING_FIXTURE_DIR)
 
@@ -526,7 +528,7 @@ func _write_yields_invalid_item_type_fixture_bundle() -> void:
 	_write_json(YIELDS_INVALID_ITEM_TYPE_FIXTURE_DIR + "/calendar.json", {"day_length_ticks": 100, "windows": []})
 	_write_json(YIELDS_INVALID_ITEM_TYPE_FIXTURE_DIR + "/jobs.json", {"jobs": [
 		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"],
-			"yields": {"always": [], "find_table": [{"item": 5, "weight": 100}]}},
+			"effects": {"yields": {"placement": "target", "always": [], "find_table": [{"item": 5, "weight": 100}]}}},
 	]})
 	_write_required_tiles_and_mapgen(YIELDS_INVALID_ITEM_TYPE_FIXTURE_DIR)
 
