@@ -19,9 +19,10 @@ var _is_cell_free: Callable
 var _passability: Callable
 var _is_cell_occupied: Callable
 
-## priority is WorldState.HAUL_PRIORITY. get_jobs/get_items/get_zones/
-## is_cell_free/passability must be WorldState's own public methods of the
-## same name; is_in_any_zone/is_cell_occupied must be its like-named private
+## priority is WorldState.HAUL_PRIORITY. get_jobs is the read-only
+## JobQueue.view_jobs_of_kinds(["haul"]) (A5: live records, never mutated).
+## get_items/get_zones/is_cell_free/passability must be WorldState's own
+## public methods of the same name; is_in_any_zone/is_cell_occupied must be its like-named private
 ## methods. submit_job must be WorldState._scheduler.submit (the same entry
 ## point any order-driven job uses); attach_item must be
 ## WorldState._scheduler.queue.attach_item.

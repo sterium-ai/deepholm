@@ -14,9 +14,9 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
-## deepholm-save v1: the schema was reset before release (R14, ADR 049). Every later
-## shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 1
+## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
+## ADR 053). Every later shape change bumps this and adds a SaveMigrations step and a fixture.
+const SCHEMA_VERSION := 2
 
 ## content/manifest.json's version, read fresh through a new ContentRegistry
 ## each call (mirroring how WorldState._init() itself builds one) rather than
@@ -54,7 +54,8 @@ static func encode(world: WorldState) -> Dictionary:
 		},
 		"entities": EntityCodec._encode_entities(world._colonists, world._reroutes),
 		"inventory": {},
-		"jobs": SchedulingCodec._encode_jobs(world._scheduler.queue.get_jobs()),
+		# Live jobs only: terminal jobs leave the save (A5, schema v2).
+		"jobs": SchedulingCodec._encode_jobs(world._scheduler.queue.get_jobs(false)),
 		"scheduling": SchedulingCodec._encode_scheduling(world._scheduler, world._event_log.encode()),
 		"rng": {"seed": world._random.seed, "state": world._random.state},
 		"items": item_table["items"],
@@ -289,7 +290,12 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		var job := world._scheduler.queue.get_job(job_id)
 		var faction_id := String(colonist.get("factionId", "colony"))
 		var cost_fn: Callable
-		if String(job.get("kind", "")) == "haul" and InventoryType.is_carrying(colonist):
+		# A job finished by a command since the last tick is not saved (A5, ADR 053) but
+		# may still name this route: with no assignment, the next _advance_colonists()
+		# drops the route before any resume, so the cost callable is never consulted.
+		if job.is_empty():
+			cost_fn = world._passability.is_passable
+		elif String(job.get("kind", "")) == "haul" and InventoryType.is_carrying(colonist):
 			cost_fn = world._passability.is_passable
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
 			# A carrying build's live second leg searches toward job.site with

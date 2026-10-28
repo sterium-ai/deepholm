@@ -2613,6 +2613,12 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 		"cancelling dig_1 mid-drop-walk must be accepted")
 	_expect(world.get_tool_item_reservation(pick_id) == "", "cancelling dig_1 must release its reservation on the pick")
 
+	# A5 (ADR 053): a job already completed when the save is taken is not saved, so the
+	# restored run must not know it at all; the others must complete there as before.
+	var completed_before_save: Dictionary = {}
+	for job_id in [forage_a_id, forage_b_id]:
+		if String(_find_job(world, job_id).get("status", "")) == "completed":
+			completed_before_save[job_id] = true
 	if FileAccess.file_exists(SAVE_IO_TEST_PATH):
 		DirAccess.remove_absolute(SAVE_IO_TEST_PATH)
 	var write_result: Dictionary = SaveIOType.write_atomic(SAVE_IO_TEST_PATH, world.to_save_state())
@@ -2636,13 +2642,21 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 		if not direct_completed and String(_find_job(world, forage_a_id).get("status", "")) == "completed" \
 				and String(_find_job(world, forage_b_id).get("status", "")) == "completed":
 			direct_completed = true
-		if not restored_completed and String(_find_job(restored, forage_a_id).get("status", "")) == "completed" \
-				and String(_find_job(restored, forage_b_id).get("status", "")) == "completed":
+		if not restored_completed and _restored_job_done(restored, forage_a_id, completed_before_save) \
+				and _restored_job_done(restored, forage_b_id, completed_before_save):
 			restored_completed = true
 		if direct_completed and restored_completed:
 			break
 	_expect(direct_completed, "the uninterrupted run must still complete both forage jobs after the cancellation")
 	_expect(restored_completed, "the SaveIO-restored run must also complete both forage jobs, never abandoning or misreading the drop")
+
+## A job completed before the save must be unknown to the restored world (v2 saves
+## live jobs only, ADR 053); any other must have completed there.
+func _restored_job_done(restored: WorldStateType, job_id: String, completed_before_save: Dictionary) -> bool:
+	var job := _find_job(restored, job_id)
+	if completed_before_save.has(job_id):
+		return job.is_empty()
+	return String(job.get("status", "")) == "completed"
 
 ## Second of the three marker-restore cases: a save taken inside the window
 ## between a fetch_tool reservation being released (the holder's own

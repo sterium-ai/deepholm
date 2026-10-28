@@ -254,7 +254,7 @@ func _advance_colonists() -> void:
 				_reroutes.erase(colonist["id"])
 			continue
 		var job_id: String = assignment["job_id"]
-		var job := _scheduler.queue.get_job(job_id)
+		var job := _scheduler.queue.view_job(job_id) # read-only (A5)
 		if job.is_empty() or String(job.get("status", "")) != "active":
 			continue
 		# The scheduler phase may reassign a colonist the tick a command frees it: clear

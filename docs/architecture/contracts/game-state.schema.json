@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, deepholm-save v1",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v2",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
@@ -340,7 +340,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 1 },
+    "schemaVersion": { "type": "integer", "const": 2 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },

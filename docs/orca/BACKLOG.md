@@ -476,7 +476,7 @@ one.
 - **Non-goals:** exclusive tile occupancy (a rule change); new combat behaviour.
 - **Scope amendment approved by the owner (2026-10-27, in the A4 terminal):** the entry predates R8, so `actors/needs_system.gd` (where `need_source_candidates()` now lives), plus one hook line each in `jobs/toil_executor.gd` and `actors/trench_system.gd` where an actor's x/y is written. `persistence/state_codec.gd` was approved too, but A4 did not need it. Owner's coordination note: the index is a new module composed in WorldState, with minimal `world_state.gd` changes and no CommandRouter change.
 
-#### A5 — Job storage: id index, retired jobs, read-only views inside the core · `todo` · after R4/R5 (best after R14, still with a migration)
+#### A5 — Job storage: id index, retired jobs, read-only views inside the core · `review (antonelmejor50-hub/a5-job-storage-id-index)` · after R4/R5 (best after R14, still with a migration)
 
 - **Goal:** `JobQueue` indexes live jobs by id. Terminal jobs move to a bounded history (size
   decided in an ADR) instead of staying in `_jobs`. Core callers that only read
@@ -498,6 +498,7 @@ one.
   backlog 2,000 open orders: mean tick ≤ 25% of baseline (235 ms); `test_job_queue`,
   `test_scheduling_fairness` unchanged.
 - **Non-goals:** changing the fairness policy (ADR 004) or job states.
+- **Scope amendment approved by the owner (2026-10-28, in the A5 terminal):** the entry predates B1 and R12, so `jobs/job_index.gd` (the id index B1 created), a new `jobs/job_history.gd` (`job_queue.gd` is at its 790-line cap), `world/tick_pipeline.gd` (where R12 moved `_advance_colonists()`; one read only), `jobs/README.md` and `contracts/game-state.schema.json`. The owner also confirmed the v1 → v2 bump, migration and fixture (an earlier coordination note saying R14 made a migration unnecessary was withdrawn).
 
 #### A6 — Bounded event and dirty-cell streams · `review (antonelmejor50-hub/a6-bounded-event-and-dirty)` · *parallel-safe (no save change)*
 

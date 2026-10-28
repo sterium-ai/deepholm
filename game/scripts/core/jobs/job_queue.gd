@@ -6,6 +6,7 @@ const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.
 const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
 const JobIndexType = preload("res://scripts/core/jobs/job_index.gd")
 const JobEventLogType = preload("res://scripts/core/jobs/job_event_log.gd")
+const JobHistoryType = preload("res://scripts/core/jobs/job_history.gd")
 
 enum Priority { LOW, NORMAL, HIGH }
 
@@ -37,9 +38,11 @@ var _can_reach: Callable
 var _tick: int = 0
 var _next_id: int = 1
 var _sequence: int = 0
+## Live (queued/active) jobs only: _finish() retires a job to _history (A5).
 var _jobs: Array[Dictionary] = []
 ## Lookup indexes over _jobs and the event log (B1, see each module's doc).
 var _index := JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
+var _history := JobHistoryType.new()
 var _table: ReservationTableType = ReservationTableType.new()
 var _events := JobEventLogType.new()
 ## haul-only: item_id -> a free destination cell, or null when none is free
@@ -328,15 +331,7 @@ func tick() -> void:
 			if not owner.is_empty() and owner != job["id"]:
 				_block(job, BLOCKED_TARGET_RESERVED, "wait_for_target_release", owner)
 				continue
-			if not _can_reach.is_valid():
-				_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-				continue
-			var reachable: Variant = _can_reach.call(target)
-			if not reachable is bool:
-				_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-				continue
-			if not reachable:
-				_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
+			if _blocked_unreachable(job, target):
 				continue
 			if not _tool_requirement_satisfied(job):
 				continue
@@ -380,15 +375,7 @@ func _tick_haul(job: Dictionary) -> void:
 	if not owner.is_empty() and owner != job["id"]:
 		_block(job, BLOCKED_ITEM_RESERVED, "wait_for_item_release", owner)
 		return
-	if not _can_reach.is_valid():
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	var reachable: Variant = _can_reach.call(job["target"])
-	if not reachable is bool:
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	if not reachable:
-		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
+	if _blocked_unreachable(job, job["target"]):
 		return
 	var cell: Variant = _find_haul_destination.call(String(job["item_id"])) if _find_haul_destination.is_valid() else null
 	_emit("haul_destination_attempt", job["id"], {"attempt_tick": _tick})
@@ -431,15 +418,7 @@ func _tick_site_fetch(job: Dictionary) -> void:
 	if not item_owner.is_empty() and item_owner != job["id"]:
 		_block(job, BLOCKED_ITEM_RESERVED, "wait_for_item_release", item_owner)
 		return
-	if not _can_reach.is_valid():
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	var reachable: Variant = _can_reach.call(job["target"])
-	if not reachable is bool:
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	if not reachable:
-		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
+	if _blocked_unreachable(job, job["target"]):
 		return
 	if not String(job["reason"]).is_empty():
 		_emit("job_unblocked", job["id"], {"previous_reason": job["reason"]})
@@ -457,21 +436,24 @@ func _tick_site_fetch(job: Dictionary) -> void:
 ## submits more than max_builders of these per site, and the mechanism
 ## places no lower gate here.
 func _tick_site_work(job: Dictionary) -> void:
-	if not _can_reach.is_valid():
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	var reachable: Variant = _can_reach.call(job["target"])
-	if not reachable is bool:
-		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
-		return
-	if not reachable:
-		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
+	if _blocked_unreachable(job, job["target"]):
 		return
 	if not String(job["reason"]).is_empty():
 		_emit("job_unblocked", job["id"], {"previous_reason": job["reason"]})
 	_set_reason(job, "", "")
 	job["status"] = "active"
 	_emit("job_active", job["id"], {})
+
+## The reachability gate every activation shares: blocks job and returns true
+## unless can_reach(target) answers true.
+func _blocked_unreachable(job: Dictionary, target: Variant) -> bool:
+	var reachable: Variant = _can_reach.call(target) if _can_reach.is_valid() else null
+	if not reachable is bool:
+		_block(job, BLOCKED_REACHABILITY_UNAVAILABLE, "provide_reachability_check")
+		return true
+	if not reachable:
+		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
+	return not reachable
 
 ## Gates activation on a matching free tool existing anywhere (colonist-ai.md
 ## 2/3.3, ADR 013). Backoff/blocking logic lives in
@@ -630,17 +612,29 @@ func get_next_id() -> int:
 func get_sequence() -> int:
 	return _sequence
 
+## A copy of the live or retained (job_history.gd) job, or {}.
 func get_job(job_id: String) -> Dictionary:
-	return _find_job(job_id).duplicate(true)
+	return view_job(job_id).duplicate(true)
 
-func get_jobs() -> Array[Dictionary]:
-	return _jobs.duplicate(true)
+## Copies of every live job and, unless include_retired is false, every
+## retained one, in submission order. Saves and state_hash() read live only.
+func get_jobs(include_retired: bool = true) -> Array[Dictionary]:
+	return _history.merged(_jobs, _index.position_of, [], include_retired)
 
-## get_jobs() filtered to `kinds`, costing only the jobs returned.
-func get_jobs_of_kinds(kinds: Array) -> Array[Dictionary]:
-	return _index.of_kinds(_jobs, kinds).duplicate(true)
+## get_jobs(include_retired) filtered to `kinds`, costing only the jobs returned.
+func get_jobs_of_kinds(kinds: Array, include_retired: bool = true) -> Array[Dictionary]:
+	return _history.merged(_index.of_kinds(_jobs, kinds), _index.position_of, kinds, include_retired)
 
-## job id -> kind for every job; a live view callers must never mutate.
+## Read-only views for core readers (A5): the records themselves, never mutated. view_job() is
+## get_job() without the copy; view_jobs_of_kinds() the live jobs of `kinds`, in a fresh array.
+func view_job(job_id: String) -> Dictionary:
+	var job := _find_job(job_id)
+	return job if not job.is_empty() else _history.find(job_id)
+
+func view_jobs_of_kinds(kinds: Array) -> Array[Dictionary]:
+	return _index.of_kinds(_jobs, kinds)
+
+## job id -> kind for every live job; a live view callers must never mutate.
 func get_job_kinds() -> Dictionary:
 	return _index.kinds_of(_jobs)
 
@@ -694,10 +688,15 @@ func get_event_log() -> JobEventLogType:
 ## the same invariant tick() maintains (exactly one reservation per active
 ## job, on that job's own target). The event log is not restored: it is
 ## diagnostic only, and every event a future tick() emits still gets a
-## correctly continued sequence number from the restored counters.
+## correctly continued sequence number from the restored counters. A terminal job in `jobs`
+## (none in a save since A5) is retired to the history at once; `jobs` is compacted in place.
 func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: int) -> void:
 	_jobs = jobs
 	_index = JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
+	_history = JobHistoryType.new()
+	for job: Dictionary in jobs.duplicate():
+		if job["status"] not in ["queued", "active"]:
+			_history.add(job, _index.remove(job))
 	_tick = tick_value
 	_next_id = next_id
 	_sequence = sequence
@@ -742,7 +741,7 @@ func _find_job(job_id: String) -> Dictionary:
 ## mirrors complete()'s own active-only transition. Returns {} when job_id may transition to a
 ## terminal status, or the rejection _finish() would produce otherwise. Never mutates.
 func check_terminal(job_id: String, active_only: bool = false) -> Dictionary:
-	var job := _find_job(job_id)
+	var job := view_job(job_id)
 	if job.is_empty():
 		return {"reason": "unknown_job", "remedy": "choose_existing_job"}
 	if job["status"] not in ["queued", "active"]:
@@ -762,6 +761,7 @@ func _finish(job_id: String, status: String, reason: String, remedy: String, act
 	job["status"] = status
 	_set_reason(job, reason, remedy)
 	_emit("job_" + status, job_id, {"reason": reason, "remedy": remedy})
+	_history.add(job, _index.remove(job))
 	return {"ok": true, "job_id": job_id}
 
 func _block(job: Dictionary, reason: String, remedy: String, owner: String = "") -> void:

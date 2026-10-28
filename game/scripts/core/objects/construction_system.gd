@@ -337,7 +337,7 @@ func construction_item_reservation_owner(item_id: String) -> String:
 ## no reservation on its item yet, so source searches must skip it explicitly.
 func _pending_site_fetch_jobs(exclude_job_id: String = "") -> Array[Dictionary]:
 	var pending: Array[Dictionary] = []
-	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch"]):
 		if String(job.get("status", "")) not in ["queued", "active"]:
 			continue
 		if String(job["id"]) != exclude_job_id:
@@ -411,7 +411,7 @@ func reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vec
 ## ConstructionGiver.advance() uses.
 func _site_fetch_work_busy(origin: Vector2i) -> int:
 	var busy := 0
-	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch", "site_work"]):
+	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch", "site_work"]):
 		if String(job.get("status", "")) in ["queued", "active"] and job.get("site") == origin:
 			busy += 1
 	return busy
@@ -425,7 +425,7 @@ func next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector2i, ex
 ## so the jobs that just (re)activated can be told apart.
 func active_site_fetch_job_ids() -> Dictionary:
 	var ids: Dictionary = {}
-	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch"]):
 		if String(job.get("status", "")) == "active":
 			ids[String(job["id"])] = true
 	return ids
@@ -435,7 +435,7 @@ func active_site_fetch_job_ids() -> Dictionary:
 ## Only jobs still fetching (cell == null) and not active before this tick: a
 ## running job is never re-evaluated mid-route.
 func resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
-	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch"]):
+	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch"]):
 		if String(job.get("status", "")) != "active" or job.get("cell") != null:
 			continue
 		var job_id := String(job["id"])
@@ -502,7 +502,7 @@ func cancel_construction_site(site_id: String) -> void:
 	if site.is_empty():
 		return
 	var origin: Vector2i = site["origin"]
-	for job in _scheduler.queue.get_jobs_of_kinds(["site_fetch", "site_work"]):
+	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch", "site_work"]):
 		if job.get("site") != origin or not (String(job.get("status", "")) in ["queued", "active"]):
 			continue
 		var kind := String(job.get("kind", ""))
@@ -538,9 +538,9 @@ func _finalize_construction_site(site_id: String, completing_job_id: String) -> 
 	site_table.remove(site_id)
 
 ## A site_work job's terminal transition other than completion frees its builder
-## slot. job.site survives termination (JobQueue never deletes terminal jobs).
+## slot. Called right after the transition, so the job is still in JobQueue's history (A5).
 func release_site_builder(job_id: String) -> void:
-	var job := _scheduler.queue.get_job(job_id)
+	var job := _scheduler.queue.view_job(job_id)
 	if job.is_empty() or job.get("site") == null:
 		return
 	var site_id := site_table.find_at_origin(job["site"])

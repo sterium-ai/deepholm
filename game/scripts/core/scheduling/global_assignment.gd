@@ -215,7 +215,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 		region_check: Callable = Callable()) -> void:
 	_metrics = {}
 	_route_budget.clear()
-	var workers: Array[Dictionary] = colonists.duplicate(true)
+	var workers: Array[Dictionary] = colonists.duplicate() # read-only (A5): no deep copy
 	workers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
 	var proposals: Array[Dictionary] = []
 	var selected: Array[String] = []
@@ -381,7 +381,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 	queue.advance_selection(selected, reachable)
 	for pair in chosen:
 		var job_id: String = pair["entry"]["id"]
-		if queue.get_job(job_id)["status"] == "active":
+		if queue.view_job(job_id)["status"] == "active":
 			var path: Array = pair.get("path", [])
 			# _routable() lets the search terminate on an impassable resource tile
 			# (a chop job's tree); trim that last step so execution stops adjacent

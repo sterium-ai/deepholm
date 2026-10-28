@@ -27,8 +27,8 @@ var _insert_event: Callable
 var _next_sequence: Callable
 var _priority: int
 
-## get_colonists/get_tiles must be WorldState's own public methods of the
-## same name; has_item_of_kind must be WorldState._has_item_of_kind (the same
+## get_colonists must be WorldState._worker_view (A5: the live worker actors,
+## read only); get_tiles the live tile array; has_item_of_kind must be WorldState._has_item_of_kind (the same
 ## ground/stockpile/carrying-slot query sow's blocked_missing_input
 ## precondition already uses, so a seed mid-haul in a colonist's carrying
 ## slot counts here too); insert_event must be WorldState._insert_event,

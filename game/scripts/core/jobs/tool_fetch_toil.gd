@@ -25,6 +25,7 @@ var _reserve_tool: Callable
 var _release_tool: Callable
 var _pick_up_tool: Callable
 var _drop_tool_ground: Callable
+## WorldState._worker_view (A5): the live worker actors, read only.
 var _get_colonists: Callable
 ## ToilExecutor.advance_go_to/_record, bound as callables so this toil can
 ## drive the same go_to stepping and execution trace without ToilExecutor

@@ -92,10 +92,17 @@ func _check_reads(world, t: int) -> void:
 		if job["status"] == "queued" and queue.get_tick() < int(job["retry_at"]) and not reservations.has(job["target"]):
 			reservations[job["target"]] = job["id"]
 	_expect(queue.get_reservations() == reservations, "tick %d: get_reservations() must match the full scan" % t)
-	var kinds_by_id := {}
+	# A5 (ADR 053): the kind index covers live jobs only; get_jobs(false) lists exactly
+	# the queued/active jobs get_jobs() shows, in the same order.
+	var live_jobs: Array[Dictionary] = []
 	for job in queue_jobs:
+		if job["status"] in ["queued", "active"]:
+			live_jobs.append(job)
+	_expect(queue.get_jobs(false) == live_jobs, "tick %d: get_jobs(false) must be get_jobs()' live jobs" % t)
+	var kinds_by_id := {}
+	for job in live_jobs:
 		kinds_by_id[job["id"]] = String(job["kind"])
-	_expect(queue.get_job_kinds() == kinds_by_id, "tick %d: get_job_kinds() must match the jobs" % t)
+	_expect(queue.get_job_kinds() == kinds_by_id, "tick %d: get_job_kinds() must match the live jobs" % t)
 	var waiting: Array[Dictionary] = world._scheduler.get_waiting()
 	for index in range(0, waiting.size(), maxi(1, waiting.size() / 25)):
 		var entry: Dictionary = waiting[index]

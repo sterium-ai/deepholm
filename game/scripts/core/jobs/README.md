@@ -37,11 +37,18 @@ No random draws are needed: IDs and arbitration use submission order.
   its own `tile:` key) before returning. Invalidation maps to `failed` with
   `target_invalidated`. A blocked job cannot release another job's reservation.
 - Unknown IDs, terminal jobs, and completion of queued jobs are rejected with
-  typed reasons/remedies. Terminal jobs remain queryable and never restart.
+  typed reasons/remedies. Terminal jobs never restart.
+- A terminal job leaves the live list at once and is retained in a bounded
+  history (`job_history.gd`, the last `LIMIT` = 256 retirements; ADR 053).
+  `get_job()`/`get_jobs()`/`check_terminal()` still see a retained job; once
+  it is evicted it reads as unknown. The history is never saved or hashed.
 
 ## Read model and explainability
 
-All getters return detached deep copies. `get_job(unknown_id)` returns `{}`.
+All `get_*` job getters return detached deep copies; `get_jobs(false)` lists
+live jobs only (what the save and `state_hash()` read). Core readers that only
+read use `view_job()`/`view_jobs_of_kinds()`, the live records themselves,
+which they must never mutate. `get_job(unknown_id)` returns `{}`.
 A job contains `id`, `kind: dig`, `status`, `priority`, `target: Vector2i`,
 `reason`, `remedy`, and `blocking_job_id` (empty when inapplicable).
 Statuses are exactly `queued/active/completed/failed/cancelled`, matching the

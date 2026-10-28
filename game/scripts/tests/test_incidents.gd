@@ -964,8 +964,11 @@ func _check_save_load_mid_incident() -> void:
 		# may legitimately have proposed other actors: assert on this one's own.)
 		_expect(restored_after.get_assignments().get(actor_id, {}).is_empty(), "%s: a post-despawn load must carry no assignment for the despawned actor" % incident_id)
 		_expect(restored_after._incidents.staged_actor(actor_id).is_empty(), "%s: a post-despawn load must carry no staged proposal for the despawned actor" % incident_id)
+		# A5 (ADR 053): the job is terminal in the source world, and v2 saves live jobs
+		# only, so the restored world must not know it at all.
+		_expect(String(_find_job(world, job_id).get("status", "")) == "completed", "%s: the despawned actor's own job record must be terminal (completed), got %s" % [incident_id, _find_job(world, job_id)])
 		var own_job := _find_job(restored_after, job_id)
-		_expect(String(own_job.get("status", "")) == "completed", "%s: the despawned actor's own job record must be terminal (completed), got %s" % [incident_id, own_job])
+		_expect(own_job.is_empty(), "%s: a completed job must not be saved, so the restored world must not know it, got %s" % [incident_id, own_job])
 		for i in 10:
 			restored_after.tick()
 		restored_after.state_hash()

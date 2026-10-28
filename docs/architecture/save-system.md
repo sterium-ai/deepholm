@@ -94,11 +94,20 @@ typed result codes are:
 
 A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text.
-The state carries `schemaVersion: 1` (`StateCodec.SCHEMA_VERSION`) and is
+The state carries `schemaVersion: 2` (`StateCodec.SCHEMA_VERSION`) and is
 described field for field by
-[`contracts/game-state.schema.json`](contracts/game-state.schema.json)
-("deepholm-save v1"). The schema was reset to v1 before the first public
-release; see [ADR 049](../decisions/049-save-schema-reset-v1.md).
+[`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
+schema was reset to v1 before the first public release (see
+[ADR 049](../decisions/049-save-schema-reset-v1.md)); v2 stops saving terminal
+jobs (see "Jobs" below and [ADR 053](../decisions/053-job-storage-retired-history.md)).
+
+**Jobs.** `jobs` lists the open (queued or active) jobs only, in submission
+order. A completed, failed or cancelled job leaves `JobQueue`'s live list at
+once and is kept only in its bounded, unsaved history (`jobs/job_history.gd`,
+the last 256), so neither the save nor `state_hash()` grows with play time. A
+loaded world starts with an empty history: a command naming a job finished
+before the load is rejected as `unknown_job`. The validator still accepts the
+five statuses, and `JobQueue.restore()` retires a terminal entry it is given.
 
 **Pre-release saves.** Saves written by development builds before the reset
 use the envelope format `"deepholm-save-v1"` (`SaveIO.PRE_RELEASE_FORMAT`)
@@ -119,10 +128,15 @@ runs `_validate_state()`. A rejected save's state is never returned.
 **Migration chain.** `SaveMigrations.migrate()`
 (`game/scripts/core/persistence/save_migrations.gd`) chains single-version
 `_migrate_step()` calls from the save's version to the current one. Each step
-returns a new dictionary and never mutates its input. The chain is empty
-today: `_migrate_step()` has no arms, so any version below the current one is
-rejected with `no_migration_available`; nothing is ever silently filled from
-current defaults. Adding schema version N+1 (the recipe in the class doc):
+returns a new dictionary and never mutates its input. Steps today:
+
+- **v1 → v2** (A5, ADR 053): drops every completed/failed/cancelled entry from
+  `jobs`; nothing else changes. `save_schema_v1_fixture.json` migrates exactly
+  to `save_schema_v2_fixture.json` (the same session written at v2).
+
+A version with no arm (below 1) is rejected with `no_migration_available`;
+nothing is ever silently filled from current defaults. Adding schema version
+N+1 (the recipe in the class doc):
 
 1. Bump `StateCodec.SCHEMA_VERSION`.
 2. Add an `N:` arm to `_migrate_step()` that checks the vN shape and returns

@@ -250,8 +250,27 @@ func _check_seed(seed_value: int) -> void:
 		"tick counters must match after advancing %d ticks post-restore (seed %d)" % [ADVANCE_TICKS, seed_value])
 	_expect(direct.state_hash() == restored.state_hash(),
 		"state_hash must match an uninterrupted run after advancing %d ticks post-restore (seed %d)" % [ADVANCE_TICKS, seed_value])
-	_expect(direct.get_jobs() == restored.get_jobs(),
-		"full job records must match after advancing post-restore (seed %d)" % seed_value)
+	# A5 (ADR 053): a job already terminal at the save is not saved. Live jobs must
+	# match exactly; every job the restored world knows (live, or finished after the
+	# load) must equal the uninterrupted run's record; and the only jobs it may lack
+	# are the ones the source had already finished when it saved.
+	_expect(direct.get_jobs([], false) == restored.get_jobs([], false),
+		"live job records must match after advancing post-restore (seed %d)" % seed_value)
+	var finished_before_save := {}
+	for job in source.get_jobs():
+		if not (job["status"] in ["queued", "active"]):
+			finished_before_save[job["id"]] = true
+	var direct_by_id := {}
+	for job in direct.get_jobs():
+		direct_by_id[job["id"]] = job
+	var restored_ids := {}
+	for job in restored.get_jobs():
+		restored_ids[job["id"]] = true
+		_expect(direct_by_id.get(job["id"], {}) == job,
+			"full job record %s must match after advancing post-restore (seed %d)" % [job["id"], seed_value])
+	for job_id in direct_by_id:
+		_expect(restored_ids.has(job_id) or finished_before_save.has(job_id),
+			"job %s may only be missing after restore if it was finished before the save (seed %d)" % [job_id, seed_value])
 
 ## Same corridor shape as _fresh_world() (top row + right column, 95 tiles,
 ## more than one STEP_BUDGET (64) but at most two), reused here for a chop
