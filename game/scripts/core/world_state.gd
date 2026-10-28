@@ -272,7 +272,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		func(job_id: String) -> bool: return _needs_system.consume_source_valid(job_id),
 		_resume_work_progress, _set_work_progress, _progress_table.clear, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
-		set_tool_item_held, set_tool_item_ground, get_colonists, _route_budget,
+		set_tool_item_held, set_tool_item_ground, _worker_view, _route_budget,
 		get_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
 		_work_target_for, _construction.construction_site_exists, _construction.construction_site_deposit)
@@ -301,15 +301,15 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.queue.set_tool_requirement(_toil_bindings.tool_requirement_for_kind, _toil_bindings.tool_exists)
 	_toil_hooks = _toil_bindings.hooks
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
-	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), get_jobs.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
+	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
+	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
 		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
-	# The queue's own kind-filtered read: get_jobs()'s tool-handover overlay never touches site_fetch/site_work.
-	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.get_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
+	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
 		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
 	# Live tiles by reference: get_tiles() would copy 65536 Strings per tick.
-	_calendar_alert_giver = CalendarAlertGiverType.new(get_colonists, func() -> Array[String]: return _tile_grid.tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
+	_calendar_alert_giver = CalendarAlertGiverType.new(_worker_view, func() -> Array[String]: return _tile_grid.tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
 
 ## Builds what is sized by the map (NeedGiver, RescueGiver, ApproachGiver, IncidentScheduler)
 ## and the TickPipeline over them. StateCodec.decode() calls it again after setting a saved
@@ -373,7 +373,7 @@ func state_hash(include_incidents: bool = true) -> int:
 		"next_tool_item_id": _tool_store.next_id,
 		"tool_reservations": _tool_store.reservations.snapshot(),
 		"colonists": StateCodec._hash_colonists(_colonists, _reroutes),
-		"jobs": get_jobs(),
+		"jobs": get_jobs([], false),
 		"scheduling": _scheduler.snapshot(),
 		"calendar_alerts_fired": _calendar_alerts_fired,
 		"tool_fetch_excluded": _toils.get_fetch_tool_excluded(),
@@ -491,6 +491,8 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 			_progress_table.release_owned(job_id, job)
 	return result
 
+## Read-only view (A5) of the live actors get_colonists() copies, for core readers; never mutated.
+func _worker_view() -> Array: return _colonists.filter(func(a: Dictionary) -> bool: return ActorTableType.has_component(a, "worker", _content))
 ## A thin filter over the actor table (ADR 012): every actor with a worker component.
 func get_colonists() -> Array[Dictionary]:
 	var copy: Array[Dictionary] = []
@@ -509,10 +511,10 @@ func _carrying_view(actor: Dictionary) -> Variant:
 	var first: Dictionary = InventoryType.hands_snapshot(actor)[0]
 	return {"kind": first["kind"], "count": first["count"]}
 
-## The tool-handover overlay only mutates detached duplicates; a non-empty `kinds`
-## keeps only those kinds, costing only the jobs returned (B1).
-func get_jobs(kinds: Array = []) -> Array[Dictionary]:
-	var jobs := _scheduler.queue.get_jobs() if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
+## The tool-handover overlay only mutates detached duplicates; a non-empty `kinds` keeps only those kinds, costing
+## only the jobs returned (B1). Retained terminal jobs (A5) are listed unless `retired` is false (state_hash()).
+func get_jobs(kinds: Array = [], retired: bool = true) -> Array[Dictionary]:
+	var jobs := _scheduler.queue.get_jobs(retired) if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
 	var assignments := _scheduler.get_assignments()
 	for job in jobs:
 		ToolHandoverType.apply(job, assignments, _toils)
@@ -571,7 +573,7 @@ func _submit_incident_job(actor_id: String, target: Vector2i) -> String:
 ## After a load (IncidentScheduler persists nothing): re-associates each live incident job with
 ## its actor, or retires it. A queued job with a restrict_to_for() was activated (paused by a flee).
 func _reconcile_incident_jobs_after_load() -> void:
-	for job in _scheduler.queue.get_jobs():
+	for job in _scheduler.queue.view_jobs_of_kinds(["incident"]):
 		if String(job["kind"]) != "incident" or String(job["status"]) not in ["queued", "active"]:
 			continue
 		var job_id := String(job["id"])
@@ -597,7 +599,7 @@ func _has_item_of_kind(kind: String) -> bool: return _item_table.has_item_of_kin
 
 ## Fails any live haul job naming item_id once its last ground unit is gone (no endless retry).
 func _fail_haul_jobs_referencing_item(item_id: String) -> void:
-	for job in _scheduler.queue.get_jobs():
+	for job in _scheduler.queue.view_jobs_of_kinds(["haul"]):
 		if String(job["kind"]) != "haul" or String(job["status"]) not in ["queued", "active"]:
 			continue
 		if String(job["item_id"]) != item_id:

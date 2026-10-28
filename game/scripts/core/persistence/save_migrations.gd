@@ -2,9 +2,9 @@ class_name SaveMigrations
 extends RefCounted
 
 ## Explicit migrations for persisted state dictionaries. The schema was reset to
-## v1 before release (R14, ADR 049): the chain is empty, and saves written before
-## the reset are rejected by SaveIO, never migrated. The mechanism stays for the
-## first post-release change.
+## v1 before release (R14, ADR 049): saves written before the reset are rejected by
+## SaveIO, never migrated. Steps since the reset:
+## - v1 -> v2 (A5, ADR 053): terminal jobs leave the save.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -26,14 +26,34 @@ static func migrate(state: Dictionary, from_version: int, to_version: int) -> Di
 	return {"ok": true, "code": "ok", "message": "save migrated", "state": current_state}
 
 ## One arm per from_version, each returning {"ok": true, "state": <vN+1 state>}.
-static func _migrate_step(_state: Dictionary, from_version: int) -> Dictionary:
+static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 	match from_version:
+		1:
+			return _v1_to_v2(state)
 		_:
 			return {
 				"ok": false,
 				"code": "no_migration_available",
 				"message": "no migration is available for this save schema",
 			}
+
+## v1 -> v2 (A5, ADR 053): drops every completed/failed/cancelled job from "jobs"
+## (JobQueue keeps them only in its unsaved, bounded history now). Nothing else in a
+## v1 save names a terminal job: each terminal transition already cleared its
+## assignment, activation snapshot, work-progress owner and giver associations.
+## Entries that are not job objects are kept for the validator to reject.
+static func _v1_to_v2(state: Dictionary) -> Dictionary:
+	if not (state.get("jobs") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v1 save has no jobs array"}
+	var migrated := state.duplicate(true)
+	var live: Array = []
+	for job: Variant in migrated["jobs"]:
+		if job is Dictionary and (job as Dictionary).get("status") in ["completed", "failed", "cancelled"]:
+			continue
+		live.append(job)
+	migrated["jobs"] = live
+	migrated["schemaVersion"] = 2
+	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------
 

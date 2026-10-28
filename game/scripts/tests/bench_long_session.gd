@@ -6,8 +6,10 @@ extends SceneTree
 ##               to OPEN_TARGET queued/active till orders every ORDER_EVERY
 ##               ticks), so only finished jobs accumulate. Every WINDOW ticks
 ##               it prints the window's mean tick time, its slowest phases,
-##               and the sizes of the structures nothing trims today:
-##               JobQueue._jobs (terminal jobs included), JobQueue._events,
+##               and the sizes of the job and log structures: JobQueue._jobs
+##               (live jobs, plus terminal ones not yet compacted away), its
+##               retained terminal history (A5, job_history.gd; before A5 every
+##               terminal job stayed in _jobs), JobQueue._events,
 ##               EventLog._events and TileGrid.dirty_cells.
 ##   backlog   - fresh worlds with Q open till orders at once (a player
 ##               designating a large field), BACKLOG_TICKS ticks each.
@@ -54,13 +56,14 @@ func _retention() -> void:
 		window_usec += Time.get_ticks_usec() - t
 		if tick % WINDOW == 0:
 			var jobs: Array = world._scheduler.queue._jobs
+			var retained: int = world._scheduler.queue._history.size()
 			print("bench_long_session: retention ticks=%d mean_tick=%.2fms queue_jobs=%d (open=%d terminal=%d) queue_events=%d world_events=%d dirty_cells=%d top_phases: %s" % [
-				tick, window_usec / 1000.0 / WINDOW, jobs.size(), _open_jobs(world), jobs.size() - _open_jobs(world),
+				tick, window_usec / 1000.0 / WINDOW, jobs.size(), _open_jobs(world), retained,
 				world._scheduler.queue._events.size(), world._event_log._events.size(), world._tile_grid.dirty_cells.size(),
 				_top_phases(totals, WINDOW)])
 			BenchCommon.row("bench_long_session", "retention", "ticks=%d" % tick, {
 				"mean tick ms": "%.2f" % (window_usec / 1000.0 / WINDOW), "queue jobs": jobs.size(),
-				"open": _open_jobs(world), "terminal": jobs.size() - _open_jobs(world),
+				"open": _open_jobs(world), "terminal": retained,
 				"queue events": world._scheduler.queue._events.size(), "world events": world._event_log._events.size(),
 				"dirty cells": world._tile_grid.dirty_cells.size(), "top phases (ms/tick)": _top_phases(totals, WINDOW)})
 			window_usec = 0

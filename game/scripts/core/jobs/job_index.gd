@@ -7,8 +7,14 @@ extends RefCounted
 ## own beyond them.
 ##
 ## Invariants:
-## - Jobs are only ever appended to the list and never change id or kind, so
-##   add() is the only write besides watch()/note_reason().
+## - Jobs are only ever appended to the list and never change id or kind; a
+##   job leaves the indexes only through remove(), on its terminal transition
+##   (A5). The list and _by_kind may still hold removed jobs until the next
+##   compaction, which runs once they outnumber half the list (amortized O(1)
+##   per removal) and filters both in place, keeping the list's identity.
+##   Every read skips them: only _by_id names a live job.
+## - _position is a job's submission ordinal (list order), never reused, so
+##   compaction needs no renumbering and JobHistory can merge by it.
 ## - Every read takes the caller's current job list and answers from the
 ##   indexes only while it is the list they were built for (covers()):
 ##   AssignmentQueue.advance_selection() temporarily swaps JobQueue._jobs for
@@ -42,14 +48,16 @@ var _labour_disabled: Dictionary = {}
 var _designations: Dictionary = {}
 var _pending_by_target: Dictionary = {}
 var _designation_log: Array[Vector2i] = []
+var _next_position: int = 0
+## Jobs removed since the last compaction.
+var _removed: int = 0
 
 ## Indexes `jobs` (restored or empty) as it stands.
 func _init(jobs: Array[Dictionary], labour_disabled_reason: String) -> void:
 	_jobs = jobs
 	_labour_disabled_reason = labour_disabled_reason
-	for position in jobs.size():
-		var job: Dictionary = jobs[position]
-		_add_at(job, position)
+	for job in jobs:
+		_add_at(job)
 		if job["status"] == "active" or int(job.get("retry_at", 0)) > 0:
 			watch(job)
 		note_reason(job)
@@ -63,18 +71,47 @@ func covers(jobs: Array[Dictionary]) -> bool:
 ## Records a job JobQueue just appended to `jobs`.
 func add(jobs: Array[Dictionary], job: Dictionary) -> void:
 	if covers(jobs):
-		_add_at(job, jobs.size() - 1)
+		_add_at(job)
 
-func _add_at(job: Dictionary, position: int) -> void:
+func _add_at(job: Dictionary) -> void:
 	var job_id: String = job["id"]
 	var kind := String(job.get("kind", ""))
 	_by_id[job_id] = job
-	_position[job_id] = position
+	_position[job_id] = _next_position
+	_next_position += 1
 	_kinds[job_id] = kind
 	if not _by_kind.has(kind):
 		var of_kind: Array[Dictionary] = []
 		_by_kind[kind] = of_kind
 	_by_kind[kind].append(job)
+
+## Drops a job JobQueue just made terminal (after its terminal event reached
+## on_event()) from every index; returns its position, or -1 if not indexed.
+func remove(job: Dictionary) -> int:
+	var job_id: String = job["id"]
+	var position: int = _position.get(job_id, -1)
+	if position < 0:
+		return -1
+	for index: Dictionary in [_by_id, _position, _kinds, _watched, _labour_disabled]:
+		index.erase(job_id)
+	_removed += 1
+	if _removed * 2 > _jobs.size():
+		_compact()
+	return position
+
+func _compact() -> void:
+	_jobs.assign(_jobs.filter(_is_live))
+	for kind: String in _by_kind:
+		(_by_kind[kind] as Array).assign((_by_kind[kind] as Array).filter(_is_live))
+	_removed = 0
+
+func _is_live(job: Dictionary) -> bool:
+	return _by_id.has(job["id"])
+
+## The submission position of the live job job_id, or -1.
+func position_of(job_id: String) -> int:
+	var position: int = _position.get(job_id, -1)
+	return position
 
 ## The live job with job_id in `jobs`, or {}.
 func find(jobs: Array[Dictionary], job_id: String) -> Dictionary:
@@ -94,7 +131,9 @@ func of_kinds(jobs: Array[Dictionary], kinds: Array) -> Array[Dictionary]:
 				result.append(job)
 		return result
 	for kind in kinds:
-		result.append_array(_by_kind.get(kind, []))
+		for job: Dictionary in _by_kind.get(kind, []):
+			if _by_id.has(job["id"]):
+				result.append(job)
 	if kinds.size() > 1:
 		result.sort_custom(_before)
 	return result

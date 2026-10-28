@@ -416,11 +416,13 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
 	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
+	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_SOIL
 	world._colonists.clear()
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	world._item_table.items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
+	world._item_table.next_item_id = 3
 
 	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"first till submission must be accepted")
@@ -446,6 +448,12 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 			break
 	_expect(world.get_tile(2, 0) == WorldStateType.TILE_PLANTED, "setup: the second tile must be sown")
 
+	# A5 (ADR 053): a v2 save lists live jobs only and the jobs above are complete, so
+	# one more till and sow are queued, never ticked, for the save to carry both kinds.
+	_expect(_command(world, "till_3", "till", {"x": 3, "y": 0, "priority": 1}).get("ok", false),
+		"third till submission must be accepted")
+	_expect(_command(world, "sow_2", "sow", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+		"second sow submission must be accepted")
 	var state := world.to_save_state()
 	_expect(int(state.get("schemaVersion", -1)) == StateCodecType.SCHEMA_VERSION,
 		"till/sow must add no schema/version bump, got %s" % state.get("schemaVersion"))

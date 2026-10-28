@@ -53,6 +53,7 @@ var _work_progress_clear: Callable
 var _reroutes: Dictionary
 var _advance_go_to: Callable
 var _record: Callable
+## WorldState._worker_view (A5): the live worker actors, read only.
 var _get_colonists: Callable
 var _get_tool_items: Callable
 ## Live colonist lookup by id (mutating the returned Dictionary mutates

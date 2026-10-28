@@ -30,7 +30,8 @@ var _remaining: Callable
 
 ## Every dependency comes from ConstructionSystem or a sibling module, never
 ## WorldState: get_sites is ConstructionSystem.site_table.list (the raw records, not
-## the colonist-id-translated public view); get_jobs is JobQueue.get_jobs;
+## the colonist-id-translated public view); get_jobs is the read-only
+## JobQueue.view_jobs_of_kinds(["site_fetch", "site_work"]) (A5, never mutated);
 ## get_items is ItemTable.get_items; is_in_any_zone is ZoneTable.is_in_any_zone.
 ## reservation_owner(item_id: String) -> String, submit_fetch(origin, item_id,
 ## item_tile, tick) -> Dictionary and submit_work(origin, tick) -> Dictionary are
