@@ -78,10 +78,13 @@ write in the viewer and `boot.gd`.
 
 - The per-tick viewer refresh at 1,000 actors drops from about 415 ms to 3.6–4.0 ms (mean)
   (`docs/orca/handoffs/A9.md` has the numbers and the command).
-- The colonist panel recomposes at most `ColonistPanel.ROWS_PER_REFRESH` (16) lines per
-  refresh in a window that walks the id-sorted roster, plus any new or rebuilt row. A colony of
-  16 or fewer sees every line every refresh, as before; at 1,000 colonists a line is at most
-  63 refreshes old. The work table compares only the rows whose details the snapshot carries;
+- On a tick, the colonist panel recomposes at most `ColonistPanel.ROWS_PER_REFRESH` (16)
+  lines in a window that walks the id-sorted roster, plus every row on screen and any new or
+  rebuilt row. A colony of 16 or fewer sees every line every tick, as before; at 1,000
+  colonists a row off screen is at most 63 ticks old. A refresh at the same tick as the last
+  one (it follows a command or a world swap, also while paused) recomposes every row, so a
+  command's effect shows at once anywhere in the list; at 1,000 colonists that refresh costs
+  about 33 ms. The work table compares only the rows whose details the snapshot carries;
   labour levels change only through `set_labour`, and its own clicks refresh their row at once.
 - The map layers keep no node per actor: colonist and actor sprites are plain records drawn by
   one `_draw()` per layer, and a colonist whose columns did not change is skipped.

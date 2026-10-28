@@ -53,14 +53,19 @@ var _trade_keys: Array[String] = []
 var _buttons: Dictionary = {}
 var _seen_ids: Array = []
 var _seen_worker: Array = []
-## A9: at most this many colonist lines are recomposed per refresh, in a window that
-## walks the id-sorted roster (_cursor), plus every row that is new or rebuilt. A
-## colony this size or smaller gets every line every refresh, as before; a larger one
-## sees each line at most ceil(roster / ROWS_PER_REFRESH) refreshes old.
+## A9: on a tick refresh, at most this many colonist lines are recomposed in a window
+## that walks the id-sorted roster (_cursor), plus every row on screen (inside the
+## enclosing ScrollContainer) and every row that is new or rebuilt. A colony this size
+## or smaller gets every line every refresh, as before; in a larger one a row off
+## screen is at most ceil(roster / ROWS_PER_REFRESH) ticks old. A refresh at the same
+## tick as the last one is not a tick's: it follows a command or a world swap (also
+## while paused), so it recomposes every row.
 const ROWS_PER_REFRESH := 16
 ## The id-sorted colonist roster of the last refresh, and where its window starts.
 var _roster: PackedStringArray = PackedStringArray()
 var _cursor: int = 0
+## The tick of the last refresh (-1: none yet).
+var _last_tick: int = -1
 ## The snapshot the line being composed reads.
 var _snapshot: Dictionary = {}
 ## Tool item id -> kind, from _snapshot's tool_items.
@@ -73,14 +78,57 @@ func setup(world_ref: WorldStateType, text_table: TextTableType) -> void:
 	add_child(_list)
 	refresh()
 
-## The colonist ids whose lines the next refresh() recomposes (its window), for
+## The colonist ids whose lines the next refresh() recomposes, for
 ## WorldState.get_view_snapshot(detail_ids): boot.gd asks before taking the tick's
-## snapshot, so that one snapshot carries their full records.
+## snapshot, so that one snapshot carries their full records. Every id when the
+## world is still at the last refresh's tick; otherwise the window and the rows on screen.
 func detail_ids() -> Array:
-	var ids: Array = []
+	if world != null and world.get_tick() == _last_tick:
+		return Array(_roster)
+	return _window_ids(_visible_ids())
+
+func _window_ids(extra: Array) -> Array:
+	var ids: Array = extra.duplicate()
 	for k in mini(ROWS_PER_REFRESH, _roster.size()):
-		ids.append(_roster[(_cursor + k) % _roster.size()])
+		var id := _roster[(_cursor + k) % _roster.size()]
+		if not ids.has(id):
+			ids.append(id)
 	return ids
+
+## The colonist ids whose rows intersect the enclosing ScrollContainer's visible rect;
+## [] outside a laid-out scroll view (headless tests, before the first frame). Rows sit
+## in roster order, so a binary search finds the first one on screen.
+func _visible_ids() -> Array:
+	var scroll := _scroll_view()
+	if scroll == null or _roster.is_empty() or _list.get_child_count() < _roster.size():
+		return []
+	var view := scroll.get_global_rect()
+	if view.size.y <= 0.0:
+		return []
+	var low := 0
+	var high := _roster.size()
+	while low < high:
+		var middle := (low + high) / 2
+		if (_list.get_child(middle) as Control).get_global_rect().end.y < view.position.y:
+			low = middle + 1
+		else:
+			high = middle
+	var ids: Array = []
+	for i in range(low, _roster.size()):
+		var rect := (_list.get_child(i) as Control).get_global_rect()
+		if rect.position.y > view.end.y:
+			break
+		if rect.size.y > 0.0:
+			ids.append(_roster[i])
+	return ids
+
+func _scroll_view() -> ScrollContainer:
+	if not is_inside_tree():
+		return null
+	var node := get_parent()
+	while node != null and not node is ScrollContainer:
+		node = node.get_parent()
+	return node as ScrollContainer
 
 ## `snapshot` is this tick's WorldState.get_view_snapshot(); {} takes a fresh one.
 ## Rows are matched by colonist (and trader) id: lines are recomposed for the
@@ -98,8 +146,10 @@ func refresh(snapshot: Dictionary = {}) -> void:
 	# refresh touches only its window's rows.
 	var roster_changed := _read_roster(snapshot)
 	var buttons := _recruit_buttons(snapshot) if (snapshot["factions"] as Array).has("allies") else {}
+	var tick := int(snapshot["tick"])
+	var every_row := tick == _last_tick
 	var due := {}
-	for id in detail_ids():
+	for id in (Array(_roster) if every_row else _window_ids(_visible_ids())):
 		due[id] = true
 	if roster_changed or buttons != _buttons:
 		for colonist_id in _roster:
@@ -136,7 +186,8 @@ func refresh(snapshot: Dictionary = {}) -> void:
 				_list.move_child(row, i)
 		_trade_keys = trade_keys
 	_use_snapshot({})
-	if _roster.size() > ROWS_PER_REFRESH:
+	_last_tick = tick
+	if not every_row and _roster.size() > ROWS_PER_REFRESH:
 		_cursor = (_cursor + ROWS_PER_REFRESH) % _roster.size()
 
 ## Drops every row and the roster, so the next refresh() rebuilds them all with
@@ -150,6 +201,7 @@ func forget_rows() -> void:
 	_buttons = {}
 	_trade_keys = []
 	_cursor = 0
+	_last_tick = -1
 
 ## Re-reads the id-sorted roster when the snapshot's ids or worker columns differ
 ## from the last ones read; true when they did. A different roster restarts the window.

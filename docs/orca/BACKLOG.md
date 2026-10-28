@@ -597,8 +597,9 @@ one.
   per-actor columns plus full records only for the colonist panel's window of rows; `boot.gd`
   takes one per refresh and hands it to every panel and layer. Colonist and actor sprites are
   plain records drawn by one `_draw()` per layer (no node per actor) and skip colonists that did
-  not change. The colonist panel keeps its rows and recomposes at most 16 lines per refresh in a
-  rotating window; the work table compares only those rows. `TickDriver` runs at most 4 ticks
+  not change. The colonist panel keeps its rows; on a tick it recomposes the rows on screen plus at
+  most 16 more in a rotating window, and after a command (a refresh at the same tick, also
+  while paused) every row; the work table compares the same rows. `TickDriver` runs at most 4 ticks
   per frame. The purity rule rejects `world._x` in the viewer and `boot.gd`, with a planted
   read. `bench_viewer_refresh` at 1,000 actors: about 415 ms per tick on `main`, 3.6–4.0 ms
   here. See `docs/orca/handoffs/A9.md`.

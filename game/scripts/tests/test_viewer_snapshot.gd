@@ -5,8 +5,10 @@ extends SceneTree
 ##    get_actors_with_health(), get_job(), get_colonist_need_reason(), ...), is
 ##    read-only all the way down, and is a copy: ticking the world never changes it;
 ## 2) the sprite layers keep no node per actor (one _draw() per layer);
-## 3) the colonist panel keeps its row nodes across refreshes, recomposes at most
-##    ROWS_PER_REFRESH lines per refresh, and still reaches every row in turn;
+## 3) the colonist panel keeps its row nodes across refreshes; on a tick it recomposes
+##    at most ROWS_PER_REFRESH lines plus the rows on screen, and still reaches every
+##    row in turn; a refresh at the same tick (a command, also while paused)
+##    recomposes every row;
 ## 4) TickDriver runs at most MAX_TICKS_PER_FRAME ticks per frame and drops the rest
 ##    of a long frame's backlog.
 
@@ -22,11 +24,17 @@ const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
 
 var _failed := false
 
-func _init() -> void:
+func _initialize() -> void:
+	_run.call_deferred()
+
+## Deferred so the tree runs frames: the on-screen-rows check needs real layout.
+func _run() -> void:
 	_check_snapshot_matches_getters()
 	_check_snapshot_is_frozen_copy()
 	_check_layers_keep_no_nodes()
 	_check_panel_rows_rotate()
+	_check_paused_command_refreshes_every_row()
+	await _check_rows_on_screen_refresh_every_tick()
 	_check_tick_driver_cap()
 	if _failed:
 		quit(1)
@@ -151,31 +159,111 @@ func _check_layers_keep_no_nodes() -> void:
 	_expect(actors.get_child_count() == 0, "actor layer keeps no node per actor")
 	actors.free()
 
+## A world of ROWS_PER_REFRESH * 2 + 5 colonists, several of them working till orders.
+func _panel_world() -> WorldStateType:
+	var world := BenchCommon.world_with_colonists(7, 64, 64, ColonistPanelType.ROWS_PER_REFRESH * 2 + 5)
+	BenchCommon.submit_till_orders(world, world.get_colonists().size())
+	for _i in 6:
+		world.tick()
+	return world
+
+func _mark_stale(list: VBoxContainer) -> void:
+	for row in list.get_children():
+		(row as Label).text = "stale"
+
+func _fresh_count(list: VBoxContainer) -> int:
+	var fresh := 0
+	for row in list.get_children():
+		if (row as Label).text != "stale":
+			fresh += 1
+	return fresh
+
 func _check_panel_rows_rotate() -> void:
-	var count := ColonistPanelType.ROWS_PER_REFRESH * 2 + 5
-	var world := BenchCommon.world_with_colonists(7, 48, 48, count)
+	var world := _panel_world()
+	var count := world.get_colonists().size()
 	var panel := ColonistPanelType.new()
 	panel.setup(world, TextTableType.new())
 	var list: VBoxContainer = panel._list
 	_expect(list.get_child_count() == count, "one row per colonist (%d, got %d)" % [count, list.get_child_count()])
 	var first_row := list.get_child(0)
-	for row in list.get_children():
-		(row as Label).text = "stale"
+	_mark_stale(list)
 	var refreshes := ceili(float(count) / ColonistPanelType.ROWS_PER_REFRESH)
 	for i in refreshes:
+		world.tick()
 		panel.refresh()
-		var fresh := 0
-		for row in list.get_children():
-			if (row as Label).text != "stale":
-				fresh += 1
+		var fresh := _fresh_count(list)
 		_expect(fresh <= (i + 1) * ColonistPanelType.ROWS_PER_REFRESH,
-			"refresh %d recomposes at most ROWS_PER_REFRESH lines (%d fresh)" % [i, fresh])
-	for row in list.get_children():
-		_expect((row as Label).text != "stale", "every row is recomposed within ceil(roster / ROWS_PER_REFRESH) refreshes")
+			"tick refresh %d recomposes at most ROWS_PER_REFRESH lines (%d fresh)" % [i, fresh])
+	_expect(_fresh_count(list) == count, "every row is recomposed within ceil(roster / ROWS_PER_REFRESH) ticks")
 	_expect(list.get_child(0) == first_row, "rows are updated in place, not rebuilt")
-	var colonist := world.get_colonists()[0]
-	_expect((list.get_child(0) as Label).text == panel._line_for(colonist), "a recomposed row shows _line_for()'s line")
 	panel.free()
+
+## The reviewer's case: while paused (no tick), a command changes a colonist whose row
+## is outside the window; the refresh that follows the command must show it.
+func _check_paused_command_refreshes_every_row() -> void:
+	var world := _panel_world()
+	var panel := ColonistPanelType.new()
+	panel.setup(world, TextTableType.new())
+	world.tick()
+	panel.refresh() # a tick refresh: only the window
+	var window: Array = panel._window_ids([])
+	var target := ""
+	var assignments := world.get_assignments()
+	for id: String in assignments:
+		if not window.has(id):
+			target = id
+			break
+	_expect(target != "", "setup: a working colonist outside the next window")
+	if target == "":
+		panel.free()
+		return
+	_expect(panel.detail_ids().size() == world.get_colonists().size(),
+		"at the last refresh's tick, detail_ids() asks for every colonist")
+	var row := panel._rows[target]["label"] as Label
+	var before := row.text
+	_mark_stale(panel._list)
+	var job_id := String(assignments[target]["job_id"])
+	var result := world.apply({"actor": "test", "command_id": "cancel_%s" % job_id, "tick": world.get_tick(),
+		"type": "cancel_job", "payload": {"job_id": job_id}})
+	_expect(result["ok"], "setup: cancel_job is accepted (%s)" % [result])
+	panel.refresh() # same tick: a command's refresh
+	_expect(_fresh_count(panel._list) == world.get_colonists().size(), "a same-tick refresh recomposes every row")
+	_expect(row.text == panel._line_for(TestAccess.find_colonist(world, target)) and row.text != before,
+		"the cancelled colonist's row (outside the window) shows its new state at once")
+	panel.free()
+
+## Rows inside the enclosing ScrollContainer's visible rect are recomposed on every
+## tick refresh, even outside the window.
+func _check_rows_on_screen_refresh_every_tick() -> void:
+	var world := _panel_world()
+	var scroll := ScrollContainer.new()
+	scroll.size = Vector2(400, 300)
+	var content := VBoxContainer.new()
+	scroll.add_child(content)
+	var panel := ColonistPanelType.new()
+	panel.custom_minimum_size = Vector2(380, 20000)
+	content.add_child(panel)
+	root.add_child(scroll)
+	panel.setup(world, TextTableType.new())
+	for _i in 3:
+		await process_frame
+	scroll.scroll_vertical = 2000
+	for _i in 3:
+		await process_frame
+	var on_screen: Array = panel._visible_ids()
+	var window: Array = panel._window_ids([])
+	_expect(not on_screen.is_empty(), "setup: some rows are on screen after scrolling")
+	_expect(on_screen.any(func(id: String) -> bool: return not window.has(id)),
+		"setup: an on-screen row lies outside the window (%s vs %s)" % [on_screen, window])
+	_mark_stale(panel._list)
+	world.tick()
+	panel.refresh()
+	for id: String in on_screen:
+		_expect((panel._rows[id]["label"] as Label).text != "stale", "on-screen row %s is recomposed on a tick" % id)
+	_expect(_fresh_count(panel._list) <= ColonistPanelType.ROWS_PER_REFRESH + on_screen.size(),
+		"a tick refresh recomposes only the window and the on-screen rows")
+	scroll.queue_free()
+	await process_frame
 
 func _check_tick_driver_cap() -> void:
 	var world := WorldStateType.new(5)
