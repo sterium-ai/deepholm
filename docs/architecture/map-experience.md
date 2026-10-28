@@ -183,7 +183,7 @@ Save: ~399 ms, Load: ~1051 ms
 ```
 
 Save/Load cost comes from exact seed/rng restoration walking the save's JSON
-structurally (`SaveIO._scan_object_members()`,
+structurally (`SaveJsonInts._scan_object_members()`,
 `docs/architecture/save-system.md`), a GDScript-interpreted parse chosen for
 correctness against escaped keys and envelope decoys that a native regex
 search could not handle. That cost is deliberate and must not be reduced by

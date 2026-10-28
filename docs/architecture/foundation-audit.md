@@ -581,7 +581,7 @@ What does not scale (numbers in §2.4):
 - **One JSON document**, with tiles as an array of 65,536 strings (`state_codec.gd`
   `encode()`, `"tiles": world._tile_grid.encode()["tiles"]`, which is `TileGrid.encode()`'s
   `tiles.duplicate()`).
-- **In-flight route searches saved in full.** `StateCodec._encode_route()` writes
+- **In-flight route searches saved in full.** `SchedulingCodec._encode_route()` writes
   `visited`, `cameFrom` and `frontier`. One long search is up to about 2 MB of JSON (§2.3,
   `snapshot_json`).
 - **`write_atomic()` does the work several times.** It runs `_validate_state()`, which

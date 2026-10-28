@@ -9,7 +9,8 @@ extends RefCounted
 ## - build and build_line share _construction_footprint_check(); build_line runs the
 ##   enclosure check once, before creating any site.
 ## - A fetch job's submission-time source is a seed, swapped for the nearest one on activation.
-## - ConstructionSiteTable.progress is the one work counter; site_work never writes WorkProgress.
+## - A site record's "progress" (ConstructionSiteTable) is the one work counter; site_work
+##   never writes WorkProgress.
 ## - site_fetch_source_retargeted/site_fetch_picked_kind are runtime caches, never saved or hashed.
 ## - "constructionSites" is persisted and hashed; the next site id is re-derived on load.
 
