@@ -1,8 +1,8 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2984
-untyped_declaration 534
+total 2973
+untyped_declaration 523
 unsafe_property_access 0
 unsafe_method_access 233
 unsafe_call_argument 2184
@@ -17,7 +17,7 @@ file game/scripts/core/actors/components/mover.gd 1
 file game/scripts/core/actors/components/needs.gd 16
 file game/scripts/core/actors/components/wild.gd 1
 file game/scripts/core/actors/components/worker.gd 12
-file game/scripts/core/actors/needs_system.gd 41
+file game/scripts/core/actors/needs_system.gd 38
 file game/scripts/core/actors/trench_system.gd 52
 file game/scripts/core/calendar/calendar_service.gd 9
 file game/scripts/core/combat/approach_giver.gd 87
@@ -53,13 +53,13 @@ file game/scripts/core/jobs/tool_fetch_toil.gd 48
 file game/scripts/core/jobs/tool_handover.gd 10
 file game/scripts/core/jobs/tool_matching.gd 31
 file game/scripts/core/jobs/work_progress.gd 40
-file game/scripts/core/map/passability.gd 18
-file game/scripts/core/map/regions.gd 4
-file game/scripts/core/map/rooms.gd 24
-file game/scripts/core/map/tile_grid.gd 14
+file game/scripts/core/map/passability.gd 17
+file game/scripts/core/map/regions.gd 3
+file game/scripts/core/map/rooms.gd 26
+file game/scripts/core/map/tile_grid.gd 7
 file game/scripts/core/objects/construction_site.gd 26
 file game/scripts/core/objects/construction_system.gd 125
-file game/scripts/core/objects/object_table.gd 22
+file game/scripts/core/objects/object_table.gd 23
 file game/scripts/core/objects/zone_table.gd 7
 file game/scripts/core/persistence/entity_codec.gd 105
 file game/scripts/core/persistence/giver_codec.gd 41
@@ -89,4 +89,4 @@ file game/scripts/core/world/event_log.gd 16
 file game/scripts/core/world/tick_pipeline.gd 14
 file game/scripts/core/world_state.gd 66
 file game/scripts/core/worldgen/world_generator.gd 97
-file game/scripts/core/worldgen/world_seeding.gd 6
+file game/scripts/core/worldgen/world_seeding.gd 4
