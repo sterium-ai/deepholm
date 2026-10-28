@@ -289,7 +289,12 @@ func _check_blocked_source_reserved_colonist_shows_reason_and_remedy() -> void:
 	var world := Scenarios.floor_world(50001)
 	Scenarios.isolate_need(world, "food")
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"food": 20})))
-	TestAccess.item_table(world).ground_berries["47_47"] = 1
+	# A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+	# fifteen thousand"): an open-floor candidate resolves within two ticks now,
+	# so the only candidate sits behind a rock row whose gap is far east, and
+	# the detour keeps the search running for many ticks.
+	Scenarios.rock_row_with_gap(world, 24, 40)
+	TestAccess.item_table(world).ground_berries["0_47"] = 1
 
 	world.tick()
 	_expect(Scenarios.jobs_of_kind(world, "eat_food").is_empty(),
@@ -300,7 +305,7 @@ func _check_blocked_source_reserved_colonist_shows_reason_and_remedy() -> void:
 		"the search must still be in progress before the injected race (no job submitted yet)")
 
 	var table := TestAccess.scheduler(world).queue.get_reservation_table()
-	table.acquire("tile:47,47", "external_job")
+	table.acquire("tile:0,47", "external_job")
 
 	var line := ""
 	for _i in 60:
@@ -308,7 +313,7 @@ func _check_blocked_source_reserved_colonist_shows_reason_and_remedy() -> void:
 		if world.get_colonist_need_reason("colonist_0") == "blocked_source_reserved":
 			line = _panel_for(world)._line_for(Scenarios.colonist_by_id(world, "colonist_0"))
 			break
-	table.release("tile:47,47", "external_job")
+	table.release("tile:0,47", "external_job")
 
 	_expect(not line.is_empty(), "the scenario must observe blocked_source_reserved within the tick budget")
 	if line.is_empty():

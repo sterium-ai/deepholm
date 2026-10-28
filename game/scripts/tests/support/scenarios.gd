@@ -6,6 +6,20 @@ extends RefCounted
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
+## A rock row at y from x = 0 to gap_x - 1, open from gap_x to the east edge.
+## A8 (ADR 054): A* resolves an open-floor route in about one expansion per
+## tile of distance, so a check that needs a genuinely multi-tick route search
+## puts this between the searcher and its target: the detour through the gap
+## makes the search expand the whole area on its own side first. Raw tile
+## writes, so the passability cache and the region and room maps are dropped
+## and rebuilt on their next query.
+static func rock_row_with_gap(world: WorldStateType, y: int, gap_x: int) -> void:
+	for x in gap_x:
+		TestAccess.set_tile(world, x, y, WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.tile_grid(world).regions = null
+	TestAccess.tile_grid(world).rooms = null
+
 ## A world whose tiles are all floor, with no colonists.
 static func floor_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)

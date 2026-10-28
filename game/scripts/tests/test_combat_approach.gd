@@ -82,15 +82,17 @@ func _check_approach_determinism_and_save_load() -> void:
 	if _failed: return
 	var world_a := _build_wolf_door_world(103)
 	var world_b := _build_wolf_door_world(103)
-	# 100 ticks: the wolf's own faction relation makes
+	# 40 ticks: the wolf's own faction relation makes
 	# it hostile to every placed colony-faction object with a health entry, not
 	# just the door, so its own search ranks the door against every individual
 	# wall segment too (`_build_wolf_door_world()`'s wall column) -- an
 	# admissible Chebyshev lower bound cannot prune most
 	# of them early, since they tie at the same Chebyshev distance from the
-	# wolf's own start tile, so committing the job takes closer to 64 ticks than
-	# 20 here.
-	for i in 100:
+	# wolf's own start tile. A8 (ADR 054: "a long walk costs a few hundred tile
+	# checks instead of fifteen thousand"): each of those searches is now short,
+	# so the job commits at tick 23 and stays in flight until tick 58 (it was
+	# still in flight at tick 100 under Dijkstra); 40 lands inside that window.
+	for i in 40:
 		world_a.tick()
 		world_b.tick()
 		_expect(world_a.state_hash() == world_b.state_hash(),

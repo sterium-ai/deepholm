@@ -316,10 +316,10 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	_need_giver = NeedGiverType.new(_need_definitions, _need_full, int(need_config["retry_base_ticks"]), int(need_config["retry_cap_ticks"]),
 		int(need_config["job_priority"]), bounds_max, _scheduler.queue.get_reservation_table(), _needs_system.need_job_targets,
 		_needs_system.need_source_candidates, _tile_key, _routable_to, _scheduler.submit, _needs_system.set_need_reason,
-		_needs_system.emit_need_unmet_event, _needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _content)
+		_needs_system.emit_need_unmet_event, _needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _content, _passability.region_reachable)
 	_rescue_giver = RescueGiverType.new(RESCUE_JOB_PRIORITY, bounds_max, _scheduler.queue.get_reservation_table(),
 		_tile_key, _routable_to, _trench.rescue_target_candidates, _scheduler.submit, _trench.set_rescue_reason,
-		_needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _trench.is_trench_tile, _route_budget, _get_job, _trench.retire_rescue_job)
+		_needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _trench.is_trench_tile, _route_budget, _get_job, _trench.retire_rescue_job, _passability.region_reachable)
 	# The "trapped:<victim_id>" key moves through JobQueue's activation boundary like any reservation.
 	_scheduler.queue.set_extra_reservation_keys(_rescue_giver.extra_keys_for_job)
 	# Shares CombatGiver's faction-aware wrappers and the same _route_budget ledger.
@@ -691,7 +691,7 @@ func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 ## A fresh bounded re-route search within this map's bounds (injected into _toils).
 func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable) -> RerouteType:
 	var bounds_max := Vector2i(_tile_grid.width - 1, _tile_grid.height - 1)
-	return RerouteType.new(start, target, passable, Vector2i.ZERO, bounds_max)
+	return RerouteType.new(start, target, passable, Vector2i.ZERO, bounds_max, _passability.region_reachable)
 
 ## Faction passability with the scheduler's target-tile exception: a route may end on
 ## its own impassable target (a chop job's tree).

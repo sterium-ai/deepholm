@@ -441,8 +441,8 @@ func get_pending() -> Dictionary:
 	return pending
 
 ## Restores continuation state from a save; routes rebuild through _passable_for() like
-## tick(), so an autonomous entry keeps its own faction's passability.
-func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i) -> void:
+## tick(), so an autonomous entry keeps its own faction's passability. region_check as in tick().
+func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i, region_check: Callable = Callable()) -> void:
 	_waiting = state["waiting"].duplicate(true)
 	_waiting_index.restore(_waiting, state.get("activated_entries", {}))
 	_next_ordinal = state["next_ordinal"]
@@ -466,7 +466,7 @@ func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Ve
 		var restored_found: Array = []
 		for pair in request["found"]:
 			var restored_pair: Dictionary = pair.duplicate(true)
-			restored_pair["path"] = _resolve_path(request["start"], pair["entry"]["target"], _passable_for(worker, pair["entry"], is_passable), bounds_min, bounds_max)
+			restored_pair["path"] = _resolve_path(request["start"], pair["entry"]["target"], _passable_for(worker, pair["entry"], is_passable), bounds_min, bounds_max, region_check)
 			restored_found.append(restored_pair)
 		request["found"] = restored_found
 		_pending[worker] = request
@@ -525,9 +525,9 @@ func _priority_bracket(entry: Dictionary, job_kinds: Dictionary, labour_table: D
 	var calendar_boost := int(get_calendar_boost.call(labour, tick_number)) if get_calendar_boost.is_valid() else 0
 	return mini(order_priority + calendar_boost + LABOUR_LEVEL_MAX - labour_level, MAX_PRIORITY_BRACKET)
 
-## Unbounded is safe: it repeats a search that already reached STATUS_FOUND.
-func _resolve_path(start: Vector2i, target: Vector2i, passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i) -> Array:
-	var route := RouteType.new(start, target, _routable(target, passable), bounds_min, bounds_max)
+## Unbounded re-run of a found search; region_check (ADR 054) refuses a target cut off since.
+func _resolve_path(start: Vector2i, target: Vector2i, passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i, region_check: Callable) -> Array:
+	var route := RouteType.new(start, target, _routable(target, passable), bounds_min, bounds_max, region_check)
 	while not route.is_terminal():
 		route.resume()
 	return route.get_path()

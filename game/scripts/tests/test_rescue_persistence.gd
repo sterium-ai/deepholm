@@ -142,6 +142,7 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_TRENCH)
+	_fence_victim_b_lane(world)
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
 	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)

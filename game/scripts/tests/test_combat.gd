@@ -422,6 +422,11 @@ func _check_object_health_validation() -> void:
 func _check_dead_worker_pending_search_frees_job_for_other_worker() -> void:
 	if _failed: return
 	var world := _build_arena(43)
+	# A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+	# fifteen thousand"; an open-arena target 20 tiles away now resolves in one
+	# tick): the rock row keeps doomed_worker's search multi-tick, as this
+	# check needs.
+	Scenarios.rock_row_with_gap(world, 15, 30)
 	_spawn_actor(world, "colony", "doomed_worker", 5, 5)
 	_spawn_actor(world, "colony", "rescue_worker", 5, 10)
 	_spawn_actor(world, "raiders", "reaper", 6, 5)

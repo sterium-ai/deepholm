@@ -34,7 +34,14 @@ func _expect(condition: bool, message: String) -> void:
 
 ## Arrange initial authoritative state before commands; no scenes or execution
 ## mechanics are loaded. The surrounding 48x48 world is impassable rock.
-func _world() -> WorldType:
+## far_worker: the load check's fixture. A8 (ADR 054: "a long walk costs a
+## few hundred tile checks instead of fifteen thousand"): an A* search inside
+## the 20x10 pocket never needs more than 64 expansions, so the load could no
+## longer reach the route budget boundary it must exercise. A soil corridor
+## (x = 19 down to y = 47, then west along y = 47) leads to colonist_7 parked
+## at its far end, whose searches into the pocket need more than one tick's
+## budget. Corridor tiles are never order targets.
+func _world(far_worker: bool = false) -> WorldType:
 	var world := WorldType.new(47)
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
@@ -45,9 +52,17 @@ func _world() -> WorldType:
 	for y in 10:
 		for x in 20:
 			TestAccess.tile_grid(world).tiles[y * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
+	if far_worker:
+		for y in range(10, WorldType.MAP_HEIGHT):
+			TestAccess.tile_grid(world).tiles[y * WorldType.MAP_WIDTH + 19] = WorldType.TILE_SOIL
+		for x in 19:
+			TestAccess.tile_grid(world).tiles[(WorldType.MAP_HEIGHT - 1) * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
 	TestAccess.colonists(world).clear()
 	for i in 8:
 		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5})
+	if far_worker:
+		TestAccess.colonists(world)[7]["x"] = 0
+		TestAccess.colonists(world)[7]["y"] = WorldType.MAP_HEIGHT - 1
 	# Already held: this is ADR 004's own fairness/service-bound proof, wholly
 	# unrelated to tools, and the fixture completes every active job by
 	# explicit command before the next tick() -- with no pick, dig's own
@@ -79,7 +94,7 @@ func _check_metrics(world: WorldType) -> void:
 	_expect(SchedulerType.JOB_EVALUATION_BUDGET == 32, "evaluation budget contract changed")
 
 func _run_load() -> Dictionary:
-	var world := _world()
+	var world := _world(true)
 	var submitted: Dictionary = {}
 	var started: Dictionary = {}
 	var max_wait := 0

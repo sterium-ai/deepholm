@@ -464,6 +464,11 @@ func _check_flee_target_excludes_faction_blocked_door() -> void:
 func _check_flee_recovery_retires_searching_job() -> void:
 	if _failed: return
 	var world := _build_arena(44)
+	# A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+	# fifteen thousand"): Manhattan distance 12 no longer outlasts one tick's
+	# budget in an open arena, so a rock row with a far gap sits between the
+	# prey and its flee candidates and the detour keeps the search running.
+	Scenarios.rock_row_with_gap(world, 13, 30)
 	_spawn_actor(world, "colony", "prey", 10, 10)
 	_spawn_actor(world, "raiders", "hunter", 0, 0) # diagonal threat, far enough to never land a hit
 	world.tick() # backfills "combat"/"health" before this test mutates them
@@ -679,6 +684,10 @@ func _check_flee_recovery_after_save_load_matches_uninterrupted() -> void:
 			uninterrupted = _build_arena(48)
 			live = _build_arena(48)
 			for world in [uninterrupted, live]:
+				if shape == "searching":
+					# A8 (ADR 054): the flee leg needs a detour to stay mid-search
+					# under A*, as in _check_flee_recovery_retires_searching_job().
+					Scenarios.rock_row_with_gap(world, 13, 30)
 				_spawn_actor(world, "colony", "prey", 10, 10)
 				# A diagonal far threat keeps the first leg mid-search for many ticks; a cardinal one lets it go active quickly.
 				if shape == "searching":
@@ -1229,6 +1238,10 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 	if _failed: return
 	for searching in [true, false]:
 		var world := _build_arena(62 if searching else 63)
+		if searching:
+			# A8 (ADR 054): the flee leg needs a detour to stay mid-search
+			# under A*, as in _check_flee_recovery_retires_searching_job().
+			Scenarios.rock_row_with_gap(world, 13, 30)
 		var actor_id := "incident_fleeing"
 		var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 10, 10), Vector2i(20, 10), 5)
 		_expect(not job_id.is_empty(), "the incident proposal must be accepted")

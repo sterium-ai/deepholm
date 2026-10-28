@@ -280,7 +280,12 @@ func _check_blocked_source_reserved_then_need_unmet() -> void:
 	var world := Scenarios.floor_world(90001)
 	Scenarios.isolate_need(world, "food")
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"food": 20})))
-	TestAccess.item_table(world).ground_berries["47_47"] = 1
+	# A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+	# fifteen thousand"): an open-floor candidate resolves within two ticks now,
+	# so the only candidate sits behind a rock row whose gap is far east, and
+	# the detour keeps the search running for many ticks.
+	Scenarios.rock_row_with_gap(world, 24, 40)
+	TestAccess.item_table(world).ground_berries["0_47"] = 1
 
 	world.tick()
 	_expect(Scenarios.jobs_of_kind(world, "eat_food").is_empty(),
@@ -292,7 +297,7 @@ func _check_blocked_source_reserved_then_need_unmet() -> void:
 		"the search must still be in progress before the injected race (no job submitted yet)")
 
 	var table := TestAccess.scheduler(world).queue.get_reservation_table()
-	table.acquire("tile:47,47", "external_job")
+	table.acquire("tile:0,47", "external_job")
 
 	var saw_blocked := false
 	var saw_unmet := false
@@ -305,7 +310,7 @@ func _check_blocked_source_reserved_then_need_unmet() -> void:
 			saw_unmet = true
 	_expect(saw_blocked, "the colonist must observe blocked_source_reserved once its search finds the now-taken source")
 	_expect(saw_unmet, "with the only candidate taken, the colonist must end up need_unmet:food")
-	table.release("tile:47,47", "external_job")
+	table.release("tile:0,47", "external_job")
 
 ## A colonist with an urgent rest need and a reachable unreserved bed reserves
 ## it, sleeps for the declared duration, and the bed's reservation is released

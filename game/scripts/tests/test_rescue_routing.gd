@@ -136,6 +136,15 @@ func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void:
 	var world := _fresh_world(360019)
 	var long_bound := 400
+	# A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+	# fifteen thousand"): on open floor each target's A* search from the
+	# worker resolves within one tick, so a sweep can line up with the
+	# worker's own move hold and lock it in before drift ever shows. A rock
+	# row at y = 3, open only at x = 47, puts every worker route to the
+	# victim's targets through a long detour (each search spans several
+	# ticks again); the backup starts north of the row, ranked after the
+	# worker (Manhattan 31 to the victim) but close enough to finish.
+	Scenarios.rock_row_with_gap(world, 3, 47)
 	var worker := _spawn_colonist(world, "long_travel_worker", 0, 5)
 	var worker_id: String = String(worker["id"])
 	# Far enough (46 of the map's 48 columns) that the remaining travel still
@@ -164,7 +173,7 @@ func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void
 			traveling = true
 			break
 	_expect(traveling, "setup: the long ordinary labour job must be genuinely under way, not merely assigned, before the trap happens")
-	var backup := _spawn_colonist(world, "backup_worker", 0, 30)
+	var backup := _spawn_colonist(world, "backup_worker", 30, 2)
 	var backup_id: String = String(backup["id"])
 	_trap_colonist_0(world)
 	var victim: Dictionary = TestAccess.colonists(world)[0]

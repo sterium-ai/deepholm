@@ -308,7 +308,7 @@ func _advance_candidate_search(actor: Dictionary, state: Dictionary, cursor: int
 	var search: RerouteType = state.get("search")
 	if search == null:
 		var start := Vector2i(int(actor["x"]), int(actor["y"]))
-		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector2i.ZERO, _bounds_max)
+		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector2i.ZERO, _bounds_max, _reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(actor_id, false)):

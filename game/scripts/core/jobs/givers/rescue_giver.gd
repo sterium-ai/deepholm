@@ -32,6 +32,8 @@ var _bounds_max: Vector2i
 var _reservation_table
 var _tile_key: Callable
 var _routable_to: Callable
+## Handed to every RouteSearch: a target in another region is refused before it expands.
+var _region_reachable: Callable
 var _rescue_target_candidates: Callable
 var _submit_job: Callable
 var _set_reason: Callable
@@ -58,15 +60,18 @@ var _job_victim: Dictionary = {}
 
 ## reservation_table is only peeked, never acquired. route_budget must be the shared instance,
 ## never a copy. interrupt/resume are the same NeedsSystem wrappers NeedGiver gets.
+## region_reachable is Passability.region_reachable (ADR 054); invalid means no region check.
 func _init(priority: int, bounds_max: Vector2i, reservation_table, tile_key: Callable,
 		routable_to: Callable, rescue_target_candidates: Callable, submit_job: Callable,
 		set_reason: Callable, interrupt_current_job: Callable, resume_interrupted_job: Callable,
-		is_trench: Callable, route_budget: Dictionary, get_job: Callable, retire_job: Callable) -> void:
+		is_trench: Callable, route_budget: Dictionary, get_job: Callable, retire_job: Callable,
+		region_reachable: Callable = Callable()) -> void:
 	_priority = priority
 	_bounds_max = bounds_max
 	_reservation_table = reservation_table
 	_tile_key = tile_key
 	_routable_to = routable_to
+	_region_reachable = region_reachable
 	_rescue_target_candidates = rescue_target_candidates
 	_submit_job = submit_job
 	_set_reason = set_reason
@@ -218,7 +223,7 @@ func _advance_target_search(state: Dictionary, candidate: Dictionary, target_cur
 	var candidate_id: String = String(candidate["id"])
 	var search: RerouteType = state.get("search")
 	if search == null:
-		search = RerouteType.new(candidate["pos"], target, _routable_to.call(target), Vector2i.ZERO, _bounds_max)
+		search = RerouteType.new(candidate["pos"], target, _routable_to.call(target), Vector2i.ZERO, _bounds_max, _region_reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(candidate_id, false)):
