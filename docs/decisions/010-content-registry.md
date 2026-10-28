@@ -67,3 +67,47 @@ mismatch before rejection; the hook table is empty in production today.
 - **Keep `contentVersion` a hard-coded literal bumped by hand alongside content changes.**
   Rejected: it drifts from the content actually on disk the moment someone edits a content
   file without remembering to bump the literal, defeating the point of the mismatch check.
+
+## Amendment 1: content packs, ordered roots and strict ids (A13, 2026-10-28)
+
+**Roots.** `ContentRegistry.new(content_dir, schema_dir, pack_dirs)` builds one bundle from an
+ordered list of roots: the base (`res://content/`, unchanged rules above), then each pack root
+in `pack_dirs` order. A pack root holds `pack.json` (`{id, version}`, validated by
+`schemas/pack.schema.json`) and any subset of the collection kinds (`items`, `tiles`, `jobs`,
+...). Each pack kind file has the shape `{"<kind>": [new entries], "overrides": [replacement
+entries]}`, both lists optional. Schemas always come from the base `schema_dir`; a pack cannot
+add a schema or a kind.
+
+**Rules.** Every pack entry is validated against the base schema's entry schema. A new entry's
+id must not exist in any earlier root; it is appended. An override names an id that exists in
+an earlier root (base or pack) and replaces that whole entry; there is no field-level merge and
+no removal. A later root wins over an earlier one, so pack order is part of the bundle. Failures
+are typed like the base ones: an id twice in one root (base file or pack, including one id under
+both lists), a new entry reusing an existing id, a pack file for a document kind (`calendar`,
+`manifest`, `mapgen`) or for a kind with no base schema, an unexpected top-level field, the same
+pack id in two roots, or an invalid `pack.json` is `schema_violation`; an override of an unknown
+id is `dangling_reference`; a pack root without `pack.json` is `missing_file`. Cross-file checks
+(`_check_references()`, job yields, actor tunables) run once, on the merged bundle, so a pack
+that breaks a base reference fails the same way a broken base would.
+
+**Duplicate ids.** A collection file in the base that names one id twice is now a
+`schema_violation`. Before this amendment the later entry silently overwrote the earlier one.
+
+**`enum`.** The minimal validator now enforces `enum` (value equal to one listed value, same
+JSON type). This supersedes the "enum stays inert" note in ADR 012: an unknown actor component
+now fails as `schema_violation` from `actors.schema.json`'s closed enum, before
+`_check_references()` would have typed it `dangling_reference`. The `enum` inside a
+schema-valued `additionalProperties` (factions' `relations`) stays inert, as before, and is still
+enforced by `_check_references()`.
+
+**One registry per session.** `WorldState._init()` takes an optional `content` registry and only
+builds its own when given none. `boot.gd` builds the session registry once
+(`session_content()`, from `CONTENT_PACK_ROOTS`, empty today) and passes it to the world it
+builds. `ContentRegistry.packs()` returns the applied packs in load order as frozen `{id,
+version}` entries, ready to be recorded in a save.
+
+**Not done here (follow-ups).** Persistence was out of reach while R14 resets the save schema:
+`SaveIO` validation still uses its own tile/job/need literals, saves do not record
+`packs()` yet, there is no typed error for a save whose pack is missing, and `StateCodec`,
+`SaveIO`, `SaveMigrations` and the viewer's new-game paths still build their own
+`ContentRegistry` instead of receiving the session one.

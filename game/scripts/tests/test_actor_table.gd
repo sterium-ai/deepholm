@@ -213,7 +213,11 @@ func _check_wolf_and_trader_component_state(registry: ContentRegistryType) -> vo
 	_expect(ActorTableType.get_component(trader, "visitor", registry) == true,
 		"get_component(trader, 'visitor') must be true")
 
-# --- 2) unknown component name -> ERROR_DANGLING_REFERENCE -----------------
+# --- 2) unknown component name -> ERROR_SCHEMA_VIOLATION -------------------
+#
+# A13: the registry validator now enforces actors.schema.json's closed
+# components enum, so an unknown name fails schema validation before
+# _check_references() (which used to type it dangling_reference) runs.
 
 func _check_unknown_component_fails_construction() -> void:
 	_write_minimal_bundle(UNKNOWN_COMPONENT_FIXTURE_DIR, {"actors": [
@@ -224,8 +228,10 @@ func _check_unknown_component_fails_construction() -> void:
 
 	_expect(not registry.is_valid(), "an actors.json naming an unknown component must fail construction")
 	var error := registry.get_error()
-	_expect(error.get("code") == ContentRegistryType.ERROR_DANGLING_REFERENCE,
-		"the fixture's error code must be typed as dangling_reference, got %s" % error)
+	_expect(error.get("code") == ContentRegistryType.ERROR_SCHEMA_VIOLATION,
+		"the fixture's error code must be typed as schema_violation (components enum), got %s" % error)
+	_expect(String(error.get("message", "")).contains("flight"),
+		"the fixture's error must name the unknown component 'flight', got %s" % error)
 	_expect(String(error.get("file", "")).ends_with("actors.json"),
 		"the fixture's error must name actors.json as the offending file, got %s" % error)
 

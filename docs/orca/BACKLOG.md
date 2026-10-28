@@ -624,7 +624,7 @@ one.
 - **Acceptance:** the owner signs off the ADR; F4's Design block can cite it.
 - **Non-goals:** any code.
 
-#### A13 — Content packs: one registry per session, ordered roots, strict ids · `todo` · after R12
+#### A13 — Content packs: one registry per session, ordered roots, strict ids · `review (antonelmejor50-hub/a13-content-packs-one-registry)` · after R12
 
 - **Goal:** `ContentRegistry` is built once per session from an ordered list of roots (base,
   then packs). Each root may append entries or override entries by id, under explicit rules.
