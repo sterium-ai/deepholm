@@ -7,7 +7,10 @@ extends RefCounted
 ## keeps regions/rooms current through the sibling TileGrid.
 ##
 ## Invariants:
-## - Every map is keyed "%d_%d" (object_key()). objects/object_factions carry
+## - Every map is keyed by the integer tile index (TileGrid.tile_index(), so
+##   x/y must be in bounds); the "%d_%d" String key (object_key()) exists only
+##   on the save and state_hash() boundary (encode(), hash_into(),
+##   get_objects()), whose output is unchanged. objects/object_factions carry
 ##   an entry on every footprint tile; object_health and object_orientation
 ##   only on the origin tile; object_origin only on a non-origin footprint
 ##   tile (absent means "this tile is its own origin").
@@ -15,8 +18,10 @@ extends RefCounted
 ##   objects, because StateCodec's object encoding assumes a plain kind String
 ##   per entry. orientation is absent (never "") when unrotated.
 ## - set_object() is the only mutator of a placed object: it clears the whole
-##   existing footprint first, then marks every touched tile dirty and tells
-##   regions/rooms, so their bookkeeping is never skipped.
+##   existing footprint first, then marks every touched tile dirty (which also
+##   refreshes Passability's per-tile arrays) and tells regions/rooms, so their
+##   bookkeeping is never skipped. decode() and place_generated() write the maps
+##   directly and reset those arrays through TileGrid.reset_cells().
 ## - state_hash() covers objects and object_health (hash_into()); a wall's
 ##   damage changes future combat, so hp must hash. object_factions is
 ##   deliberately left out; object_origin/object_orientation are re-derived
@@ -40,7 +45,8 @@ func _init(object_definitions: Dictionary, tile_grid: TileGridType) -> void:
 
 ## The save field this table owns: "objects" (one record per origin tile).
 func encode() -> Dictionary:
-	return {"objects": StateCodec._encode_objects(objects, object_factions, object_health, object_origin, object_orientation)}
+	return {"objects": StateCodec._encode_objects(_keyed(objects), _keyed(object_factions), _keyed(object_health),
+		_keyed(object_origin), _keyed(object_orientation))}
 
 ## Expands each persisted per-origin record back out to every footprint tile.
 func decode(state: Dictionary) -> void:
@@ -51,11 +57,11 @@ func decode(state: Dictionary) -> void:
 	var decoded_orientation: Dictionary = {}
 	for record in StateCodec._decode_objects(state["objects"]):
 		var origin: Vector2i = record["origin"]
-		var origin_key := "%d_%d" % [origin.x, origin.y]
+		var origin_key := _tile_grid.tile_index(origin.x, origin.y)
 		var kind: String = record["kind"]
 		var orientation: String = record["orientation"]
 		for tile in object_footprint_tiles(kind, origin, orientation):
-			var key := "%d_%d" % [tile.x, tile.y]
+			var key := _tile_grid.tile_index(tile.x, tile.y)
 			decoded_objects[key] = kind
 			decoded_factions[key] = record["factionId"]
 			if key != origin_key:
@@ -69,32 +75,60 @@ func decode(state: Dictionary) -> void:
 	object_health = decoded_health
 	object_origin = decoded_origin
 	object_orientation = decoded_orientation
+	_tile_grid.reset_cells()
 
 ## Adds this table's state_hash() entries to snapshot (see the class doc for what is left out).
+## String-keyed, exactly as when the maps themselves were keyed by object_key().
 func hash_into(snapshot: Dictionary) -> void:
-	snapshot["objects"] = objects
-	snapshot["object_health"] = object_health
+	snapshot["objects"] = _keyed(objects)
+	snapshot["object_health"] = _keyed(object_health)
 
+## "" for no object, and for an out-of-bounds tile.
 func get_object(x: int, y: int) -> String:
-	return String(objects.get(object_key(x, y), ""))
+	if not _tile_grid.in_bounds(x, y):
+		return ""
+	return String(objects.get(_tile_grid.tile_index(x, y), ""))
 
 ## "" (like get_object()'s own "none") when no object is placed here.
 func get_object_faction_id(x: int, y: int) -> String:
-	return String(object_factions.get(object_key(x, y), ""))
+	if not _tile_grid.in_bounds(x, y):
+		return ""
+	return String(object_factions.get(_tile_grid.tile_index(x, y), ""))
 
+## Sorted by object_key(), the order this has always had.
 func get_objects() -> Array[Dictionary]:
-	var keys := objects.keys()
+	var by_key := _keyed(objects)
+	var keys := by_key.keys()
 	keys.sort()
 	var copy: Array[Dictionary] = []
 	for key in keys:
 		var coords := String(key).split("_")
-		copy.append({"x": int(coords[0]), "y": int(coords[1]), "kind": String(objects[key]),
-			"faction_id": String(object_factions.get(key, "colony"))})
+		var index := _tile_grid.tile_index(int(coords[0]), int(coords[1]))
+		copy.append({"x": int(coords[0]), "y": int(coords[1]), "kind": String(by_key[key]),
+			"faction_id": String(object_factions.get(index, "colony"))})
 	return copy
+
+## Every tile carrying kind, in placement order (NeedsSystem's "rest" candidates).
+func tiles_of_kind(kind: String) -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	for index: int in objects:
+		if String(objects[index]) == kind:
+			tiles.append(_tile_grid.tile_at(index))
+	return tiles
+
+## A generated colony object (WorldState's berry bushes) on one tile, written
+## straight into the maps like decode(): no dirty mark, no region/room hook.
+func place_generated(x: int, y: int, kind: String) -> void:
+	var index := _tile_grid.tile_index(x, y)
+	objects[index] = kind
+	object_factions[index] = "colony"
+	_tile_grid.reset_cells()
 
 ## (x, y)'s footprint origin: (x, y) itself unless it is a non-origin tile of a multi-tile object.
 func object_origin_at(x: int, y: int) -> Vector2i:
-	return object_origin.get(object_key(x, y), Vector2i(x, y))
+	if not _tile_grid.in_bounds(x, y):
+		return Vector2i(x, y)
+	return object_origin.get(_tile_grid.tile_index(x, y), Vector2i(x, y))
 
 ## Kind's declared [w, h] footprint (default [1, 1] on a lookup miss), swapped
 ## when orientation is "vertical" and the kind is rotatable.
@@ -122,16 +156,16 @@ func object_footprint_tiles(kind: String, origin: Vector2i, orientation: String)
 ## marks exactly that one tile. faction_id/orientation default to "colony"/"".
 func set_object(x: int, y: int, kind: String, faction_id: String = "colony", orientation: String = "") -> void:
 	var origin := Vector2i(x, y)
-	var origin_key := object_key(x, y)
+	var origin_key := _tile_grid.tile_index(x, y)
 	var existing_origin := object_origin_at(x, y)
-	var existing_origin_key := object_key(existing_origin.x, existing_origin.y)
+	var existing_origin_key := _tile_grid.tile_index(existing_origin.x, existing_origin.y)
 	var existing_kind := String(objects.get(existing_origin_key, ""))
 	var clear_tiles: Array[Vector2i] = [origin]
 	if not existing_kind.is_empty():
 		clear_tiles = object_footprint_tiles(existing_kind, existing_origin, String(object_orientation.get(existing_origin_key, "")))
 		object_orientation.erase(existing_origin_key)
 	for tile in clear_tiles:
-		var clear_key := object_key(tile.x, tile.y)
+		var clear_key := _tile_grid.tile_index(tile.x, tile.y)
 		objects.erase(clear_key)
 		object_factions.erase(clear_key)
 		object_health.erase(clear_key)
@@ -143,7 +177,7 @@ func set_object(x: int, y: int, kind: String, faction_id: String = "colony", ori
 		return
 	var definition: Dictionary = _object_definitions.get(kind, {})
 	for tile in object_footprint_tiles(kind, origin, orientation):
-		var key := object_key(tile.x, tile.y)
+		var key := _tile_grid.tile_index(tile.x, tile.y)
 		objects[key] = kind
 		object_factions[key] = faction_id
 		if key != origin_key:
@@ -162,13 +196,17 @@ func set_object(x: int, y: int, kind: String, faction_id: String = "colony", ori
 ## one pool stored at the origin.
 func object_health_at(x: int, y: int) -> Dictionary:
 	var origin := object_origin_at(x, y)
-	return (object_health.get(object_key(origin.x, origin.y), {}) as Dictionary).duplicate()
+	if not _tile_grid.in_bounds(origin.x, origin.y):
+		return {}
+	return (object_health.get(_tile_grid.tile_index(origin.x, origin.y), {}) as Dictionary).duplicate()
 
 ## Damages the object at (x, y) (any footprint tile), clearing the whole
 ## object through set_object() at 0 hp. A no-op without a health pool.
 func damage_object(x: int, y: int, amount: int) -> void:
 	var origin := object_origin_at(x, y)
-	var key := object_key(origin.x, origin.y)
+	if not _tile_grid.in_bounds(origin.x, origin.y):
+		return
+	var key := _tile_grid.tile_index(origin.x, origin.y)
 	if not object_health.has(key):
 		return
 	var health: Dictionary = object_health[key]
@@ -177,7 +215,7 @@ func damage_object(x: int, y: int, amount: int) -> void:
 		set_object(origin.x, origin.y, "")
 
 ## Backfills full health for an origin whose kind declares max_health but has
-## no entry: an older save, or a fixture writing objects[key] directly.
+## no entry: an older save, or a fixture writing objects[index] directly.
 func ensure_object_health() -> void:
 	for key in objects.keys():
 		if object_origin.has(key):
@@ -190,6 +228,15 @@ func ensure_object_health() -> void:
 			continue
 		object_health[key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
 
-## JSON-safe key for every map above.
+## The JSON-safe "%d_%d" key the save and state_hash() use for (x, y).
 func object_key(x: int, y: int) -> String:
 	return "%d_%d" % [x, y]
+
+## map re-keyed by object_key(), insertion order kept: the shape the maps had
+## before they were keyed by tile index, for the save and state_hash() only.
+func _keyed(map: Dictionary) -> Dictionary:
+	var keyed: Dictionary = {}
+	for index: int in map:
+		var tile := _tile_grid.tile_at(index)
+		keyed[object_key(tile.x, tile.y)] = map[index]
+	return keyed

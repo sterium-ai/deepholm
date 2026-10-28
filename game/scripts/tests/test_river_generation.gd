@@ -437,9 +437,10 @@ func _check_bush_blocked_route_detected() -> void:
 	world._object_table.objects.clear()
 	world._object_table.object_factions.clear()
 	for pos in [Vector2i(4, 5), Vector2i(6, 5), Vector2i(5, 4), Vector2i(5, 6)]:
-		var key := "%d_%d" % [pos.x, pos.y]
+		var key := world._tile_grid.tile_index(pos.x, pos.y)
 		world._object_table.objects[key] = "berry_bush"
 		world._object_table.object_factions[key] = "colony"
+	world._tile_grid.reset_cells()
 	var steps := _bfs_route_distance(world, Vector2i(5, 5), func(x, y): return world.get_tile(x, y) == "water")
 	if steps != -1:
 		_fail("accessibility BFS must respect blocking objects (a berry bush must not be treated as passable soil), got distance %d instead of unreachable" % steps)
@@ -462,8 +463,9 @@ func _check_single_shared_bush_insufficient_food_detected() -> void:
 		ActorTableType.spawn("colonist", 6, 5, world._content, "colonist_1"),
 		ActorTableType.spawn("colonist", 7, 5, world._content, "colonist_2"),
 	]
-	world._object_table.objects["10_5"] = "berry_bush"
-	world._object_table.object_factions["10_5"] = "colony"
+	world._object_table.objects[world._tile_grid.tile_index(10, 5)] = "berry_bush"
+	world._object_table.object_factions[world._tile_grid.tile_index(10, 5)] = "colony"
+	world._tile_grid.reset_cells()
 	var colonists := world.get_colonists()
 	var food_sources := _count_reachable_food_sources(world, colonists, FOOD_STEP_LIMIT)
 	if food_sources >= colonists.size():
@@ -518,11 +520,12 @@ func _check_bush_wall_detour_rejected() -> void:
 	world._tile_grid.tiles = map.duplicate()
 	world._object_table.objects.clear()
 	world._object_table.object_factions.clear()
-	world._object_table.objects["%d_%d" % [target_bush.x, target_bush.y]] = "berry_bush"
-	world._object_table.object_factions["%d_%d" % [target_bush.x, target_bush.y]] = "colony"
+	world._object_table.objects[world._tile_grid.tile_index(target_bush.x, target_bush.y)] = "berry_bush"
+	world._object_table.object_factions[world._tile_grid.tile_index(target_bush.x, target_bush.y)] = "colony"
 	for pos in wall_bushes:
-		world._object_table.objects["%d_%d" % [pos.x, pos.y]] = "berry_bush"
-		world._object_table.object_factions["%d_%d" % [pos.x, pos.y]] = "colony"
+		world._object_table.objects[world._tile_grid.tile_index(pos.x, pos.y)] = "berry_bush"
+		world._object_table.object_factions[world._tile_grid.tile_index(pos.x, pos.y)] = "colony"
+	world._tile_grid.reset_cells()
 	world._colonists = [
 		ActorTableType.spawn("colonist", near.x, near.y, world._content, "colonist_0"),
 		ActorTableType.spawn("colonist", far.x, far.y, world._content, "colonist_1"),

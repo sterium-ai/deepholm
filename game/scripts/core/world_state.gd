@@ -201,7 +201,7 @@ func _build_map(p_width: int, p_height: int) -> void:
 	_mapgen = _content.document("mapgen").duplicate(true)
 	var resolved_size := WorldGeneratorType.resolve_size(p_width, p_height, _mapgen)
 	_zone_table = ZoneTableType.new()
-	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, passability, get_object, _zone_table.is_in_any_zone)
+	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, get_object, _zone_table.is_in_any_zone)
 	_object_table = ObjectTableType.new(_object_definitions, _tile_grid)
 	_passability = PassabilityType.new(_content, _tile_grid, _object_table, _object_definitions, _tile_definitions,
 		_actor_faction, _find_colonist)

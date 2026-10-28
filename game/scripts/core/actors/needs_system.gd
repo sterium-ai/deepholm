@@ -339,10 +339,7 @@ func _raw_need_sources(kind: String) -> Array[Vector2i]:
 		"water":
 			candidates = _tile_grid.get_water_tiles()
 		"rest":
-			for key in _object_table.objects.keys():
-				if String(_object_table.objects[key]) == "bed":
-					var coords := String(key).split("_")
-					candidates.append(Vector2i(int(coords[0]), int(coords[1])))
+			candidates = _object_table.tiles_of_kind("bed")
 	return candidates
 
 ## The distinct nonzero region ids `regions.reachable(from, target)` is true from.

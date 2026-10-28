@@ -204,7 +204,7 @@ func _labour_disabled_jobs(world: WorldStateType) -> int:
 	return count
 
 func _check_dirty_cell_retention() -> void:
-	var grid := TileGridType.new(8, 8, Callable(), Callable(), Callable())
+	var grid := TileGridType.new(8, 8, Callable(), Callable())
 	var cursor := 0
 	var max_size := 0
 	var total := TileGridType.MAX_DIRTY_CELLS + 700
