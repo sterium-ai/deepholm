@@ -117,6 +117,9 @@ boundaries and are not a separate extension point.
   `WorldState` orchestration, not a new extension point — but its batch
   payload shape and its whole-set enclosure-atomicity rule change the command
   contract, hence the ADR; `test_wall_orders.gd` checks it.
+  `WorldState.command_observer` ([ADR 050](../decisions/050-command-observer.md)) is the one
+  listener presentation may set on the core: after each command from outside the core it hears
+  `(command, result)`, and it never mutates. `test_command_replay.gd` checks it.
 
 ## Faction
 

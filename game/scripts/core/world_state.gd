@@ -250,7 +250,7 @@ func _build_systems() -> void:
 		func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
-	_area_orders = AreaOrders.new(apply, get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
+	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:
 	# Every CommandChecks rule takes the world; handlers get it only through this Callable.
@@ -340,9 +340,12 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_toil_hooks, func() -> Array[Dictionary]: return _colonists, func() -> Dictionary: return _calendar_alerts_fired,
 		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index)
 
+var command_observer: Callable # optional (command, result) listener after each apply() from outside the core (area-order expansion bypasses it); never mutates (A11)
 ## apply() and tick() are the only mutators; preview() is apply()'s read-only dry run.
 func preview(command) -> Dictionary: return _commands.preview(command)
-func apply(command) -> Dictionary: return _commands.apply(command)
+func apply(command) -> Dictionary:
+	var result := _commands.apply(command); if command_observer.is_valid(): command_observer.call(command, result)
+	return result
 func tick() -> void: _tick_pipeline.run() # one tick, phases in world/tick_pipeline.gd
 
 ## The mover component's route through ActorTable (ADR 012): the live route object,

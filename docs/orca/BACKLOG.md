@@ -587,7 +587,7 @@ one.
   suite PASS.
 - **Non-goals:** typed entity classes (a data-model change, not a gate).
 
-#### A11 — Command recording and headless replay · `todo` · *parallel-safe*
+#### A11 — Command recording and headless replay · `review (antonelmejor50-hub/a11-command-recording-and-headless)` · *parallel-safe*
 
 - **Goal:** the viewer can record a session's seed, content version and command stream to a
   file. `tools/replay.ps1` replays it headless and checks `state_hash()` checkpoints recorded
@@ -597,6 +597,20 @@ one.
 - **Acceptance:** a test records 500 ticks with mixed commands, replays them and matches every
   checkpoint; a planted nondeterminism is reported at the right tick.
 - **Non-goals:** network play; a replay viewer UI.
+- **Approved scope extension (owner):** `game/scripts/core/world_state.gd`, `game/scripts/boot.gd`
+  and `tools/replay.gd`. The viewer modules call `world.apply()` directly, so the live viewer
+  needs a capture point outside the owned paths. The owner allowed an optional command
+  observer in `WorldState.apply()` (1–3 lines) on R12's new façade, plus the hookup and a
+  record/stop key in `boot.gd`. It was asked for on 2026-10-27 and built after R12 landed
+  (`63d3d5f`). `tools/replay.gd` is the helper `tools/replay.ps1` runs. The branch keeps that
+  script embedded in `replay.ps1`, so the file does not exist, but splitting it back out is
+  within scope.
+- **Done in this branch:** `WorldState.command_observer` (+3 lines; its rules are in
+  [ADR 050](../decisions/050-command-observer.md)). Area-order expansion inside
+  `tick()` now calls the command router directly, so the observer only hears commands from
+  outside. **F9** in `boot.gd` starts and stops recording to `user://replays/`, and a world swap
+  stops and saves first. `test_boot_command_recording.gd` drives F9 itself;
+  `test_command_replay.gd` records through the observer. See `docs/orca/handoffs/A11.md`.
 
 #### A12 — Map layers: coordinate model ADR · `review (antonelmejor50-hub/a12-map-layers-coordinate-model)` · *parallel-safe (docs only)* · before F4
 
