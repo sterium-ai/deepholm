@@ -246,7 +246,8 @@ boundaries and are not a separate extension point.
   `ContentRegistry` loads `scenarios` as an optional collection kind, so a content pack may add
   or override a scenario. It checks that each step carries exactly the fields
   `SCENARIO_STEP_FIELDS` lists for it (`schema_violation`), and that every object or item kind a
-  step names is declared (`dangling_reference`).
+  step names is declared (`dangling_reference`). A `ground_items` step may not name a tool item
+  (`schema_violation`): tools are placed by `needed_tools`, through `ToolItemStore`.
 
   `ScenarioBuilder.build(content, id, options)` (`game/scripts/core/world/scenario_builder.gd`)
   builds the world. It is a caller-side factory that drives the new world only through

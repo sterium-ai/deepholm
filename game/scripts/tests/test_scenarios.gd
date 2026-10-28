@@ -141,6 +141,8 @@ func _check_registry_rejects_bad_scenarios() -> void:
 	var cases := [
 		[{"step": "per_colonist_objects", "kind": "no_such_object"}, true, ContentRegistryType.ERROR_DANGLING_REFERENCE, "an unknown object kind"],
 		[{"step": "ground_items", "kind": "no_such_item", "count": 1, "search_radius": 1}, true, ContentRegistryType.ERROR_DANGLING_REFERENCE, "an unknown item kind"],
+		# A tool in the stackable item table would be invisible to fetch_tool (review round 2).
+		[{"step": "ground_items", "kind": "axe", "count": 1, "search_radius": 1}, true, ContentRegistryType.ERROR_SCHEMA_VIOLATION, "a ground_items step naming a tool"],
 		[{"step": "object_rows", "seed_offset": 1, "rows": [{"name": "r", "anchor": "clearing_top", "offset": 0, "door": "no_such_door",
 			"objects": [{"kind": "chair", "count": 1}]}]}, true, ContentRegistryType.ERROR_DANGLING_REFERENCE, "an unknown door kind"],
 		[{"step": "dig_orders", "count": 1, "seed_offset": 1}, true, ContentRegistryType.ERROR_SCHEMA_VIOLATION, "a step missing a field it reads"],

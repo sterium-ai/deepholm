@@ -715,7 +715,8 @@ func _check_actor_component_tunables(raw_by_kind: Dictionary) -> Dictionary:
 	return {"ok": true}
 
 ## A16 (ADR 053): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
-## no per-variant lists), "when" needs the scenario's seed, and every named object/item exists.
+## no per-variant lists), "when" needs the scenario's seed, every named object/item exists, and
+## ground_items never names a tool (tools live in ToolItemStore, not the stackable item table).
 func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 	if not raw_by_kind.has("scenarios"):
 		return {"ok": true}
@@ -723,7 +724,7 @@ func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 	for entry: Dictionary in (raw_by_kind["objects"]["objects"] as Array):
 		known["object:%s" % entry["kind"]] = true
 	for entry: Dictionary in (raw_by_kind["items"]["items"] as Array):
-		known["item:%s" % entry["id"]] = true
+		known["item:%s" % entry["id"]] = entry.get("kind", "")
 	for scenario: Dictionary in (raw_by_kind["scenarios"]["scenarios"] as Array):
 		for step: Dictionary in (scenario["setup"] as Array):
 			var where := "scenario '%s' step '%s'" % [scenario["id"], step["step"]]
@@ -738,6 +739,8 @@ func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 			for ref: String in _scenario_step_refs(step):
 				if not known.has(ref):
 					return {"ok": false, "code": ERROR_DANGLING_REFERENCE, "message": "%s names an unknown %s" % [where, ref.replace(":", " kind '") + "'"]}
+			if step["step"] == "ground_items" and known["item:%s" % step["kind"]] == "tool":
+				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s names tool item '%s'; tools are placed by needed_tools" % [where, step["kind"]]}
 	return {"ok": true}
 
 ## The "object:<kind>"/"item:<id>" references one scenario setup step makes.

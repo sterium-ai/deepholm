@@ -737,6 +737,10 @@ one.
   - Reduced scope after review round 1 ("Aprobar alcance reducido"): the per-scenario starting
     roster, calendar and per-incident enable list are deferred to A16b. Each needs a new
     construction parameter outside A16's owned paths.
+  - Review round 2, scope extension ("Aprobar las dos claves"): `game/data/text/en.json` gets
+    the scenario label keys `scenario.new_game` and `scenario.debug`, and
+    `test_text_pseudo_locale.gd` collects scenario labels. This follows A15's rule that content
+    labels are text keys.
 
 #### A16b — Scenario roster, calendar and incident list · `todo` · after A16
 
@@ -756,7 +760,7 @@ one.
   `debug` entry stay byte-identical (the A16 probe `docs/orca/handoffs/A16-scenario_dump.gd`);
   full suite green.
 - **Non-goals:** win/lose conditions (A17); a campaign; new setup steps.
-- **Note:** `world_state.gd` is at 798 of 800 lines. Make room first, by moving code out
+- **Note:** `world_state.gd` is at 800 of 800 lines (since A5). Make room first, by moving code out
   rather than raising the cap.
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*

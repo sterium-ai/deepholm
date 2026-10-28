@@ -276,8 +276,8 @@ func _on_new_game_confirmed() -> void:
 
 ## Explicit opt-in to DebugScenario's seeded diagnostic world; never the default.
 func _on_debug_scenario_pressed() -> void:
-	_swap_in_unsaved_world(DebugScenarioType.build(null, null, true, session_content()),
-		_text_table.format("status.debug_scenario_started", [DebugScenarioType.scenario_seed()]))
+	var debug_world := DebugScenarioType.build(null, null, true, session_content())
+	_swap_in_unsaved_world(debug_world, _text_table.format("status.debug_scenario_started", [debug_world.get_seed()]))
 
 func _start_new_game(seed_value: int, scenario_id: String = ScenarioBuilderType.NEW_GAME_SCENARIO_ID) -> void:
 	var new_world := build_default_world(seed_value, null, null, scenario_id)

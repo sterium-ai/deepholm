@@ -63,13 +63,13 @@ the registry requires each step to carry exactly those fields, no more and no fe
 | `object_rows` | `seed_offset`, `rows` | Places rows of objects at the clearing's left edge, on the clearing's top or bottom edge plus `offset`. Each row takes the first tiles that are neither tree nor water. If a row has a `door`, one random tile in it gets that kind instead, drawn from `seed + seed_offset`. |
 | `dig_orders` | `count`, `seed_offset`, `priority` | Submits `count` dig orders at tick 0 on random soil tiles, drawn from `seed + seed_offset`. |
 | `till_plot` | `search_radius`, `tick_budget` | Submits a HIGH-priority till order on the free soil tile nearest a colonist, then ticks until that tile is plowed, at most `tick_budget` ticks. |
-| `ground_items` | `kind`, `count`, `search_radius` | Drops one stack of `count` `kind` items on the free soil tile nearest a colonist, never on the till target. |
+| `ground_items` | `kind`, `count`, `search_radius` | Drops one stack of `count` `kind` items on the free soil tile nearest a colonist, never on the till target. `kind` may not be a tool item (`items.json` kind `tool`). Tools live in `ToolItemStore`, where `fetch_tool` finds them, so they are placed by `needed_tools`. |
 
 Cross-file checks run at load time (`ContentRegistry._check_scenarios()`). Each object kind a
 step names (`per_colonist_objects.kind`, each row object and each `door`) must be declared in
 `objects.json`, and the `ground_items` kind must be declared in `items.json`. A violation is
-a typed `dangling_reference`. A field mismatch or a seedless `when` is a typed
-`schema_violation`. Both errors name `scenarios.json`.
+a typed `dangling_reference`. A field mismatch, a seedless `when`, or a `ground_items` step
+naming a tool item is a typed `schema_violation`. Both errors name `scenarios.json`.
 
 `scenarios` is an **optional** collection kind (`OPTIONAL_COLLECTION_KINDS`). A bundle
 without it still loads, so the minimal fixture bundles the registry tests write stay valid.
@@ -150,7 +150,7 @@ builds.
   a `scenarios.json` that has nothing to do with what those tests check. Rejected in favour
   of an optional kind that the base bundle ships and `test_scenarios.gd` requires.
 - **A `scenario` field in `WorldState._init()`.** That would put setup policy inside the
-  façade, which is at its size limit (798 of 800 lines). Rejected.
+  façade, which is at its size limit (800 of 800 lines since A5). Rejected.
 
 ## Consequences
 
@@ -168,7 +168,7 @@ builds.
 
   The schema leaves these fields out instead of accepting values it would ignore.
 - Win and lose conditions are A17 (story layer), not scenario fields.
-- `content_registry.gd` is at 795 of 800 lines. The next registry rule has to move
+- `content_registry.gd` is at 798 of 800 lines. The next registry rule has to move
   validation into its own module first.
 
 ## Acceptance criteria
