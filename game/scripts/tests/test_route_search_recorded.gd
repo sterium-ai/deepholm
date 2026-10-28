@@ -50,12 +50,12 @@ var _open_grid := PackedByteArray()
 func _init() -> void:
 	_record = OS.get_cmdline_user_args().has("--record")
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
-	var start := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var start := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	var by_distance := _tiles_at_distances(func(tile: Vector2i) -> bool:
 		return bool(world.passability(tile.x, tile.y)["passable"]), start)
 	for distance in DISTANCES:
 		if by_distance.has(distance):
-			_check_case("generated/d%d" % distance, start, by_distance[distance], world._passability.is_passable, SIZE)
+			_check_case("generated/d%d" % distance, start, by_distance[distance], TestAccess.passability(world).is_passable, SIZE)
 
 	_open_grid.resize(SIZE * SIZE)
 	_open_grid.fill(1)

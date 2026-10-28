@@ -12,6 +12,7 @@ extends SceneTree
 ## extra-owners contract.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 
@@ -45,34 +46,13 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._object_table.objects.clear()
-	return world
-
-func _colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y,
-		"needs": {"food": 100, "water": 100, "rest": 100},
-		"route": null, "work": null, "carrying": null}
-
-func _command(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": command_type, "payload": payload})
-
 func _command_ok(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	var result := _command(world, command_id, command_type, payload)
+	var result := Scenarios.command(world, command_id, command_type, payload)
 	_expect(bool(result.get("ok", false)), "%s must be accepted: %s" % [command_id, result])
 	return result
 
 func _reason_of(result: Dictionary) -> String:
 	return String((result.get("rejection", {}) as Dictionary).get("reason", ""))
-
-func _add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
-	var id := "item_%d" % world._item_table.next_item_id
-	world._item_table.items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
-	world._item_table.next_item_id += 1
 
 func _held_quantity(site: Dictionary, item_kind: String) -> int:
 	for entry in (site["held_materials"] as Array):
@@ -83,7 +63,7 @@ func _held_quantity(site: Dictionary, item_kind: String) -> int:
 ## Requirement: "ordering a workbench creates a site immediately, before any
 ## material arrives".
 func _check_workbench_order_creates_site_immediately_before_any_material() -> void:
-	var world := _build_world(320000)
+	var world := Scenarios.empty_floor_world(320000)
 	var result := _command_ok(world, "wb", "build", {"kind": "workbench", "x": 10, "y": 10})
 	var site := world.get_construction_site(10, 10)
 	_expect(not site.is_empty(), "get_construction_site() must be non-empty immediately after the build command")
@@ -97,11 +77,11 @@ func _check_workbench_order_creates_site_immediately_before_any_material() -> vo
 ## Requirement: "one colonist with build labour enabled delivers 3 wood + 4
 ## stone; ... held_materials on the site reflects each delivery."
 func _check_one_colonist_delivers_multi_kind_cost_and_held_materials_track_each_delivery() -> void:
-	var world := _build_world(320100)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320100)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 0, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 0, 0)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": 10, "y": 10})
 	var saw_intermediate_delivery := false
 	var materials_met := false
@@ -132,10 +112,10 @@ func _check_one_colonist_delivers_multi_kind_cost_and_held_materials_track_each_
 ## Requirement: "delivered items are absent from get_items()/ground and cannot
 ## be picked up by a second colonist."
 func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_second_colonist() -> void:
-	var world := _build_world(320200)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320200)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 1, 0, 0)
+	Scenarios.add_stock(world, "wood", 1, 0, 0)
 	_command_ok(world, "wooden_wall", "build", {"kind": "wooden_wall", "x": 10, "y": 10})
 	var item_id := ""
 	for item in world.get_items():
@@ -145,14 +125,14 @@ func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_se
 	var reserved_while_fetching := false
 	for _i in MAX_TICKS:
 		world.tick()
-		var owner := world._scheduler.queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + item_id)
+		var owner := TestAccess.scheduler(world).queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + item_id)
 		if not owner.is_empty():
 			reserved_while_fetching = true
 			var still_on_ground := false
 			for item in world.get_items():
 				if String(item.get("id", "")) == item_id:
 					still_on_ground = true
-			_expect(not still_on_ground or int(world._item_table.items.get(item_id, {}).get("count", 0)) >= 0,
+			_expect(not still_on_ground or int(TestAccess.item_table(world).items.get(item_id, {}).get("count", 0)) >= 0,
 				"a reserved item id must not silently duplicate onto the ground")
 		if world.get_construction_site(10, 10).is_empty():
 			break
@@ -170,11 +150,11 @@ func _check_delivered_item_is_gone_from_ground_and_its_reservation_excludes_a_se
 ## job pipeline already has -- so the total elapsed time is build_ticks plus
 ## a small, bounded latency, never open-ended.
 func _check_completion_takes_exactly_build_ticks_after_materials_are_met() -> void:
-	var world := _build_world(320300)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320300)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 1, 0, 0)
-	var definition: Dictionary = world._object_definitions["wooden_wall"]
+	Scenarios.add_stock(world, "wood", 1, 0, 0)
+	var definition: Dictionary = TestAccess.object_definitions(world)["wooden_wall"]
 	var declared_ticks := int(definition["build_ticks"])
 	_command_ok(world, "wooden_wall", "build", {"kind": "wooden_wall", "x": 10, "y": 10})
 	var last_delivery_tick := -1
@@ -202,11 +182,11 @@ func _check_completion_takes_exactly_build_ticks_after_materials_are_met() -> vo
 ## Requirement: "the workbench then occupies both footprint tiles (get_object()
 ## on each), both impassable, held_materials empty, site record gone."
 func _check_completed_workbench_occupies_both_footprint_tiles_impassable_and_site_is_gone() -> void:
-	var world := _build_world(320400)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320400)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 0, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 0, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var completed := false
@@ -227,11 +207,11 @@ func _check_completed_workbench_occupies_both_footprint_tiles_impassable_and_sit
 ## free tiles adjacent to the site, releases every reservation
 ## (find_orphaned_reservations() empty), removes the site/ghost."
 func _check_cancel_mid_delivery_drops_held_materials_adjacent_and_releases_reservations() -> void:
-	var world := _build_world(320500)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320500)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 0, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 0, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var saw_partial_delivery := false
@@ -262,31 +242,31 @@ func _check_cancel_mid_delivery_drops_held_materials_adjacent_and_releases_reser
 			dropped_stone += int(item["count"])
 	_expect(dropped_wood == wood_before, "cancel_site must drop exactly the held wood adjacent to the site (expected %d, found %d)" % [wood_before, dropped_wood])
 	_expect(dropped_stone == stone_before, "cancel_site must drop exactly the held stone adjacent to the site (expected %d, found %d)" % [stone_before, dropped_stone])
-	var orphans := ReservationInvariantsType.find_orphaned_reservations(world._scheduler.queue.get_reservation_table(), world._scheduler.queue.get_jobs())
+	var orphans := ReservationInvariantsType.find_orphaned_reservations(TestAccess.scheduler(world).queue.get_reservation_table(), TestAccess.scheduler(world).queue.get_jobs())
 	_expect(orphans.is_empty(), "find_orphaned_reservations() must be empty after cancel_site (found %s)" % [orphans])
 
 ## Requirement: "a builder mid-fetch deposits its carried hands per the
 ## hands-filling rules" -- a colonist already carrying picked-up material when cancel_site
 ## runs must drop it on its own current tile, not lose or teleport it.
 func _check_cancel_mid_fetch_drops_the_carrying_builders_own_hands() -> void:
-	var world := _build_world(320600)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320600)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 1, 0, 0)
+	Scenarios.add_stock(world, "wood", 1, 0, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wooden_wall", "build", {"kind": "wooden_wall", "x": site_origin.x, "y": site_origin.y})
 	var saw_carrying := false
 	for _i in MAX_TICKS:
 		world.tick()
 		var InventoryType = load("res://scripts/core/actors/components/inventory.gd")
-		if InventoryType.is_carrying(world._colonists[0]):
+		if InventoryType.is_carrying(TestAccess.colonists(world)[0]):
 			saw_carrying = true
 			break
 	_expect(saw_carrying, "the fixture must reach a tick where the builder is already carrying the fetched wood")
-	var carrier_tile := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var carrier_tile := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	_command_ok(world, "cancel", "cancel_site", {"x": site_origin.x, "y": site_origin.y})
 	var InventoryType = load("res://scripts/core/actors/components/inventory.gd")
-	_expect(not InventoryType.is_carrying(world._colonists[0]), "the builder's hands must be emptied once cancel_site drops its carried cargo")
+	_expect(not InventoryType.is_carrying(TestAccess.colonists(world)[0]), "the builder's hands must be emptied once cancel_site drops its carried cargo")
 	var dropped_at_carrier := false
 	for item in world.get_items():
 		if String(item["kind"]) == "wood" and Vector2i(int(item["x"]), int(item["y"])) == carrier_tile:
@@ -300,19 +280,19 @@ func _check_cancel_mid_fetch_drops_the_carrying_builders_own_hands() -> void:
 ## flag it as an orphan (the exact behaviour every caller who does not know
 ## about sites already relies on).
 func _check_find_orphaned_reservations_default_behaviour_is_unchanged() -> void:
-	var world := _build_world(320700)
+	var world := Scenarios.empty_floor_world(320700)
 	_command_ok(world, "wooden_wall", "build", {"kind": "wooden_wall", "x": 10, "y": 10})
-	var table := world._scheduler.queue.get_reservation_table()
-	var jobs := world._scheduler.queue.get_jobs()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
+	var jobs := TestAccess.scheduler(world).queue.get_jobs()
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(table, jobs)
 	_expect(orphans.has("tile:10,10"), "a site's own footprint reservation must still be reported orphaned by the unmodified default call (got %s)" % [orphans])
 
 func _check_find_orphaned_reservations_extra_owners_excludes_a_sites_own_footprint() -> void:
-	var world := _build_world(320800)
+	var world := Scenarios.empty_floor_world(320800)
 	var result := _command_ok(world, "wooden_wall", "build", {"kind": "wooden_wall", "x": 10, "y": 10})
 	var site_id := String(result["site_id"])
-	var table := world._scheduler.queue.get_reservation_table()
-	var jobs := world._scheduler.queue.get_jobs()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
+	var jobs := TestAccess.scheduler(world).queue.get_jobs()
 	var owner_key: Array[String] = ["site:" + site_id]
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(table, jobs, owner_key)
 	_expect(not orphans.has("tile:10,10"), "passing the site's own owner key must exclude its footprint reservation from the orphan list (got %s)" % [orphans])
@@ -320,11 +300,11 @@ func _check_find_orphaned_reservations_extra_owners_excludes_a_sites_own_footpri
 ## Requirement: "a save mid-construction (partial materials, partial progress,
 ## one builder) round-trips with hash equality."
 func _check_save_load_round_trip_mid_construction_preserves_hash() -> void:
-	var world := _build_world(320900)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320900)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 0, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 0, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var reached_partial_progress := false

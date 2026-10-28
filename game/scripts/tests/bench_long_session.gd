@@ -55,17 +55,17 @@ func _retention() -> void:
 		BenchCommon.profiled_tick(world, totals)
 		window_usec += Time.get_ticks_usec() - t
 		if tick % WINDOW == 0:
-			var jobs: Array = world._scheduler.queue._jobs
-			var retained: int = world._scheduler.queue._history.size()
+			var jobs: Array = TestAccess.queue_jobs(world)
+			var retained: int = TestAccess.scheduler(world).queue._history.size()
 			print("bench_long_session: retention ticks=%d mean_tick=%.2fms queue_jobs=%d (open=%d terminal=%d) queue_events=%d world_events=%d dirty_cells=%d top_phases: %s" % [
 				tick, window_usec / 1000.0 / WINDOW, jobs.size(), _open_jobs(world), retained,
-				world._scheduler.queue._events.size(), world._event_log._events.size(), world._tile_grid.dirty_cells.size(),
+				TestAccess.queue_events(world).size(), TestAccess.event_log_events(world).size(), TestAccess.tile_grid(world).dirty_cells.size(),
 				_top_phases(totals, WINDOW)])
 			BenchCommon.row("bench_long_session", "retention", "ticks=%d" % tick, {
 				"mean tick ms": "%.2f" % (window_usec / 1000.0 / WINDOW), "queue jobs": jobs.size(),
 				"open": _open_jobs(world), "terminal": retained,
-				"queue events": world._scheduler.queue._events.size(), "world events": world._event_log._events.size(),
-				"dirty cells": world._tile_grid.dirty_cells.size(), "top phases (ms/tick)": _top_phases(totals, WINDOW)})
+				"queue events": TestAccess.queue_events(world).size(), "world events": TestAccess.event_log_events(world).size(),
+				"dirty cells": TestAccess.tile_grid(world).dirty_cells.size(), "top phases (ms/tick)": _top_phases(totals, WINDOW)})
 			window_usec = 0
 			totals = {}
 
@@ -89,7 +89,7 @@ func _backlog(size: int) -> void:
 	BenchCommon.row("bench_long_session", "backlog", "open_orders=%d" % size, values)
 
 func _candidates(world: WorldStateType) -> Array[Vector2i]:
-	var origin := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var origin := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	return BenchCommon.passable_tiles_from(world, origin, 30000)
 
 ## Submits up to `count` till orders on the next soil tiles of `candidates`;
@@ -109,7 +109,7 @@ func _submit(world: WorldStateType, candidates: Array[Vector2i], cursor: int, co
 
 func _open_jobs(world: WorldStateType) -> int:
 	var open := 0
-	for job in world._scheduler.queue._jobs:
+	for job in TestAccess.queue_jobs(world):
 		if ["queued", "active"].has(String(job.get("status", ""))):
 			open += 1
 	return open

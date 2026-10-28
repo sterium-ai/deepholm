@@ -56,19 +56,19 @@ func _expect(condition: bool, message: String) -> void:
 ## activates within a single resume() call.
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on this fixture's own
 	# single-tile-wide corridor.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in WorldStateType.MAP_WIDTH:
-		world._tile_grid.tiles[x] = WorldStateType.TILE_SOIL
+		TestAccess.tile_grid(world).tiles[x] = WorldStateType.TILE_SOIL
 	for y in range(1, WorldStateType.MAP_HEIGHT):
-		world._tile_grid.tiles[y * WorldStateType.MAP_WIDTH + (WorldStateType.MAP_WIDTH - 1)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 47, "y": 0, "route": null, "work": null, "hands": []})
+		TestAccess.tile_grid(world).tiles[y * WorldStateType.MAP_WIDTH + (WorldStateType.MAP_WIDTH - 1)] = WorldStateType.TILE_SOIL
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 47, "y": 0, "route": null, "work": null, "hands": []})
 	# Already held, not merely reachable: this scenario's exact tick-by-tick
 	# activation/completion choreography leaves no room for fetch_tool's own
 	# travel tick, so both colonists start the run already equipped.
@@ -151,7 +151,7 @@ func _assert_pre_save_state(world: WorldStateType, ids: Dictionary, seed_value: 
 	_expect(colonist_0.get("route") == null and colonist_0.get("work") == null,
 		"colonist_0 must be idle while FAR's route search is still in flight (seed %d)" % seed_value)
 
-	var pending: Dictionary = world._scheduler.get_pending()
+	var pending: Dictionary = TestAccess.scheduler(world).get_pending()
 	# Per ADR 004, route searches only ever run on a queued job's pending
 	# candidate; a job only becomes active once its route search is terminal.
 	# So a worker holding an active assignment can never also carry a
@@ -240,9 +240,9 @@ func _check_seed(seed_value: int) -> void:
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
 	_expect(restored.state_hash() == source.state_hash(),
 		"restore must match the source's hash before any further ticks (seed %d)" % seed_value)
-	_expect(restored._random.seed == source._random.seed,
+	_expect(TestAccess.random(restored).seed == TestAccess.random(source).seed,
 		"restored RNG seed must match the source's (seed %d)" % seed_value)
-	_expect(restored._random.state == source._random.state,
+	_expect(TestAccess.random(restored).state == TestAccess.random(source).state,
 		"restored RNG state must match the source's, not just its seed (seed %d)" % seed_value)
 	_drive_and_advance(restored, ADVANCE_TICKS)
 
@@ -281,18 +281,18 @@ func _check_seed(seed_value: int) -> void:
 ## entirely so it cannot shorten FAR's own path.
 func _chop_save_load_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
 	# See _fresh_world()'s own doc comment above.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in WorldStateType.MAP_WIDTH:
-		world._tile_grid.tiles[x] = WorldStateType.TILE_SOIL
+		TestAccess.tile_grid(world).tiles[x] = WorldStateType.TILE_SOIL
 	for y in range(1, WorldStateType.MAP_HEIGHT):
-		world._tile_grid.tiles[world._tile_grid.tile_index(WorldStateType.MAP_WIDTH - 1, y)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1)] = WorldStateType.TILE_TREE
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+		TestAccess.set_tile(world, WorldStateType.MAP_WIDTH - 1, y, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
+	TestAccess.set_tile(world, WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1, WorldStateType.TILE_TREE)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("axe", 0, 0), "colonist_0")
 	return world
 
@@ -320,7 +320,7 @@ func _check_pending_chop_save_load() -> void:
 	world.tick() # tick 2: FAR's search starts and stays "searching" past its first resume() budget.
 	_expect(world.get_tick() == 2, "priming must land on tick 2")
 
-	var pending: Dictionary = world._scheduler.get_pending()
+	var pending: Dictionary = TestAccess.scheduler(world).get_pending()
 	_expect(pending.has("colonist_0"), "colonist_0 must still hold a pending evaluation batch at tick 2")
 	if not pending.has("colonist_0"):
 		return
@@ -340,7 +340,7 @@ func _check_pending_chop_save_load() -> void:
 	_expect(restored.state_hash() == world.state_hash(),
 		"a pending-chop-search save/load round trip must match the source's hash before any further ticks")
 
-	var restored_pending: Dictionary = restored._scheduler.get_pending()
+	var restored_pending: Dictionary = TestAccess.scheduler(restored).get_pending()
 	_expect(restored_pending.has("colonist_0"), "restored world must keep colonist_0's pending batch")
 	if restored_pending.has("colonist_0"):
 		var restored_found: Array = restored_pending["colonist_0"]["found"]
@@ -436,8 +436,8 @@ func _check_zone_save_load() -> void:
 		"a restored world must generate the same next zone id as an uninterrupted run (source=%s restored=%s)"
 			% [source_next.get("zone_id", ""), restored_next.get("zone_id", "")])
 
-	var reservations := world._scheduler.queue.get_reservation_table()
-	reservations.acquire(world._cell_key(3, 3), "synthetic_job")
+	var reservations := TestAccess.scheduler(world).queue.get_reservation_table()
+	reservations.acquire(TestAccess.cell_key(world, 3, 3), "synthetic_job")
 	_expect(not world.is_cell_free(3, 3), "a synthetic reservation must mark the cell not free before saving")
 	var saved_with_reservation := world.to_save_state()
 	var restored_with_reservation: WorldStateType = WorldStateType.from_save_state(saved_with_reservation)
@@ -457,11 +457,11 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(HAUL_SAVE_SEED, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result["ok"], "haul save/load setup zone_add must succeed: %s" % zone_result)
@@ -489,11 +489,11 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	# Mid-carry (leg two): a fresh run, ticked until the colonist is carrying
 	# and mid-route toward the reserved cell.
 	var carry_world := WorldStateType.new(HAUL_SAVE_SEED, 10)
-	carry_world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	carry_world._colonists.clear()
-	carry_world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	carry_world._item_table.items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
-	carry_world._item_table.next_item_id = 2
+	TestAccess.tile_grid(carry_world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(carry_world).clear()
+	TestAccess.colonists(carry_world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(carry_world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(carry_world).next_item_id = 2
 	var carry_zone_result := carry_world.apply({"actor": "test", "command_id": "zone_setup", "tick": carry_world.get_tick(),
 		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
 	_expect(carry_zone_result["ok"], "haul save/load mid-carry setup zone_add must succeed: %s" % carry_zone_result)
@@ -537,13 +537,13 @@ func _check_mine_save_load() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(MINE_SAVE_SEED, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
-	world._item_table.spawn_item("stone", 5, 5)
+	TestAccess.item_table(world).spawn_item("stone", 5, 5)
 
 	var submit := _apply(world, "mine_1", "mine", {"x": 1, "y": 0, "priority": 1})
 	var job_id := String(submit["job_id"])

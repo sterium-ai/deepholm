@@ -100,7 +100,7 @@ func _check_initialization() -> void:
 
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH:
-			if world.get_tile(x, y) == WorldStateType.TILE_TREE and world._passability.is_passable(Vector2i(x, y)) > 0.0:
+			if world.get_tile(x, y) == WorldStateType.TILE_TREE and TestAccess.passability(world).is_passable(Vector2i(x, y)) > 0.0:
 				_fail("tree tile (%d,%d) must not be passable" % [x, y])
 				return
 
@@ -256,10 +256,10 @@ func _check_dig_and_chop_targets() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(123, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_FLOOR
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_TREE)
+	TestAccess.set_tile(world, 3, 1, WorldStateType.TILE_FLOOR)
 	for target in [Vector2i(1, 1), Vector2i(0, 0), Vector2i(3, 1)]:
 		var chop_result := _job_command(world, "chop_invalid_%d_%d" % [target.x, target.y], "chop", target)
 		if chop_result["ok"] or chop_result["rejection"]["reason"] != "invalid_target":
@@ -436,10 +436,10 @@ func _check_incident_replay_determinism() -> void:
 ##   (ADR 024), which changed both the decay trajectory and the colonist shape.
 ## - New snapshot keys that are always empty in this colony-only scenario but
 ##   still change the dict shape: the colonist "combat" component,
-##   world._object_table.object_health, CombatGiver's excluded-flee-destination set,
-##   world._item_table.dig_find_random's seed/state (hashed unconditionally, not gated by
+##   TestAccess.object_table(world).object_health, CombatGiver's excluded-flee-destination set,
+##   TestAccess.item_table(world).dig_find_random's seed/state (hashed unconditionally, not gated by
 ##   include_incidents), the colonist "trapped" field (ADR 026),
-##   world._progress_table.suspended, "rescue_victim_assignments" (hashed as a
+##   TestAccess.progress_table(world).suspended, "rescue_victim_assignments" (hashed as a
 ##   sorted {jobId, victimId} array so insertion order does not matter),
 ##   "approach_job_targets" (ADR 033), the colonist "hands" list (ADR 037) and
 ##   "construction_sites" (ADR 040).
@@ -451,21 +451,21 @@ func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 		return
 	var seed_value := 20260922
 	var world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false)
-	var initial_cooldowns: Dictionary = world._incidents._cooldown_until_day.duplicate()
-	var initial_day: int = world._incidents._last_processed_day
-	var initial_rng_seed: int = world._incidents._random.seed
-	var initial_rng_state: int = world._incidents._random.state
+	var initial_cooldowns: Dictionary = TestAccess.incident_cooldown_until_day(world).duplicate()
+	var initial_day: int = TestAccess.incident_last_processed_day(world)
+	var initial_rng_seed: int = TestAccess.incident_random(world).seed
+	var initial_rng_state: int = TestAccess.incident_random(world).state
 	var reference := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false)
 	for _i in 650:
 		world.tick()
 		reference.tick()
-	if world._incidents._cooldown_until_day != initial_cooldowns:
+	if TestAccess.incident_cooldown_until_day(world) != initial_cooldowns:
 		_fail("an incidents-disabled world must never populate incident cooldowns")
 		return
-	if world._incidents._last_processed_day != initial_day:
+	if TestAccess.incident_last_processed_day(world) != initial_day:
 		_fail("an incidents-disabled world must never advance its last-processed day")
 		return
-	if world._incidents._random.seed != initial_rng_seed or world._incidents._random.state != initial_rng_state:
+	if TestAccess.incident_random(world).seed != initial_rng_seed or TestAccess.incident_random(world).state != initial_rng_state:
 		_fail("an incidents-disabled world must never draw from its own incident RNG stream")
 		return
 	if world.state_hash() != reference.state_hash():
@@ -474,7 +474,7 @@ func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if world.state_hash(false) != PRE_INCIDENT_BASELINE_HASH:
 		_fail("an incidents-disabled world's colony-only projection must match the independent pre-incident baseline (got %d, expected %d)" % [world.state_hash(false), PRE_INCIDENT_BASELINE_HASH])
 		return
-	if world._random.seed != reference._random.seed or world._random.state != reference._random.state:
+	if TestAccess.random(world).seed != TestAccess.random(reference).seed or TestAccess.random(world).state != TestAccess.random(reference).state:
 		_fail("disabling incidents must never desynchronize the colony's own RNG stream between two otherwise-identical runs")
 
 ## state_hash() must be sensitive to each persisted
@@ -489,21 +489,21 @@ func _check_incident_scheduler_fields_affect_state_hash() -> void:
 	var base_hash: int = WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true).state_hash()
 
 	var cooldown_world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	cooldown_world._incidents._cooldown_until_day["wildlife_wander"] = 99
+	TestAccess.incident_cooldown_until_day(cooldown_world)["wildlife_wander"] = 99
 	if cooldown_world.state_hash() == base_hash:
 		_fail("state_hash() must change when cooldown_until_day changes")
 
 	var day_world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	day_world._incidents._last_processed_day = 7
+	TestAccess.set_incident_last_processed_day(day_world, 7)
 	if day_world.state_hash() == base_hash:
 		_fail("state_hash() must change when last_processed_day changes")
 
 	var rng_seed_world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	rng_seed_world._incidents._random.seed += 1
+	TestAccess.incident_random(rng_seed_world).seed += 1
 	if rng_seed_world.state_hash() == base_hash:
 		_fail("state_hash() must change when the incident RNG stream's seed changes")
 
 	var rng_state_world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	rng_state_world._incidents._random.randi()
+	TestAccess.incident_random(rng_state_world).randi()
 	if rng_state_world.state_hash() == base_hash:
 		_fail("state_hash() must change when the incident RNG stream's state changes")

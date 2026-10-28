@@ -8,6 +8,7 @@ extends SceneTree
 ## stack is.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 
 var _failed := false
@@ -41,20 +42,12 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-## A small all-floor map so every tile the test touches is passable except
-## the one rock tile _check_place_onto_blocked_destination_fails_typed() uses.
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	return world
-
 func _colonist(id: String, x: int, y: int) -> Dictionary:
 	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "hands": []}
 
 func _place_wood_item(world: WorldStateType, item_id: String, x: int, y: int, count: int = 1) -> void:
-	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": count}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": count}
+	TestAccess.item_table(world).next_item_id = 2
 
 ## Sum of every hands entry's count -- must never exceed InventoryType.HANDS_CAPACITY.
 func _hands_total(colonist: Dictionary) -> int:
@@ -69,26 +62,26 @@ func _hands_total(colonist: Dictionary) -> int:
 func _check_pick_up_then_place_moves_the_item() -> void:
 	if _failed:
 		return
-	var world := _build_world(1001)
+	var world := Scenarios.floor_world(1001)
 	_place_wood_item(world, "item_1", 2, 2)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
 	_expect(world.get_ground_wood(2, 2) == 1, "item must start on the ground at (2,2)")
 
-	var pick_result := world._toils.pick_up(colonist, "item_1")
+	var pick_result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(pick_result.get("ok") == true, "pick_up must succeed while on the item's tile: %s" % pick_result)
 	_expect(world.get_ground_wood(2, 2) == 0, "pick_up must remove the item from the ground map")
 	_expect(InventoryType.is_carrying(colonist), "pick_up must add the item to the colonist's hands")
 	_expect(InventoryType.count_of_kind(colonist, "wood") == 1, "hands must record the item's kind and count")
 
-	var place_result := world._toils.place(colonist, Vector2i(5, 5))
+	var place_result := TestAccess.toils(world).place(colonist, Vector2i(5, 5))
 	_expect(place_result.get("ok") == true, "place must succeed onto a free, passable cell: %s" % place_result)
 	_expect(not InventoryType.is_carrying(colonist), "place must clear the colonist's hands")
 	_expect(world.get_ground_wood(5, 5) == 1, "place must put the item down at the destination cell")
 	_expect(world.get_ground_wood(2, 2) == 0, "the item must not remain at its original tile")
 	var placed_id: String = String((place_result["item_ids"] as Array)[0])
-	_expect(world._item_table.items[placed_id]["x"] == 5 and world._item_table.items[placed_id]["y"] == 5,
+	_expect(TestAccess.item_table(world).items[placed_id]["x"] == 5 and TestAccess.item_table(world).items[placed_id]["y"] == 5,
 		"the placed item must sit at the new position")
 
 ## A colonist too far from the item's tile must fail pick_up with a typed
@@ -96,12 +89,12 @@ func _check_pick_up_then_place_moves_the_item() -> void:
 func _check_pick_up_out_of_reach_fails_typed() -> void:
 	if _failed:
 		return
-	var world := _build_world(1002)
+	var world := Scenarios.floor_world(1002)
 	_place_wood_item(world, "item_1", 2, 2)
 	var colonist := _colonist("colonist_0", 10, 10)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var result := world._toils.pick_up(colonist, "item_1")
+	var result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(result.get("ok") == false and result.get("reason") == "item_out_of_reach",
 		"pick_up from far away must fail with item_out_of_reach: %s" % result)
 	_expect(not InventoryType.is_carrying(colonist), "a failed pick_up must not set hands")
@@ -113,17 +106,17 @@ func _check_pick_up_out_of_reach_fails_typed() -> void:
 func _check_pick_up_already_gone_fails_typed() -> void:
 	if _failed:
 		return
-	var world := _build_world(1003)
+	var world := Scenarios.floor_world(1003)
 	_place_wood_item(world, "item_1", 2, 2)
 	var first := _colonist("colonist_0", 2, 2)
 	var second := _colonist("colonist_1", 2, 3)
-	world._colonists.append(first)
-	world._colonists.append(second)
+	TestAccess.colonists(world).append(first)
+	TestAccess.colonists(world).append(second)
 
-	var first_result := world._toils.pick_up(first, "item_1")
+	var first_result := TestAccess.toils(world).pick_up(first, "item_1")
 	_expect(first_result.get("ok") == true, "the first colonist must successfully pick up the item: %s" % first_result)
 
-	var second_result := world._toils.pick_up(second, "item_1")
+	var second_result := TestAccess.toils(world).pick_up(second, "item_1")
 	_expect(second_result.get("ok") == false and second_result.get("reason") == "item_not_found",
 		"pick_up on an already-gone item must fail with item_not_found rather than throw: %s" % second_result)
 	_expect(not InventoryType.is_carrying(second), "the second colonist must not end up carrying anything")
@@ -133,16 +126,16 @@ func _check_pick_up_already_gone_fails_typed() -> void:
 func _check_place_onto_blocked_destination_fails_typed() -> void:
 	if _failed:
 		return
-	var world := _build_world(1004)
-	world._tile_grid.tiles[world._tile_grid.tile_index(6, 6)] = WorldStateType.TILE_ROCK
+	var world := Scenarios.floor_world(1004)
+	TestAccess.set_tile(world, 6, 6, WorldStateType.TILE_ROCK)
 	_place_wood_item(world, "item_1", 2, 2)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var pick_result := world._toils.pick_up(colonist, "item_1")
+	var pick_result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(pick_result.get("ok") == true, "setup pick_up must succeed: %s" % pick_result)
 
-	var place_result := world._toils.place(colonist, Vector2i(6, 6))
+	var place_result := TestAccess.toils(world).place(colonist, Vector2i(6, 6))
 	_expect(place_result.get("ok") == false and place_result.get("reason") == "destination_blocked",
 		"place onto an impassable tile must fail with destination_blocked: %s" % place_result)
 	_expect(InventoryType.is_carrying(colonist), "a failed place must leave the colonist still carrying the item")
@@ -154,17 +147,17 @@ func _check_place_onto_blocked_destination_fails_typed() -> void:
 func _check_place_onto_colonist_occupied_destination_fails_typed() -> void:
 	if _failed:
 		return
-	var world := _build_world(1006)
+	var world := Scenarios.floor_world(1006)
 	_place_wood_item(world, "item_1", 2, 2)
 	var carrier := _colonist("colonist_0", 2, 2)
 	var occupant := _colonist("colonist_1", 6, 6)
-	world._colonists.append(carrier)
-	world._colonists.append(occupant)
+	TestAccess.colonists(world).append(carrier)
+	TestAccess.colonists(world).append(occupant)
 
-	var pick_result := world._toils.pick_up(carrier, "item_1")
+	var pick_result := TestAccess.toils(world).pick_up(carrier, "item_1")
 	_expect(pick_result.get("ok") == true, "setup pick_up must succeed: %s" % pick_result)
 
-	var place_result := world._toils.place(carrier, Vector2i(6, 6))
+	var place_result := TestAccess.toils(world).place(carrier, Vector2i(6, 6))
 	_expect(place_result.get("ok") == false and place_result.get("reason") == "destination_blocked",
 		"place onto a colonist-occupied tile must fail with destination_blocked: %s" % place_result)
 	_expect(InventoryType.is_carrying(carrier), "a failed place must leave the colonist still carrying the item")
@@ -176,17 +169,17 @@ func _check_place_onto_colonist_occupied_destination_fails_typed() -> void:
 func _check_place_onto_item_occupied_destination_fails_typed() -> void:
 	if _failed:
 		return
-	var world := _build_world(1007)
+	var world := Scenarios.floor_world(1007)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._item_table.items["item_2"] = {"id": "item_2", "x": 6, "y": 6, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 3
+	TestAccess.item_table(world).items["item_2"] = {"id": "item_2", "x": 6, "y": 6, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 3
 	var carrier := _colonist("colonist_0", 2, 2)
-	world._colonists.append(carrier)
+	TestAccess.colonists(world).append(carrier)
 
-	var pick_result := world._toils.pick_up(carrier, "item_1")
+	var pick_result := TestAccess.toils(world).pick_up(carrier, "item_1")
 	_expect(pick_result.get("ok") == true, "setup pick_up must succeed: %s" % pick_result)
 
-	var place_result := world._toils.place(carrier, Vector2i(6, 6))
+	var place_result := TestAccess.toils(world).place(carrier, Vector2i(6, 6))
 	_expect(place_result.get("ok") == false and place_result.get("reason") == "destination_blocked",
 		"place onto an item-occupied tile must fail with destination_blocked: %s" % place_result)
 	_expect(InventoryType.is_carrying(carrier), "a failed place must leave the colonist still carrying the item")
@@ -199,21 +192,21 @@ func _check_place_onto_item_occupied_destination_fails_typed() -> void:
 func _check_save_load_round_trip_with_items_and_carrying() -> void:
 	if _failed:
 		return
-	var world := _build_world(1005)
+	var world := Scenarios.floor_world(1005)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._item_table.items["item_2"] = {"id": "item_2", "x": 7, "y": 7, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 3
+	TestAccess.item_table(world).items["item_2"] = {"id": "item_2", "x": 7, "y": 7, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 3
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var pick_result := world._toils.pick_up(colonist, "item_1")
+	var pick_result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(pick_result.get("ok") == true, "setup pick_up must succeed: %s" % pick_result)
 
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
 	_expect(restored.state_hash() == world.state_hash(),
 		"save/load round trip with a ground item and a carrying colonist must reproduce the same state_hash()")
-	var restored_colonist: Dictionary = restored._colonists[0]
+	var restored_colonist: Dictionary = TestAccess.colonists(restored)[0]
 	_expect(InventoryType.is_carrying(restored_colonist) and InventoryType.count_of_kind(restored_colonist, "wood") == 1,
 		"restored colonist must still be carrying the picked-up item")
 	_expect(restored.get_ground_wood(7, 7) == 1, "restored world must still have the untouched ground item")
@@ -226,13 +219,13 @@ func _check_save_load_round_trip_with_items_and_carrying() -> void:
 func _check_state_hash_reflects_next_item_id() -> void:
 	if _failed:
 		return
-	var world_a := _build_world(1008)
+	var world_a := Scenarios.floor_world(1008)
 	_place_wood_item(world_a, "item_1", 2, 2)
-	world_a._item_table.next_item_id = 5
+	TestAccess.item_table(world_a).next_item_id = 5
 
-	var world_b := _build_world(1008)
+	var world_b := Scenarios.floor_world(1008)
 	_place_wood_item(world_b, "item_1", 2, 2)
-	world_b._item_table.next_item_id = 6
+	TestAccess.item_table(world_b).next_item_id = 6
 
 	_expect(world_a.state_hash() != world_b.state_hash(),
 		"differing next_item_id counters must produce different state_hash() results")
@@ -244,19 +237,19 @@ func _check_state_hash_reflects_next_item_id() -> void:
 func _check_save_load_preserves_next_item_id_continuation() -> void:
 	if _failed:
 		return
-	var world := _build_world(1009)
+	var world := Scenarios.floor_world(1009)
 	_place_wood_item(world, "item_1", 2, 2)
-	world._item_table.next_item_id = 7
+	TestAccess.item_table(world).next_item_id = 7
 
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(restored._item_table.next_item_id == 7, "restore must preserve the source's next_item_id counter")
+	_expect(TestAccess.item_table(restored).next_item_id == 7, "restore must preserve the source's next_item_id counter")
 
-	world._item_table.spawn_item("wood", 9, 9)
-	restored._item_table.spawn_item("wood", 9, 9)
-	_expect(world._item_table.items.has("item_7") and restored._item_table.items.has("item_7"),
+	TestAccess.item_table(world).spawn_item("wood", 9, 9)
+	TestAccess.item_table(restored).spawn_item("wood", 9, 9)
+	_expect(TestAccess.item_table(world).items.has("item_7") and TestAccess.item_table(restored).items.has("item_7"),
 		"the source and its restore must generate the same next item id after loading")
-	_expect(world._item_table.next_item_id == restored._item_table.next_item_id,
+	_expect(TestAccess.item_table(world).next_item_id == TestAccess.item_table(restored).next_item_id,
 		"the source and its restore must advance the counter identically after generating an item")
 
 ## 4 units from a ground stack of exactly 4 move in one
@@ -264,12 +257,12 @@ func _check_save_load_preserves_next_item_id_continuation() -> void:
 func _check_pick_up_four_unit_stack_moves_fully_in_one_call() -> void:
 	if _failed:
 		return
-	var world := _build_world(1010)
+	var world := Scenarios.floor_world(1010)
 	_place_wood_item(world, "item_1", 2, 2, 4)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var result := world._toils.pick_up(colonist, "item_1")
+	var result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(result.get("ok") == true and int(result.get("count", 0)) == 4,
 		"pick_up of a 4-unit stack must move all 4 units in one call: %s" % result)
 	_expect(world.get_ground_wood(2, 2) == 0, "a fully-picked-up stack must leave nothing on the ground")
@@ -283,12 +276,12 @@ func _check_pick_up_four_unit_stack_moves_fully_in_one_call() -> void:
 func _check_pick_up_six_unit_stack_leaves_two_and_hands_never_exceed_capacity() -> void:
 	if _failed:
 		return
-	var world := _build_world(1011)
+	var world := Scenarios.floor_world(1011)
 	_place_wood_item(world, "item_1", 2, 2, 6)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var result := world._toils.pick_up(colonist, "item_1")
+	var result := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(result.get("ok") == true and int(result.get("count", 0)) == 4,
 		"pick_up of a 6-unit stack must move only 4 units (hands capacity) in one call: %s" % result)
 	_expect(world.get_ground_wood(2, 2) == 2, "a 6-unit stack must leave 2 units on the ground after one pick_up of 4")
@@ -308,16 +301,16 @@ func _check_pick_up_six_unit_stack_leaves_two_and_hands_never_exceed_capacity() 
 func _check_pick_up_fails_hands_full() -> void:
 	if _failed:
 		return
-	var world := _build_world(1012)
+	var world := Scenarios.floor_world(1012)
 	_place_wood_item(world, "item_1", 2, 2, 4)
 	_place_wood_item(world, "item_2", 2, 2, 1)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var first := world._toils.pick_up(colonist, "item_1")
+	var first := TestAccess.toils(world).pick_up(colonist, "item_1")
 	_expect(first.get("ok") == true and int(first.get("count", 0)) == 4, "setup pick_up must fill hands: %s" % first)
 
-	var second := world._toils.pick_up(colonist, "item_2")
+	var second := TestAccess.toils(world).pick_up(colonist, "item_2")
 	_expect(second.get("ok") == false and second.get("reason") == "hands_full",
 		"pick_up with no free hands capacity must fail hands_full: %s" % second)
 	_expect(world.get_ground_wood(2, 2) == 1, "a failed pick_up must leave the second item untouched on the ground")
@@ -329,12 +322,12 @@ func _check_pick_up_fails_hands_full() -> void:
 func _check_pick_up_zero_count_is_a_no_op() -> void:
 	if _failed:
 		return
-	var world := _build_world(1013)
+	var world := Scenarios.floor_world(1013)
 	_place_wood_item(world, "item_1", 2, 2, 4)
 	var colonist := _colonist("colonist_0", 2, 2)
-	world._colonists.append(colonist)
+	TestAccess.colonists(world).append(colonist)
 
-	var result := world._toils.pick_up(colonist, "item_1", 0)
+	var result := TestAccess.toils(world).pick_up(colonist, "item_1", 0)
 	_expect(result.get("ok") == true and int(result.get("count", -1)) == 0,
 		"pick_up with count: 0 must succeed as a no-op: %s" % result)
 	_expect(world.get_ground_wood(2, 2) == 4, "a count: 0 pick_up must leave the ground item's count untouched")

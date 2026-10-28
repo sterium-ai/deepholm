@@ -118,7 +118,7 @@ func _check_malformed_nested_state_rejected(expected: Dictionary) -> void:
 	var state: Dictionary = envelope["state"]
 	state["scheduling"]["assignments"]["forged-worker"] = {"jobId": "job-1", "startedTick": 0, "travelTicks": "not-an-int", "path": []}
 	var round_tripped = JSON.parse_string(JSON.stringify(state))
-	var hash: String = SaveIOType._sha256(JSON.stringify(round_tripped).to_utf8_buffer())
+	var hash: String = TestAccess.save_sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var output := FileAccess.open(CORRUPT, FileAccess.WRITE)
 	output.store_string(JSON.stringify({"format": envelope["format"], "integrity": hash, "state": state}))
 	output.close()
@@ -131,7 +131,7 @@ func _check_malformed_nested_state_rejected(expected: Dictionary) -> void:
 
 ## A rehashed save (valid envelope, hash recomputed to match) whose items.list
 ## carries two entries sharing the same id must be refused: StateCodec's
-## decoder keys world._item_table.items by id, so duplicate ids would silently overwrite
+## decoder keys TestAccess.item_table(world).items by id, so duplicate ids would silently overwrite
 ## one item with the other on load rather than crash, changing state_hash()
 ## with no typed error to explain why.
 func _check_duplicate_item_id_is_schema_error(expected: Dictionary) -> void:
@@ -145,7 +145,7 @@ func _check_duplicate_item_id_is_schema_error(expected: Dictionary) -> void:
 		],
 	}
 	var round_tripped = JSON.parse_string(JSON.stringify(state))
-	var hash: String = SaveIOType._sha256(JSON.stringify(round_tripped).to_utf8_buffer())
+	var hash: String = TestAccess.save_sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var output := FileAccess.open(CORRUPT, FileAccess.WRITE)
 	output.store_string(JSON.stringify({"format": envelope["format"], "integrity": hash, "state": state}))
 	output.close()
@@ -165,7 +165,7 @@ func _check_missing_required_field_is_migration_error(expected: Dictionary) -> v
 	var state: Dictionary = envelope["state"]
 	state.erase("tick")
 	var round_tripped = JSON.parse_string(JSON.stringify(state))
-	var hash: String = SaveIOType._sha256(JSON.stringify(round_tripped).to_utf8_buffer())
+	var hash: String = TestAccess.save_sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var output := FileAccess.open(CORRUPT, FileAccess.WRITE)
 	output.store_string(JSON.stringify({"format": envelope["format"], "integrity": hash, "state": state}))
 	output.close()
@@ -183,7 +183,7 @@ func _check_missing_required_field_is_migration_error(expected: Dictionary) -> v
 ## at TARGET is untouched.
 func _expect_migration_error_for_mutated_state(expected: Dictionary, state: Dictionary, label: String) -> void:
 	var round_tripped = JSON.parse_string(JSON.stringify(state))
-	var hash: String = SaveIOType._sha256(JSON.stringify(round_tripped).to_utf8_buffer())
+	var hash: String = TestAccess.save_sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var output := FileAccess.open(CORRUPT, FileAccess.WRITE)
 	output.store_string(JSON.stringify({"format": SaveIOType.FORMAT, "integrity": hash, "state": state}))
 	output.close()

@@ -62,7 +62,7 @@ func _check_faction_doors() -> void:
 
 	var wildlife_set := _set_faction(world, "set_wildlife", colonist_id, "wildlife")
 	_expect(wildlife_set.get("ok", false), "set_faction to wildlife must be accepted")
-	var wildlife_faction: String = String(world._find_colonist(colonist_id)["factionId"])
+	var wildlife_faction: String = String(TestAccess.find_colonist(world, colonist_id)["factionId"])
 	_expect(wildlife_faction == "wildlife", "the actor's factionId must now be wildlife")
 	var wildlife_result := world.passability(door.x, door.y, wildlife_faction)
 	_expect(not bool(wildlife_result["passable"]) and wildlife_result["cost"] == 0 and wildlife_result["is_door"],
@@ -70,7 +70,7 @@ func _check_faction_doors() -> void:
 
 	var allies_set := _set_faction(world, "set_allies", colonist_id, "allies")
 	_expect(allies_set.get("ok", false), "set_faction to allies must be accepted")
-	var allies_faction: String = String(world._find_colonist(colonist_id)["factionId"])
+	var allies_faction: String = String(TestAccess.find_colonist(world, colonist_id)["factionId"])
 	_expect(allies_faction == "allies", "the actor's factionId must now be allies")
 	var allies_result := world.passability(door.x, door.y, allies_faction)
 	_expect(allies_result["passable"] and allies_result["cost"] == 2 and allies_result["is_door"],

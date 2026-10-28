@@ -87,7 +87,7 @@ func _check_fresh_colonist_needs_start_full() -> void:
 	var world := WorldStateType.new(4242, 10)
 	var colonists := world.get_colonists()
 	_expect(colonists.size() > 0, "a freshly generated world must have at least one colonist")
-	var need_full := world._need_full
+	var need_full := TestAccess.need_full(world)
 	for colonist in colonists:
 		var needs: Dictionary = colonist.get("needs", {})
 		var accumulator: Dictionary = colonist.get("needsAccumulator", {})
@@ -110,11 +110,11 @@ func _check_needs_decay_by_declared_rate() -> void:
 		return
 	var definitions := _load_need_definitions()
 	var world := WorldStateType.new(1001, 10)
-	var day_length := world._calendar.day_length_ticks()
+	var day_length := TestAccess.calendar(world).day_length_ticks()
 	var ticks := 220
 	for _i in ticks:
 		world.tick()
-	var need_full := world._need_full
+	var need_full := TestAccess.need_full(world)
 	for colonist in world.get_colonists():
 		var needs: Dictionary = colonist["needs"]
 		for kind in NEED_KINDS:
@@ -138,11 +138,11 @@ func _check_needs_clamp_at_zero() -> void:
 	# never this test's actual claim ("decay clamps at 0 with no source ever
 	# reachable"). Removing every tile/object a need source could resolve
 	# against makes that claim terrain-independent instead of seed-dependent.
-	world._tile_grid.tiles.fill("rock")
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	var day_length := world._calendar.day_length_ticks()
-	var need_full := world._need_full
+	TestAccess.tile_grid(world).tiles.fill("rock")
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	var day_length := TestAccess.calendar(world).day_length_ticks()
+	var need_full := TestAccess.need_full(world)
 	var slowest_rate := 999999
 	for kind in NEED_KINDS:
 		slowest_rate = mini(slowest_rate, int(definitions[kind]["rate_per_day"]))
@@ -168,11 +168,11 @@ func _check_needs_reach_zero_at_expected_tick() -> void:
 		return
 	var definitions := _load_need_definitions()
 	var world := WorldStateType.new(3300, 10)
-	world._tile_grid.tiles.fill("rock")
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	var day_length := world._calendar.day_length_ticks()
-	var need_full := world._need_full
+	TestAccess.tile_grid(world).tiles.fill("rock")
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	var day_length := TestAccess.calendar(world).day_length_ticks()
+	var need_full := TestAccess.need_full(world)
 	var expected: Dictionary = {}
 	var max_expected := 0
 	for kind in NEED_KINDS:

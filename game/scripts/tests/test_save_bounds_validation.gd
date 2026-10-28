@@ -57,7 +57,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _expect_valid_baseline() -> void:
-	var validation := SaveIOType._validate_state(_base_state())
+	var validation := TestAccess.save_validate_state(_base_state())
 	_expect(validation["ok"], "the shared baseline fixture must itself be valid before any corruption: %s" % validation.get("message", ""))
 
 ## Applies `corrupt` to a fresh deep copy of the shared baseline state, then
@@ -67,7 +67,7 @@ func _expect_valid_baseline() -> void:
 func _check_rejects(label: String, corrupt: Callable) -> void:
 	var state := _base_state()
 	corrupt.call(state)
-	var result := SaveIOType._validate_state(state)
+	var result := TestAccess.save_validate_state(state)
 	_expect(not result["ok"], "corrupting %s must be rejected" % label)
 	_expect(result.get("code", "") == "schema_error", "corrupting %s must be a typed schema_error, got %s" % [label, result])
 

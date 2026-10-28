@@ -8,6 +8,7 @@ extends SceneTree
 ## ColonistPanel._line_for() actually renders.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ColonistPanelType = preload("res://scripts/viewer/colonist_panel.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -45,14 +46,14 @@ func _expect(condition: bool, message: String) -> void:
 ## after pick_up (hands just populated, leg-two route not started yet).
 func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	var world := WorldStateType.new(24601, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({
 		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": [],
 	})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 5, "y": 5, "width": 1, "height": 1},
@@ -140,7 +141,7 @@ func _check_tool_display() -> void:
 		sprites.refresh()
 		_expect(not sprites._tool_markers[id].visible, "drop clears marker on refresh")
 		_expect(not panel._line_for(world.get_colonists()[0]).contains("Held tool:"), "drop clears panel label")
-	world._colonists.clear()
+	TestAccess.colonists(world).clear()
 	sprites.refresh()
 	_expect(sprites._tool_markers.is_empty(), "removed colonists leave no tool markers")
 	sprites.free()
@@ -151,8 +152,8 @@ func _command(world: WorldStateType, id: String, kind: String, payload: Dictiona
 
 func _check_no_tool_reason() -> void:
 	var world := WorldStateType.new(274)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TREE
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TREE)
 	_expect(_command(world, "chop", "chop", {"x": 1, "y": 0}).get("ok", false), "chop accepted without tool")
 	var panel := _panel(world)
 	var seen := false
@@ -169,27 +170,14 @@ func _check_no_tool_reason() -> void:
 	_expect(seen, "real chop reaches blocked_no_tool")
 	panel.free()
 
-func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
-	for job in world.get_jobs():
-		if String(job["id"]) == job_id:
-			return job
-	return {}
-
-func _find_colonist(world: WorldStateType, colonist_id: String) -> Dictionary:
-	for colonist in world.get_colonists():
-		if String(colonist["id"]) == colonist_id:
-			return colonist
-	return {}
-
-
 func _check_handover_reason() -> void:
 	var world := WorldStateType.new(266104)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(10, 9)] = WorldStateType.TILE_TREE
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 10, 9, WorldStateType.TILE_TREE)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
-	world._colonists.append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_a"), "moving the axe into colonist_a's hand must succeed")
@@ -212,7 +200,7 @@ func _check_handover_reason() -> void:
 	for _i in 20:
 		world.tick()
 		ticks += 1
-		var colonist_a := _find_colonist(world, "colonist_a")
+		var colonist_a := Scenarios.colonist_by_id(world, "colonist_a")
 		if colonist_a.get("route") != null or colonist_a.get("work") != null:
 			colonist_a_busy = true
 			break
@@ -238,15 +226,15 @@ func _check_handover_reason() -> void:
 					# waits -- is what makes its first toil drop_tool.
 					var forage_b := _command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
 					_expect(forage_b.get("ok", false), "forage_b must be accepted right as forage_a completes")
-		var chop_job := _find_job(world, chop_b_id)
+		var chop_job := Scenarios.find_job(world, chop_b_id)
 		if String(chop_job.get("reason", "")) == "waiting_for_tool_handover":
 			waiting_seen = true
-			var line := panel._line_for(_find_colonist(world, "colonist_b"))
+			var line := panel._line_for(Scenarios.colonist_by_id(world, "colonist_b"))
 			_expect(line.contains("Reason: Waiting for another colonist to drop the reserved tool"), "active handover reason translated")
 			_expect(line.contains("Remedy: Wait for the holder to drop the tool"), "active handover remedy translated")
 			_expect(String(chop_job.get("item_id", "")) == axe_id,
 				"waiting_for_tool_handover's itemId must name the reserved axe, got '%s'" % chop_job.get("item_id"))
-			_expect(String(_find_colonist(world, "colonist_b").get("held_tool", "")) == "",
+			_expect(String(Scenarios.colonist_by_id(world, "colonist_b").get("held_tool", "")) == "",
 				"colonist_b must not hold the axe while genuinely waiting for the handover")
 		if String(chop_job.get("status", "")) == "completed":
 			completed = true
@@ -255,13 +243,13 @@ func _check_handover_reason() -> void:
 	_expect(completed,
 		"chop_b must complete, within %d total ticks, once colonist_a's own next dispatched job drops the axe (took %d)" %
 			[400, ticks])
-	_expect(String(_find_colonist(world, "colonist_b").get("held_tool", "")) == axe_id,
+	_expect(String(Scenarios.colonist_by_id(world, "colonist_b").get("held_tool", "")) == axe_id,
 		"colonist_b must end up holding the axe it waited for")
 
 	var drop_seen := false
-	for entry in world._toils.trace:
+	for entry in TestAccess.toils(world).trace:
 		if String(entry.get("toil", "")) == "drop_tool" and String(entry.get("phase", "")) == "complete":
 			drop_seen = true
-	_expect(drop_seen, "colonist_a must have run a drop_tool toil to release the handover: %s" % [world._toils.trace])
+	_expect(drop_seen, "colonist_a must have run a drop_tool toil to release the handover: %s" % [TestAccess.toils(world).trace])
 
 	panel.free()

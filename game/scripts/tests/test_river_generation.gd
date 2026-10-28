@@ -177,7 +177,7 @@ func _check_rock_outcrops(world: WorldStateType, tiles: Array[String], width: in
 ## _grow_rock_outcrop()'s own while-loop already honors that (0 < 0 is false),
 ## but _scatter_rock_outcrops() previously clamped the value to a floor of 1
 ## via maxi(1, ...), silently spending a growth attempt the configured budget
-## never paid for. Calls WorldGeneratorType._scatter_rock_outcrops() directly
+## never paid for. Calls TestAccess.generator_scatter_rock_outcrops() directly
 ## (a private static helper, exercised the same way this file's own
 ## _count_reachable_food_sources() call above exercises another one) against
 ## an all-soil synthetic map with outcrop_max_size well above 1, so any
@@ -195,7 +195,7 @@ func _check_zero_outcrop_placement_attempts_yields_seed_only() -> void:
 	mapgen["outcrop_placement_attempts"] = 0
 	var random := RandomNumberGenerator.new()
 	random.seed = 99
-	WorldGeneratorType._scatter_rock_outcrops(random, map, width, height, mapgen, 1.0)
+	TestAccess.generator_scatter_rock_outcrops(random, map, width, height, mapgen, 1.0)
 	var components := _rock_components(map, width, height)
 	if components.size() != 3:
 		_fail("zero-outcrop-placement-attempts: outcrop_count=3 must still place 3 seed tiles even with a zero growth budget, found %d rock component(s)" % components.size())
@@ -409,15 +409,15 @@ func _check_generation_does_not_perturb_simulation_stream() -> void:
 ## independently must fail.
 func _check_only_one_colonist_reachable_detected() -> void:
 	var world := WorldStateType.new(3, 10, 100, 16)
-	world._tile_grid.tiles.fill("soil")
-	world._tile_grid.tiles[2 * 100 + 1] = "water"
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists = [
-		ActorTableType.spawn("colonist", 0, 2, world._content, "colonist_0"),
-		ActorTableType.spawn("colonist", 90, 2, world._content, "colonist_1"),
-		ActorTableType.spawn("colonist", 95, 2, world._content, "colonist_2"),
-	]
+	TestAccess.tile_grid(world).tiles.fill("soil")
+	TestAccess.tile_grid(world).tiles[2 * 100 + 1] = "water"
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.set_colonists(world, [
+		ActorTableType.spawn("colonist", 0, 2, TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", 90, 2, TestAccess.content(world), "colonist_1"),
+		ActorTableType.spawn("colonist", 95, 2, TestAccess.content(world), "colonist_2"),
+	])
 	for colonist in world.get_colonists():
 		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
 		var steps := _bfs_route_distance(world, start, func(x, y): return world.get_tile(x, y) == "water")
@@ -432,15 +432,15 @@ func _check_only_one_colonist_reachable_detected() -> void:
 ## check must report the colonist unreachable.
 func _check_bush_blocked_route_detected() -> void:
 	var world := WorldStateType.new(4, 10, 20, 20)
-	world._tile_grid.tiles.fill("soil")
-	world._tile_grid.tiles[0 * 20 + 5] = "water"
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.tile_grid(world).tiles.fill("soil")
+	TestAccess.tile_grid(world).tiles[0 * 20 + 5] = "water"
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for pos in [Vector2i(4, 5), Vector2i(6, 5), Vector2i(5, 4), Vector2i(5, 6)]:
-		var key := world._tile_grid.tile_index(pos.x, pos.y)
-		world._object_table.objects[key] = "berry_bush"
-		world._object_table.object_factions[key] = "colony"
-	world._tile_grid.reset_cells()
+		var key := TestAccess.tile_grid(world).tile_index(pos.x, pos.y)
+		TestAccess.object_table(world).objects[key] = "berry_bush"
+		TestAccess.object_table(world).object_factions[key] = "colony"
+	TestAccess.tile_grid(world).reset_cells()
 	var steps := _bfs_route_distance(world, Vector2i(5, 5), func(x, y): return world.get_tile(x, y) == "water")
 	if steps != -1:
 		_fail("accessibility BFS must respect blocking objects (a berry bush must not be treated as passable soil), got distance %d instead of unreachable" % steps)
@@ -455,17 +455,17 @@ func _check_bush_blocked_route_detected() -> void:
 ## shape rather than merely counting "any bush reachable".
 func _check_single_shared_bush_insufficient_food_detected() -> void:
 	var world := WorldStateType.new(5, 10, 20, 20)
-	world._tile_grid.tiles.fill("soil")
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists = [
-		ActorTableType.spawn("colonist", 5, 5, world._content, "colonist_0"),
-		ActorTableType.spawn("colonist", 6, 5, world._content, "colonist_1"),
-		ActorTableType.spawn("colonist", 7, 5, world._content, "colonist_2"),
-	]
-	world._object_table.objects[world._tile_grid.tile_index(10, 5)] = "berry_bush"
-	world._object_table.object_factions[world._tile_grid.tile_index(10, 5)] = "colony"
-	world._tile_grid.reset_cells()
+	TestAccess.tile_grid(world).tiles.fill("soil")
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.set_colonists(world, [
+		ActorTableType.spawn("colonist", 5, 5, TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", 6, 5, TestAccess.content(world), "colonist_1"),
+		ActorTableType.spawn("colonist", 7, 5, TestAccess.content(world), "colonist_2"),
+	])
+	TestAccess.object_table(world).objects[TestAccess.tile_grid(world).tile_index(10, 5)] = "berry_bush"
+	TestAccess.object_table(world).object_factions[TestAccess.tile_grid(world).tile_index(10, 5)] = "colony"
+	TestAccess.tile_grid(world).reset_cells()
 	var colonists := world.get_colonists()
 	var food_sources := _count_reachable_food_sources(world, colonists, FOOD_STEP_LIMIT)
 	if food_sources >= colonists.size():
@@ -511,25 +511,25 @@ func _check_bush_wall_detour_rejected() -> void:
 	for pos in wall_bushes:
 		bush_lookup[pos.y * width + pos.x] = true
 	var footprint: Array[Vector2i] = [near, far]
-	var confirmed := WorldGeneratorType._count_reachable_food_sources(map, width, height, footprint, bush_lookup, limit)
+	var confirmed := TestAccess.generator_count_reachable_food_sources(map, width, height, footprint, bush_lookup, limit)
 	if confirmed >= 1:
 		_fail("production _count_reachable_food_sources must reject a bush only reachable by cutting through a wall of other bushes, counted %d confirmed" % confirmed)
 
 	# -- independent per-colonist counter, against the same shape via WorldState --
 	var world := WorldStateType.new(6, 10, width, height)
-	world._tile_grid.tiles = map.duplicate()
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._object_table.objects[world._tile_grid.tile_index(target_bush.x, target_bush.y)] = "berry_bush"
-	world._object_table.object_factions[world._tile_grid.tile_index(target_bush.x, target_bush.y)] = "colony"
+	TestAccess.tile_grid(world).tiles = map.duplicate()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.object_table(world).objects[TestAccess.tile_grid(world).tile_index(target_bush.x, target_bush.y)] = "berry_bush"
+	TestAccess.object_table(world).object_factions[TestAccess.tile_grid(world).tile_index(target_bush.x, target_bush.y)] = "colony"
 	for pos in wall_bushes:
-		world._object_table.objects[world._tile_grid.tile_index(pos.x, pos.y)] = "berry_bush"
-		world._object_table.object_factions[world._tile_grid.tile_index(pos.x, pos.y)] = "colony"
-	world._tile_grid.reset_cells()
-	world._colonists = [
-		ActorTableType.spawn("colonist", near.x, near.y, world._content, "colonist_0"),
-		ActorTableType.spawn("colonist", far.x, far.y, world._content, "colonist_1"),
-	]
+		TestAccess.object_table(world).objects[TestAccess.tile_grid(world).tile_index(pos.x, pos.y)] = "berry_bush"
+		TestAccess.object_table(world).object_factions[TestAccess.tile_grid(world).tile_index(pos.x, pos.y)] = "colony"
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.set_colonists(world, [
+		ActorTableType.spawn("colonist", near.x, near.y, TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", far.x, far.y, TestAccess.content(world), "colonist_1"),
+	])
 	var colonists := world.get_colonists()
 	var independent_count := _count_reachable_food_sources(world, colonists, limit)
 	if independent_count >= 1:

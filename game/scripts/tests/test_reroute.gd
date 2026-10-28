@@ -10,6 +10,7 @@ extends SceneTree
 ## uninterrupted run. Every scenario declares its own explicit tick bound.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ColonistPanelType = preload("res://scripts/viewer/colonist_panel.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
@@ -69,10 +70,6 @@ func _expect(condition: bool, message: String) -> void:
 		_failed = true
 		push_error(message)
 
-func _command(world: WorldType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
-
 func _job_status(world: WorldType, job_id: String) -> String:
 	for job in world.get_jobs():
 		if job["id"] == job_id:
@@ -93,24 +90,24 @@ func _find_queued_job_for_target(world: WorldType, target: Vector2i) -> Dictiona
 ## unreachable and excluded it (tool_fetch_toil.gd's _exclude_candidate()),
 ## for the after-exclusion save/load scenario below.
 func _fetch_tool_has_excluded(world: WorldType, job_id: String) -> bool:
-	return (world._toils.get_fetch_tool_excluded().get(job_id, []) as Array).size() > 0
+	return (TestAccess.toils(world).get_fetch_tool_excluded().get(job_id, []) as Array).size() > 0
 
 ## Two open rows (y=0 and y=1, x=0..4): the direct top-row path to the dig
 ## target at (4,0) is 4 edges; blocking (2,0) forces a 5-edge detour through
 ## row 1, which stays well within a single RouteSearch.STEP_BUDGET (64) call.
 func _build_two_row_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit on one of this fixture's
 	# own narrow rows and block a route the test expects to be open.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in range(0, 5):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 1)] = WorldType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
+		TestAccess.set_tile(world, x, 1, WorldType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -122,7 +119,7 @@ func _build_two_row_world(seed_value: int) -> WorldType:
 func _check_reroute_then_resume() -> void:
 	var world := _build_racetrack_world(9001)
 	var target := Vector2i(5, 0)
-	var job_id: String = _command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var job_id: String = Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 
 	var walled := false
 	var saw_rerouting := false
@@ -147,7 +144,7 @@ func _check_reroute_then_resume() -> void:
 func _check_panel_shows_rerouting_reason() -> void:
 	var world := _build_racetrack_world(9002)
 	var target := Vector2i(5, 0)
-	_command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})
 
 	var walled := false
 	var rerouting_colonist := {}
@@ -184,7 +181,7 @@ func _check_panel_shows_rerouting_reason() -> void:
 func _check_unreachable_target_releases_job() -> void:
 	var world := _build_two_row_world(9003)
 	var enclosed_target := Vector2i(4, 0)
-	_command(world, "dig", "dig", {"x": enclosed_target.x, "y": enclosed_target.y, "priority": 1})
+	Scenarios.command(world, "dig", "dig", {"x": enclosed_target.x, "y": enclosed_target.y, "priority": 1})
 
 	var walled := false
 	var released := false
@@ -195,8 +192,8 @@ func _check_unreachable_target_releases_job() -> void:
 		ticks += 1
 		var colonist := world.get_colonists()[0]
 		if not walled and colonist["x"] == 2 and colonist["y"] == 0:
-			world._object_table.set_object(3, 0, "wooden_wall")
-			world._object_table.set_object(4, 1, "wooden_wall")
+			TestAccess.object_table(world).set_object(3, 0, "wooden_wall")
+			TestAccess.object_table(world).set_object(4, 1, "wooden_wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -204,7 +201,7 @@ func _check_unreachable_target_releases_job() -> void:
 				released = true
 				_expect(not world.get_reservations().has(enclosed_target),
 					"no reservation must be left behind for the released, enclosed target")
-				second_job_id = _command(world, "second", "dig", {"x": 1, "y": 1, "priority": 1})["job_id"]
+				second_job_id = Scenarios.command(world, "second", "dig", {"x": 1, "y": 1, "priority": 1})["job_id"]
 		if released and second_job_id != "" and _job_status(world, second_job_id) == "completed":
 			break
 
@@ -227,18 +224,18 @@ func _check_unreachable_target_releases_job() -> void:
 ## search to save mid-flight, not one that resolves in the same tick.
 func _build_racetrack_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# See _build_two_row_world()'s own doc comment above.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in range(0, 6):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, WorldType.MAP_HEIGHT - 1)] = WorldType.TILE_SOIL
+		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
+		TestAccess.set_tile(world, x, WorldType.MAP_HEIGHT - 1, WorldType.TILE_SOIL)
 	for y in range(0, WorldType.MAP_HEIGHT):
-		world._tile_grid.tiles[world._tile_grid.tile_index(0, y)] = WorldType.TILE_SOIL
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+		TestAccess.set_tile(world, 0, y, WorldType.TILE_SOIL)
+		TestAccess.set_tile(world, 5, y, WorldType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -250,7 +247,7 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 		return walled
 	var colonist := world.get_colonists()[0]
 	if colonist["x"] == 1 and colonist["y"] == 0:
-		world._object_table.set_object(2, 0, "wooden_wall")
+		TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
 		return true
 	return walled
 
@@ -268,8 +265,8 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 ## search -- and could resolve differently.
 func _build_fetch_tool_racetrack_world(seed_value: int) -> WorldType:
 	var world := _build_racetrack_world(seed_value)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldType.TILE_ROCK
+	TestAccess.set_tile(world, 1, 0, WorldType.TILE_TREE)
+	TestAccess.set_tile(world, 5, 0, WorldType.TILE_ROCK)
 	world.spawn_ground_tool_item("axe", 5, 0)
 	return world
 
@@ -279,7 +276,7 @@ func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
 
 	# Path A: an uninterrupted run straight through to completion.
 	var direct := _build_fetch_tool_racetrack_world(seed_value)
-	var direct_job_id: String = _command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -291,7 +288,7 @@ func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
 	# STATUS_SEARCHING (mid-flight, not yet resolved), restore into a fresh
 	# WorldState, then advance identically.
 	var source := _build_fetch_tool_racetrack_world(seed_value)
-	var source_job_id: String = _command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -341,7 +338,7 @@ func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupt
 	var seed_value := 9013
 
 	var direct := _build_fetch_tool_racetrack_world(seed_value)
-	var direct_job_id: String = _command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -350,7 +347,7 @@ func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupt
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_racetrack_world(seed_value)
-	var source_job_id: String = _command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -425,7 +422,7 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 	var seed_value := 9014
 
 	var direct := _build_fetch_tool_excluded_candidate_world(seed_value)
-	var direct_job_id: String = _command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_excluded_seen := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
@@ -438,7 +435,7 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_excluded_candidate_world(seed_value)
-	var source_job_id: String = _command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -507,8 +504,8 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 ## least one observable tick.
 func _build_fetch_tool_return_leg_racetrack_world(seed_value: int) -> WorldType:
 	var world := _build_racetrack_world(seed_value)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_ROCK
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 24)] = WorldType.TILE_TREE
+	TestAccess.set_tile(world, 1, 0, WorldType.TILE_ROCK)
+	TestAccess.set_tile(world, 5, 24, WorldType.TILE_TREE)
 	world.spawn_ground_tool_item("axe", 0, 2)
 	return world
 
@@ -517,7 +514,7 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 	var seed_value := 9015
 
 	var direct := _build_fetch_tool_return_leg_racetrack_world(seed_value)
-	var direct_job_id: String = _command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -526,7 +523,7 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_return_leg_racetrack_world(seed_value)
-	var source_job_id: String = _command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var mid_return_search := false
 	var source_ticks := 0
 	while not mid_return_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -600,8 +597,8 @@ func _build_fetch_tool_racetrack_world_with_moving_holder(seed_value: int) -> Wo
 	# (3,1) sits off every racetrack corridor tile (only reachable via (3,0),
 	# on the top row) so it cannot block the long left/bottom/right-column
 	# detour the second fetch_tool search below needs once (2,0) is walled.
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldType.TILE_ROCK
+	TestAccess.set_tile(world, 3, 1, WorldType.TILE_TREE)
+	TestAccess.set_tile(world, 5, 0, WorldType.TILE_ROCK)
 	# colonist_1 stands on (5,0), itself now impassable rock (only enterable
 	# via the fetch_tool target-tile exception): a RouteSearch starting from
 	# an impassable tile is invalid by construction (RouteSearch._init()), so
@@ -609,7 +606,7 @@ func _build_fetch_tool_racetrack_world_with_moving_holder(seed_value: int) -> Wo
 	# proposed for (and, being closer, keep winning over colonist_0) the chop
 	# job's own activation search every tick, which can never resolve from
 	# colonist_1's own invalid start tile, wedging the job forever.
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 5, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 5, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": {"mine": 0, "chop": 0, "farm": 0, "haul": 0, "build": 0, "craft": 0, "cook": 0},
 		"route": null, "work": null, "carrying": null, "held_tool": ""})
@@ -629,7 +626,7 @@ func _drive_fetch_tool_holder_moves_fixture(world: WorldType, state: Dictionary)
 	var colonist := world.get_colonists()[0]
 	if not state.get("walled", false):
 		if colonist["x"] == 1 and colonist["y"] == 0:
-			world._object_table.set_object(2, 0, "wooden_wall")
+			TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
 			state["walled"] = true
 		return
 	if state.get("moved", false):
@@ -645,10 +642,10 @@ func _drive_fetch_tool_holder_moves_fixture(world: WorldType, state: Dictionary)
 	# unrelated trim decision the same either way, isolating this fixture to
 	# the one behavior actually under test (the restored search's passability
 	# exception, not this live trim's own separate target staleness).
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_1":
-			world._colonists[i]["x"] = 10
-			world._colonists[i]["y"] = 10
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_1":
+			TestAccess.colonists(world)[i]["x"] = 10
+			TestAccess.colonists(world)[i]["y"] = 10
 	state["moved"] = true
 
 ## True once job_id has reached a settled outcome: either it completed (the
@@ -683,7 +680,7 @@ func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted
 	# move side effects as path B (both share the same frozen search cost_fn
 	# regardless; the fix under test only matters at restore).
 	var direct := _build_fetch_tool_racetrack_world_with_moving_holder(seed_value)
-	var direct_job_id: String = _command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_state := {"walled": false, "moved": false}
 	var direct_ticks := 0
 	while not _fetch_tool_holder_moved_job_settled(direct, direct_job_id) and direct_ticks < FETCH_TOOL_MAX_TICKS:
@@ -695,7 +692,7 @@ func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted
 	# Path B: same fixture and script, saving through SaveIO's real file
 	# boundary the instant colonist_1 has just moved mid-second-search.
 	var source := _build_fetch_tool_racetrack_world_with_moving_holder(seed_value)
-	var source_job_id: String = _command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var source_state := {"walled": false, "moved": false}
 	var mid_search := false
 	var source_ticks := 0
@@ -764,14 +761,14 @@ func _check_route_budget_shared_across_scheduler_fetch_and_return() -> void:
 	var target := Vector2i(1, 0)
 	var seed_value := 9008
 	var world := _build_fetch_tool_racetrack_world(seed_value)
-	var job_id: String = _command(world, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var job_id: String = Scenarios.command(world, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var colonist_id := "colonist_0"
 
 	var multi_batch_seen := false
 	var checked_activation_tick := false
 	var ticks := 0
 	while _job_status(world, job_id) != "completed" and ticks < FETCH_TOOL_MAX_TICKS:
-		var prev_search = world._reroutes.get(colonist_id)
+		var prev_search = TestAccess.reroutes(world).get(colonist_id)
 		var prev_resume_calls := int(prev_search.resume_calls) if prev_search != null else -1
 		var prev_status := _job_status(world, job_id)
 		# A search already resumed at least once and still not terminal, right
@@ -786,7 +783,7 @@ func _check_route_budget_shared_across_scheduler_fetch_and_return() -> void:
 		world.tick()
 		ticks += 1
 
-		var cur_search = world._reroutes.get(colonist_id)
+		var cur_search = TestAccess.reroutes(world).get(colonist_id)
 		if prev_search != null and cur_search != null and prev_search == cur_search:
 			var delta := int(cur_search.resume_calls) - prev_resume_calls
 			_expect(delta <= 1,
@@ -812,7 +809,7 @@ func _check_save_load_mid_reroute_matches_uninterrupted_run() -> void:
 
 	# Path A: an uninterrupted run straight through to completion.
 	var direct := _build_racetrack_world(seed_value)
-	var direct_job_id: String = _command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_walled := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < SAVE_LOAD_MAX_TICKS:
@@ -825,7 +822,7 @@ func _check_save_load_mid_reroute_matches_uninterrupted_run() -> void:
 	# (mid-flight, not yet resolved), restore into a fresh WorldState, then
 	# advance identically.
 	var source := _build_racetrack_world(seed_value)
-	var source_job_id: String = _command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var source_walled := false
 	var mid_search := false
 	var source_ticks := 0
@@ -871,7 +868,7 @@ func _check_save_io_round_trip_mid_reroute_matches_uninterrupted_run() -> void:
 	var seed_value := 9005
 
 	var direct := _build_racetrack_world(seed_value)
-	var direct_job_id: String = _command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var direct_walled := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < SAVE_LOAD_MAX_TICKS:
@@ -881,7 +878,7 @@ func _check_save_io_round_trip_mid_reroute_matches_uninterrupted_run() -> void:
 		"uninterrupted run must complete within the declared tick bound (%d)" % SAVE_LOAD_MAX_TICKS)
 
 	var source := _build_racetrack_world(seed_value)
-	var source_job_id: String = _command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
 	var source_walled := false
 	var mid_search := false
 	var source_ticks := 0

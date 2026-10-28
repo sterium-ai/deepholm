@@ -46,17 +46,17 @@ func _expect(condition: bool, message: String) -> void:
 
 func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	var world := WorldStateType.new(SEED, 10, 20, 20)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_SOIL)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._tile_grid.tiles[world._tile_grid.tile_index(WATER_TILE.x, WATER_TILE.y)] = WorldStateType.TILE_WATER
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "route": null, "work": null, "carrying": null})
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_SOIL)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.set_tile(world, WATER_TILE.x, WATER_TILE.y, WorldStateType.TILE_WATER)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "route": null, "work": null, "carrying": null})
 
 	# Force the water-tile cache to build before the mutation below, so this
 	# proves the cache is kept in sync, not merely lazily rebuilt fresh every
 	# time (which would hide the bug this test exists to catch).
-	_expect(world._tile_grid.get_water_tiles().has(WATER_TILE),
+	_expect(TestAccess.tile_grid(world).get_water_tiles().has(WATER_TILE),
 		"setup: the water tile cache must include the fixture's own water tile before any mutation")
 
 	# place_object now rejects a water footprint tile with the
@@ -76,7 +76,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 		"place_object must reject a berry_bush on a water tile with invalid_target: %s" % place_result)
 	_expect(world.get_object(WATER_TILE.x, WATER_TILE.y).is_empty(),
 		"a rejected place_object must leave the water tile empty")
-	world._object_table.set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
+	TestAccess.object_table(world).set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
 
 	var forage_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "forage_water_bush", "tick": world.get_tick(),
@@ -97,7 +97,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	_expect(world.get_tile(WATER_TILE.x, WATER_TILE.y) == WorldStateType.TILE_FLOOR,
 		"forage must convert the water tile to floor exactly like any other forage target")
 
-	var live_candidates: Array[Vector2i] = world._needs_system.need_source_candidates("water")
+	var live_candidates: Array[Vector2i] = TestAccess.needs_system(world).need_source_candidates("water")
 	_expect(not live_candidates.has(WATER_TILE),
 		"the live world's water-tile cache must stop offering a tile that is no longer water once forage converts it to floor")
 
@@ -108,7 +108,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	# side effect) is what keeps them in sync.
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	var restored_candidates: Array[Vector2i] = restored._needs_system.need_source_candidates("water")
+	var restored_candidates: Array[Vector2i] = TestAccess.needs_system(restored).need_source_candidates("water")
 	_expect(not restored_candidates.has(WATER_TILE),
 		"a freshly decoded world must never offer the former water tile either")
 	_expect(live_candidates == restored_candidates,

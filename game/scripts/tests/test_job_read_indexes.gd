@@ -75,7 +75,7 @@ func _check_reads(world, t: int) -> void:
 			if String(event["type"]) in types:
 				expected_events.append(event)
 		_expect(world.get_events(types) == expected_events, "tick %d: get_events(%s) must equal get_events() filtered by type" % [t, types])
-	var queue = world._scheduler.queue
+	var queue = TestAccess.scheduler(world).queue
 	var queue_events: Array[Dictionary] = queue.get_events()
 	for after in [-1, queue.get_sequence() - 7, queue.get_sequence() - 1]:
 		var tail: Array[Dictionary] = []
@@ -103,16 +103,16 @@ func _check_reads(world, t: int) -> void:
 	for job in live_jobs:
 		kinds_by_id[job["id"]] = String(job["kind"])
 	_expect(queue.get_job_kinds() == kinds_by_id, "tick %d: get_job_kinds() must match the live jobs" % t)
-	var waiting: Array[Dictionary] = world._scheduler.get_waiting()
+	var waiting: Array[Dictionary] = TestAccess.scheduler(world).get_waiting()
 	for index in range(0, waiting.size(), maxi(1, waiting.size() / 25)):
 		var entry: Dictionary = waiting[index]
-		_expect(world._scheduler._find_waiting_entry(String(entry["id"])) == entry,
+		_expect(TestAccess.scheduler_find_waiting_entry(world, String(entry["id"])) == entry,
 			"tick %d: the waiting lookup must find %s" % [t, entry["id"]])
-		_expect(world._scheduler.waiting_restrict_to(String(entry["id"])) == String(entry.get("restrict_to", "")),
+		_expect(TestAccess.scheduler(world).waiting_restrict_to(String(entry["id"])) == String(entry.get("restrict_to", "")),
 			"tick %d: waiting_restrict_to(%s) must match its entry" % [t, entry["id"]])
 	for job in queue_jobs:
 		if job["status"] != "queued":
-			_expect(world._scheduler._find_waiting_entry(String(job["id"])).is_empty() or _waiting_has(waiting, String(job["id"])),
+			_expect(TestAccess.scheduler_find_waiting_entry(world, String(job["id"])).is_empty() or _waiting_has(waiting, String(job["id"])),
 				"tick %d: a %s job must not be found waiting unless it is" % [t, job["status"]])
 
 func _waiting_has(waiting: Array[Dictionary], job_id: String) -> bool:

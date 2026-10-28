@@ -6,6 +6,7 @@ extends SceneTree
 ## section 3), turning the tile to floor and leaving one ground berry.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const OBJECTS_CONTENT_PATH := "res://content/objects.json"
@@ -101,22 +102,18 @@ func _check_water_generated_deterministically() -> void:
 					"a water tile at (%d, %d) must be impassable with cost 0" % [x, y])
 	_expect(found_water, "map generation must place at least one water tile for seed 20260918")
 
-func _command(world: WorldType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
-
 ## A single row corridor: colonist starts at (0,0); (0,0)-(3,0) are soil, a
 ## berry_bush object sits on (4,0) (mirrors test_movement_and_work.gd's
 ## dig/chop corridor). Everything else is rock, so the router has exactly one
 ## path to the bush.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	for x in range(0, 5):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
-	var place_result := _command(world, "place_bush", "place_object", {"x": 4, "y": 0, "kind": "berry_bush"})
+		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 4, "y": 0, "kind": "berry_bush"})
 	_expect(place_result["ok"], "placing the berry_bush fixture object must be accepted")
 	return world
 
@@ -132,11 +129,11 @@ func _check_forage_walk_and_work() -> void:
 	_expect(passability["passable"] == false, "a berry_bush tile must be impassable")
 
 	# Foraging a tile with no berry_bush must be rejected invalid_target.
-	var bad_result := _command(world, "forage_bad", "forage", {"x": 0, "y": 0, "priority": 1})
+	var bad_result := Scenarios.command(world, "forage_bad", "forage", {"x": 0, "y": 0, "priority": 1})
 	_expect(not bad_result["ok"] and bad_result["rejection"]["reason"] == "invalid_target",
 		"forage against a non-berry_bush tile must be rejected invalid_target")
 
-	var forage_result := _command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
 	_expect(forage_result["ok"], "forage order against a berry_bush must be accepted")
 
 	var ticks := 0
@@ -160,7 +157,7 @@ func _check_forage_walk_and_work() -> void:
 func _check_forage_save_round_trip() -> void:
 	var world := _build_world(3030918)
 	var bush := Vector2i(4, 0)
-	var forage_result := _command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
 	_expect(forage_result["ok"], "forage order against a berry_bush must be accepted")
 
 	var ticks := 0

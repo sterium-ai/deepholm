@@ -167,11 +167,11 @@ func _check_reachable_handles_work_targets() -> void:
 ## and checks both tiles' region_id() dropped to 0 (impassable/no region).
 func _check_footprint_object_invalidates_every_occupied_tile() -> void:
 	var world := WorldStateType.new(400, 10)
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 2)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 2)] = WorldStateType.TILE_FLOOR
-	var regions := world._tile_grid.get_regions()
+	TestAccess.set_tile(world, 2, 2, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 3, 2, WorldStateType.TILE_FLOOR)
+	var regions := TestAccess.tile_grid(world).get_regions()
 	_expect(regions.region_id(2, 2) != 0 and regions.region_id(3, 2) != 0,
 		"both setup tiles must start passable/regioned")
-	world._object_table.set_object(2, 2, "test_footprint_crate", "colony", "horizontal")
+	TestAccess.object_table(world).set_object(2, 2, "test_footprint_crate", "colony", "horizontal")
 	_expect(regions.region_id(2, 2) == 0, "the origin footprint tile's region cache must be invalidated to impassable")
 	_expect(regions.region_id(3, 2) == 0, "the second footprint tile's region cache must also be invalidated to impassable")

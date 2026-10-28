@@ -52,7 +52,7 @@ func _check_set_faction_valid() -> void:
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var result := _set_faction_command(world, "set_valid", colonist_id, "wildlife")
 	_expect(result.get("ok", false), "a valid set_faction must be accepted")
-	var updated := world._find_colonist(colonist_id)
+	var updated := TestAccess.find_colonist(world, colonist_id)
 	_expect(updated["factionId"] == "wildlife", "set_faction must update the targeted actor's factionId")
 
 func _check_set_faction_rejects_missing_target() -> void:
@@ -97,11 +97,11 @@ func _check_set_faction_rejects_unknown_faction() -> void:
 	var world := WorldStateType.new(6, 10)
 	world.state_hash() # forces _ensure_health()'s factionId backfill
 	var colonist_id: String = world.get_colonists()[0]["id"]
-	var before: String = world._find_colonist(colonist_id)["factionId"]
+	var before: String = TestAccess.find_colonist(world, colonist_id)["factionId"]
 	var result := _set_faction_command(world, "set_unknown_faction", colonist_id, "spaceship_crew")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_payload",
 		"set_faction with a faction_id absent from the factions registry must be rejected invalid_payload")
-	_expect(world._find_colonist(colonist_id)["factionId"] == before, "a rejected set_faction must change nothing")
+	_expect(TestAccess.find_colonist(world, colonist_id)["factionId"] == before, "a rejected set_faction must change nothing")
 
 func _check_set_faction_mutates_only_target_actor() -> void:
 	if _failed:
@@ -117,8 +117,8 @@ func _check_set_faction_mutates_only_target_actor() -> void:
 	var other_before: String = colonists[1]["factionId"]
 	var result := _set_faction_command(world, "set_target_only", target_id, "allies")
 	_expect(result.get("ok", false), "a valid set_faction must be accepted")
-	_expect(world._find_colonist(target_id)["factionId"] == "allies", "the targeted actor's factionId must change")
-	_expect(world._find_colonist(other_id)["factionId"] == other_before, "a different actor's factionId must be untouched")
+	_expect(TestAccess.find_colonist(world, target_id)["factionId"] == "allies", "the targeted actor's factionId must change")
+	_expect(TestAccess.find_colonist(world, other_id)["factionId"] == other_before, "a different actor's factionId must be untouched")
 
 ## Regression: a non-worker actor (no "worker"
 ## component, e.g. a wolf) fails _ensure_needs()'s labour_table_missing check
@@ -130,15 +130,15 @@ func _check_set_faction_persists_for_non_worker_actor() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(10, 10)
-	var wolf := ActorTableType.spawn("wolf", 2, 2, world._content, "wolf_test")
-	world._colonists.append(wolf)
+	var wolf := ActorTableType.spawn("wolf", 2, 2, TestAccess.content(world), "wolf_test")
+	TestAccess.colonists(world).append(wolf)
 	var result := _set_faction_command(world, "set_wolf_faction", "wolf_test", "wildlife")
 	_expect(result.get("ok", false), "a valid set_faction on a non-worker actor must be accepted")
-	_expect(world._find_colonist("wolf_test")["factionId"] == "wildlife",
+	_expect(TestAccess.find_colonist(world, "wolf_test")["factionId"] == "wildlife",
 		"set_faction must update a non-worker actor's factionId")
 
 	world.state_hash()
-	_expect(world._find_colonist("wolf_test")["factionId"] == "wildlife",
+	_expect(TestAccess.find_colonist(world, "wolf_test")["factionId"] == "wildlife",
 		"state_hash() must not reset a non-worker actor's factionId")
 
 	var saved := world.to_save_state()
@@ -150,7 +150,7 @@ func _check_set_faction_persists_for_non_worker_actor() -> void:
 		"to_save_state() must not reset a non-worker actor's factionId")
 
 	world.tick()
-	_expect(world._find_colonist("wolf_test")["factionId"] == "wildlife",
+	_expect(TestAccess.find_colonist(world, "wolf_test")["factionId"] == "wildlife",
 		"tick() must not reset a non-worker actor's factionId")
 
 ## spawn_item("wood") is chop's on_work_complete effect (jobs.json, ADR 051); the
@@ -159,7 +159,7 @@ func _check_chopped_item_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(8, 10)
-	world._item_table.spawn_item("wood", 5, 5)
+	TestAccess.item_table(world).spawn_item("wood", 5, 5)
 	var items := world.get_items()
 	_expect(items.size() == 1 and items[0]["faction_id"] == "colony",
 		"a chopped wood item must default to faction_id 'colony'")
@@ -171,6 +171,6 @@ func _check_foraged_berries_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(9, 10)
-	world._item_table.spawn_berries_item(6, 6)
+	TestAccess.item_table(world).spawn_berries_item(6, 6)
 	_expect(world.get_ground_berries_faction_id(6, 6) == "colony",
 		"foraged berries must default to faction_id 'colony'")

@@ -81,7 +81,7 @@ func _check_drag_preview() -> void:
 			trees.append(tile)
 	_expect(trees.size() >= 5, "sanity: the previewed rectangle must hold trees")
 	for tile in trees.slice(0, 5):
-		world._tile_grid.tiles[world._tile_grid.tile_index(tile.x, tile.y)] = "soil" # a test-only poke
+		TestAccess.set_tile(world, tile.x, tile.y, "soil") # a test-only poke
 	world.tick()
 	view.refresh()
 	view.finish_preview_work()
@@ -256,8 +256,8 @@ func _check_cancel_candidates() -> void:
 	var rejected := orders.commit_rectangle(world, null, tiles)
 	# 1681 tiles: the area order expands TILES_PER_STEP now; drain the rest at
 	# this same tick (what the next ticks would do first) to compare like for like.
-	while world._area_orders.remaining_tiles(1) > 0:
-		for entry in world._area_orders.advance():
+	while TestAccess.area_orders(world).remaining_tiles(1) > 0:
+		for entry in TestAccess.area_orders(world).advance():
 			rejected.append({"tile": Vector2i(entry["x"], entry["y"]), "reason": entry["reason"]})
 	# The former path: every tile scans every job (no tile index).
 	var expected_preview: Array[bool] = []

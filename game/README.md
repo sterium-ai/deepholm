@@ -52,3 +52,36 @@ against two seeded `WorldState` instances and asserts equal `state_hash()` and
 event logs, plus map/spawn invariants, rejection categories, tick advancement,
 event ordering and the read-only snapshot boundary (see
 `scripts/core/commands/README.md` for the command contract).
+
+### Running one subject
+
+`tools\run_tests.ps1 -Filter <text>` runs every `test_*<text>*.gd` (a substring of the file
+name). Filters by subject:
+
+| Subject | `-Filter` | Files |
+| --- | --- | --- |
+| Tool items (content, reservations, fetch, handover, save) | `tool_items` | `test_tool_items*.gd` (5) |
+| Combat (damage and death, flee, approach) | `combat` | `test_combat*.gd` (3) |
+| Rescue (assignment, routing, persistence) | `rescue` | `test_rescue*.gd` (3) |
+| Trench traps | `trap` | `test_trapped_actors.gd` |
+| Needs and need jobs | `need` | `test_needs`, `test_need_jobs`, `test_haul_need_interrupt` |
+| Hauling | `haul` | `test_haul_stockpile`, `test_haul_need_interrupt` |
+| Building and construction sites | `build`, `construction`, `wall` | `test_build*`, `test_construction_*`, `test_wall_orders` |
+| Incidents and visitors | `incident`, `wolf`, `trader`, `migrant` | one file each |
+| Scheduling and labour | `schedul`, `labour` | `test_*scheduling*`, `test_labour_*` |
+| Routing | `route` | `test_reroute*`, `test_route_search_recorded` |
+| Factions | `faction` | `test_faction*`, `test_set_faction_command` |
+| Saves | `save` | `test_save_*`, `test_autosave_trigger`, `test_tool_items_save` |
+| Content and packs | `content`, `pack` | `test_content_*`, `test_*_content`, `test_*pack*` |
+| World generation | `river`, `worldgen` | `test_river_*`, `test_worldgen_determinism` |
+| Map view and viewer flows | `map` | `test_map_*`, `test_river_map_capture`, `test_tile_atlas_map` |
+| Orders | `order` | `test_area_orders`, `test_order_input`, `test_*order*` |
+| Determinism | `determinism` | world, worldgen and save determinism |
+| Architecture rules | `architecture` | `test_architecture_rules` |
+
+Tests read and set up simulation internals only through `TestAccess`
+(`scripts/core/world/test_access.gd`), never through `world._field`. Shared scenario builders
+are in `scripts/tests/support/scenarios.gd`. The tool-items, combat and rescue test files
+extend `support/tool_items_base.gd`, `support/combat_base.gd` and `support/rescue_base.gd`,
+which hold their shared helpers. `support/` is not scanned for tests, so never name a file
+there `test_*.gd`.

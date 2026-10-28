@@ -144,7 +144,7 @@ func _check_job_queue_retention() -> void:
 	var log: JobEventLogType = queue.get_event_log()
 	var burst := JobEventLogType.MAX_EVENTS + 500
 	for i in burst:
-		queue._emit("job_test", "job_%d" % i, {})
+		TestAccess.queue_emit(queue, "job_test", "job_%d" % i, {})
 	queue.tick()
 	_expect(queue.get_events().size() == burst, "nothing released: tick() must keep the whole burst, got %d" % queue.get_events().size())
 	log.release_through(99)
@@ -193,7 +193,7 @@ func _check_labour_burst_reaches_world_log() -> void:
 		if String(event["data"]["reason"]) == QueueType.BLOCKED_LABOUR_DISABLED:
 			collected += 1
 	_expect(collected == blocked, "every labour job_blocked event must reach the world log: %d jobs blocked, %d events collected" % [blocked, collected])
-	var queue = world._scheduler.queue
+	var queue = TestAccess.scheduler(world).queue
 	_expect(queue.get_events().size() <= JobEventLogType.MAX_EVENTS, "once collected, the queue log must be back within its bound, got %d" % queue.get_events().size())
 
 func _labour_disabled_jobs(world: WorldStateType) -> int:
@@ -231,11 +231,11 @@ func _check_map_view_full_rebuild_on_truncation() -> void:
 	world.tick()
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == 0, "setup: a tick with no change touches no cell")
-	world._tile_grid.mark_dirty(3, 3)
+	TestAccess.tile_grid(world).mark_dirty(3, 3)
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == 1, "one dirty cell must touch one cell, got %d" % map_view.last_tile_map_cells_touched)
 	for i in TileGridType.MAX_DIRTY_CELLS + 1:
-		world._tile_grid.mark_dirty(i % 32, (i / 32) % 32)
+		TestAccess.tile_grid(world).mark_dirty(i % 32, (i / 32) % 32)
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == full_count,
 		"a truncated dirty-cell read must rebuild every cell (%d), got %d" % [full_count, map_view.last_tile_map_cells_touched])
@@ -246,13 +246,13 @@ func _check_map_view_full_rebuild_on_truncation() -> void:
 func _check_status_text_keeps_trimmed_incidents() -> void:
 	var world := WorldStateType.new(41, 10, 16, 16)
 	var text_table := TextTableType.new()
-	world._event_log.insert_event({"type": "incident_started", "tick": world.get_tick(), "system_priority": 0,
-		"entity_id": "world", "sequence": world._event_log.next_sequence(), "data": {"incident_id": "raid_1", "faction": "wolves"}})
+	TestAccess.event_log(world).insert_event({"type": "incident_started", "tick": world.get_tick(), "system_priority": 0,
+		"entity_id": "world", "sequence": TestAccess.event_log(world).next_sequence(), "data": {"incident_id": "raid_1", "faction": "wolves"}})
 	var line := "Incident: raid_1 (wolves)"
 	_expect(StatusTextType.need_alerts_text(world, text_table).find(line) >= 0, "setup: the incident line must show")
-	var clock: SeededClock = world._clock
+	var clock: SeededClock = TestAccess.clock(world)
 	for i in EventLogType.MAX_EVENTS + 1:
-		_insert(world._event_log, clock, "filler")
+		_insert(TestAccess.event_log(world), clock, "filler")
 	_expect(world.get_events(["incident_started"]).is_empty(), "setup: retention must have dropped the incident event")
 	var text := StatusTextType.need_alerts_text(world, text_table)
 	_expect(text.count(line) == 1, "an incident line must survive its event's retention, once, got '%s'" % text)

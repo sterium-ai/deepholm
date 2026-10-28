@@ -74,6 +74,7 @@ extends SceneTree
 ##   close_rule() below proves the current behavior instead.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -130,24 +131,8 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._object_table.objects.clear()
-	return world
-
-func _colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y,
-		"needs": {"food": 100, "water": 100, "rest": 100},
-		"route": null, "work": null, "carrying": null}
-
-func _command(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": command_type, "payload": payload})
-
 func _command_ok(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	var result := _command(world, command_id, command_type, payload)
+	var result := Scenarios.command(world, command_id, command_type, payload)
 	_expect(bool(result.get("ok", false)), "%s must be accepted: %s" % [command_id, result])
 	return result
 
@@ -165,10 +150,10 @@ func _add_zone(world: WorldStateType, command_id: String, x: int, y: int, width:
 ## zone, then submits `build`.
 func _seed_stock_and_order(world: WorldStateType, kind: String, site: Vector2i, stock_tile: Vector2i) -> Dictionary:
 	_add_zone(world, "zone", stock_tile.x, stock_tile.y, 1, 1)
-	for cost_entry in (world._object_definitions[kind]["build_cost"] as Array):
-		world._item_table.items["item_%d" % world._item_table.next_item_id] = {"id": "item_%d" % world._item_table.next_item_id,
+	for cost_entry in (TestAccess.object_definitions(world)[kind]["build_cost"] as Array):
+		TestAccess.item_table(world).items["item_%d" % TestAccess.item_table(world).next_item_id] = {"id": "item_%d" % TestAccess.item_table(world).next_item_id,
 			"x": stock_tile.x, "y": stock_tile.y, "kind": String(cost_entry["item"]), "count": int(cost_entry["quantity"])}
-		world._item_table.next_item_id += 1
+		TestAccess.item_table(world).next_item_id += 1
 	return _command_ok(world, "build_%s" % kind, "build", {"kind": kind, "x": site.x, "y": site.y})
 
 ## Ticks world until get_construction_site(site) is empty (the site
@@ -184,15 +169,15 @@ func _tick_until_site_gone(world: WorldStateType, site: Vector2i, budget: int = 
 ## reservation-lifecycle/cargo/route-cost checks need deterministic ids to
 ## reason about which source is nearest/lowest-id).
 func _place_item(world: WorldStateType, item_id: String, kind: String, x: int, y: int, count: int = 1) -> void:
-	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
+	TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
 
 func _job_by_id(world: WorldStateType, job_id: String) -> Dictionary:
-	return world._scheduler.queue.get_job(job_id)
+	return TestAccess.scheduler(world).queue.get_job(job_id)
 
 ## True when a get_construction_site()-shaped record's own held_materials
 ## already meets every entry of its required_materials (ConstructionSiteTable.
 ## materials_met()'s own rule, read from the public view instead of reaching
-## into world._construction.site_table directly -- the public record is not guaranteed to still
+## into TestAccess.construction(world).site_table directly -- the public record is not guaranteed to still
 ## resolve to a live internal site by the time a caller gets around to
 ## checking it).
 func _public_site_materials_met(site_record: Dictionary) -> bool:
@@ -218,18 +203,18 @@ func _ground_kind_total(world: WorldStateType, kind: String) -> int:
 func _assert_no_orphaned_reservations(world: WorldStateType, context: String) -> void:
 	var extra_owners: Array[String] = []
 	for site in world.get_construction_sites():
-		extra_owners.append(world._construction.site_table.owner_key(String(site["id"])))
+		extra_owners.append(TestAccess.construction(world).site_table.owner_key(String(site["id"])))
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(
-		world._scheduler.queue.get_reservation_table(), world.get_jobs(), extra_owners)
+		TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs(), extra_owners)
 	_expect(orphans.is_empty(), "no reservation may outlive its job (%s): orphans=%s" % [context, orphans])
 
 ## One colonist at (0,0), one stockpiled wood item "item_1" at `stockpile`, a
 ## `build` order for `kind` at `site`; ticks until ConstructionGiver submits
 ## the site's first site_fetch job and returns its id ("" on timeout/refusal).
 func _order_site_fetch(world: WorldStateType, kind: String, site: Vector2i, stockpile: Vector2i = Vector2i(0, 0), count: int = 1) -> String:
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", stockpile.x, stockpile.y, count)
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).next_item_id = 2
 	_add_zone(world, "zone_setup", stockpile.x, stockpile.y, 1, 1)
 	var result := _command_ok(world, "build_%s" % kind, "build", {"kind": kind, "x": site.x, "y": site.y})
 	if not result.get("ok", false):
@@ -285,12 +270,12 @@ func _tick_until_site_work_active(world: WorldStateType, budget: int = 200) -> b
 ## instant jump on delivery), no object exists until progress reaches
 ## build_ticks, and the builder is free to take a further job afterward.
 func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
-	var world := _build_world(310000 + BUILDABLE_KINDS.find(kind))
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(310000 + BUILDABLE_KINDS.find(kind))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var site := Vector2i(10, 10)
 	var stock_tile := Vector2i(0, 0)
 	_seed_stock_and_order(world, kind, site, stock_tile)
-	var definition: Dictionary = world._object_definitions[kind]
+	var definition: Dictionary = TestAccess.object_definitions(world)[kind]
 	var declared_ticks := int(definition["build_ticks"])
 
 	var progress_samples: Array[int] = []
@@ -357,7 +342,7 @@ func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
 	_expect(builder_tile != site, "(%s) an object built from several tiles away must not appear under its own builder" % kind)
 	_expect(bool(world.passability(builder_tile.x, builder_tile.y)["passable"]),
 		"(%s) the builder must end up on a tile it can still move from" % kind)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 5)] = WorldStateType.TILE_SOIL
+	TestAccess.set_tile(world, 0, 5, WorldStateType.TILE_SOIL)
 	world.spawn_ground_tool_item("pick", 0, 0)
 	var dig_result := _command_ok(world, "dig_after_build_%s" % kind, "dig", {"x": 0, "y": 5, "priority": 1})
 	var dig_terminal := ""
@@ -372,43 +357,43 @@ func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
 ## arrives" generalizes to every buildable kind -- a `build` command
 ## with zero stockpiled material must still be accepted and create a site.
 func _check_site_created_immediately_with_no_stock() -> void:
-	var world := _build_world(310100)
-	var result := _command(world, "b", "build", {"kind": "wooden_wall", "x": 5, "y": 5})
+	var world := Scenarios.empty_floor_world(310100)
+	var result := Scenarios.command(world, "b", "build", {"kind": "wooden_wall", "x": 5, "y": 5})
 	_expect(bool(result.get("ok", false)), "build must be accepted with no material on hand: %s" % result)
 	_expect(not world.get_construction_site(5, 5).is_empty(), "a site must exist immediately after an accepted build command")
 	_expect(world.get_object(5, 5).is_empty(), "no object may appear before any material is delivered")
 
 func _check_invalid_payload_rejections() -> void:
-	var world := _build_world(310200)
-	_expect(_reason_of(_command(world, "a", "build", {"kind": "wooden_wall", "x": 1, "y": "1"})) == "invalid_payload",
+	var world := Scenarios.empty_floor_world(310200)
+	_expect(_reason_of(Scenarios.command(world, "a", "build", {"kind": "wooden_wall", "x": 1, "y": "1"})) == "invalid_payload",
 		"non-integer y must be rejected invalid_payload")
-	_expect(_reason_of(_command(world, "b", "build", {"kind": "wooden_wall", "x": 1})) == "invalid_payload",
+	_expect(_reason_of(Scenarios.command(world, "b", "build", {"kind": "wooden_wall", "x": 1})) == "invalid_payload",
 		"missing y must be rejected invalid_payload")
-	_expect(_reason_of(_command(world, "c", "build", {"kind": "wooden_wall", "x": 1, "y": 1, "extra": 1})) == "invalid_payload",
+	_expect(_reason_of(Scenarios.command(world, "c", "build", {"kind": "wooden_wall", "x": 1, "y": 1, "extra": 1})) == "invalid_payload",
 		"an unknown payload field must be rejected invalid_payload")
-	_expect(_reason_of(_command(world, "d", "build", {"kind": "not_a_kind", "x": 1, "y": 1})) == "invalid_payload",
+	_expect(_reason_of(Scenarios.command(world, "d", "build", {"kind": "not_a_kind", "x": 1, "y": 1})) == "invalid_payload",
 		"an unknown object kind must be rejected invalid_payload")
 
 func _check_invalid_target_rejections() -> void:
-	var world := _build_world(310300)
-	world._colonists.append(_colonist("colonist_0", 3, 3))
-	world._tile_grid.tiles[world._tile_grid.tile_index(4, 4)] = WorldStateType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 5)] = WorldStateType.TILE_ROCK
+	var world := Scenarios.empty_floor_world(310300)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 3, 3))
+	TestAccess.set_tile(world, 4, 4, WorldStateType.TILE_TREE)
+	TestAccess.set_tile(world, 5, 5, WorldStateType.TILE_ROCK)
 	_command_ok(world, "wall1", "build", {"kind": "wooden_wall", "x": 6, "y": 6})
-	_expect(_reason_of(_command(world, "on_colonist", "build", {"kind": "wooden_wall", "x": 3, "y": 3})) == "invalid_target",
+	_expect(_reason_of(Scenarios.command(world, "on_colonist", "build", {"kind": "wooden_wall", "x": 3, "y": 3})) == "invalid_target",
 		"a colonist's own tile must be rejected invalid_target")
-	_expect(_reason_of(_command(world, "on_tree", "build", {"kind": "wooden_wall", "x": 4, "y": 4})) == "invalid_target",
+	_expect(_reason_of(Scenarios.command(world, "on_tree", "build", {"kind": "wooden_wall", "x": 4, "y": 4})) == "invalid_target",
 		"a tree tile must be rejected invalid_target")
-	_expect(_reason_of(_command(world, "on_rock", "build", {"kind": "wooden_wall", "x": 5, "y": 5})) == "invalid_target",
+	_expect(_reason_of(Scenarios.command(world, "on_rock", "build", {"kind": "wooden_wall", "x": 5, "y": 5})) == "invalid_target",
 		"an impassable rock tile must be rejected invalid_target")
-	_expect(_reason_of(_command(world, "on_site", "build", {"kind": "wooden_wall", "x": 6, "y": 6})) == "invalid_target",
+	_expect(_reason_of(Scenarios.command(world, "on_site", "build", {"kind": "wooden_wall", "x": 6, "y": 6})) == "invalid_target",
 		"a tile another site already claims must be rejected invalid_target")
-	_expect(_reason_of(_command(world, "out_of_bounds", "build", {"kind": "wooden_wall", "x": -1, "y": 0})) == "invalid_target",
+	_expect(_reason_of(Scenarios.command(world, "out_of_bounds", "build", {"kind": "wooden_wall", "x": -1, "y": 0})) == "invalid_target",
 		"an out-of-bounds target must be rejected invalid_target")
 
 func _check_orientation_payload_validated() -> void:
-	var world := _build_world(310400)
-	_expect(_reason_of(_command(world, "bad_orient", "build", {"kind": "wooden_wall", "x": 1, "y": 1, "orientation": "sideways"})) == "invalid_payload",
+	var world := Scenarios.empty_floor_world(310400)
+	_expect(_reason_of(Scenarios.command(world, "bad_orient", "build", {"kind": "wooden_wall", "x": 1, "y": 1, "orientation": "sideways"})) == "invalid_payload",
 		"an unsupported orientation string must be rejected invalid_payload")
 	var result := _command_ok(world, "workbench_v", "build", {"kind": "workbench", "x": 10, "y": 10, "orientation": "vertical"})
 	_expect(result.get("ok", false), "workbench with a valid orientation must be accepted: %s" % result)
@@ -421,34 +406,34 @@ func _check_orientation_payload_validated() -> void:
 ## with no cost) -- an empty build_cost must still read as non-buildable for
 ## a multi-tile kind, not just a [1,1] one.
 func _check_non_buildable_kinds_rejected() -> void:
-	var world := _build_world(310500)
+	var world := Scenarios.empty_floor_world(310500)
 	for kind in ["chair", "table", "berry_bush", "test_footprint_crate"]:
-		var result := _command(world, "nb_%s" % kind, "build", {"kind": kind, "x": 2, "y": 2})
+		var result := Scenarios.command(world, "nb_%s" % kind, "build", {"kind": kind, "x": 2, "y": 2})
 		_expect(_reason_of(result) == "invalid_payload",
 			"%s has no build_cost and must be rejected invalid_payload for build (got %s)" % [kind, result])
 		_expect(world.get_object(2, 2) == "", "(%s) a rejected build command must place nothing" % kind)
 
 func _check_second_order_on_same_footprint_rejected() -> void:
-	var world := _build_world(310600)
+	var world := Scenarios.empty_floor_world(310600)
 	_command_ok(world, "first", "build", {"kind": "door", "x": 8, "y": 8})
-	var result := _command(world, "second", "build", {"kind": "wooden_wall", "x": 8, "y": 8})
+	var result := Scenarios.command(world, "second", "build", {"kind": "wooden_wall", "x": 8, "y": 8})
 	_expect(_reason_of(result) == "invalid_target", "a second order on an already-claimed footprint tile must be rejected invalid_target: %s" % result)
 
 ## Seven walls around (4,4) leaving only the north gap at (4,3) open; the
 ## colonist stands outside at (4,1). Returns the world.
 func _room_with_north_gap(seed_value: int) -> WorldStateType:
-	var world := _build_world(seed_value)
+	var world := Scenarios.empty_floor_world(seed_value)
 	for cell in [Vector2i(3, 3), Vector2i(5, 3), Vector2i(3, 4), Vector2i(5, 4),
 			Vector2i(3, 5), Vector2i(4, 5), Vector2i(5, 5)]:
-		world._object_table.set_object(cell.x, cell.y, "wooden_wall")
+		TestAccess.object_table(world).set_object(cell.x, cell.y, "wooden_wall")
 	return world
 
 ## The enclosure rule (_would_enclose_tiles(), footprint-aware generalization
 ## of the superseded single-tile _would_enclose()) still refuses an impassable
 ## kind that would strand a reachable tile.
 func _check_enclosing_wall_rejected_unreachable() -> void:
-	var world := _build_world(310700)
-	world._colonists.append(_colonist("colonist_0", 5, 5))
+	var world := Scenarios.empty_floor_world(310700)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 5, 5))
 	# A 4x4 room (x=4..7, y=4..7): walls on all four sides except one opening
 	# at (7, 5); closing that last opening would seal the colonist in.
 	for x in range(4, 8):
@@ -457,21 +442,21 @@ func _check_enclosing_wall_rejected_unreachable() -> void:
 	for y in range(5, 7):
 		_command_ok(world, "left_%d" % y, "build", {"kind": "wooden_wall", "x": 4, "y": y})
 	_command_ok(world, "right_6", "build", {"kind": "wooden_wall", "x": 7, "y": 6})
-	var result := _command(world, "seal", "build", {"kind": "wooden_wall", "x": 7, "y": 5})
+	var result := Scenarios.command(world, "seal", "build", {"kind": "wooden_wall", "x": 7, "y": 5})
 	_expect(_reason_of(result) == "blocked_target_unreachable",
 		"sealing the only remaining opening must be rejected blocked_target_unreachable: %s" % result)
 
 	# The same gap must remain a valid target for a kind that never encloses
 	# anything (content/objects.json declares door passable).
-	var world_door := _build_world(310701)
-	world_door._colonists.append(_colonist("colonist_0", 5, 5))
+	var world_door := Scenarios.empty_floor_world(310701)
+	TestAccess.colonists(world_door).append(Scenarios.idle_colonist("colonist_0", 5, 5))
 	for x in range(4, 8):
-		world_door._object_table.set_object(x, 4, "wooden_wall")
-		world_door._object_table.set_object(x, 7, "wooden_wall")
+		TestAccess.object_table(world_door).set_object(x, 4, "wooden_wall")
+		TestAccess.object_table(world_door).set_object(x, 7, "wooden_wall")
 	for y in range(5, 7):
-		world_door._object_table.set_object(4, y, "wooden_wall")
-	world_door._object_table.set_object(7, 6, "wooden_wall")
-	var door_result := _command(world_door, "build_door_in_gap", "build", {"kind": "door", "x": 7, "y": 5})
+		TestAccess.object_table(world_door).set_object(4, y, "wooden_wall")
+	TestAccess.object_table(world_door).set_object(7, 6, "wooden_wall")
+	var door_result := Scenarios.command(world_door, "build_door_in_gap", "build", {"kind": "door", "x": 7, "y": 5})
 	_expect(door_result.get("ok", false), "a passable object (door) must never trigger the enclosure check: %s" % [door_result])
 
 ## A room with two openings: the first wall order (into one opening) is
@@ -479,11 +464,11 @@ func _check_enclosing_wall_rejected_unreachable() -> void:
 ## first, still pending, already counts as blocking.
 func _check_two_pending_openings_reject_the_second_wall() -> void:
 	var world := _room_with_north_gap(310750)
-	world._object_table.set_object(4, 5, "")  # a second opening, south
-	world._colonists.append(_colonist("colonist_0", 4, 1))
-	var north := _command(world, "close_north", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
+	TestAccess.object_table(world).set_object(4, 5, "")  # a second opening, south
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 4, 1))
+	var north := Scenarios.command(world, "close_north", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
 	_expect(north.get("ok", false), "the first of two openings may be walled: %s" % [north])
-	var south := _command(world, "close_south", "build", {"kind": "wooden_wall", "x": 4, "y": 5})
+	var south := Scenarios.command(world, "close_south", "build", {"kind": "wooden_wall", "x": 4, "y": 5})
 	_expect(_reason_of(south) == "blocked_target_unreachable",
 		"the second opening must be refused while the first wall is still pending: %s" % [south])
 
@@ -496,18 +481,18 @@ func _check_enclosure_seen_from_every_colony_component() -> void:
 	# Split the map: a full wall column at x=20 puts colonist_0 (east) in a
 	# component that never contains the room's gap at (4,3).
 	for y in world.get_map_height():
-		world._object_table.set_object(20, y, "wooden_wall")
-	world._colonists.append(_colonist("colonist_0", 30, 30))
-	world._colonists.append(_colonist("colonist_1", 4, 1))
-	var sealed := _command(world, "seal_other_component", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
+		TestAccess.object_table(world).set_object(20, y, "wooden_wall")
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 30, 30))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 4, 1))
+	var sealed := Scenarios.command(world, "seal_other_component", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
 	_expect(_reason_of(sealed) == "blocked_target_unreachable",
 		"an enclosure reachable only by a later colonist must still be refused: %s" % [sealed])
 
 	var trapped_world := _room_with_north_gap(310761)
-	trapped_world._tile_grid.tiles[trapped_world._tile_grid.tile_index(30, 30)] = WorldStateType.TILE_ROCK
-	trapped_world._colonists.append(_colonist("colonist_0", 30, 30))
-	trapped_world._colonists.append(_colonist("colonist_1", 4, 1))
-	var hidden := _command(trapped_world, "seal_with_first_actor_on_rock", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
+	TestAccess.set_tile(trapped_world, 30, 30, WorldStateType.TILE_ROCK)
+	TestAccess.colonists(trapped_world).append(Scenarios.idle_colonist("colonist_0", 30, 30))
+	TestAccess.colonists(trapped_world).append(Scenarios.idle_colonist("colonist_1", 4, 1))
+	var hidden := Scenarios.command(trapped_world, "seal_with_first_actor_on_rock", "build", {"kind": "wooden_wall", "x": 4, "y": 3})
 	_expect(_reason_of(hidden) == "blocked_target_unreachable",
 		"a first actor on an impassable tile must not hide an enclosure seen by another: %s" % [hidden])
 
@@ -516,8 +501,8 @@ func _check_enclosure_seen_from_every_colony_component() -> void:
 ## preview never mutates the world, and that once a site is claimed the same
 ## target previews as claimed too.
 func _check_preview_matches_apply() -> void:
-	var world := _build_world(310800)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(310800)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var preview_ok := world.preview({"actor": "test", "command_id": "p", "tick": world.get_tick(),
 		"type": "build", "payload": {"kind": "wooden_wall", "x": 12, "y": 12}})
 	_expect(bool(preview_ok.get("ok", false)), "preview must accept a valid build target: %s" % preview_ok)
@@ -526,7 +511,7 @@ func _check_preview_matches_apply() -> void:
 		"type": "build", "payload": {"kind": "wooden_wall", "x": 0, "y": 0}})
 	_expect(not bool(preview_bad.get("ok", false)), "preview must reject a build target on a colonist's own tile")
 	_expect(world.state_hash() == hash_before, "preview must never mutate the world")
-	var apply_result := _command(world, "a", "build", {"kind": "wooden_wall", "x": 0, "y": 0})
+	var apply_result := Scenarios.command(world, "a", "build", {"kind": "wooden_wall", "x": 0, "y": 0})
 	_expect(not bool(apply_result.get("ok", false)) and _reason_of(apply_result) == "invalid_target",
 		"apply must reject the same target preview rejected, with the same reason: %s" % apply_result)
 	var applied := _command_ok(world, "apply_valid", "build", {"kind": "wooden_wall", "x": 12, "y": 12})
@@ -539,12 +524,12 @@ func _check_preview_matches_apply() -> void:
 ## while queued: reservations are only acquired once
 ## JobQueue._tick_site_fetch() actually activates the job.
 func _check_queued_site_fetch_holds_no_reservation_until_active() -> void:
-	var world := _build_world(320000)
+	var world := Scenarios.empty_floor_world(320000)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	_expect(not job_id.is_empty(), "setup must produce a site_fetch job")
 	if job_id.is_empty():
 		return
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	if String(_job_by_id(world, job_id).get("status", "")) == "queued":
 		_expect(not table.is_reserved("item:item_1"), "a still-queued site_fetch job must hold no item reservation")
 	var active := false
@@ -563,14 +548,14 @@ func _check_queued_site_fetch_holds_no_reservation_until_active() -> void:
 ## holding no item reservation -- and must run to completion the instant
 ## labour is re-enabled.
 func _check_queued_site_fetch_labour_disabled_holds_no_reservation_then_activates() -> void:
-	var world := _build_world(320100)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320100)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", 0, 0, 1)
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).next_item_id = 2
 	_add_zone(world, "zone_setup", 0, 0, 1, 1)
 	_command_ok(world, "labour_off", "set_labour", {"colonist": "colonist_0", "kind": "build", "level": 0})
 	_command_ok(world, "build_wall", "build", {"kind": "wooden_wall", "x": 0, "y": 10})
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	var job_id := ""
 	for _i in 30:
 		world.tick()
@@ -601,7 +586,7 @@ func _check_queued_site_fetch_labour_disabled_holds_no_reservation_then_activate
 ## untouched throughout: it belongs to the site, not the job, so it neither
 ## drops on suspend nor needs reacquiring on reactivate.
 func _check_suspend_then_reactivate_site_fetch_reacquires_item_reservation() -> void:
-	var world := _build_world(320200)
+	var world := Scenarios.empty_floor_world(320200)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	_expect(not job_id.is_empty(), "setup must produce a site_fetch job")
 	if job_id.is_empty():
@@ -615,17 +600,17 @@ func _check_suspend_then_reactivate_site_fetch_reacquires_item_reservation() -> 
 	_expect(active, "the site_fetch job must activate before this check can proceed")
 	if not active:
 		return
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	_expect(table.is_reserved("item:item_1"), "an active site_fetch job must hold its item reservation")
 	_expect(table.is_reserved("tile:0,10"), "the site's own footprint reservation must be held while its site_fetch job is active")
-	var suspended := world._scheduler.queue.suspend(job_id)
+	var suspended := TestAccess.scheduler(world).queue.suspend(job_id)
 	_expect(suspended.get("ok", false), "suspend must accept an active site_fetch job")
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "queued",
 		"a suspended site_fetch job must return to queued")
 	_expect(not table.is_reserved("item:item_1"), "suspend must release the item reservation")
 	_expect(table.is_reserved("tile:0,10"), "suspending the job must never release the site's own footprint reservation")
 	_assert_no_orphaned_reservations(world, "after site_fetch suspend")
-	var reactivated := world._scheduler.queue.reactivate(job_id)
+	var reactivated := TestAccess.scheduler(world).queue.reactivate(job_id)
 	_expect(reactivated, "reactivate must reacquire an unclaimed site_fetch job's reservation")
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "active",
 		"a reactivated site_fetch job must be active again")
@@ -639,11 +624,11 @@ func _check_suspend_then_reactivate_site_fetch_reacquires_item_reservation() -> 
 ## release_all(), reused unchanged), and place no object -- adapted from the
 ## old single-job suite's _check_cancel_mid_haul_leaks_no_reservation().
 func _check_cancel_mid_fetch_leaks_no_reservation() -> void:
-	var world := _build_world(320050)
+	var world := Scenarios.empty_floor_world(320050)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	if job_id.is_empty():
 		return
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	var caught_mid_walk := _tick_until_carrying_mid_walk(world, Vector2i(0, 0))
 	_expect(caught_mid_walk, "setup must catch the colonist carrying the wood, strictly mid-walk to the build site")
 	if not caught_mid_walk:
@@ -679,18 +664,18 @@ func _check_cancel_mid_fetch_leaks_no_reservation() -> void:
 ## carrier lookup _trap_actor()/_resolve_refused_reservations()/
 ## _resume_interrupted_job() all share.
 func _check_cancel_while_suspended_returns_cargo() -> void:
-	var world := _build_world(320300)
+	var world := Scenarios.empty_floor_world(320300)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	if job_id.is_empty():
 		return
 	if not _tick_until_carrying_mid_walk(world, Vector2i(0, 0)):
 		_fail("setup must catch the colonist carrying the wood mid-walk to the site")
 		return
-	var colonist: Dictionary = world._find_colonist("colonist_0")
-	world._needs_system.interrupt_current_job(colonist)
+	var colonist: Dictionary = TestAccess.find_colonist(world, "colonist_0")
+	TestAccess.needs_system(world).interrupt_current_job(colonist)
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry site_fetch must suspend it back to queued")
-	_expect(world._needs_system.paused_jobs.get("colonist_0") == job_id,
+	_expect(TestAccess.needs_system(world).paused_jobs.get("colonist_0") == job_id,
 		"the interrupt must record the paused site_fetch job for its carrier")
 	_expect(InventoryType.is_carrying(colonist), "a suspended site_fetch's carrier still holds the wood until the job ends")
 	# Stand in for the need job that now drives this colonist: its own
@@ -705,7 +690,7 @@ func _check_cancel_while_suspended_returns_cargo() -> void:
 		"the suspended site_fetch's wood must return to the ground exactly once, at the carrier's tile")
 	_expect(colonist.get("work") != null and colonist["work"]["job_id"] == "need_stand_in",
 		"terminating a suspended site_fetch must not clear the work state now owned by another job")
-	_expect(not world._needs_system.paused_jobs.has("colonist_0"), "a cancelled site_fetch must leave no pause entry behind")
+	_expect(not TestAccess.needs_system(world).paused_jobs.has("colonist_0"), "a cancelled site_fetch must leave no pause entry behind")
 	_assert_no_orphaned_reservations(world, "after cancelling a suspended site_fetch")
 
 ## A suspended site_fetch whose carrier is switched to a non-orderable faction
@@ -714,18 +699,18 @@ func _check_cancel_while_suspended_returns_cargo() -> void:
 ## drop the site_fetch's cargo too, exercising
 ## _resolve_refused_reservations()'s `["haul", "site_fetch"]` carrier lookup.
 func _check_refused_resumption_returns_cargo() -> void:
-	var world := _build_world(320400)
+	var world := Scenarios.empty_floor_world(320400)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	if job_id.is_empty():
 		return
 	if not _tick_until_carrying_mid_walk(world, Vector2i(0, 0)):
 		_fail("setup must catch the colonist carrying the wood mid-walk")
 		return
-	world._needs_system.interrupt_current_job(world.get_colonists()[0])
-	_expect(_command(world, "set_raider_mid_carry", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
+	TestAccess.needs_system(world).interrupt_current_job(world.get_colonists()[0])
+	_expect(Scenarios.command(world, "set_raider_mid_carry", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
 		"set_faction while the site_fetch is suspended mid-carry must be accepted")
-	world._needs_system.resume_interrupted_job("colonist_0")
-	world._resolve_refused_reservations()
+	TestAccess.needs_system(world).resume_interrupted_job("colonist_0")
+	TestAccess.resolve_refused_reservations(world)
 	var job := _job_by_id(world, job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a refused resumption must terminally fail the site_fetch not_ordered_by_player (got %s/%s)" % [job.get("status"), job.get("reason")])
@@ -740,10 +725,10 @@ func _check_refused_resumption_returns_cargo() -> void:
 ## is_carrying() flag) while the fetched wood stays carried, then resume and complete
 ## the site.
 func _check_rest_interrupt_completes_sleep_while_carrying_site_fetch_material() -> void:
-	var world := _build_world(320500)
-	for other in world._need_definitions.keys():
+	var world := Scenarios.empty_floor_world(320500)
+	for other in TestAccess.need_definitions(world).keys():
 		if other != "rest":
-			world._need_definitions[other]["rate_per_day"] = 0
+			TestAccess.need_definitions(world)[other]["rate_per_day"] = 0
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(6, 0))
 	_expect(not job_id.is_empty(), "the site_fetch job must be submitted")
 	if job_id.is_empty():
@@ -761,9 +746,9 @@ func _check_rest_interrupt_completes_sleep_while_carrying_site_fetch_material() 
 	if not at_boundary:
 		return
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_0":
-			world._colonists[i]["needs"]["rest"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
+			TestAccess.colonists(world)[i]["needs"]["rest"] = 5
 
 	var interrupted := false
 	for _i in 60:
@@ -824,7 +809,7 @@ func _check_rest_interrupt_completes_sleep_while_carrying_site_fetch_material() 
 ## the builder off before its site_work toil starts, and the wall must appear
 ## with the builder beside it, never under it.
 func _check_stockpile_on_site_steps_builder_off() -> void:
-	var world := _build_world(320900)
+	var world := Scenarios.empty_floor_world(320900)
 	var site := Vector2i(5, 10)
 	var job_id := _order_site_fetch(world, "wooden_wall", site, site)
 	if job_id.is_empty():
@@ -852,8 +837,8 @@ func _check_stockpile_on_site_steps_builder_off() -> void:
 ## the remainder returns to the ground through the ordinary deposit path
 ## instead of being destroyed with the rest of the stack.
 func _check_stack_larger_than_cost_keeps_remainder() -> void:
-	var world := _build_world(320950)
-	var quantity := int(world._object_definitions["wooden_wall"]["build_cost"][0]["quantity"])
+	var world := Scenarios.empty_floor_world(320950)
+	var quantity := int(TestAccess.object_definitions(world)["wooden_wall"]["build_cost"][0]["quantity"])
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10), Vector2i(0, 0), quantity + 2)
 	if job_id.is_empty():
 		return
@@ -877,10 +862,10 @@ func _check_stack_larger_than_cost_keeps_remainder() -> void:
 ## currently active/queued job id ("" on setup failure).
 func _prime_site_phase(world: WorldStateType, phase: String, site: Vector2i) -> String:
 	for x in range(0, 40):
-		world._object_table.set_object(x, 6, "wooden_wall")
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+		TestAccess.object_table(world).set_object(x, 6, "wooden_wall")
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	_place_item(world, "item_1", "wood", 5, 0)
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).next_item_id = 2
 	_add_zone(world, "zone_setup", 5, 0, 1, 1)
 	if phase == "queued":
 		_command_ok(world, "labour_off", "set_labour", {"colonist": "colonist_0", "kind": "build", "level": 0})
@@ -928,7 +913,7 @@ func _check_save_load_round_trip_preserves_site_state() -> void:
 	var phase_seeds := {"queued": 321001, "hauling": 321002, "carrying": 321003, "searching": 321005, "working": 321004}
 	for phase in ["queued", "hauling", "carrying", "searching", "working"]:
 		var site := Vector2i(5, 10)
-		var source := _build_world(int(phase_seeds[phase]))
+		var source := Scenarios.empty_floor_world(int(phase_seeds[phase]))
 		var job_id := _prime_site_phase(source, phase, site)
 		if job_id.is_empty() or _failed:
 			continue
@@ -971,15 +956,15 @@ func _check_save_load_round_trip_preserves_site_state() -> void:
 ## without it (a same-version save written before construction sites existed)
 ## still validates.
 func _check_save_io_rejects_site_job_missing_site_field() -> void:
-	var world := _build_world(320999)
+	var world := Scenarios.empty_floor_world(320999)
 	var job_id := _order_site_fetch(world, "wooden_wall", Vector2i(0, 10))
 	if job_id.is_empty():
 		return
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 3)] = WorldStateType.TILE_SOIL
+	TestAccess.set_tile(world, 3, 3, WorldStateType.TILE_SOIL)
 	_command_ok(world, "dig_legacy_shape", "dig", {"x": 3, "y": 3, "priority": 1})
 	var state := world.to_save_state()
-	_expect(SaveIOType._validate_state(state).get("ok", false),
-		"a freshly encoded state with a site_fetch job must validate: %s" % [SaveIOType._validate_state(state)])
+	_expect(TestAccess.save_validate_state(state).get("ok", false),
+		"a freshly encoded state with a site_fetch job must validate: %s" % [TestAccess.save_validate_state(state)])
 	var fetch_index := -1
 	var dig_index := -1
 	for i in range(state["jobs"].size()):
@@ -992,20 +977,20 @@ func _check_save_io_rejects_site_job_missing_site_field() -> void:
 		return
 	var no_site: Dictionary = state.duplicate(true)
 	no_site["jobs"][fetch_index]["site"] = null
-	_expect(not SaveIOType._validate_state(no_site).get("ok", true), "a site_fetch job with a null site must be rejected")
+	_expect(not TestAccess.save_validate_state(no_site).get("ok", true), "a site_fetch job with a null site must be rejected")
 	var legacy: Dictionary = state.duplicate(true)
 	legacy["jobs"][dig_index].erase("site")
-	_expect(SaveIOType._validate_state(legacy).get("ok", false),
-		"a non-site job without site (a pre-construction-site save) must still validate: %s" % [SaveIOType._validate_state(legacy)])
+	_expect(TestAccess.save_validate_state(legacy).get("ok", false),
+		"a non-site job without site (a pre-construction-site save) must still validate: %s" % [TestAccess.save_validate_state(legacy)])
 
 ## An in-flight wall order and an in-flight bed order, otherwise identical and
 ## at the same tick, must hash differently -- proving the site's own declared
 ## kind is actually part of state_hash()'s own snapshot, not merely
 ## round-tripped and ignored.
 func _check_wall_and_bed_orders_hash_differently() -> void:
-	var wall_world := _build_world(320970)
+	var wall_world := Scenarios.empty_floor_world(320970)
 	_order_site_fetch(wall_world, "wooden_wall", Vector2i(0, 10))
-	var bed_world := _build_world(320970)
+	var bed_world := Scenarios.empty_floor_world(320970)
 	_order_site_fetch(bed_world, "bed", Vector2i(0, 10))
 	_expect(wall_world.get_tick() == bed_world.get_tick(), "both worlds must be compared at the same tick")
 	_expect(wall_world.state_hash() != bed_world.state_hash(),
@@ -1021,7 +1006,7 @@ func _check_wall_and_bed_orders_hash_differently() -> void:
 ## the site is gone immediately after cancellation, and a replacement order at
 ## the same tile starts its own progress at zero, not the abandoned partial one.
 func _check_cancel_site_mid_work_clears_progress_for_replacement() -> void:
-	var world := _build_world(321100)
+	var world := Scenarios.empty_floor_world(321100)
 	var site := Vector2i(0, 10)
 	var job_id := _order_site_fetch(world, "wooden_wall", site)
 	if job_id.is_empty():
@@ -1062,7 +1047,7 @@ func _check_cancel_site_mid_work_clears_progress_for_replacement() -> void:
 ## must leave it untouched and available to whichever builder ConstructionGiver
 ## next assigns.
 func _check_site_progress_survives_a_refused_builder_resumption() -> void:
-	var world := _build_world(321150)
+	var world := Scenarios.empty_floor_world(321150)
 	var site := Vector2i(0, 10)
 	var job_id := _order_site_fetch(world, "wooden_wall", site)
 	if job_id.is_empty():
@@ -1070,17 +1055,17 @@ func _check_site_progress_survives_a_refused_builder_resumption() -> void:
 	_expect(_tick_until_site_work_active(world), "setup must catch the site's own site_work job in progress")
 	for _i in 3:
 		world.tick()
-	var colonist: Dictionary = world._find_colonist("colonist_0")
+	var colonist: Dictionary = TestAccess.find_colonist(world, "colonist_0")
 	_expect(colonist.get("work") != null, "the builder must still be working a few ticks after starting")
 	var work_job_id := String(colonist["work"].get("job_id", ""))
 	var progress_before := int(world.get_construction_site(site.x, site.y).get("progress", 0))
 	_expect(progress_before > 0, "setup must have recorded genuine progress at the site")
 
-	world._needs_system.interrupt_current_job(colonist)
-	_expect(_command(world, "set_raider_mid_work", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
+	TestAccess.needs_system(world).interrupt_current_job(colonist)
+	_expect(Scenarios.command(world, "set_raider_mid_work", "set_faction", {"target": "colonist_0", "faction_id": "raiders"}).get("ok", false),
 		"set_faction while the builder is suspended mid-work must be accepted")
-	world._needs_system.resume_interrupted_job("colonist_0")
-	world._resolve_refused_reservations()
+	TestAccess.needs_system(world).resume_interrupted_job("colonist_0")
+	TestAccess.resolve_refused_reservations(world)
 	var job := _job_by_id(world, work_job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a refused resumption must terminally fail the site_work job not_ordered_by_player (got %s/%s)" % [job.get("status"), job.get("reason")])
@@ -1107,13 +1092,13 @@ func _check_site_progress_survives_a_refused_builder_resumption() -> void:
 ## site_fetch job then fetches the sole remaining candidate, item_2, and the
 ## site completes.
 func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_rule() -> void:
-	var world := _build_world(320600)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320600)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var site := Vector2i(40, 0)
 	_place_item(world, "item_1", "wood", 1, 0, 3)
 	_place_item(world, "item_2", "stone", 46, 0, 1)
 	_place_item(world, "item_3", "stone", 42, 0, 1)
-	world._item_table.next_item_id = 4
+	TestAccess.item_table(world).next_item_id = 4
 	_add_zone(world, "zone_setup", 0, 0, 48, 3)
 	_command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 
@@ -1125,7 +1110,7 @@ func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_r
 		world.tick()
 		_assert_no_orphaned_reservations(world, "nearest-source/very-close settling")
 		for id in ids:
-			if not seen.has(id) and not world._item_table.items.has(id):
+			if not seen.has(id) and not TestAccess.item_table(world).items.has(id):
 				seen[id] = true
 				order.append(id)
 		if world.get_construction_site(site.x, site.y).is_empty():
@@ -1146,14 +1131,14 @@ func _check_site_fetch_prefers_nearest_reachable_source_and_applies_very_close_r
 ## needed to reach the crate's declared 3, sits at (8,0), just an ordinary
 ## (untied) further source that lets the site actually complete.
 func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
-	var world := _build_world(320700)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320700)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var site := Vector2i(15, 0)
 	_place_item(world, "item_2", "wood", 3, 0, 1)
 	_place_item(world, "item_3", "wood", 0, 3, 1)
 	_place_item(world, "item_4", "wood", 8, 0, 1)
 	_place_item(world, "item_5", "stone", 16, 0, 2)
-	world._item_table.next_item_id = 6
+	TestAccess.item_table(world).next_item_id = 6
 	_add_zone(world, "zone_setup", 0, 0, 16, 4)
 	_command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 
@@ -1165,7 +1150,7 @@ func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
 		world.tick()
 		_assert_no_orphaned_reservations(world, "tie-break settling")
 		for id in ids:
-			if not seen.has(id) and not world._item_table.items.has(id):
+			if not seen.has(id) and not TestAccess.item_table(world).items.has(id):
 				seen[id] = true
 				order.append(id)
 		if world.get_construction_site(site.x, site.y).is_empty():
@@ -1182,28 +1167,28 @@ func _check_site_fetch_route_cost_ties_break_by_lowest_item_id() -> void:
 ## complete, never retargeting onto the geometrically-closer but sealed-off
 ## one.
 func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
-	var world := _build_world(320800)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320800)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var site := Vector2i(10, 5)
 	_place_item(world, "item_1", "wood", 10, 0)
 	_place_item(world, "item_2", "wood", 3, 3)
-	world._item_table.next_item_id = 3
+	TestAccess.item_table(world).next_item_id = 3
 	# Seal item_2 inside a complete wall ring: every perimeter tile of the
 	# 2..4 x 2..4 box is a wall with no gap, so nothing outside can ever
 	# reach (3,3) or step adjacent to it.
 	for x in range(2, 5):
-		world._object_table.set_object(x, 2, "wooden_wall")
-		world._object_table.set_object(x, 4, "wooden_wall")
-	world._object_table.set_object(2, 3, "wooden_wall")
-	world._object_table.set_object(4, 3, "wooden_wall")
+		TestAccess.object_table(world).set_object(x, 2, "wooden_wall")
+		TestAccess.object_table(world).set_object(x, 4, "wooden_wall")
+	TestAccess.object_table(world).set_object(2, 3, "wooden_wall")
+	TestAccess.object_table(world).set_object(4, 3, "wooden_wall")
 	_add_zone(world, "zone_setup", 0, 0, 11, 6)
 	var result := _command_ok(world, "build_wall_behind_obstacle", "build", {"kind": "wooden_wall", "x": site.x, "y": site.y})
 	_expect(result.get("ok", false), "the build order must be accepted")
 	var elapsed := _tick_until_site_gone(world, site, 300)
 	_expect(elapsed > 0,
 		"the wall order must complete by fetching the reachable source (item_1), never getting retargeted onto the geometrically-closer but sealed-off item_2")
-	_expect(not world._item_table.items.has("item_1"), "item_1, the only reachable wood, must be the one consumed")
-	_expect(world._item_table.items.has("item_2"), "item_2, sealed behind the wall ring, must never be visited/consumed")
+	_expect(not TestAccess.item_table(world).items.has("item_1"), "item_1, the only reachable wood, must be the one consumed")
+	_expect(TestAccess.item_table(world).items.has("item_2"), "item_2, sealed behind the wall ring, must never be visited/consumed")
 	_assert_no_orphaned_reservations(world, "after completing behind the obstacle")
 
 ## Carried over from the old single-job suite: cancelling a site_fetch
@@ -1215,15 +1200,15 @@ func _check_route_cost_skips_unreachable_source_behind_a_wall() -> void:
 ## included, swept by the generic release_all()), and leave the deposited
 ## stack immediately available to a completely different colonist.
 func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservations() -> void:
-	var world := _build_world(320850)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.empty_floor_world(320850)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
 	var site := Vector2i(47, 0)
 	_place_item(world, "item_1", "wood", 1, 0)
 	_place_item(world, "item_2", "wood", 5, 0)
 	_place_item(world, "item_3", "wood", 9, 0)
 	_place_item(world, "item_4", "stone", 15, 0)
 	_place_item(world, "item_5", "stone", 19, 0)
-	world._item_table.next_item_id = 6
+	TestAccess.item_table(world).next_item_id = 6
 	_add_zone(world, "zone_setup", 0, 0, 47, 2)
 	var result := _command_ok(world, "build_crate", "build", {"kind": "test_multi_source_crate", "x": site.x, "y": site.y})
 	_expect(result.get("ok", false), "the build order must be accepted")
@@ -1249,26 +1234,26 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 		"setup must catch the colonist strictly between sources, not standing on one (got %s)" % [mid_carry_tile])
 	_expect(not job_id.is_empty(), "setup must capture the in-flight site_fetch job's own id")
 
-	var before_ids := world._item_table.items.keys()
+	var before_ids := TestAccess.item_table(world).items.keys()
 	_command_ok(world, "cancel_multi_fetch", "cancel_job", {"job_id": job_id})
 	_expect(String(_job_by_id(world, job_id).get("status", "")) == "cancelled", "the site_fetch job must be cancelled")
 	var after_colonist := world.get_colonists()[0]
 	_expect(not InventoryType.is_carrying(after_colonist), "the colonist must no longer be carrying anything after cancel")
 
 	var deposited_id := ""
-	for id in world._item_table.items.keys():
+	for id in TestAccess.item_table(world).items.keys():
 		if not (id in before_ids):
 			deposited_id = String(id)
 	_expect(not deposited_id.is_empty(), "cancelling mid-fetch must deposit a fresh ground item")
 	if deposited_id.is_empty():
 		return
-	var deposited: Dictionary = world._item_table.items[deposited_id]
+	var deposited: Dictionary = TestAccess.item_table(world).items[deposited_id]
 	_expect(String(deposited["kind"]) == "wood" and int(deposited["count"]) == 2,
 		"the deposit must carry both already-visited sources' wood in one stack (got %s)" % [deposited])
 	_expect(Vector2i(int(deposited["x"]), int(deposited["y"])) == mid_carry_tile,
 		"the wood must drop on the colonist's exact tile at the moment of cancellation")
 	_assert_no_orphaned_reservations(world, "after cancelling mid multi-source fetch")
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	_expect(not table.is_reserved("item:" + deposited_id), "the freshly deposited item must not be reserved by anything")
 
 	# A different colonist must be able to pick the deposited stack straight
@@ -1277,9 +1262,9 @@ func _check_cancel_mid_multi_source_fetch_deposits_everything_and_frees_reservat
 	# exact, now-unreserved item before this check ever gets to it -- the point
 	# here is that the deposit itself is unreserved and available immediately,
 	# not that it survives untouched for a full tick).
-	world._colonists.append(_colonist("colonist_1", mid_carry_tile.x, mid_carry_tile.y))
-	var colonist_1 := world._find_colonist("colonist_1")
-	var pick_result := world._toils.pick_up(colonist_1, deposited_id)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", mid_carry_tile.x, mid_carry_tile.y))
+	var colonist_1 := TestAccess.find_colonist(world, "colonist_1")
+	var pick_result := TestAccess.toils(world).pick_up(colonist_1, deposited_id)
 	_expect(pick_result.get("ok", false), "a different colonist must be able to pick up the deposited items the next tick: %s" % pick_result)
 	_expect(InventoryType.count_of_kind(colonist_1, "wood") == 2, "the picking-up colonist must receive the full deposited stack")
 
@@ -1322,16 +1307,16 @@ func _check_two_site_orders_disjoint_sources_and_deterministic() -> void:
 ## fetching", ADR 038) or the tick budget runs out (both_done_tick
 ## stays 0, unmet).
 func _run_two_orders_scenario(seed_value: int, two_colonists: bool) -> Dictionary:
-	var world := _build_world(seed_value)
-	world._colonists.append(_colonist("colonist_a", 0, 0))
+	var world := Scenarios.empty_floor_world(seed_value)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_a", 0, 0))
 	if two_colonists:
-		world._colonists.append(_colonist("colonist_b", 2, 0))
+		TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_b", 2, 0))
 	var kinds := {"ia": "wood", "ib": "wood", "ic": "wood", "id": "stone", "ie": "stone",
 		"if": "wood", "ig": "wood", "ih": "wood", "ii": "stone", "ij": "stone"}
 	var xs := {"ia": 5, "ib": 6, "ic": 7, "id": 8, "ie": 9, "if": 10, "ig": 11, "ih": 12, "ii": 13, "ij": 14}
 	for id in kinds.keys():
 		_place_item(world, id, String(kinds[id]), int(xs[id]), 0)
-	world._item_table.next_item_id = 100
+	TestAccess.item_table(world).next_item_id = 100
 	_add_zone(world, "zone_setup", 0, 0, 16, 2)
 	var site_a := Vector2i(0, 20)
 	var site_b := Vector2i(30, 20)
@@ -1363,8 +1348,8 @@ func _run_two_orders_scenario(seed_value: int, two_colonists: bool) -> Dictionar
 		if a_met and b_met:
 			both_done_tick = world.get_tick()
 			break
-	var colonist_a := world._find_colonist("colonist_a")
-	var colonist_b := world._find_colonist("colonist_b") if two_colonists else {}
+	var colonist_a := TestAccess.find_colonist(world, "colonist_a")
+	var colonist_b := TestAccess.find_colonist(world, "colonist_b") if two_colonists else {}
 	return {
 		"both_done_tick": both_done_tick,
 		"colonist_a_hands": InventoryType.hands_snapshot(colonist_a) if not colonist_a.is_empty() else [],

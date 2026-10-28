@@ -61,11 +61,11 @@ func _save_and_read(state: Dictionary, file_name: String) -> Dictionary:
 ## test_rescue.gd's all-floor world with a single colonist ("colonist_0").
 func _fresh_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
@@ -74,11 +74,11 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	return world
 
 func _spawn_colonist(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var colonist: Dictionary = ActorTableType.spawn("colonist", x, y, world._content, id)
+	var colonist: Dictionary = ActorTableType.spawn("colonist", x, y, TestAccess.content(world), id)
 	colonist.erase("carrying")
 	colonist["hands"] = []
 	colonist["factionId"] = "colony"
-	world._append_colonist(colonist)
+	TestAccess.append_colonist(world, colonist)
 	return colonist
 
 func _check_key_codec_round_trips() -> void:
@@ -98,10 +98,10 @@ func _check_key_codec_round_trips() -> void:
 ## the same state_hash().
 func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 	var world := _fresh_world(450001)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
-	var victim: Dictionary = world._colonists[0]
-	var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim["id"]))
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
+	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
+	var victim: Dictionary = TestAccess.colonists(world)[0]
+	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim["id"]))
 	_expect(submit.get("ok", false), "setup: till submission must be accepted")
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -112,10 +112,10 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 	var scoped_key := ""
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
-		var work = world._find_colonist(String(rescuer["id"])).get("work")
+		var work = TestAccess.find_colonist(world, String(rescuer["id"])).get("work")
 		if work == null:
 			continue
-		for key in world._progress_table.progress:
+		for key in TestAccess.progress_table(world).progress:
 			if String(key).contains(":"):
 				scoped_key = String(key)
 		if not scoped_key.is_empty():
@@ -124,7 +124,7 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 	if scoped_key.is_empty():
 		return
 	var scope := String(WorkProgressType.key_parts(scoped_key)["scope"])
-	_expect(String(world._progress_table.owners.get(scoped_key, "")) == scope, "setup: the rescue must own its scoped key")
+	_expect(String(TestAccess.progress_table(world).owners.get(scoped_key, "")) == scope, "setup: the rescue must own its scoped key")
 
 	var state := world.to_save_state()
 	var owner_entry := {}
@@ -140,8 +140,8 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 	if read_state.is_empty():
 		return
 	var loaded: WorldStateType = WorldStateType.from_save_state(read_state)
-	_expect(loaded._progress_table.progress == world._progress_table.progress, "the loaded progress map must be identical")
-	_expect(loaded._progress_table.owners == world._progress_table.owners, "the loaded owners must be identical")
+	_expect(TestAccess.progress_table(loaded).progress == TestAccess.progress_table(world).progress, "the loaded progress map must be identical")
+	_expect(TestAccess.progress_table(loaded).owners == TestAccess.progress_table(world).owners, "the loaded owners must be identical")
 	_expect(loaded.state_hash() == world.state_hash(), "a rescue saved mid-work must load back with an identical state_hash()")
 
 	# The owner must come from the save itself, not from the rescuer's work:
@@ -151,7 +151,7 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 		if String(entity.get("id", "")) == String(rescuer["id"]):
 			entity["work"] = null
 	var from_record: WorldStateType = WorldStateType.from_save_state(without_work)
-	_expect(String(from_record._progress_table.owners.get(scoped_key, "")) == scope,
+	_expect(String(TestAccess.progress_table(from_record).owners.get(scoped_key, "")) == scope,
 		"the persisted owner record alone must restore the scoped key's owner")
 
 func _owners_state(owners: Array) -> Dictionary:
@@ -173,36 +173,36 @@ func _check_owner_validation_allows_two_rescues_on_one_tile() -> void:
 		{"target": tile, "jobId": "job_9", "ownerJobId": "job_9"},
 		{"target": tile, "jobId": "job_11"},
 	])
-	var ok := SaveIOType._validate_state(two_rescues)
+	var ok := TestAccess.save_validate_state(two_rescues)
 	_expect(ok.get("ok", false), "two rescues and a plain owner on one tile must validate: %s" % ok)
 	var duplicate := _owners_state([
 		{"target": tile, "jobId": "job_9", "ownerJobId": "job_9"},
 		{"target": tile, "jobId": "job_9", "ownerJobId": "job_9"},
 	])
-	_expect(not SaveIOType._validate_state(duplicate).get("ok", true), "a duplicate (ownerJobId, target) pair must be rejected")
+	_expect(not TestAccess.save_validate_state(duplicate).get("ok", true), "a duplicate (ownerJobId, target) pair must be rejected")
 	var duplicate_plain := _owners_state([{"target": tile, "jobId": "job_9"}, {"target": tile, "jobId": "job_8"}])
-	_expect(not SaveIOType._validate_state(duplicate_plain).get("ok", true), "a duplicate plain target must still be rejected")
+	_expect(not TestAccess.save_validate_state(duplicate_plain).get("ok", true), "a duplicate plain target must still be rejected")
 	var bad_scope := _owners_state([{"target": tile, "jobId": "job_9", "ownerJobId": "Job 9"}])
-	_expect(not SaveIOType._validate_state(bad_scope).get("ok", true), "an ownerJobId outside the id pattern must be rejected")
+	_expect(not TestAccess.save_validate_state(bad_scope).get("ok", true), "an ownerJobId outside the id pattern must be rejected")
 
 func _check_ground_berries_change_state_hash() -> void:
 	var a := WorldStateType.new(450003, 2)
 	var b := WorldStateType.new(450003, 2)
 	_expect(a.state_hash() == b.state_hash(), "setup: two worlds from one seed must hash equal")
-	b._item_table.spawn_berries_item(3, 3)
+	TestAccess.item_table(b).spawn_berries_item(3, 3)
 	_expect(a.state_hash() != b.state_hash(), "a world with ground berries must not hash equal to one without")
-	a._item_table.spawn_berries_item(3, 3)
+	TestAccess.item_table(a).spawn_berries_item(3, 3)
 	_expect(a.state_hash() == b.state_hash(), "the same ground berries must hash equal")
-	b._item_table.spawn_berries_item(3, 3)
+	TestAccess.item_table(b).spawn_berries_item(3, 3)
 	_expect(a.state_hash() != b.state_hash(), "a different berry count must change state_hash()")
-	b._item_table.consume_ground_berry(3, 3)
+	TestAccess.item_table(b).consume_ground_berry(3, 3)
 	_expect(a.state_hash() == b.state_hash(), "eating back to the same count must hash equal again")
 
 func _check_ground_berry_factions_survive_save_load() -> void:
 	var world := WorldStateType.new(450004, 2)
-	world._item_table.spawn_berries_item(2, 2)
-	world._item_table.spawn_berries_item(5, 1)
-	world._item_table.ground_berries_factions["5_1"] = "wildlife"
+	TestAccess.item_table(world).spawn_berries_item(2, 2)
+	TestAccess.item_table(world).spawn_berries_item(5, 1)
+	TestAccess.item_table(world).ground_berries_factions["5_1"] = "wildlife"
 	var state := world.to_save_state()
 	var read_state := _save_and_read(state, "berry_factions.json")
 	if read_state.is_empty():

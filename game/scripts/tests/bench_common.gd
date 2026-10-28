@@ -74,7 +74,7 @@ static func row(bench_name: String, table: String, case_label: String, values: D
 ## actor. Used to seat N actors around the generated spawn clearing.
 static func passable_tiles_from(world: WorldStateType, origin: Vector2i, count: int) -> Array[Vector2i]:
 	var occupied: Dictionary = {}
-	for actor in world._colonists:
+	for actor in TestAccess.colonists(world):
 		occupied[Vector2i(int(actor["x"]), int(actor["y"]))] = true
 	var result: Array[Vector2i] = []
 	var seen: Dictionary = {origin: true}
@@ -100,16 +100,16 @@ static func passable_tiles_from(world: WorldStateType, origin: Vector2i, count: 
 ## on distinct passable tiles around the spawn clearing.
 static func world_with_colonists(seed_value: int, width: int, height: int, actor_count: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, width, height)
-	var template: Dictionary = world._colonists[0].duplicate(true)
+	var template: Dictionary = TestAccess.colonists(world)[0].duplicate(true)
 	var origin := Vector2i(int(template["x"]), int(template["y"]))
-	world._colonists.clear()
+	TestAccess.colonists(world).clear()
 	var tiles := passable_tiles_from(world, origin, actor_count)
 	for i in tiles.size():
 		var colonist: Dictionary = template.duplicate(true)
 		colonist["id"] = "colonist_%d" % i
 		colonist["x"] = tiles[i].x
 		colonist["y"] = tiles[i].y
-		world._colonists.append(colonist)
+		TestAccess.colonists(world).append(colonist)
 	return world
 
 static func command(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:
@@ -121,7 +121,7 @@ static func command(world: WorldStateType, command_id: String, type: String, pay
 ## tool-free job. Returns the number accepted.
 static func submit_till_orders(world: WorldStateType, count: int) -> int:
 	var prefix := "till_t%d" % world.get_tick()
-	var origin := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var origin := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	var accepted := 0
 	var candidates := passable_tiles_from(world, origin, count * 4 + 64)
 	for tile in candidates:
@@ -140,7 +140,7 @@ static func submit_till_orders(world: WorldStateType, count: int) -> int:
 ## state_hash() against a twin world advanced with the real tick(). Adds the
 ## elapsed microseconds per phase into `totals`.
 static func profiled_tick(world: WorldStateType, totals: Dictionary) -> void:
-	var phases: Array[Callable] = world._tick_pipeline.phases()
+	var phases: Array[Callable] = TestAccess.tick_pipeline(world).phases()
 	var t := Time.get_ticks_usec()
 	for i in phases.size():
 		phases[i].call()

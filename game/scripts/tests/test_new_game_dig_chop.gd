@@ -82,7 +82,7 @@ func _run_and_verify(world, job_type: String, target: Vector2i, expected_tile: S
 		# decay, colonists spend so much time servicing recurring eat/drink/
 		# sleep jobs that an ordinary-priority order can sit queued for
 		# thousands of ticks before ever being picked up.
-		for colonist in world._colonists:
+		for colonist in TestAccess.colonists(world):
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100

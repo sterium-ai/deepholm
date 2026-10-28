@@ -13,6 +13,7 @@ extends SceneTree
 ## _build_lingering_arena()/_draw_lingering_incident() (ADR 034).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 
 const TICK_RATE := 10
@@ -89,19 +90,19 @@ func _expect(condition: bool, message: String) -> void:
 ## that door is reachable only through it.
 func _build_wolf_attack_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
 	for y in range(GUARD_TILE.y, SPAWN_TILE.y + 1):
-		world._tile_grid.tiles[world._tile_grid.tile_index(SPAWN_TILE.x, y)] = WorldStateType.TILE_FLOOR
-	world._object_table.set_object(DOOR_TILE.x, DOOR_TILE.y, "door") # defaults to faction "colony"
-	world._object_table.set_object(GUARD_TILE.x, GUARD_TILE.y, "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
-	var guard := ActorTableType.spawn("colonist", GUARD_TILE.x, GUARD_TILE.y, world._content, GUARD_ID)
+		TestAccess.set_tile(world, SPAWN_TILE.x, y, WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).set_object(DOOR_TILE.x, DOOR_TILE.y, "door") # defaults to faction "colony"
+	TestAccess.object_table(world).set_object(GUARD_TILE.x, GUARD_TILE.y, "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
+	var guard := ActorTableType.spawn("colonist", GUARD_TILE.x, GUARD_TILE.y, TestAccess.content(world), GUARD_ID)
 	guard.erase("carrying")
 	guard["hands"] = []
 	guard["factionId"] = "colony"
-	world._append_colonist(guard)
+	TestAccess.append_colonist(world, guard)
 	return world
 
 ## content/calendar.json's day_length_ticks combined with MIN_DAY: the exact
@@ -110,7 +111,7 @@ func _build_wolf_attack_world(seed_value: int) -> WorldStateType:
 ## day's budgeted draw (calendar_service.gd's day_of_tick(): day 6 covers
 ## ticks [5*day_length_ticks, 6*day_length_ticks)).
 func _day6_tick(world: WorldStateType) -> int:
-	return (MIN_DAY - 1) * int(world._calendar.day_length_ticks())
+	return (MIN_DAY - 1) * int(TestAccess.calendar(world).day_length_ticks())
 
 ## Ticks world up to (but not including) the one world.tick() call in which
 ## the day-6 draw fires, so a caller can bracket exactly that call.
@@ -133,9 +134,9 @@ func _advance_to_eve_of_day6(world: WorldStateType) -> void:
 ## incident_started event's own actor_ids ([] if the draw did not fire).
 func _draw_wolf_attack_naturally_away_from_door(world: WorldStateType) -> Array:
 	_advance_to_eve_of_day6(world)
-	world._object_table.set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "bed")
+	TestAccess.object_table(world).set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "bed")
 	world.tick()
-	world._object_table.set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "")
+	TestAccess.object_table(world).set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "")
 	var events := _incident_started_events(world, "wolf_attack")
 	if events.is_empty():
 		return []
@@ -149,17 +150,11 @@ func _tick_until(world: WorldStateType, predicate: Callable, budget: int) -> int
 	return -1 if not predicate.call(world) else budget
 
 func _in_world(actor_id: String) -> Callable:
-	return func(world: WorldStateType) -> bool: return not world._find_colonist(actor_id).is_empty()
+	return func(world: WorldStateType) -> bool: return not TestAccess.find_colonist(world, actor_id).is_empty()
 
 func _actor_pos(world: WorldStateType, actor_id: String) -> Vector2i:
-	var actor := world._find_colonist(actor_id)
+	var actor := TestAccess.find_colonist(world, actor_id)
 	return Vector2i(int(actor["x"]), int(actor["y"])) if not actor.is_empty() else NO_TILE
-
-func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
-	for job in world.get_jobs():
-		if String(job["id"]) == job_id:
-			return job
-	return {}
 
 func _assignment_job_id(world: WorldStateType, actor_id: String) -> String:
 	return String(world.get_assignments().get(actor_id, {}).get("job_id", ""))
@@ -176,7 +171,7 @@ func _incident_started_events(world: WorldStateType, incident_id: String) -> Arr
 func _check_wolf_attack_content_row() -> void:
 	if _failed: return
 	var world := _build_wolf_attack_world(SEED)
-	var entry: Dictionary = world._content.get_entry("incidents", "wolf_attack")
+	var entry: Dictionary = TestAccess.content(world).get_entry("incidents", "wolf_attack")
 	_expect(not entry.is_empty(), "content/incidents.json must declare a 'wolf_attack' row")
 	if entry.is_empty(): return
 	_expect(int(entry.get("min_day", -1)) == MIN_DAY, "wolf_attack's min_day must be 6, got %s" % entry.get("min_day"))
@@ -195,7 +190,7 @@ func _check_wolf_attack_content_row() -> void:
 func _check_wolf_attack_natural_draw_at_day6() -> void:
 	if _failed: return
 	var world := WorldStateType.new(SEED, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	var day6_tick: int = (MIN_DAY - 1) * int(world._calendar.day_length_ticks())
+	var day6_tick: int = (MIN_DAY - 1) * int(TestAccess.calendar(world).day_length_ticks())
 	while world.get_tick() < day6_tick:
 		world.tick()
 	var events := _incident_started_events(world, "wolf_attack")
@@ -207,7 +202,7 @@ func _check_wolf_attack_natural_draw_at_day6() -> void:
 	var wolf_id := String(actor_ids[0])
 	_expect(_tick_until(world, _in_world(wolf_id), NATURAL_DRAW_ARRIVAL_BUDGET) >= 0,
 		"the naturally-drawn wolf must enter the world once its own incident job activates")
-	var wolf := world._find_colonist(wolf_id)
+	var wolf := TestAccess.find_colonist(world, wolf_id)
 	_expect(String(wolf.get("kind", "")) == "wolf", "the naturally-drawn actor must be a 'wolf'")
 	_expect(String(wolf.get("factionId", "")) == "predators", "the naturally-drawn actor must carry the 'predators' faction")
 
@@ -240,7 +235,7 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 
 	_expect(_tick_until(world, _in_world(wolf_id), ARRIVAL_TICK_BUDGET) >= 0,
 		"the proposed wolf must enter the world once its own incident job activates")
-	var wolf := world._find_colonist(wolf_id)
+	var wolf := TestAccess.find_colonist(world, wolf_id)
 	_expect(String(wolf.get("kind", "")) == "wolf", "wolf_attack must spawn a 'wolf' actor")
 	_expect(String(wolf.get("factionId", "")) == "predators", "a wolf_attack actor must carry the 'predators' faction")
 
@@ -249,7 +244,7 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 	# FAR_CORRIDOR_* tile, genuinely non-adjacent to the door -- everything
 	# after this point is the generic lingering hand-off/approach behaviour,
 	# never a coincidence and never set by this test.
-	var incident_target: Vector2i = _find_job(world, _assignment_job_id(world, wolf_id)).get("target", NO_TILE)
+	var incident_target: Vector2i = Scenarios.find_job(world, _assignment_job_id(world, wolf_id)).get("target", NO_TILE)
 	_expect(incident_target != NO_TILE, "the wolf's own incident job must carry a target")
 	_expect(maxi(absi(incident_target.x - DOOR_TILE.x), absi(incident_target.y - DOOR_TILE.y)) > 1,
 		"the incident's own target (%s) must NOT be adjacent to the door -- the seal in _draw_wolf_attack_naturally_away_from_door() must have worked" % incident_target)
@@ -258,9 +253,9 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 	# target) must run to completion, and the wolf must survive that
 	# completion (spawn.lingers, ADR 034) instead of despawning.
 	var incident_job_id := _assignment_job_id(world, wolf_id)
-	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return String(_find_job(w, incident_job_id).get("status", "")) == "completed", ARRIVAL_TICK_BUDGET) >= 0,
+	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return String(Scenarios.find_job(w, incident_job_id).get("status", "")) == "completed", ARRIVAL_TICK_BUDGET) >= 0,
 		"the wolf's own incident arrival job (walk then wait) must run to completion")
-	_expect(not world._find_colonist(wolf_id).is_empty(), "the wolf must survive its own incident arrival job's completion instead of despawning (spawn.lingers)")
+	_expect(not TestAccess.find_colonist(world, wolf_id).is_empty(), "the wolf must survive its own incident arrival job's completion instead of despawning (spawn.lingers)")
 
 	# Never set by this test: the incident's own spawn choreography, the
 	# lingering hand-off (ADR 034) and the generic approach/attack systems
@@ -287,7 +282,7 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 		attacks += 1
 	_expect(attacks >= 2, "the wolf must damage the door every cooldown, not merely once (got %d attacked_by events)" % attacks)
 
-	var guard := world._find_colonist(GUARD_ID)
+	var guard := TestAccess.find_colonist(world, GUARD_ID)
 	_expect(not guard.is_empty(), "the guard colonist must still be in the world")
 	if not guard.is_empty():
 		var guard_health: Dictionary = guard["health"]
@@ -299,16 +294,16 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 	# direct hp mutation, not a fabricated attacker) -- proving the generic
 	# flee mechanic honours this actor def's own tunable, not that a live
 	# opponent can out-damage a door in this arena.
-	world._find_colonist(wolf_id)["health"]["hp"] = 5
+	TestAccess.find_colonist(world, wolf_id)["health"]["hp"] = 5
 	var fled := false
 	for i in FLEE_TICK_BUDGET:
 		world.tick()
-		if world._combat_giver.owns(wolf_id):
+		if TestAccess.combat_giver(world).owns(wolf_id):
 			fled = true
 			break
 	_expect(fled, "the wolf must start fleeing once its hp fraction drops below its own flee_hp_fraction (0.3)")
 
-	var guard_after := world._find_colonist(GUARD_ID)
+	var guard_after := TestAccess.find_colonist(world, GUARD_ID)
 	if not guard_after.is_empty():
 		var guard_health_after: Dictionary = guard_after["health"]
 		_expect(not bool(guard_health_after.get("dead", false)) and int(guard_health_after["hp"]) == int(guard_health_after["maxHp"]),
@@ -341,8 +336,8 @@ func _check_same_seed_reproduces_identical_hash() -> void:
 		_expect(world_a.state_hash() == world_b.state_hash(),
 			"two runs of the same seed must produce identical state_hash() during the fight (tick %d)" % world_a.get_tick())
 
-	world_a._find_colonist(wolf_id)["health"]["hp"] = 5
-	world_b._find_colonist(wolf_id)["health"]["hp"] = 5
+	TestAccess.find_colonist(world_a, wolf_id)["health"]["hp"] = 5
+	TestAccess.find_colonist(world_b, wolf_id)["health"]["hp"] = 5
 	for i in FLEE_TICK_BUDGET:
 		world_a.tick()
 		world_b.tick()

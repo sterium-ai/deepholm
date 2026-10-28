@@ -3,7 +3,7 @@ extends SceneTree
 ## Architecture-trace test for the "one work engine" rule (AGENTS.md):
 ## 1) every kind content/jobs.json declares is driven to completion purely
 ##    via world.tick(), asserting against ToilExecutor's own execution trace
-##    (world._toils.trace, populated by toil_executor.gd itself) that each
+##    (TestAccess.toils(world).trace, populated by toil_executor.gd itself) that each
 ##    toil the kind's own toils array names was actually entered/completed
 ##    through ToilExecutor -- not inferred after the fact from colonist
 ##    state. "reserve"/"release_all" are not in ToilExecutor's vocabulary (its
@@ -19,14 +19,20 @@ extends SceneTree
 ##    doc comments) plus the read-only surface. tick() is included alongside
 ##    apply() because it is WorldState's other declared mutator and
 ##    scripts/viewer/tick_driver.gd calls it to advance the simulation once
-##    per frame.
+##    per frame;
+## 4) TestAccess (core/world/test_access.gd, R15) is a test-only seam: no other
+##    script under game/scripts outside tests/ names it.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WORLD_STATE_PATH := "res://scripts/core/world_state.gd"
 const TICK_PIPELINE_PATH := "res://scripts/core/world/tick_pipeline.gd"
 const VIEWER_DIR := "res://scripts/viewer"
+const SCRIPTS_DIR := "res://scripts"
+const TESTS_DIR := "res://scripts/tests"
+const TEST_ACCESS_PATH := "res://scripts/core/world/test_access.gd"
 const JOBS_CONTENT_PATH := "res://content/jobs.json"
 
 const MAX_TICKS := 400
@@ -44,6 +50,7 @@ func _init() -> void:
 	_check_single_advance_path()
 	_check_viewer_purity()
 	_check_drop_tool_in_vocabulary()
+	_check_test_access_is_test_only()
 	if _failed:
 		quit(1)
 		return
@@ -87,46 +94,28 @@ func _load_jobs_content() -> Dictionary:
 
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	# A freshly generated world can now place berry_bush objects
 	# (ADR 020); this fixture rebuilds tiles/colonists from scratch
 	# and must clear generator-placed objects the same way, or a stray one
 	# left over from the real (pre-override) terrain could sit on a coordinate
 	# this scenario relies on being free.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
 		"route": null, "work": null, "carrying": null, "held_tool": ""})
 	return world
-
-## Zeroes every need's decay rate except `kind` (or, when `kind` is "", every
-## need's rate), so a scenario's own order/need job is never disturbed by an
-## unrelated need crossing its own threshold and having the need-giver
-## preempt the colonist mid-job -- which would otherwise re-enter go_to/work
-## through their own resume-from-adjacent shortcut (colonist-ai.md 3.6) and
-## break the execution trace's exact per-toil counts.
-func _isolate_need(world: WorldStateType, kind: String) -> void:
-	for other in world._need_definitions.keys():
-		if other != kind:
-			world._need_definitions[other]["rate_per_day"] = 0
 
 func _command(world: WorldStateType, kind: String, payload: Dictionary) -> Dictionary:
 	return world.apply({"actor": "test", "command_id": "%s_%d" % [kind, world.get_events().size()],
 		"tick": world.get_tick(), "type": kind, "payload": payload})
 
-func _jobs_of_kind(world: WorldStateType, kind: String) -> Array[Dictionary]:
-	var jobs: Array[Dictionary] = []
-	for job in world.get_jobs():
-		if String(job["kind"]) == kind:
-			jobs.append(job)
-	return jobs
-
 # --- 1) execution trace ------------------------------------------------------
 
 ## Runs one job-kind scenario to completion, isolating the relevant need (for
-## need-driven kinds) and clearing world._toils.trace right before ticking so
+## need-driven kinds) and clearing TestAccess.toils(world).trace right before ticking so
 ## the trace only reflects this scenario's own execution, then returns the
 ## world plus every job status this kind's job was observed in and whether it
 ## reached "completed".
@@ -134,17 +123,17 @@ func _run_scenario(kind: String, seed_value: int, setup: Callable) -> Dictionary
 	var world := _build_world(seed_value)
 	if NEED_DRIVEN_KINDS.has(kind):
 		var need_kind: String = NEED_DRIVEN_KINDS[kind]
-		_isolate_need(world, need_kind)
-		world._colonists[0]["needs"][need_kind] = 20
+		Scenarios.isolate_need(world, need_kind)
+		TestAccess.colonists(world)[0]["needs"][need_kind] = 20
 	else:
-		_isolate_need(world, "")
+		Scenarios.isolate_need(world, "")
 	setup.call(world)
-	world._toils.clear_trace()
+	TestAccess.toils(world).clear_trace()
 	var statuses: Dictionary = {}
 	var completed := false
 	for _i in MAX_TICKS:
 		world.tick()
-		for job in _jobs_of_kind(world, kind):
+		for job in Scenarios.jobs_of_kind(world, kind):
 			statuses[String(job["status"])] = true
 		if statuses.has("completed"):
 			completed = true
@@ -153,7 +142,7 @@ func _run_scenario(kind: String, seed_value: int, setup: Callable) -> Dictionary
 
 func _trace_count(world: WorldStateType, toil: String, phase: String) -> int:
 	var n := 0
-	for entry in world._toils.trace:
+	for entry in TestAccess.toils(world).trace:
 		if String(entry["toil"]) == toil and String(entry["phase"]) == phase:
 			n += 1
 	return n
@@ -195,12 +184,12 @@ func _verify_trace_against_toils(kind: String, toils: Array, world: WorldStateTy
 		var complete_count := _trace_count(world, toil_name, "complete")
 		_expect(complete_count == count,
 			"%s must execute the %s toil through ToilExecutor exactly %d time(s) (trace shows %d completion(s): %s)"
-				% [kind, toil_name, count, complete_count, world._toils.trace])
+				% [kind, toil_name, count, complete_count, TestAccess.toils(world).trace])
 		if toil_name in ["go_to", "work"]:
 			var enter_count := _trace_count(world, toil_name, "enter")
 			_expect(enter_count == count,
 				"%s must enter the %s toil through ToilExecutor exactly %d time(s) (trace shows %d entrance(s): %s)"
-					% [kind, toil_name, count, enter_count, world._toils.trace])
+					% [kind, toil_name, count, enter_count, TestAccess.toils(world).trace])
 
 func _run_and_verify(kind: String, seed_value: int, setup: Callable) -> void:
 	if not _jobs_content.has(kind):
@@ -219,15 +208,15 @@ func _check_execution_trace() -> void:
 			% [_jobs_content.size(), _jobs_content.keys(), expected_kinds.size(), expected_kinds])
 
 	_run_and_verify("dig", 201001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_SOIL
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
 		world.spawn_ground_tool_item("pick", 0, 0)
 		_expect(_command(world, "dig", {"x": 5, "y": 0, "priority": 1})["ok"], "dig order must be accepted"))
 	_run_and_verify("mine", 201501, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_ROCK
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_ROCK)
 		world.spawn_ground_tool_item("pick", 0, 0)
 		_expect(_command(world, "mine", {"x": 5, "y": 0, "priority": 1})["ok"], "mine order must be accepted"))
 	_run_and_verify("chop", 202001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_TREE
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_TREE)
 		world.spawn_ground_tool_item("axe", 0, 0)
 		_expect(_command(world, "chop", {"x": 5, "y": 0, "priority": 1})["ok"], "chop order must be accepted"))
 	_run_and_verify("forage", 203001, func(world: WorldStateType) -> void:
@@ -237,43 +226,43 @@ func _check_execution_trace() -> void:
 	_run_and_verify("sleep", 204001, func(world: WorldStateType) -> void:
 		_expect(_command(world, "place_object", {"x": 5, "y": 0, "kind": "bed"})["ok"], "bed placement must be accepted"))
 	_run_and_verify("eat_food", 205001, func(world: WorldStateType) -> void:
-		world._item_table.ground_berries["5_0"] = 1)
+		TestAccess.item_table(world).ground_berries["5_0"] = 1)
 	_run_and_verify("drink_water", 206001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_WATER)
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_WATER))
 	_check_haul_execution_trace(207001)
 	_check_construction_execution_trace(207501)
 	_run_and_verify("till", 208001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_SOIL
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
 		_expect(_command(world, "till", {"x": 5, "y": 0, "priority": 1})["ok"], "till order must be accepted"))
 	_run_and_verify("sow", 209001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, 0)] = WorldStateType.TILE_PLOWED_SOIL
-		world._item_table.items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
-		world._item_table.next_item_id = 2
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_PLOWED_SOIL)
+		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
+		TestAccess.item_table(world).next_item_id = 2
 		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
 	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
 	# -- this test proves only that the "incident" kind itself runs through
 	# the ordinary ToilExecutor dispatch once activated/assigned.
 	_run_and_verify("incident", 210001, func(world: WorldStateType) -> void:
-		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, world._content, "arch_wolf")
+		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, TestAccess.content(world), "arch_wolf")
 		wolf["factionId"] = "wildlife"
-		_expect(not world._incidents.propose(wolf, Vector2i(1, 5), 5).is_empty(),
+		_expect(not TestAccess.incidents(world).propose(wolf, Vector2i(1, 5), 5).is_empty(),
 			"incident job submission must be accepted"))
 	# ADR 026 (trench escape): walks a hostile actor into a trench through a
 	# real incident job (setup's own ticking, cleared from the trace by
 	# _run_scenario()'s clear_trace() right after setup returns, below), so
 	# only the escape_trench job's own go_to/work toils are traced.
 	_run_and_verify("escape_trench", 211001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(1, 5)] = WorldStateType.TILE_TRENCH
-		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, world._content, "arch_wolf_trap")
+		TestAccess.set_tile(world, 1, 5, WorldStateType.TILE_TRENCH)
+		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, TestAccess.content(world), "arch_wolf_trap")
 		wolf["factionId"] = "wildlife"
-		_expect(not world._incidents.propose(wolf, Vector2i(1, 5), 5).is_empty(),
+		_expect(not TestAccess.incidents(world).propose(wolf, Vector2i(1, 5), 5).is_empty(),
 			"incident job submission for the trap scenario must be accepted")
 		for _i in 50:
 			world.tick()
-			if world._find_colonist("arch_wolf_trap").get("trapped") != null:
+			if TestAccess.find_colonist(world, "arch_wolf_trap").get("trapped") != null:
 				break
-		_expect(world._find_colonist("arch_wolf_trap").get("trapped") != null,
+		_expect(TestAccess.find_colonist(world, "arch_wolf_trap").get("trapped") != null,
 			"the wolf must be trapped before the escape_trench trace assertions run"))
 	# A combat actor at/below its own flee_hp_fraction gets a
 	# `flee` job from CombatGiver. The hostile actor sits far enough away
@@ -289,40 +278,40 @@ func _check_execution_trace() -> void:
 	# competing `approach` job that would pollute this scenario's own shared
 	# ToilExecutor trace with an unrelated go_to/work pair.
 	_run_and_verify("flee", 212001, func(world: WorldStateType) -> void:
-		world._colonists[0]["health"] = {"hp": 1, "maxHp": 100, "dead": false}
-		var threat: Dictionary = ActorTableType.spawn("trader", 10, 0, world._content, "arch_threat")
+		TestAccess.colonists(world)[0]["health"] = {"hp": 1, "maxHp": 100, "dead": false}
+		var threat: Dictionary = ActorTableType.spawn("trader", 10, 0, TestAccess.content(world), "arch_threat")
 		threat["factionId"] = "raiders"
-		world._append_colonist(threat))
+		TestAccess.append_colonist(world, threat))
 	# ADR 026 (rescue): traps colonist_0 through a real till job's route
 	# (setup's own ticking, cleared from the trace by _run_scenario()'s
 	# clear_trace() right after setup returns), then spawns the rescuer so only
 	# the rescue job's own go_to/work toils are traced.
 	_run_and_verify("rescue", 213001, func(world: WorldStateType) -> void:
-		world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_TRENCH
-		world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
-		var submit := world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "till", "colonist_0")
+		TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
+		TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
+		var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", "colonist_0")
 		_expect(submit.get("ok", false), "setup: till submission for the rescue trap scenario must be accepted")
 		for _i in 50:
 			world.tick()
-			if world._colonists[0].get("trapped") != null:
+			if TestAccess.colonists(world)[0].get("trapped") != null:
 				break
-		_expect(world._colonists[0].get("trapped") != null, "setup: colonist_0 must be trapped before the rescue trace assertions run")
-		var rescuer: Dictionary = ActorTableType.spawn("colonist", 5, 5, world._content, "arch_rescuer")
+		_expect(TestAccess.colonists(world)[0].get("trapped") != null, "setup: colonist_0 must be trapped before the rescue trace assertions run")
+		var rescuer: Dictionary = ActorTableType.spawn("colonist", 5, 5, TestAccess.content(world), "arch_rescuer")
 		rescuer.erase("carrying")
 		rescuer["hands"] = []
 		rescuer["factionId"] = "colony"
-		world._append_colonist(rescuer))
+		TestAccess.append_colonist(world, rescuer))
 	# ADR 033: a hostile actor not adjacent to any hostile
 	# target, and not owned by CombatGiver (full health, never flees), gets
 	# an `approach` job from ApproachGiver -- this test proves only that the
 	# "approach" kind itself runs through the ordinary ToilExecutor dispatch
 	# once submitted/assigned, exactly like "flee"/"incident" already do.
 	_run_and_verify("approach", 214001, func(world: WorldStateType) -> void:
-		var threat: Dictionary = ActorTableType.spawn("colonist", 10, 0, world._content, "arch_approacher")
+		var threat: Dictionary = ActorTableType.spawn("colonist", 10, 0, TestAccess.content(world), "arch_approacher")
 		threat.erase("carrying")
 		threat["hands"] = []
 		threat["factionId"] = "raiders"
-		world._append_colonist(threat))
+		TestAccess.append_colonist(world, threat))
 
 ## haul is the one kind with two go_to legs (reserve, go_to, pick_up, go_to,
 ## place, release_all): _verify_trace_against_toils's per-toil counts already
@@ -338,8 +327,8 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 		return
 	var toils: Array = _jobs_content[kind]
 	var result := _run_scenario(kind, seed_value, func(world: WorldStateType) -> void:
-		world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-		world._item_table.next_item_id = 2
+		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+		TestAccess.item_table(world).next_item_id = 2
 		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted"))
 	var world: WorldStateType = result["world"]
 	_verify_trace_against_toils(kind, toils, world, result["statuses"], result["completed"])
@@ -348,7 +337,7 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 	# item's id may no longer be "item_1" -- only that a wood item still
 	# exists on the ground is checked.
 	var delivered := false
-	for item in world._item_table.items.values():
+	for item in TestAccess.item_table(world).items.values():
 		if String(item["kind"]) == "wood":
 			delivered = true
 	_expect(delivered, "the delivered item must still exist on the ground at its stockpile cell")
@@ -369,14 +358,14 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 			_fail("content/jobs.json does not declare a \"%s\" job kind" % kind)
 			return
 	var world := _build_world(seed_value)
-	_isolate_need(world, "")
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	Scenarios.isolate_need(world, "")
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
 	var build_result := _command(world, "build", {"kind": "wooden_wall", "x": 10, "y": 0})
 	_expect(build_result["ok"], "build order must be accepted")
-	world._toils.clear_trace()
-	# world._toils.trace is one shared buffer across every job/toil in the
+	TestAccess.toils(world).clear_trace()
+	# TestAccess.toils(world).trace is one shared buffer across every job/toil in the
 	# world, unlike _run_scenario()'s own single-kind scenarios above -- so
 	# site_fetch's own trace is verified and cleared the instant it completes,
 	# before site_work's separate trace (a fresh job kind, on the same
@@ -387,13 +376,13 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 	var site_completed := false
 	for _i in MAX_TICKS:
 		world.tick()
-		for job in _jobs_of_kind(world, "site_fetch"):
+		for job in Scenarios.jobs_of_kind(world, "site_fetch"):
 			site_fetch_statuses[String(job["status"])] = true
 		if not fetch_verified and site_fetch_statuses.has("completed"):
 			_verify_trace_against_toils("site_fetch", _jobs_content["site_fetch"], world, site_fetch_statuses, true)
-			world._toils.clear_trace()
+			TestAccess.toils(world).clear_trace()
 			fetch_verified = true
-		for job in _jobs_of_kind(world, "site_work"):
+		for job in Scenarios.jobs_of_kind(world, "site_work"):
 			site_work_statuses[String(job["status"])] = true
 		if world.get_construction_site(10, 0).is_empty():
 			site_completed = true
@@ -401,7 +390,7 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 	_expect(fetch_verified, "site_fetch must complete before the site itself does")
 	_expect(site_completed, "the construction site must complete within the tick budget")
 	_verify_trace_against_toils("site_work", _jobs_content["site_work"], world, site_work_statuses, site_work_statuses.has("completed"))
-	_expect(not world._item_table.items.has("item_1"), "the delivered wood must be consumed by construction, not left on the ground")
+	_expect(not TestAccess.item_table(world).items.has("item_1"), "the delivered wood must be consumed by construction, not left on the ground")
 	_expect(world.get_object(10, 0) == "wooden_wall", "the declared object must appear at the build target")
 
 # --- 2) single per-colonist advance path -------------------------------------
@@ -469,3 +458,30 @@ func _check_viewer_purity() -> void:
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	_expect(scanned > 0, "viewer purity scan must actually inspect at least one script")
+
+# --- 4) TestAccess stays test-only ------------------------------------------------
+
+func _check_test_access_is_test_only() -> void:
+	var scripts: Array[String] = []
+	_collect_scripts(SCRIPTS_DIR, scripts)
+	_expect(scripts.has(TEST_ACCESS_PATH), "the TestAccess scan must see %s itself" % TEST_ACCESS_PATH)
+	for path in scripts:
+		if path == TEST_ACCESS_PATH or path.begins_with(TESTS_DIR + "/"):
+			continue
+		_expect(not _read_text(path).contains("TestAccess"), "%s names TestAccess, which only tests may use" % path)
+
+func _collect_scripts(dir_path: String, out: Array[String]) -> void:
+	var dir := DirAccess.open(dir_path)
+	_expect(dir != null, "could not open %s" % dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name != "":
+		var path := dir_path + "/" + file_name
+		if dir.current_is_dir():
+			_collect_scripts(path, out)
+		elif file_name.ends_with(".gd"):
+			out.append(path)
+		file_name = dir.get_next()
+	dir.list_dir_end()

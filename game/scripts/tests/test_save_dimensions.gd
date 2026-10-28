@@ -181,7 +181,7 @@ func _check_far_edge_order_completes() -> void:
 		# target for exactly this reason -- this check needs a real
 		# long-distance route instead, so it neutralizes need pressure rather
 		# than shortening the distance).
-		for colonist in world._colonists:
+		for colonist in TestAccess.colonists(world):
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100
@@ -219,7 +219,7 @@ func _check_far_edge_order_completes() -> void:
 	# case; this drives `world` the rest of the way if needed).
 	var completion_ticks := 0
 	while completion_ticks < FAR_EDGE_TICK_BUDGET and world.get_tile(target.x, target.y) != "trench":
-		for colonist in world._colonists:
+		for colonist in TestAccess.colonists(world):
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100
@@ -248,11 +248,11 @@ func _carve_land_corridor(world: WorldStateType, from: Vector2i, to: Vector2i) -
 		_clear_land_tile(world, x, y)
 
 func _clear_land_tile(world: WorldStateType, x: int, y: int) -> void:
-	world._tile_grid.tiles[world._tile_grid.tile_index(x, y)] = WorldStateType.TILE_SOIL
-	var key := world._tile_grid.tile_index(x, y)
-	world._object_table.objects.erase(key)
-	world._object_table.object_factions.erase(key)
-	world._tile_grid.reset_cells()
+	TestAccess.set_tile(world, x, y, WorldStateType.TILE_SOIL)
+	var key := TestAccess.tile_grid(world).tile_index(x, y)
+	TestAccess.object_table(world).objects.erase(key)
+	TestAccess.object_table(world).object_factions.erase(key)
+	TestAccess.tile_grid(world).reset_cells()
 
 ## Expanding Chebyshev-ring search for the nearest soil tile to `origin`,
 ## mirroring debug_scenario.gd's own _nearest_matching_tile().
@@ -346,7 +346,7 @@ func _check_small_map_decodes_at_exact_size() -> void:
 		"a 3x2 saved map must decode at its own exact size, not WorldGenerator's 16-tile new-game minimum")
 	_expect(loaded.get_tiles() == (state["map"]["tiles"] as Array),
 		"a 3x2 saved map must decode with exactly its own 6 stored tiles")
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a 3x2 saved map must pass SaveIO validation (no lower bound on restore): %s" % validation.get("message", ""))
 
 ## The largest size WorldGenerator/WorldState ever
@@ -475,10 +475,10 @@ func _check_small_map_service_bounds_and_east_edge_trader_spawn() -> void:
 	var loaded := StateCodecType.decode(state)
 	_expect(loaded.get_map_width() == width and loaded.get_map_height() == height,
 		"an 8x8 saved map must decode at its own exact size")
-	_expect(loaded._need_giver._bounds_max == Vector2i(width - 1, height - 1),
-		"NeedGiver's bounds must be rebuilt at the saved map's own dimensions, not the constructor's 16x16 clamp (got %s)" % [loaded._need_giver._bounds_max])
-	_expect(loaded._incidents._map_width == width and loaded._incidents._map_height == height,
-		"IncidentScheduler's map dimensions must be rebuilt at the saved map's own size, not the constructor's 16x16 clamp (got %dx%d)" % [loaded._incidents._map_width, loaded._incidents._map_height])
+	_expect(TestAccess.need_giver_bounds_max(loaded) == Vector2i(width - 1, height - 1),
+		"NeedGiver's bounds must be rebuilt at the saved map's own dimensions, not the constructor's 16x16 clamp (got %s)" % [TestAccess.need_giver_bounds_max(loaded)])
+	_expect(TestAccess.incident_map_width(loaded) == width and TestAccess.incident_map_height(loaded) == height,
+		"IncidentScheduler's map dimensions must be rebuilt at the saved map's own size, not the constructor's 16x16 clamp (got %dx%d)" % [TestAccess.incident_map_width(loaded), TestAccess.incident_map_height(loaded)])
 
 	loaded.enable_incidents()
 	var result: Dictionary = loaded.apply({
@@ -494,7 +494,7 @@ func _check_small_map_service_bounds_and_east_edge_trader_spawn() -> void:
 	var ticks := 0
 	var actor := {}
 	while ticks < SMALL_MAP_TICK_BUDGET:
-		actor = loaded._find_colonist(actor_id)
+		actor = TestAccess.find_colonist(loaded, actor_id)
 		if not actor.is_empty():
 			break
 		loaded.tick()

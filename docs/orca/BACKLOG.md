@@ -177,12 +177,15 @@ Orca helper scripts, this backlog.
   800 lines.
 - **Non-goals:** changing what is persisted.
 
-### R15 — Test hygiene (after R12) · `todo`
+### R15 — Test hygiene (after R12) · `review (antonelmejor50-hub/r15-test-hygiene-after-r12)`
 
 - **Goal:** tests stop reaching into private fields: each module exposes the small read-only
   test surface it needs (`debug_*` getters or a `TestAccess` helper), tests use it; shared
   scenario builders deduplicated into `tests/support/`; the 3 largest test files split by
   subject; `tools/run_tests.ps1 -Filter` documented per subject in `game/README.md`.
+- **Owned paths (owner decision, 2026-10-28, recorded by the author):** `game/scripts/tests/**`,
+  `game/scripts/core/world/test_access.gd` (new; reads and named setup writes), at most one
+  line in `world_state.gd` (not used), `game/README.md` (named by the goal).
 - **Acceptance:** `git grep "_world\._\|world\._" game/scripts/tests` returns 0; assertion
   count unchanged (quote before/after); suite time not worse than before by more than 5 %.
 

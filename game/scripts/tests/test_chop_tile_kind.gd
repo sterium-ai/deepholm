@@ -39,7 +39,7 @@ func _check_chop_leaves_soil(world_seed: int) -> void:
 	var ticks := 0
 	while ticks < TICK_BUDGET and world.get_tile(tree.x, tree.y) == WorldStateType.TILE_TREE:
 		# Needs topped up so only the chop order runs (see test_new_game_dig_chop.gd).
-		for actor in world._colonists:
+		for actor in TestAccess.colonists(world):
 			for kind in (actor["needs"] as Dictionary).keys():
 				actor["needs"][kind] = 100
 		world.tick()
