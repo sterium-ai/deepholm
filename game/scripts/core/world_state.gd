@@ -514,7 +514,7 @@ func _carrying_view(actor: Dictionary) -> Variant:
 ## The tool-handover overlay only mutates detached duplicates; a non-empty `kinds` keeps only those kinds, costing
 ## only the jobs returned (B1). Retained terminal jobs (A5) are listed unless `retired` is false (state_hash()).
 func get_jobs(kinds: Array = [], retired: bool = true) -> Array[Dictionary]:
-	var jobs := _scheduler.queue.get_jobs(retired) if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds)
+	var jobs := _scheduler.queue.get_jobs(retired) if kinds.is_empty() else _scheduler.queue.get_jobs_of_kinds(kinds, retired)
 	var assignments := _scheduler.get_assignments()
 	for job in jobs:
 		ToolHandoverType.apply(job, assignments, _toils)

@@ -85,6 +85,8 @@ func _check_getters_list_submission_order() -> void:
 	_expect(_ids(queue.get_jobs()) == ids, "get_jobs() must merge live and retired jobs in submission order: %s" % [_ids(queue.get_jobs())])
 	_expect(_ids(queue.get_jobs_of_kinds(["chop"])) == [ids[1], ids[3], ids[5], ids[7]],
 		"get_jobs_of_kinds() must merge the retained jobs of those kinds in order: %s" % [_ids(queue.get_jobs_of_kinds(["chop"]))])
+	_expect(_ids(queue.get_jobs_of_kinds(["chop"], false)) == [ids[3], ids[7]],
+		"get_jobs_of_kinds(kinds, false) must list the live jobs of those kinds only: %s" % [_ids(queue.get_jobs_of_kinds(["chop"], false))])
 	_expect(_ids(queue.view_jobs_of_kinds(["chop", "dig"])) == [ids[0], ids[2], ids[3], ids[4], ids[7]],
 		"view_jobs_of_kinds() must list live jobs only, in order: %s" % [_ids(queue.view_jobs_of_kinds(["chop", "dig"]))])
 

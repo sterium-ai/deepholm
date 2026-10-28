@@ -621,9 +621,9 @@ func get_job(job_id: String) -> Dictionary:
 func get_jobs(include_retired: bool = true) -> Array[Dictionary]:
 	return _history.merged(_jobs, _index.position_of, [], include_retired)
 
-## get_jobs() filtered to `kinds`, costing only the jobs returned.
-func get_jobs_of_kinds(kinds: Array) -> Array[Dictionary]:
-	return _history.merged(_index.of_kinds(_jobs, kinds), _index.position_of, kinds)
+## get_jobs(include_retired) filtered to `kinds`, costing only the jobs returned.
+func get_jobs_of_kinds(kinds: Array, include_retired: bool = true) -> Array[Dictionary]:
+	return _history.merged(_index.of_kinds(_jobs, kinds), _index.position_of, kinds, include_retired)
 
 ## Read-only views for core readers (A5): the records themselves, never mutated. view_job() is
 ## get_job() without the copy; view_jobs_of_kinds() the live jobs of `kinds`, in a fresh array.
