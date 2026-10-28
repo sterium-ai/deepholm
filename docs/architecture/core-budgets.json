@@ -11,8 +11,7 @@
     "game/scripts/core/persistence/save_migrations.gd": {"cap": 1532, "until": "R14"},
     "game/scripts/core/persistence/state_codec.gd": {"cap": 1409, "until": "R14"},
     "game/scripts/core/worldgen/world_generator.gd": {"cap": 1178, "until": "unassigned"},
-    "game/scripts/core/jobs/toil_executor.gd": {"cap": 963, "until": "unassigned"},
-    "game/scripts/core/content/content_registry.gd": {"cap": 826, "until": "unassigned"}
+    "game/scripts/core/jobs/toil_executor.gd": {"cap": 963, "until": "unassigned"}
   },
   "function_exceptions": {
     "game/scripts/core/persistence/save_io.gd::_validate_state": {"cap": 306, "until": "R14"},

@@ -55,6 +55,15 @@ const ERROR_INVALID_JSON := "invalid_json"
 const ERROR_SCHEMA_VIOLATION := "schema_violation"
 const ERROR_DANGLING_REFERENCE := "dangling_reference"
 
+## Content packs (A13, ADR 010 amendment): a pack root is a directory holding
+## PACK_MANIFEST_FILE plus collection-kind files; see _apply_pack_root().
+const PACK_MANIFEST_FILE := "pack.json"
+const PACK_SCHEMA_FILE := "pack.schema.json"
+const PACK_OVERRIDES_FIELD := "overrides"
+
+## Reads and parses content and schema files, keeping JSON's int/float split.
+const ContentJsonType = preload("res://scripts/core/content/content_json.gd")
+
 ## Only used for its static, dependency-free is_known_toil() vocabulary check
 ## (jobs.json declaring a toil ToilExecutor does not implement is exactly the
 ## kind of dangling reference this registry exists to catch); this registry
@@ -83,48 +92,23 @@ var _error: Dictionary = {}
 var _collections: Dictionary = {}
 ## kind -> frozen whole-document Dictionary, for DOCUMENT_KINDS only.
 var _documents: Dictionary = {}
+## Frozen [{id, version}] of the pack roots applied on top of the base, in order.
+var _packs: Array = []
 
-func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAULT_SCHEMA_DIR) -> void:
-	var required_kinds := COLLECTION_KINDS + DOCUMENT_KINDS
-	var discovered_kinds := _discover_content_kinds(content_dir)
-	for kind in required_kinds:
-		if not discovered_kinds.has(kind):
-			_fail(ERROR_MISSING_FILE, "missing content file for kind '%s'" % kind, _join_path(content_dir, "%s.json" % kind))
+func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAULT_SCHEMA_DIR,
+		pack_dirs: Array[String] = []) -> void:
+	var schemas_by_kind: Dictionary = {}
+	var raw_by_kind := _load_base_root(content_dir, schema_dir, schemas_by_kind)
+	if not is_valid():
+		return
+	## Packs apply in the order given, each on top of everything before it
+	## (A13): a later pack may override an entry an earlier pack appended.
+	var applied_packs: Array[Dictionary] = []
+	for pack_dir in pack_dirs:
+		var pack := _apply_pack_root(pack_dir, schema_dir, raw_by_kind, schemas_by_kind, applied_packs)
+		if not is_valid():
 			return
-
-	## Every discovered game/content/*.json file is loaded and validated when
-	## it has a matching game/content/schemas/*.schema.json file -- not just
-	## the fixed COLLECTION_KINDS/DOCUMENT_KINDS list, so a future content
-	## kind added with its schema is never silently skipped. A required kind
-	## missing its schema is a fatal ERROR_MISSING_FILE; a non-required file
-	## with no matching schema is simply not this
-	## registry's concern and is left unread.
-	var raw_by_kind: Dictionary = {}
-	var extra_kinds: Array[String] = []
-	for kind in discovered_kinds:
-		var is_required := required_kinds.has(kind)
-		var content_path := _join_path(content_dir, "%s.json" % kind)
-		var schema_path := _join_path(schema_dir, "%s.schema.json" % kind)
-		if not FileAccess.file_exists(schema_path):
-			if is_required:
-				_fail(ERROR_MISSING_FILE, "missing schema file for kind '%s'" % kind, schema_path)
-				return
-			continue
-		var content_result := _read_json(content_path)
-		if not content_result["ok"]:
-			_fail(ERROR_INVALID_JSON, content_result["message"], content_path)
-			return
-		var schema_result := _read_json(schema_path)
-		if not schema_result["ok"]:
-			_fail(ERROR_INVALID_JSON, schema_result["message"], schema_path)
-			return
-		var validation := _validate_node(content_result["value"], schema_result["value"], kind)
-		if not validation["ok"]:
-			_fail(ERROR_SCHEMA_VIOLATION, validation["message"], content_path)
-			return
-		raw_by_kind[kind] = content_result["value"]
-		if not is_required:
-			extra_kinds.append(kind)
+		applied_packs.append(pack)
 
 	var cross_check := _check_references(raw_by_kind)
 	if not cross_check["ok"]:
@@ -141,12 +125,191 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 		_fail(ERROR_SCHEMA_VIOLATION, actor_tunables_check["message"], actor_tunables_check["file"])
 		return
 
-	for kind in COLLECTION_KINDS:
-		_collections[kind] = _freeze_collection(raw_by_kind[kind], kind)
-	for kind in DOCUMENT_KINDS:
-		_documents[kind] = _freeze_document(raw_by_kind[kind])
-	for kind in extra_kinds:
-		_documents[kind] = _freeze_document(raw_by_kind[kind])
+	for kind: String in raw_by_kind.keys():
+		var raw_document: Variant = raw_by_kind[kind]
+		if COLLECTION_KINDS.has(kind):
+			_collections[kind] = _freeze_collection(raw_document as Dictionary, kind)
+		else:
+			_documents[kind] = _freeze_document(raw_document)
+	_packs = Array(applied_packs)
+	_deep_freeze(_packs)
+
+## Loads the base root: every discovered content_dir/*.json file is loaded and
+## validated when it has a matching schema_dir/*.schema.json file -- not just
+## the fixed COLLECTION_KINDS/DOCUMENT_KINDS list, so a future content kind
+## added with its schema is never silently skipped. A required kind missing
+## its file or schema is a fatal ERROR_MISSING_FILE; a non-required file with
+## no matching schema is simply not this registry's concern and is left
+## unread. A collection kind naming one id twice is a schema_violation (it
+## used to overwrite the earlier entry silently in _freeze_collection()).
+## Each loaded schema is kept in schemas_by_kind for the pack roots.
+func _load_base_root(content_dir: String, schema_dir: String, schemas_by_kind: Dictionary) -> Dictionary:
+	var required_kinds := COLLECTION_KINDS + DOCUMENT_KINDS
+	var discovered_kinds := _discover_content_kinds(content_dir)
+	var raw_by_kind: Dictionary = {}
+	for kind in required_kinds:
+		if not discovered_kinds.has(kind):
+			_fail(ERROR_MISSING_FILE, "missing content file for kind '%s'" % kind, _join_path(content_dir, "%s.json" % kind))
+			return raw_by_kind
+
+	for kind in discovered_kinds:
+		var content_path := _join_path(content_dir, "%s.json" % kind)
+		var schema_path := _join_path(schema_dir, "%s.schema.json" % kind)
+		if not FileAccess.file_exists(schema_path):
+			if required_kinds.has(kind):
+				_fail(ERROR_MISSING_FILE, "missing schema file for kind '%s'" % kind, schema_path)
+				return raw_by_kind
+			continue
+		var content_result := ContentJsonType.read_json(content_path)
+		if not content_result["ok"]:
+			_fail(ERROR_INVALID_JSON, content_result["message"], content_path)
+			return raw_by_kind
+		var schema_result := ContentJsonType.read_json(schema_path)
+		if not schema_result["ok"]:
+			_fail(ERROR_INVALID_JSON, schema_result["message"], schema_path)
+			return raw_by_kind
+		var validation := _validate_node(content_result["value"], schema_result["value"], kind)
+		if not validation["ok"]:
+			_fail(ERROR_SCHEMA_VIOLATION, validation["message"], content_path)
+			return raw_by_kind
+		if COLLECTION_KINDS.has(kind):
+			var collection_entries: Array = content_result["value"][kind]
+			var duplicate := _first_duplicate_id(collection_entries, kind)
+			if not duplicate.is_empty():
+				_fail(ERROR_SCHEMA_VIOLATION, "%s: duplicate id '%s'" % [kind, duplicate], content_path)
+				return raw_by_kind
+		raw_by_kind[kind] = content_result["value"]
+		schemas_by_kind[kind] = schema_result["value"]
+	return raw_by_kind
+
+## Applies one pack root (A13, ADR 010 amendment) to raw_by_kind and returns
+## its {id, version}. A pack root holds PACK_MANIFEST_FILE ({id, version},
+## validated by PACK_SCHEMA_FILE) and any subset of the collection kinds, each
+## file shaped {"<kind>": [new entries], "overrides": [replacement entries]}
+## with both lists optional. A pack file for a document kind or for a kind
+## the base has no schema for is a schema_violation, never silently skipped.
+func _apply_pack_root(pack_dir: String, schema_dir: String, raw_by_kind: Dictionary,
+		schemas_by_kind: Dictionary, packs_so_far: Array[Dictionary]) -> Dictionary:
+	var manifest_path := _join_path(pack_dir, PACK_MANIFEST_FILE)
+	if not FileAccess.file_exists(manifest_path):
+		_fail(ERROR_MISSING_FILE, "content pack has no %s" % PACK_MANIFEST_FILE, manifest_path)
+		return {}
+	var manifest_result := ContentJsonType.read_json(manifest_path)
+	if not manifest_result["ok"]:
+		_fail_with(ERROR_INVALID_JSON, manifest_result, manifest_path)
+		return {}
+	var pack_schema_path := _join_path(schema_dir, PACK_SCHEMA_FILE)
+	var pack_schema_result := ContentJsonType.read_json(pack_schema_path)
+	if not pack_schema_result["ok"]:
+		_fail_with(ERROR_MISSING_FILE, pack_schema_result, pack_schema_path)
+		return {}
+	var pack_schema: Dictionary = pack_schema_result["value"]
+	var manifest_value: Variant = manifest_result["value"]
+	var manifest_check := _validate_node(manifest_value, pack_schema, "pack")
+	if not manifest_check["ok"]:
+		_fail_with(ERROR_SCHEMA_VIOLATION, manifest_check, manifest_path)
+		return {}
+	var manifest: Dictionary = manifest_value
+	var pack_id: String = manifest["id"]
+	var pack_version: String = manifest["version"]
+	for earlier: Dictionary in packs_so_far:
+		if earlier["id"] == pack_id:
+			_fail(ERROR_SCHEMA_VIOLATION, "content pack id '%s' is listed twice" % pack_id, manifest_path)
+			return {}
+
+	for kind in _discover_content_kinds(pack_dir):
+		if kind == PACK_MANIFEST_FILE.get_basename():
+			continue
+		var content_path := _join_path(pack_dir, "%s.json" % kind)
+		if not COLLECTION_KINDS.has(kind) or not schemas_by_kind.has(kind):
+			_fail(ERROR_SCHEMA_VIOLATION, "a content pack may only add to or override a collection kind, not '%s'" % kind, content_path)
+			return {}
+		var content_result := ContentJsonType.read_json(content_path)
+		if not content_result["ok"]:
+			_fail_with(ERROR_INVALID_JSON, content_result, content_path)
+			return {}
+		if typeof(content_result["value"]) != TYPE_DICTIONARY:
+			_fail(ERROR_SCHEMA_VIOLATION, "%s: expected an object" % kind, content_path)
+			return {}
+		var pack_document: Dictionary = content_result["value"]
+		var kind_schema: Dictionary = schemas_by_kind[kind]
+		var base_document: Dictionary = raw_by_kind[kind]
+		var merge := _merge_pack_kind(pack_document, kind, kind_schema, base_document)
+		if not merge["ok"]:
+			var merge_code: String = merge["code"]
+			_fail_with(merge_code, merge, content_path)
+			return {}
+	return {"id": pack_id, "version": pack_version}
+
+## Validates one pack kind file and merges it into base_document[kind] in
+## place. Every entry is checked against the base schema's entry schema. A new
+## entry's id must not exist yet and lands after the existing entries; an
+## override replaces the whole entry with its id, which must exist (else a
+## dangling_reference). An id twice in one pack root (two new entries, two
+## overrides, or one of each) is a schema_violation, like a base duplicate.
+func _merge_pack_kind(pack_document: Dictionary, kind: String, schema: Dictionary, base_document: Dictionary) -> Dictionary:
+	for key: String in pack_document.keys():
+		if key != kind and key != PACK_OVERRIDES_FIELD:
+			return _merge_error(ERROR_SCHEMA_VIOLATION, "%s: unexpected field '%s'" % [kind, key])
+	var kind_property: Dictionary = schema["properties"][kind]
+	var entry_schema: Dictionary = kind_property.get("items", {})
+	var id_field: String = ID_FIELD_BY_KIND[kind]
+	var entries: Array = base_document[kind]
+	var index_by_id: Dictionary = {}
+	for i in entries.size():
+		index_by_id[_entry_id(entries[i] as Dictionary, id_field)] = i
+	var seen_in_root: Dictionary = {}
+	for field: String in [kind, PACK_OVERRIDES_FIELD]:
+		var list_value: Variant = pack_document.get(field, [])
+		if typeof(list_value) != TYPE_ARRAY:
+			return _merge_error(ERROR_SCHEMA_VIOLATION, "%s.%s: expected an array" % [kind, field])
+		var pack_entries: Array = list_value
+		for i in pack_entries.size():
+			var pack_entry: Variant = pack_entries[i]
+			var check := _validate_node(pack_entry, entry_schema, "%s.%s[%d]" % [kind, field, i])
+			if not check["ok"]:
+				var check_message: String = check["message"]
+				return _merge_error(ERROR_SCHEMA_VIOLATION, check_message)
+			var id := _entry_id(pack_entry as Dictionary, id_field)
+			if seen_in_root.has(id):
+				return _merge_error(ERROR_SCHEMA_VIOLATION, "%s: duplicate id '%s'" % [kind, id])
+			seen_in_root[id] = true
+			if field == kind:
+				if index_by_id.has(id):
+					return _merge_error(ERROR_SCHEMA_VIOLATION,
+						"%s: id '%s' already exists; list it under '%s' to replace it" % [kind, id, PACK_OVERRIDES_FIELD])
+				index_by_id[id] = entries.size()
+				entries.append(pack_entry)
+			else:
+				if not index_by_id.has(id):
+					return _merge_error(ERROR_DANGLING_REFERENCE, "%s: override names an unknown id '%s'" % [kind, id])
+				entries[index_by_id[id]] = pack_entry
+	return {"ok": true}
+
+func _merge_error(code: String, message: String) -> Dictionary:
+	return {"ok": false, "code": code, "message": message}
+
+## _fail() with the message of a {ok: false, message} result.
+func _fail_with(code: String, result: Dictionary, file: String) -> void:
+	var message: String = result["message"]
+	_fail(code, message, file)
+
+## An entry's id as a String; entries are schema-validated, so id_field holds one.
+func _entry_id(entry: Dictionary, id_field: String) -> String:
+	var id: String = entry[id_field]
+	return id
+
+## The first id that appears twice in a collection's entry list, or "" when
+## every id is unique.
+func _first_duplicate_id(entries: Array, kind: String) -> String:
+	var id_field: String = ID_FIELD_BY_KIND[kind]
+	var seen: Dictionary = {}
+	for entry: Dictionary in entries:
+		var id := _entry_id(entry, id_field)
+		if seen.has(id):
+			return id
+		seen[id] = true
+	return ""
 
 func is_valid() -> bool:
 	return _error.is_empty()
@@ -187,6 +350,13 @@ func list(kind: String) -> Array:
 func version() -> String:
 	var manifest: Dictionary = _documents.get("manifest", {})
 	return String(manifest.get("version", ""))
+
+## The pack roots applied on top of the base bundle, in load order, as a
+## frozen Array of frozen {id, version} Dictionaries; empty for the base only.
+func packs() -> Array:
+	if _packs.is_read_only():
+		return _packs
+	return _frozen_empty_array()
 
 ## The frozen whole-document Dictionary for a DOCUMENT_KINDS kind (e.g.
 ## "mapgen": rock-vein/hazard/tree/water counts and placement attempts, the
@@ -238,286 +408,15 @@ func _discover_content_kinds(content_dir: String) -> Array[String]:
 	kinds.sort()
 	return kinds
 
-func _read_json(path: String) -> Dictionary:
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		return {"ok": false, "message": "could not open %s" % path}
-	var text := file.get_as_text()
-	file.close()
-	var parsed := _parse_json(text)
-	if not parsed["ok"]:
-		return {"ok": false, "message": "%s: %s" % [path, parsed["message"]]}
-	var value: Variant = parsed["value"]
-	if typeof(value) != TYPE_DICTIONARY and typeof(value) != TYPE_ARRAY:
-		return {"ok": false, "message": "%s did not parse as a JSON object or array" % path}
-	return {"ok": true, "value": value}
-
-## Godot's built-in JSON.parse_string() always returns JSON numbers as
-## TYPE_FLOAT -- verified directly: JSON.parse_string('{"a":1}')'s "a" has
-## typeof() == TYPE_FLOAT, never TYPE_INT, regardless of whether the source
-## literal was "1" or "1.0". That is correct per the JSON spec (which has one
-## "number" type, not separate int/float), but it means the int/float
-## distinction JSON Schema's "integer" type depends on is destroyed before
-## _validate_node ever runs. This hand-rolled recursive-descent parser
-## replaces JSON.parse_string for content/schema files so that distinction
-## survives: a number literal with no '.' and no exponent parses as a
-## GDScript int, everything else as a float.
-func _parse_json(text: String) -> Dictionary:
-	var cursor := _JsonCursor.new(text)
-	var value: Variant = _json_parse_value(cursor)
-	if cursor.failed():
-		return {"ok": false, "message": cursor.error_message}
-	cursor.skip_whitespace()
-	if not cursor.at_end():
-		return {"ok": false, "message": "trailing content after JSON value (at offset %d)" % cursor.pos}
-	return {"ok": true, "value": value}
-
-class _JsonCursor extends RefCounted:
-	var text: String
-	var length: int
-	var pos: int = 0
-	var error_message: String = ""
-
-	func _init(source: String) -> void:
-		text = source
-		length = source.length()
-
-	func failed() -> bool:
-		return not error_message.is_empty()
-
-	func fail(message: String) -> void:
-		if error_message.is_empty():
-			error_message = "%s (at offset %d)" % [message, pos]
-
-	func at_end() -> bool:
-		return pos >= length
-
-	func peek() -> String:
-		if at_end():
-			return ""
-		return text[pos]
-
-	func skip_whitespace() -> void:
-		while not at_end():
-			var c := text[pos]
-			if c == " " or c == "\t" or c == "\n" or c == "\r":
-				pos += 1
-			else:
-				break
-
-func _json_parse_value(c: _JsonCursor):
-	c.skip_whitespace()
-	if c.at_end():
-		c.fail("unexpected end of input")
-		return null
-	var ch := c.peek()
-	if ch == "{":
-		return _json_parse_object(c)
-	if ch == "[":
-		return _json_parse_array(c)
-	if ch == "\"":
-		return _json_parse_string(c)
-	if ch == "t" or ch == "f":
-		return _json_parse_bool(c)
-	if ch == "n":
-		return _json_parse_null(c)
-	if ch == "-" or (ch >= "0" and ch <= "9"):
-		return _json_parse_number(c)
-	c.fail("unexpected character '%s'" % ch)
-	return null
-
-func _json_parse_object(c: _JsonCursor) -> Dictionary:
-	var result := {}
-	c.pos += 1 # consume '{'
-	c.skip_whitespace()
-	if c.peek() == "}":
-		c.pos += 1
-		return result
-	while true:
-		c.skip_whitespace()
-		if c.peek() != "\"":
-			c.fail("expected string key")
-			return result
-		var key := _json_parse_string(c)
-		if c.failed():
-			return result
-		c.skip_whitespace()
-		if c.peek() != ":":
-			c.fail("expected ':' after object key")
-			return result
-		c.pos += 1
-		var value: Variant = _json_parse_value(c)
-		if c.failed():
-			return result
-		result[key] = value
-		c.skip_whitespace()
-		var next := c.peek()
-		if next == ",":
-			c.pos += 1
-			continue
-		if next == "}":
-			c.pos += 1
-			break
-		c.fail("expected ',' or '}' in object")
-		break
-	return result
-
-func _json_parse_array(c: _JsonCursor) -> Array:
-	var result := []
-	c.pos += 1 # consume '['
-	c.skip_whitespace()
-	if c.peek() == "]":
-		c.pos += 1
-		return result
-	while true:
-		var value: Variant = _json_parse_value(c)
-		if c.failed():
-			return result
-		result.append(value)
-		c.skip_whitespace()
-		var next := c.peek()
-		if next == ",":
-			c.pos += 1
-			continue
-		if next == "]":
-			c.pos += 1
-			break
-		c.fail("expected ',' or ']' in array")
-		break
-	return result
-
-func _json_parse_string(c: _JsonCursor) -> String:
-	c.pos += 1 # consume opening quote
-	var out := ""
-	while true:
-		if c.at_end():
-			c.fail("unterminated string")
-			return out
-		var ch := c.text[c.pos]
-		if ch == "\"":
-			c.pos += 1
-			return out
-		if ch == "\\":
-			c.pos += 1
-			if c.at_end():
-				c.fail("unterminated escape sequence")
-				return out
-			var esc := c.text[c.pos]
-			match esc:
-				"\"": out += "\""
-				"\\": out += "\\"
-				"/": out += "/"
-				"b": out += "\b"
-				"f": out += "\f"
-				"n": out += "\n"
-				"r": out += "\r"
-				"t": out += "\t"
-				"u":
-					if c.pos + 4 >= c.length:
-						c.fail("truncated unicode escape")
-						return out
-					var hex := c.text.substr(c.pos + 1, 4)
-					if not _is_hex4(hex):
-						c.fail("invalid unicode escape '\\u%s'" % hex)
-						return out
-					out += char(hex.hex_to_int())
-					c.pos += 4
-				_:
-					c.fail("invalid escape character '%s'" % esc)
-					return out
-			c.pos += 1
-			continue
-		# JSON forbids a raw (unescaped) control character inside a string
-		# literal (RFC 8259 SS7); only an escape may produce one.
-		if ch.unicode_at(0) < 0x20:
-			c.fail("unescaped control character (code %d) in string" % ch.unicode_at(0))
-			return out
-		out += ch
-		c.pos += 1
-	return out
-
-func _is_hex4(s: String) -> bool:
-	if s.length() != 4:
-		return false
-	for i in 4:
-		if not _is_hex_digit(s[i]):
-			return false
-	return true
-
-func _is_hex_digit(ch: String) -> bool:
-	return (ch >= "0" and ch <= "9") or (ch >= "a" and ch <= "f") or (ch >= "A" and ch <= "F")
-
-func _is_digit(ch: String) -> bool:
-	return ch >= "0" and ch <= "9"
-
-## Full RFC 8259 SS6 number grammar, not a lenient superset of it: a leading
-## zero followed by another digit (e.g. "01"), a decimal point with no digit
-## after it (e.g. "1."), and an exponent marker with no digit after it (e.g.
-## "1e") are each rejected rather than silently truncated, since a truncated
-## read here would leave the cursor mid-token and desync every error message
-## and offset that follows.
-func _json_parse_number(c: _JsonCursor):
-	var start := c.pos
-	var is_float := false
-	if c.peek() == "-":
-		c.pos += 1
-	if c.at_end() or not _is_digit(c.text[c.pos]):
-		c.fail("invalid number literal")
-		return 0
-	if c.text[c.pos] == "0":
-		c.pos += 1
-	else:
-		while not c.at_end() and _is_digit(c.text[c.pos]):
-			c.pos += 1
-	if not c.at_end() and c.text[c.pos] == ".":
-		is_float = true
-		c.pos += 1
-		if c.at_end() or not _is_digit(c.text[c.pos]):
-			c.fail("invalid number literal: expected a digit after '.'")
-			return 0
-		while not c.at_end() and _is_digit(c.text[c.pos]):
-			c.pos += 1
-	if not c.at_end() and (c.text[c.pos] == "e" or c.text[c.pos] == "E"):
-		is_float = true
-		c.pos += 1
-		if not c.at_end() and (c.text[c.pos] == "+" or c.text[c.pos] == "-"):
-			c.pos += 1
-		if c.at_end() or not _is_digit(c.text[c.pos]):
-			c.fail("invalid number literal: expected a digit after exponent marker")
-			return 0
-		while not c.at_end() and _is_digit(c.text[c.pos]):
-			c.pos += 1
-	var token := c.text.substr(start, c.pos - start)
-	if is_float:
-		return float(token)
-	return int(token)
-
-func _json_parse_bool(c: _JsonCursor) -> bool:
-	if c.text.substr(c.pos, 4) == "true":
-		c.pos += 4
-		return true
-	if c.text.substr(c.pos, 5) == "false":
-		c.pos += 5
-		return false
-	c.fail("invalid literal")
-	return false
-
-func _json_parse_null(c: _JsonCursor):
-	if c.text.substr(c.pos, 4) == "null":
-		c.pos += 4
-		return null
-	c.fail("invalid literal")
-	return null
-
 ## Minimal JSON Schema subset sufficient for game/content/schemas/*: type,
 ## required, properties, additionalProperties, items, minItems, minLength,
-## minimum. Not a general-purpose validator -- no $ref, oneOf, pattern, etc.
+## minimum, enum (A13: a value must equal one of the listed values, same JSON
+## type). Not a general-purpose validator -- no $ref, oneOf, pattern, etc.
 ## additionalProperties is only ever enforced as a plain boolean false (an
 ## "unexpected field" rejection); a schema-valued additionalProperties (the
 ## standard JSON Schema way to constrain a dynamic-keyed object's values,
-## used by factions.schema.json's "relations") is accepted but not applied --
-## inert in this minimal validator the same way "enum" already is (see
-## docs/decisions/012-actors-and-components.md), never a crash: the
+## used by factions.schema.json's "relations") is accepted but not applied
+## (so the "enum" inside it stays inert), never a crash: the
 ## string-type and enum constraint it would have expressed for
 ## factions.json's "relations" values is instead enforced explicitly in
 ## _check_references(), which is reached for every relations value
@@ -580,7 +479,25 @@ func _validate_node(value, schema: Dictionary, path: String) -> Dictionary:
 		"null":
 			if typeof(value) != TYPE_NIL:
 				return {"ok": false, "message": "%s: expected null" % path}
+	var enum_values: Array = schema.get("enum", [])
+	if schema.has("enum") and not _enum_has(enum_values, value):
+		return {"ok": false, "message": "%s: value %s is not one of %s" % [path, value, schema["enum"]]}
 	return {"ok": true}
+
+## Whether value equals one of options with the same JSON type, so the string
+## "1" never matches the number 1 (ints and floats are both JSON numbers).
+func _enum_has(options: Array, value: Variant) -> bool:
+	var value_is_number := typeof(value) == TYPE_INT or typeof(value) == TYPE_FLOAT
+	for option: Variant in options:
+		var option_is_number := typeof(option) == TYPE_INT or typeof(option) == TYPE_FLOAT
+		if value_is_number and option_is_number:
+			var option_number: float = option
+			var value_number: float = value
+			if option_number == value_number:
+				return true
+		elif typeof(option) == typeof(value) and option == value:
+			return true
+	return false
 
 ## A schema's "type" may be an array of type names (e.g. ["string", "null"]),
 ## standard JSON Schema for "this field is one of several primitive shapes" --

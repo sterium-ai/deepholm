@@ -163,7 +163,9 @@ var _construction_giver: ConstructionGiverType
 var _trade: TradeSystemType
 
 ## incidents_enabled defaults false so every pre-existing caller ticks byte-identically.
-func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_height: int = MAP_HEIGHT, incidents_enabled: bool = false) -> void:
+## content is the session's ContentRegistry (A13: one per session, built by the caller from its pack roots); null builds the base bundle.
+func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_height: int = MAP_HEIGHT, incidents_enabled: bool = false,
+		content: ContentRegistryType = null) -> void:
 	_seed = p_seed
 	_clock = SeededClockType.new(tick_rate)
 	_random = RandomNumberGenerator.new()
@@ -171,7 +173,7 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	# Dig's find_table stream (ADR 026), salted so it never perturbs _random.
 	var dig_find_random := RandomNumberGenerator.new()
 	dig_find_random.seed = p_seed + DIG_FIND_SEED_SALT
-	_content = ContentRegistryType.new()
+	_content = content if content != null else ContentRegistryType.new()
 	if not _content.is_valid():
 		_fail_startup("fatal ContentRegistry startup failure: %s" % _content.get_error())
 		return
