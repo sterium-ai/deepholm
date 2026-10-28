@@ -455,6 +455,16 @@ map, starting roster, items and objects, enabled incidents, calendar), and a new
 that builds a world from one scenario entry. `debug_scenario.gd` becomes the first entry
 (A16).
 
+**Status (A16, [ADR 053](../decisions/053-scenarios-as-content.md)).** `scenarios.json` ships
+two entries: `new_game` (the default New Game) and `debug`, which replaces the old
+`debug_scenario.gd` code.
+- `core/world/scenario_builder.gd` builds a world from either entry, and the New Game dialog
+  picks one.
+- Map size, seed, tick rate, the incident switch, items and objects are scenario fields.
+- The `world._items`/`world._next_item_id` writes moved out of the viewer into the builder's
+  documented bootstrap step.
+- The owner deferred the starting roster, calendar and per-incident list to A16b.
+
 ### 3.7 Localisation and mods or data packs
 
 **Localisation.** The viewer already has a key-based `TextTable` (`viewer/text_table.gd`

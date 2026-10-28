@@ -13,9 +13,8 @@ const MapViewportType = preload("res://scripts/viewer/map_viewport.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
 const AutosaveTriggerType = preload("res://scripts/viewer/autosave_trigger.gd")
 const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
-const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
-const NewGameSetupType = preload("res://scripts/viewer/new_game_setup.gd")
+const ScenarioBuilderType = preload("res://scripts/core/world/scenario_builder.gd")
 const NewGameDialogType = preload("res://scripts/viewer/new_game_dialog.gd")
 const OrderInputType = preload("res://scripts/viewer/order_input.gd")
 const SaveWiringType = preload("res://scripts/viewer/save_wiring.gd")
@@ -85,20 +84,19 @@ func _init() -> void:
 	_need_alerts_label = Label.new()
 	_room_label = Label.new()
 
-## The default boot world is a real New Game at mapgen.json's default size with
-## incidents enabled (only the live viewer wants spawn_incident reachable), never
-## the debug scenario. Pure, so test_viewer_hash.gd can call it directly.
-## content defaults to the session registry; a test passes its own to build on a pack.
-static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: int = 10,
-		content: ContentRegistryType = null) -> WorldStateType:
+## The default boot world is a real New Game: scenarios.json's "new_game" entry (A16,
+## ADR 053) at mapgen.json's default size with incidents enabled (only the live viewer
+## wants spawn_incident reachable), never the debug scenario. Pure, so
+## test_viewer_hash.gd can call it directly. content defaults to the session registry; a
+## test passes its own to build on a pack. tick_rate null keeps the scenario's own rate.
+static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: Variant = null,
+		content: ContentRegistryType = null, scenario_id: String = ScenarioBuilderType.NEW_GAME_SCENARIO_ID) -> WorldStateType:
 	if content == null:
 		content = session_content()
-	var mapgen: Dictionary = content.document("mapgen")
-	var size := WorldGeneratorType.default_new_game_size(mapgen)
-	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content)
-	world.enable_incidents()
-	NewGameSetupType.spawn_starting_items(world, mapgen, world.spawn_ground_tool_item, content)
-	return world
+	var options := {"seed": seed_value}
+	if tick_rate != null:
+		options["tick_rate"] = int(tick_rate)
+	return ScenarioBuilderType.build(content, scenario_id, options)
 
 static func session_content() -> ContentRegistryType:
 	if _session_content == null:
@@ -174,6 +172,7 @@ func _build_ui() -> void:
 	_update_need_alerts_label()
 	_update_active_seed_label()
 	_new_game_confirm = NewGameDialogType.new(_text_table)
+	_new_game_confirm.set_scenarios(session_content().list("scenarios"))
 	_new_game_confirm.confirmed.connect(_on_new_game_confirmed)
 	add_child(_new_game_confirm)
 	_map_viewport.call_deferred("center_colonists")
@@ -273,15 +272,15 @@ func _on_new_game_pressed() -> void:
 		_set_status(refusal)
 
 func _on_new_game_confirmed() -> void:
-	_start_new_game(_new_game_confirm.pending_seed)
+	_start_new_game(_new_game_confirm.pending_seed, _new_game_confirm.pending_scenario_id)
 
 ## Explicit opt-in to DebugScenario's seeded diagnostic world; never the default.
 func _on_debug_scenario_pressed() -> void:
-	_swap_in_unsaved_world(DebugScenarioType.build(DebugScenarioType.SCENARIO_SEED, DebugScenarioType.TICK_RATE, true),
-		_text_table.format("status.debug_scenario_started", [DebugScenarioType.SCENARIO_SEED]))
+	var debug_world := DebugScenarioType.build(null, null, true, session_content())
+	_swap_in_unsaved_world(debug_world, _text_table.format("status.debug_scenario_started", [debug_world.get_seed()]))
 
-func _start_new_game(seed_value: int) -> void:
-	var new_world := build_default_world(seed_value, 10)
+func _start_new_game(seed_value: int, scenario_id: String = ScenarioBuilderType.NEW_GAME_SCENARIO_ID) -> void:
+	var new_world := build_default_world(seed_value, null, null, scenario_id)
 	_swap_in_unsaved_world(new_world, _text_table.format("status.new_game_started", [seed_value, new_world.get_map_width(), new_world.get_map_height()]))
 
 ## Swaps in a fresh colony like Load does, never touching the previous save.

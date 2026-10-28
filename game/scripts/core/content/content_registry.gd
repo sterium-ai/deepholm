@@ -28,7 +28,15 @@ const DEFAULT_SCHEMA_DIR := "res://content/schemas/"
 ## frozen but not exposed through get()/list().
 const COLLECTION_KINDS: Array[String] = ["jobs", "needs", "objects", "items", "tiles", "actors", "factions", "incidents"]
 const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
-const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id"}
+## A16 (ADR 053): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
+const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios"]
+const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id"}
+## The fields each scenario setup step (world/scenario_builder.gd) reads besides step/when.
+const SCENARIO_STEP_FIELDS := {
+	"needed_tools": [], "per_colonist_objects": ["kind"], "object_rows": ["seed_offset", "rows"],
+	"dig_orders": ["count", "seed_offset", "priority"], "till_plot": ["search_radius", "tick_budget"],
+	"ground_items": ["kind", "count", "search_radius"],
+}
 
 ## Compile-time mirror of content/tiles.json ids and content/mapgen.json's
 ## colonist_count field: the only literal source for values many tests and
@@ -125,9 +133,14 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 		_fail(ERROR_SCHEMA_VIOLATION, actor_tunables_check["message"], actor_tunables_check["file"])
 		return
 
+	var scenario_check := _check_scenarios(raw_by_kind)
+	if not scenario_check["ok"]:
+		_fail("%s" % scenario_check["code"], "%s" % scenario_check["message"], "scenarios.json")
+		return
+
 	for kind: String in raw_by_kind.keys():
 		var raw_document: Variant = raw_by_kind[kind]
-		if COLLECTION_KINDS.has(kind):
+		if _is_collection_kind(kind):
 			_collections[kind] = _freeze_collection(raw_document as Dictionary, kind)
 		else:
 			_documents[kind] = _freeze_document(raw_document)
@@ -172,7 +185,7 @@ func _load_base_root(content_dir: String, schema_dir: String, schemas_by_kind: D
 		if not validation["ok"]:
 			_fail(ERROR_SCHEMA_VIOLATION, validation["message"], content_path)
 			return raw_by_kind
-		if COLLECTION_KINDS.has(kind):
+		if _is_collection_kind(kind):
 			var collection_entries: Array = content_result["value"][kind]
 			var duplicate := _first_duplicate_id(collection_entries, kind)
 			if not duplicate.is_empty():
@@ -221,7 +234,7 @@ func _apply_pack_root(pack_dir: String, schema_dir: String, raw_by_kind: Diction
 		if kind == PACK_MANIFEST_FILE.get_basename():
 			continue
 		var content_path := _join_path(pack_dir, "%s.json" % kind)
-		if not COLLECTION_KINDS.has(kind) or not schemas_by_kind.has(kind):
+		if not _is_collection_kind(kind) or not schemas_by_kind.has(kind):
 			_fail(ERROR_SCHEMA_VIOLATION, "a content pack may only add to or override a collection kind, not '%s'" % kind, content_path)
 			return {}
 		var content_result := ContentJsonType.read_json(content_path)
@@ -700,6 +713,52 @@ func _check_actor_component_tunables(raw_by_kind: Dictionary) -> Dictionary:
 					"message": "actor '%s' component '%s' has invalid tunables %s"
 						% [actor_id, component_name, component_tunables]}
 	return {"ok": true}
+
+## A16 (ADR 053): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
+## no per-variant lists), "when" needs the scenario's seed, every named object/item exists, and
+## ground_items never names a tool (tools live in ToolItemStore, not the stackable item table).
+func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
+	if not raw_by_kind.has("scenarios"):
+		return {"ok": true}
+	var known: Dictionary = {}
+	for entry: Dictionary in (raw_by_kind["objects"]["objects"] as Array):
+		known["object:%s" % entry["kind"]] = true
+	for entry: Dictionary in (raw_by_kind["items"]["items"] as Array):
+		known["item:%s" % entry["id"]] = entry.get("kind", "")
+	for scenario: Dictionary in (raw_by_kind["scenarios"]["scenarios"] as Array):
+		for step: Dictionary in (scenario["setup"] as Array):
+			var where := "scenario '%s' step '%s'" % [scenario["id"], step["step"]]
+			var fields: Array = (SCENARIO_STEP_FIELDS[step["step"]] as Array).duplicate()
+			var present := step.keys().filter(func(field: Variant) -> bool: return not field in ["step", "when"])
+			fields.sort()
+			present.sort()
+			if present != fields:
+				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s must carry exactly the fields %s, got %s" % [where, fields, present]}
+			if step.has("when") and not scenario.has("seed"):
+				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s uses 'when' but the scenario has no seed" % where}
+			for ref: String in _scenario_step_refs(step):
+				if not known.has(ref):
+					return {"ok": false, "code": ERROR_DANGLING_REFERENCE, "message": "%s names an unknown %s" % [where, ref.replace(":", " kind '") + "'"]}
+			if step["step"] == "ground_items" and known["item:%s" % step["kind"]] == "tool":
+				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s names tool item '%s'; tools are placed by needed_tools" % [where, step["kind"]]}
+	return {"ok": true}
+
+## The "object:<kind>"/"item:<id>" references one scenario setup step makes.
+func _scenario_step_refs(step: Dictionary) -> Array[String]:
+	var refs: Array[String] = []
+	if step["step"] == "per_colonist_objects":
+		refs.append("object:%s" % step["kind"])
+	elif step["step"] == "ground_items":
+		refs.append("item:%s" % step["kind"])
+	for row: Dictionary in (step.get("rows", []) as Array):
+		if row.has("door"):
+			refs.append("object:%s" % row["door"])
+		for entry: Dictionary in (row["objects"] as Array):
+			refs.append("object:%s" % entry["kind"])
+	return refs
+
+func _is_collection_kind(kind: String) -> bool:
+	return COLLECTION_KINDS.has(kind) or OPTIONAL_COLLECTION_KINDS.has(kind)
 
 func _freeze_collection(document: Dictionary, kind: String) -> Dictionary:
 	var id_field: String = ID_FIELD_BY_KIND[kind]

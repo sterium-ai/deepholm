@@ -179,6 +179,8 @@
   "new_game.title": "New Game",
   "new_game.seed_invalid": "Seed must be a whole number, or blank for a random one.",
   "new_game.confirm_text": "Start a new game with seed %d? Your last save is kept until you press Save.",
+  "scenario.new_game": "New game",
+  "scenario.debug": "Debug scenario",
 
   "status.debug_scenario_started": "Debug scenario: seed %d.",
   "status.new_game_started": "New game: seed %d (%dx%d).",

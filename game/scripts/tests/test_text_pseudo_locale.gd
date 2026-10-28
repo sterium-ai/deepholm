@@ -8,6 +8,7 @@ extends SceneTree
 ##    locale with no file at all;
 ## 2) every key the game can ask for resolves: key literals in the viewer,
 ##    content labels (tiles.json display.label, calendar.json window labels,
+##    scenarios.json labels (A16),
 ##    read through the session ContentRegistry), the per-kind families the
 ##    viewer builds ("status.job.<kind>", "status.need.<kind>", ...), and every
 ##    command rejection reason, detail and remedy the core can return, read
@@ -165,6 +166,10 @@ func _add_content_labels(keys: Dictionary) -> void:
 	_expect(not windows.is_empty(), "the session registry must hold calendar windows")
 	for window in windows:
 		keys[String(window["label"])] = "calendar.json %s" % window["id"]
+	var scenarios := content.list("scenarios")
+	_expect(not scenarios.is_empty(), "the session registry must list scenarios")
+	for scenario in scenarios:
+		keys[String(scenario["label"])] = "scenarios.json %s" % scenario["id"]
 
 func _add_viewer_families(keys: Dictionary) -> void:
 	var content := BootType.session_content()

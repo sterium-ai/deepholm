@@ -720,7 +720,7 @@ one.
   `test_viewer_text_lint.gd` and `test_text_pseudo_locale.gd`; [ADR 052](../decisions/052-localisation-ready-text.md).
   See `docs/orca/handoffs/A15.md`.
 
-#### A16 — Scenarios as content · `todo` · after R12
+#### A16 — Scenarios as content · `review (antonelmejor50-hub/a16-scenarios-as-content)` · after R12
 
 - **Goal:** a `scenarios.json` kind with a schema (map size, seed or fixed map, starting
   roster, items and objects, enabled incidents, calendar). New game builds a world from a
@@ -731,6 +731,37 @@ one.
 - **Acceptance:** two scenarios build headless with deterministic `state_hash()`; the default
   new game is byte-identical to today's.
 - **Non-goals:** win/lose conditions (A17); a campaign.
+- **Owner (2026-10-28, in the A16 terminal):**
+  - Scope extension: `boot.gd` and `viewer/new_game_setup.gd` may change, so the New Game
+    delegates to the scenario builder ("Permitir delegación mínima").
+  - Reduced scope after review round 1 ("Aprobar alcance reducido"): the per-scenario starting
+    roster, calendar and per-incident enable list are deferred to A16b. Each needs a new
+    construction parameter outside A16's owned paths.
+  - Review round 2, scope extension ("Aprobar las dos claves"): `game/data/text/en.json` gets
+    the scenario label keys `scenario.new_game` and `scenario.debug`, and
+    `test_text_pseudo_locale.gd` collects scenario labels. This follows A15's rule that content
+    labels are text keys.
+
+#### A16b — Scenario roster, calendar and incident list · `todo` · after A16
+
+- **Goal:** the three scenario fields A16 deferred (ADR 053, "Consequences"):
+  - a starting roster: the colonist count, and optionally per-colonist definitions;
+  - a calendar: a scenario-specific `calendar` document over `calendar.json`;
+  - an enabled-incident list: a subset of `incidents.json` ids instead of the on/off switch.
+
+  Each becomes a `scenarios.schema.json` field that `ScenarioBuilder` passes to the world at
+  construction.
+- **Owned paths:** `content/scenarios.json` and schema, `world/scenario_builder.gd`,
+  `content_registry.gd` (cross-checks), the construction parameters these need in
+  `world_state.gd`, `worldgen/world_seeding.gd`/`world_generator.gd` (colonist count) and
+  `incidents/incident_scheduler.gd` (enabled ids), an ADR, tests.
+- **Acceptance:** a scenario with 5 colonists, its own calendar windows and one enabled
+  incident builds headless with a deterministic `state_hash()`; the default New Game and the
+  `debug` entry stay byte-identical (the A16 probe `docs/orca/handoffs/A16-scenario_dump.gd`);
+  full suite green.
+- **Non-goals:** win/lose conditions (A17); a campaign; new setup steps.
+- **Note:** `world_state.gd` is at 800 of 800 lines (since A5). Make room first, by moving code out
+  rather than raising the cap.
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

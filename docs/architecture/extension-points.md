@@ -231,6 +231,50 @@ boundaries and are not a separate extension point.
   `_apply_construction_submission()`/`ConstructionGiver`/`ConstructionSiteTable` already
   generalize over every `build_cost`-bearing kind.
 
+## Scenario
+
+- Files: add an entry to `game/content/scenarios.json`, validated against
+  `game/content/schemas/scenarios.schema.json`. An entry is `{id, label, seed?, map?, tick_rate,
+  incidents_enabled, setup}`:
+  - `label` is a `data/text` key, added to `game/data/text/en.json`.
+  - With no `seed`, the New Game dialog's seed is used. With no `map`, `mapgen.json`'s default
+    New Game size is used.
+  - `setup` is an ordered list of steps from a closed vocabulary: `needed_tools`,
+    `per_colonist_objects`, `object_rows`, `dig_orders`, `till_plot` and `ground_items`. A step
+    may add `"when": "scenario_seed"` to run only on the scenario's own seed.
+
+  `ContentRegistry` loads `scenarios` as an optional collection kind, so a content pack may add
+  or override a scenario. It checks that each step carries exactly the fields
+  `SCENARIO_STEP_FIELDS` lists for it (`schema_violation`), and that every object or item kind a
+  step names is declared (`dangling_reference`). A `ground_items` step may not name a tool item
+  (`schema_violation`): tools are placed by `needed_tools`, through `ToolItemStore`.
+
+  `ScenarioBuilder.build(content, id, options)` (`game/scripts/core/world/scenario_builder.gd`)
+  builds the world. It is a caller-side factory that drives the new world only through
+  `apply()`/`tick()`, the getters and `spawn_ground_tool_item()`. The spawn-pool steps
+  (`needed_tools`, `per_colonist_objects`) share one cursor, so no two of them place on the same
+  tile. `boot.gd` builds a New Game from the scenario the New Game dialog picked, at that
+  scenario's own tick rate.
+
+  A start that needs a new kind of placement is a new step: one branch in
+  `ScenarioBuilder._run_step()`, its fields in `ContentRegistry.SCENARIO_STEP_FIELDS`, and a
+  value in the schema's `step` enum. It is not code in the viewer. A step drives the world
+  through commands and ticks, never by writing state, except for the two bootstrap writes that
+  [ADR 053](../decisions/053-scenarios-as-content.md) records.
+
+  Not yet scenario fields, because they need a construction parameter first (backlog A16b):
+  - a per-scenario starting roster (the colonist count is `mapgen.json`'s `colonist_count`);
+  - a per-scenario calendar;
+  - a per-incident enable list.
+- Test: extend `test_scenarios.gd`, which builds the shipped scenarios and pack-added ones
+  headless, checks `state_hash()` determinism, the registry's typed errors and the New Game
+  dialog path. For a byte-identity claim against `main`, use the A16 probe
+  (`docs/orca/handoffs/A16-scenario_dump.gd`).
+- Example: the default New Game is the `new_game` entry: `needed_tools`, then one bed per
+  colonist. The old debug viewer world is the `debug` entry: a 48×48 map on seed 20260915, rows
+  of walls, a door, furniture, a berry bush and a bed, 24 dig orders, then a tilled plot and a
+  seed stock on its own seed only. Both are content, with no per-scenario code.
+
 ## Story rule
 
 *Accepted in [ADR 046](../decisions/046-story-layer.md) (2026-10-27); not implemented yet. Until its code
