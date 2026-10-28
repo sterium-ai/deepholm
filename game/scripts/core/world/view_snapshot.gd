@@ -1,6 +1,6 @@
 extends RefCounted
 
-## The viewer's one read-only snapshot per refresh (A9, ADR 054), built by
+## The viewer's one read-only snapshot per refresh (A9, ADR 055), built by
 ## WorldState.get_view_snapshot(detail_ids). It replaces the several deep-copying
 ## getters each panel and layer used to call every tick (get_colonists() alone copied
 ## every actor three to five times per tick). Copying every actor once is still too

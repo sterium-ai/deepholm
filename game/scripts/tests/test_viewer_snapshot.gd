@@ -1,6 +1,6 @@
 extends SceneTree
 
-## A9 (ADR 054): WorldState.get_view_snapshot() and the viewer that reads it.
+## A9 (ADR 055): WorldState.get_view_snapshot() and the viewer that reads it.
 ## 1) the snapshot agrees with the getters it replaces (get_colonists(),
 ##    get_actors_with_health(), get_job(), get_colonist_need_reason(), ...), is
 ##    read-only all the way down, and is a copy: ticking the world never changes it;

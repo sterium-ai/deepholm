@@ -495,7 +495,7 @@ func get_colonists() -> Array[Dictionary]:
 	for actor: Dictionary in _worker_view():
 		copy.append(ViewSnapshotType.actor_copy(actor))
 	return copy
-## A9 (ADR 054): the viewer's one read-only snapshot per refresh (view_snapshot.gd), with the full
+## A9 (ADR 055): the viewer's one read-only snapshot per refresh (view_snapshot.gd), with the full
 ## record of only the `detail_ids` workers, in place of its several deep-copying getters.
 func get_view_snapshot(detail_ids: Array = []) -> Dictionary:
 	return ViewSnapshotType.build(_clock.tick, _colonists, _content, {"job_kinds": _scheduler.queue.get_job_kinds(),

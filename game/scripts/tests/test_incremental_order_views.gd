@@ -304,7 +304,7 @@ func _check_stockpile_cells() -> void:
 	view.set_world(world)
 	_apply(world, "zone_add", {"x": 20, "y": 20, "width": 6, "height": 4})
 	_apply(world, "zone_add", {"x": 2, "y": 40, "width": 3, "height": 3})
-	# The map draws from the view snapshot of its last refresh() (A9, ADR 054); these
+	# The map draws from the view snapshot of its last refresh() (A9, ADR 055); these
 	# commands bypassed the map, so refresh it as boot.gd does after every command.
 	view.refresh()
 	var counts := {}

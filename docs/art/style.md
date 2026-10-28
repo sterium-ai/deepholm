@@ -71,7 +71,7 @@ size and cell layout without touching simulation or viewer logic.
 ## Colonist frames, timing and grounding
 
 Colonists use **64x64 px source frames**. `TILE_SIZE` stays **16 px**. The
-art-mode renderer (one batched `_draw()` per layer since A9, ADR 054) uses a
+art-mode renderer (one batched `_draw()` per layer since A9, ADR 055) uses a
 **uniform 1.0 (native) scale** on both axes; never stretch non-uniformly.
 
 Each 64x64 frame carries a consistent empty margin around the silhouette,

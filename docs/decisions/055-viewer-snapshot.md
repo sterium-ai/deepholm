@@ -1,4 +1,4 @@
-# ADR 054: One read-only view snapshot per viewer refresh
+# ADR 055: One read-only view snapshot per viewer refresh
 
 > **In short:** The viewer now reads the world once per refresh, through
 > `WorldState.get_view_snapshot(detail_ids)`, instead of calling a handful of getters that
@@ -76,7 +76,7 @@ write in the viewer and `boot.gd`.
 
 ## Consequences
 
-- The per-tick viewer refresh at 1,000 actors drops from about 415 ms to about 3.6 ms
+- The per-tick viewer refresh at 1,000 actors drops from about 415 ms to 3.6–4.0 ms (mean)
   (`docs/orca/handoffs/A9.md` has the numbers and the command).
 - The colonist panel recomposes at most `ColonistPanel.ROWS_PER_REFRESH` (16) lines per
   refresh in a window that walks the id-sorted roster, plus any new or rebuilt row. A colony of

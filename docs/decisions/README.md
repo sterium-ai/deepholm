@@ -65,6 +65,7 @@ all with one size rule.
 | [052](052-localisation-ready-text.md) | Codes in the core, words in `data/text/<locale>.json` |
 | [053](053-job-storage-retired-history.md) | Live job storage, a bounded history of retired jobs, read-only views |
 | [054](054-scenarios-as-content.md) | Scenarios as content |
+| [055](055-viewer-snapshot.md) | One read-only view snapshot per viewer refresh |
 
 ## Renumbered records (redirects)
 

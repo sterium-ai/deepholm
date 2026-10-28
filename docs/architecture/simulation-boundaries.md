@@ -53,7 +53,7 @@ The viewer reads the core once per refresh through
 `WorldState.get_view_snapshot(detail_ids)`: per-actor columns for the map and the lists,
 full records only for the colonists whose panel rows it is rewriting, and one copy of each
 other collection it shows. Every container in it is read-only and it is never persisted or
-hashed ([ADR 054](../decisions/054-viewer-snapshot.md)). Viewer scripts and `boot.gd` never
+hashed ([ADR 055](../decisions/055-viewer-snapshot.md)). Viewer scripts and `boot.gd` never
 touch a private `WorldState` member (`world._x`); `test_architecture_rules.gd` enforces it.
 
 ## Determinism and time
