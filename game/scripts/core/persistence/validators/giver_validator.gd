@@ -4,10 +4,8 @@ extends SaveCheck
 ## Save validation for what NeedsSystem and the job givers persist: "pausedJobs",
 ## "needJobAssignments", "rescueVictimAssignments", "combatBlockedTargets", "approachJobTargets".
 
-## world._paused_jobs's wire shape is an array of {colonistId, jobId} entries
-## (see StateCodec._encode_paused_jobs()): the job a critical need interrupted
-## mid-`work` (colonist-ai.md 3.6), to resume once the need job releases the
-## colonist -- never a job record itself, so no reason/remedy/status here.
+## NeedsSystem.paused_jobs as [{colonistId, jobId}]: the job a critical need interrupted
+## (colonist-ai.md 3.6), never a job record.
 static func _valid_paused_jobs(value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid pausedJobs type")
@@ -35,11 +33,7 @@ static func _valid_paused_job_entry(value) -> Dictionary:
 		return _fail("invalid pausedJobs entry jobId")
 	return {"ok": true}
 
-## world._need_giver's own colonist_id -> job_id association's wire shape is
-## an array of {colonistId, jobId} entries -- the same shape as pausedJobs
-## (see StateCodec._encode_paused_jobs(), reused for both), naming the need
-## job a critical-need onset submitted for that colonist (colonist-ai.md
-## 3.1/3.6) rather than the job it interrupted.
+## NeedGiver's colonist -> need-job map, same shape as pausedJobs.
 static func _valid_need_job_assignments(value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid needJobAssignments type")
@@ -67,10 +61,7 @@ static func _valid_need_job_assignment_entry(value) -> Dictionary:
 		return _fail("invalid needJobAssignments entry jobId")
 	return {"ok": true}
 
-## RescueGiver's own job_id -> victim_id association's wire shape is an array of {jobId, victimId} entries -- keyed
-## by job id, not colonist id, since a rescue job's own id is what's actually
-## unique here (see StateCodec._encode_rescue_victim_assignments()). Optional
-## at the top level (SaveIO.OPTIONAL_TOP_LEVEL_FIELDS).
+## RescueGiver's [{jobId, victimId}], keyed by job id; optional at the top level.
 static func _valid_rescue_victim_assignments(value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid rescueVictimAssignments type")
@@ -98,9 +89,7 @@ static func _valid_rescue_victim_assignment_entry(value) -> Dictionary:
 		return _fail("invalid rescueVictimAssignments entry victimId")
 	return {"ok": true}
 
-## CombatGiver's own per-actor flee-destination exclusion set: the wire shape is an array of {actorId, tiles} entries, each
-## `tiles` an array of #/$defs/tile -- see
-## StateCodec._encode_combat_blocked_targets().
+## CombatGiver's [{actorId, tiles}] flee exclusions.
 static func _valid_combat_blocked_targets(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid combatBlockedTargets type")
@@ -129,9 +118,7 @@ static func _valid_combat_blocked_targets_entry(value, map_width: int, map_heigh
 		return tiles_check
 	return {"ok": true}
 
-## ApproachGiver's own job_id -> target association (ADR 033): the
-## wire shape is an array of {jobId, kind, actorId} or {jobId, kind, tile}
-## entries -- see StateCodec._encode_approach_job_targets().
+## ApproachGiver's [{jobId, kind, actorId | tile}] (ADR 033).
 static func _valid_approach_job_targets(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid approachJobTargets type")

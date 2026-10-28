@@ -83,7 +83,7 @@ and `version()`. Work costs and movement costs have moved from constants into
 count/length, spawn area position/size, and hazard/tree/water counts with their
 placement-attempt caps — have moved the same way, from constants into
 `content/mapgen.json`, read whole via `ContentRegistry.document("mapgen")` and used
-directly by `WorldState`'s map carving methods. `WorldState` reads all of these from the
+directly by `WorldGenerator`'s map carving (`worldgen/world_generator.gd`). `WorldState` reads all of these from the
 registry at construction and injects them into `ToilExecutor`/`NeedGiver`/
 `HaulGiver`'s existing constructor parameters. Every save's
 `contentVersion` is now sourced from `ContentRegistry.version()` rather than a
@@ -106,7 +106,7 @@ The component classes in `game/scripts/core/actors/components/*.gd` implement
 Scheduler, executor and need-giver consumers use component accessors, and
 `worker`, `inventory`, `needs` and `health` own labour/tool access, carrying,
 need decay and health bounds respectively. Health and faction membership
-are persisted with the schema-v18 migration (see
+are persisted in every save (since ADR 049's reset, part of save schema v1; see
 [save-system.md](save-system.md)).
 
 Components are an accessor layer over the existing colonist dictionary:
@@ -139,7 +139,13 @@ a faction with `friendly` relation and the worker component, and a tame animal i
 faction with `tame`. See [ADR 014](../decisions/014-factions-and-relations.md) for the
 collection's design and the [faction recipe](extension-points.md#faction) for how to extend it.
 
-### F4 — Systems with a fixed tick order, extracted from `world_state.gd`
+### F4 — Systems with a fixed tick order, extracted from `world_state.gd` — **Implemented (R1–R12)**
+
+The split landed as the composed core of [ADR 048](../decisions/048-composed-core.md): one module
+per concern under `game/scripts/core/` (`world/event_log.gd`, `map/tile_grid.gd`,
+`objects/object_table.gd`, `items/item_table.gd`, `actors/needs_system.gd`, …) and
+`world/tick_pipeline.gd` (`TickPipeline`) running the per-tick phases in a fixed order. The
+original proposal follows.
 
 Split the god object into systems that each own one concern and run in a declared order every
 tick (already the event ordering model: `system_priority`): `map`, `content`, `needs`,

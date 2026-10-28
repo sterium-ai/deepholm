@@ -1,10 +1,7 @@
 class_name ZoneHandler
 extends RefCounted
 
-## Stockpile zone commands: zone_add, zone_remove. Plain data, no
-## scene/node/RNG/wall-clock dependency; sibling modules are injected, every
-## WorldState rule it needs arrives as a Callable.
-##
+## Stockpile zone commands: zone_add, zone_remove.
 ## Invariant: removing a zone fails every active haul job whose reserved cell
 ## lay inside it, with a typed reason and no leaked reservation.
 

@@ -1,12 +1,8 @@
 class_name TickPipeline
 extends RefCounted
 
-## WorldState.tick(): the ordered list of per-tick phases (PHASES), run once
-## each per tick, and the worker/commitment lists the scheduler phase reads.
-## Plain data, no scene/node/RNG/wall-clock dependency; sibling modules are
-## injected; the roster, the calendar and the calendar-alert set arrive as
-## Callables because StateCodec.decode() (and tests) replace them afterwards.
-##
+## WorldState.tick(): the ordered per-tick phases (PHASES) and the worker/commitment lists the
+## scheduler phase reads. Roster, calendar and alert set arrive as Callables (decode replaces them).
 ## Invariants:
 ## - Phases run in PHASES order, every tick, each exactly once; the order is
 ##   behaviour (same seed + commands -> same events and state_hash()).
@@ -18,9 +14,7 @@ extends RefCounted
 ##   ledger) and before advance_colonists (which honours it).
 ## - incidents_activate/escapes_activate run before advance_colonists, so a
 ##   freshly activated actor's first toil runs this same tick.
-## - approach_giver runs after advance_colonists: its "already adjacent"
-##   check must see post-movement positions, and an actor trapped this tick
-##   is already `trapped` when it looks (escape_trench never loses its slot).
+## - approach_giver runs after advance_colonists, so it sees post-movement positions and traps.
 ## - dig_finds drains after advance_colonists, in ascending job-id order
 ##   whatever order colonists completed in (ADR 026).
 ## - refused_reservations drains after advance_colonists: a need resolving
@@ -163,8 +157,7 @@ func _phase_scheduler() -> void:
 		Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _toils.get_labour, _current_calendar().active_boost, _roster(),
 		_committed_jobs(), _tile_grid.get_regions().reachable)
 
-## A site_fetch job's submission-time source is a placeholder; once it activates with a
-## known colonist, swap in the source nearest the builder before advance_colonists drives it.
+## Swaps a just-activated site_fetch job's placeholder source before it moves.
 func _phase_site_fetch_resolve() -> void:
 	_construction.resolve_freshly_activated_site_fetch_sources(_site_fetch_jobs_before)
 	_site_fetch_jobs_before = {}
@@ -236,9 +229,8 @@ func _scheduler_workers() -> Array[Dictionary]:
 	workers.append_array(_incidents.staged_actors())
 	return workers
 
-## Walks every colonist's route/work by exactly one tick, ascending colonist-id
-## order, through the one generic toil advance (_toils.advance()): never a
-## branch on job kind here (AGENTS.md "one work engine").
+## One tick of every colonist's route/work, ascending id, through _toils.advance() only
+## (never a branch on job kind: one work engine).
 func _advance_colonists() -> void:
 	var assignments := _scheduler.get_assignments()
 	var ordered: Array[Dictionary] = _roster().duplicate()

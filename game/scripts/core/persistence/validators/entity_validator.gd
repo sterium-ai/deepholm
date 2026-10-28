@@ -5,18 +5,15 @@ extends SaveCheck
 
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 
-## Entity kind -> the component fields that kind must carry on the wire
-## (game-state.schema.json's per-kind if/then). Mirrors what
-## ActorTable.spawn() builds from content/actors.json: a colonist's legacy
-## worker/needs shape, a wolf's needs/combat/wild, a trader's inventory/visitor.
+## Entity kind -> the component fields it must carry (the schema's per-kind if/then, i.e.
+## what ActorTable.spawn() builds for that kind).
 const ENTITY_COMPONENT_FIELDS := {
 	"colonist": ["needs", "needsAccumulator", "labourTable", "work", "hands"],
 	"wolf": ["needs", "needsAccumulator", "combat", "wild"],
 	"trader": ["inventory", "visitor"],
 }
 
-## The optional "rerouting" key is present only while a re-route search is
-## in flight (see StateCodec._encode_route_field()).
+## "rerouting" is present only while a re-route is in flight.
 static func _valid_entity_route(value, map_width: int, map_height: int) -> Dictionary:
 	if value == null:
 		return {"ok": true}
@@ -45,8 +42,7 @@ static func _valid_entity_route(value, map_width: int, map_height: int) -> Dicti
 			return rerouting_check
 	return {"ok": true}
 
-## Mirrors the inline entity-needs check above: labourTable (colonist-ai.md
-## 3.2) is a fixed 7-kind Dictionary, each level an int 0..4.
+## labourTable (colonist-ai.md 3.2): the fixed 7 kinds, each level an int 0..4.
 static func _valid_labour_table(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity labourTable type")
@@ -59,10 +55,7 @@ static func _valid_labour_table(value) -> Dictionary:
 			return _fail("invalid entity labourTable level '%s'" % kind)
 	return {"ok": true}
 
-## Mirrors the schema's "trapped" $def: unlike carrying/work
-## (present only for kinds whose own component shape adds them), any actor
-## kind may fall into a trench, so this is validated unconditionally, like
-## route/health, never gated by entity.has().
+## "trapped" is validated for every kind (anyone can fall into a trench).
 static func _valid_entity_trapped(value, map_width: int, map_height: int) -> Dictionary:
 	if value == null:
 		return {"ok": true}
@@ -95,9 +88,7 @@ static func _valid_entity_work(value) -> Dictionary:
 		return _fail("invalid entity work fields")
 	return {"ok": true}
 
-## Mirrors the schema's "health" $def: the health component snapshot
-## (StateCodec._encode_health()/_decode_health()), always present -- unlike
-## route/work/carrying it is never null.
+## The health component; always present, never null.
 static func _valid_entity_health(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity health type")
@@ -125,8 +116,7 @@ static func _valid_entity_combat(value) -> Dictionary:
 		return _fail("invalid entity combat fields")
 	return {"ok": true}
 
-## Mirrors the schema's "inventoryComponent" $def (ActorInventory.build()):
-## items array, tool slot id (or ""), capacity >= 1.
+## items array, tool id (or ""), capacity >= 1.
 static func _valid_entity_inventory(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity inventory type")
@@ -139,10 +129,7 @@ static func _valid_entity_inventory(value) -> Dictionary:
 		return _fail("invalid entity inventory capacity")
 	return {"ok": true}
 
-## A colonist's "hands" list, at most one entry per distinct kind
-## (no item id, no ground position -- see StateCodec._encode_hands_field()),
-## every entry's count >= 1, and the sum of every entry's count never
-## exceeding ActorInventory.HANDS_CAPACITY.
+## At most one entry per kind, each count >= 1, total <= ActorInventory.HANDS_CAPACITY.
 static func _valid_entity_hands(value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entity hands type")

@@ -1,25 +1,10 @@
 extends RefCounted
 
-## F5 "Regions" (foundation-for-breadth.md §3): partitions the map into
-## connected walkable areas using a caller-supplied passability rule
-## (WorldState.passability(x, y)["passable"]), assigning each a stable
-## integer id (1.., 0 = impassable/no region) that never changes for an
-## unrelated map edit. Physical passability only -- no faction awareness and
-## no rooms (see rooms.gd); see docs/architecture/foundation-for-breadth.md's non-goals.
-##
-## The full build numbers regions in row-major order of their first tile
-## (the first region met scanning rows top to bottom, left to right is 1).
-## It labels whole row runs of passable tiles and joins the runs that touch
-## across rows (A2), which gives the same ids as a flood-fill from each
-## unlabelled tile in scan order without visiting tiles one by one.
-##
-## on_passability_changed(x, y) recomputes only the tile(s) actually affected
-## by a change at (x, y): a local flood-fill from that tile's own
-## neighbourhood, splitting a region into two ids when a passable tile
-## becomes impassable and its neighbours are no longer mutually connected, or
-## merging neighbouring regions into the lowest of their ids when an
-## impassable tile becomes passable. It never recomputes the whole map.
-## Floods work on flat tile indices (y * width + x) and never allocate per tile.
+## Regions (foundation-for-breadth.md §3): connected walkable areas under physical passability
+## (no factions, no rooms). Ids are 1.. (0 = impassable) and stable across unrelated edits.
+## The full build numbers regions in row-major order of their first tile (row-run union, A2);
+## on_passability_changed() only re-floods the changed tile's neighbourhood (split or merge
+## into the lowest id), never the whole map.
 
 var _width: int
 var _height: int
@@ -30,9 +15,7 @@ var _next_id: int = 1
 var _visited := PackedInt32Array()
 var _visit_epoch := 0
 
-## passable_mask, when given, is every tile's passable(x, y) as 1/0 in
-## row-major order (Passability.passable_mask()), so the build calls nothing
-## per tile; passable still answers on_passability_changed().
+## passable_mask (optional) is Passability.passable_mask(), so the build calls nothing per tile.
 func _init(width: int, height: int, passable: Callable, passable_mask := PackedByteArray()) -> void:
 	_width = width
 	_height = height
@@ -54,23 +37,15 @@ func region_id(x: int, y: int) -> int:
 		return 0
 	return _region_of[_index(x, y)]
 
-## True when a and b sit in the same connected walkable area: both in bounds,
-## both passable (nonzero region id), and that id equal. Symmetric, and false
-## for any out-of-bounds or impassable endpoint -- an impassable tile has no
-## region membership of its own, whatever passable tiles surround it.
+## True when a and b share a nonzero region id; false for any out-of-bounds or impassable endpoint.
 func same_region(a: Vector2i, b: Vector2i) -> bool:
 	var ra := region_id(a.x, a.y)
 	if ra == 0:
 		return false
 	return region_id(b.x, b.y) == ra
 
-## Scheduler-facing reachability check for a job's target tile, mirroring
-## GlobalAssignment._routable()'s treatment of an impassable work target: a
-## chop/forage/dig tile is worked by standing adjacent to it, never stood on.
-## Bounds-checks target explicitly (out of bounds is never reachable) before
-## falling back to same_region(); unlike same_region(), an impassable target
-## (region id 0) is still reachable when any of its orthogonal neighbours
-## shares from's region.
+## A job target's reachability: an impassable target (worked from beside it) is reachable
+## when an orthogonal neighbour shares from's region; out of bounds never is.
 func reachable(from: Vector2i, target: Vector2i) -> bool:
 	if not _in_bounds(target.x, target.y):
 		return false
@@ -83,9 +58,7 @@ func reachable(from: Vector2i, target: Vector2i) -> bool:
 			return true
 	return false
 
-## Call after (x, y)'s passability may have changed (WorldState's
-## place_object/remove_object and dig/chop/forage tile transforms). A no-op
-## when the tile's own passability did not actually change.
+## Call after (x, y)'s passability may have changed; a no-op when it did not.
 func on_passability_changed(x: int, y: int) -> void:
 	if not _in_bounds(x, y):
 		return
@@ -100,11 +73,8 @@ func on_passability_changed(x: int, y: int) -> void:
 		return
 	_merge_neighbours(Vector2i(x, y))
 
-## The full-map partition the constructor runs once. Each row's passable runs
-## (found with PackedByteArray.find()) are unioned with the runs of the row
-## above they overlap (4-connectivity: a shared column); each run's set then
-## takes the next id the first time one of its runs is met in row-major run
-## order, which is the order of each region's first tile.
+## The constructor's full partition: row runs unioned with overlapping runs above, ids handed
+## out in row-major order of each region's first tile.
 func _build(mask: PackedByteArray) -> void:
 	var run_start := PackedInt32Array()
 	var run_end := PackedInt32Array()
@@ -168,11 +138,8 @@ func _union(parent: PackedInt32Array, a: int, b: int) -> void:
 	elif root_b < root_a:
 		parent[root_a] = root_b
 
-## A single cell can only disconnect its own orthogonal neighbours from one
-## another (removing one graph vertex splits its neighbourhood into at most
-## as many pieces as it had edges): the first neighbour keeps old_id, and any
-## neighbour not reachable from it within the surviving old_id tiles starts a
-## freshly relabelled component.
+## One removed cell can only disconnect its own neighbours: the first keeps old_id, any
+## neighbour no longer reachable from it is relabelled as a fresh component.
 func _resplit_neighbours(tile: Vector2i) -> void:
 	var neighbours := _passable_neighbours(tile)
 	if neighbours.size() < 2:
@@ -208,10 +175,7 @@ func _merge_neighbours(tile: Vector2i) -> void:
 			merged[id] = true
 			_flood_relabel(_index(neighbour.x, neighbour.y), id, keep)
 
-## Marks (with _visit_epoch) every tile reachable from start while still
-## carrying old_id, without mutating _region_of -- used to prove two
-## neighbours of a newly impassable tile remain connected without
-## relabelling anything.
+## Marks every tile reachable from start within old_id, without relabelling.
 func _flood_visit(start: int, old_id: int) -> void:
 	if _region_of[start] != old_id:
 		return
@@ -230,9 +194,7 @@ func _flood_visit(start: int, old_id: int) -> void:
 			_visited[neighbour] = _visit_epoch
 			frontier.append(neighbour)
 
-## Bounded flood-fill confined to tiles currently carrying old_id, relabelling
-## them to new_id -- the actual work behind a split's new component or a
-## merge's absorbed region.
+## Relabels the old_id component reachable from start to new_id.
 func _flood_relabel(start: int, old_id: int, new_id: int) -> void:
 	if _region_of[start] != old_id:
 		return

@@ -1,51 +1,15 @@
 class_name SaveManager
 extends RefCounted
 
-## Slot policy on top of SaveIO's validate-before-replace writer/reader.
-## One save directory (default "user://saves", injectable for tests)
-## holds exactly four files:
-##   - "manual.json"      -- the single manual save slot. Only save_manual()
-##                            ever writes it; save_autosave() never touches it.
-##   - "autosave-1.json"
-##   - "autosave-2.json"  -- three rotating autosave slots.
-##   - "autosave-3.json"
-##
-## Rotation order: each save_autosave() call writes to whichever of the three
-## autosave files currently holds the oldest recorded (epoch, tick) pair (an
-## empty or unreadable slot counts as oldest and is always picked first), so
-## the newest write always replaces the oldest survivor -- never a fixed
-## round-robin index. With four consecutive calls at the same epoch the 1st
-## save is evicted by the 4th, leaving the 2nd/3rd/4th on disk. Recency is
-## read from each slot's own recorded "epoch"/"tick" (state_codec.gd /
-## game-state.schema.json), not file mtime or an in-memory counter, so
-## rotation and load_best() both behave the same whether or not the process
-## restarted between calls.
-##
-## "epoch" is a caller-supplied game-session marker, not a WorldState field: every save_manual()/save_autosave() call defaults to
-## epoch 0 (an ordinary continuing game), but boot.gd's New Game control
-## mints a strictly higher epoch (see next_epoch()/highest_known_epoch()
-## below) for the fresh game it starts, so ordering below always compares
-## (epoch, tick) lexicographically -- a higher epoch outranks any tick from a
-## lower one. Raw tick alone is not a valid cross-game recency signal: an old
-## game's autosave at tick 1000 must never outrank a brand-new game's manual
-## save at tick 10 just because 1000 > 10. Within a
-## single epoch, tick ordering behaves exactly as it always has.
-##
-## last-known-good pointer: get_last_known_good() reports the slot/file/tick
-## of the most recent candidate this manager has itself seen validate --
-## either by writing it (SaveIO.write_atomic() already validates and reads
-## the candidate back before replacing the target) or by load_best()
-## successfully reading it. The pointer only ever advances to a strictly
-## newer validated tick; it never regresses and never reflects a candidate
-## that failed validation.
-##
-## load_best() pools all four slots, orders the ones that exist newest-first
-## by recorded tick, and tries SaveIO.read() on each in that order until one
-## validates. Every candidate rejected along the way is reported, in trial
-## order, with its file name and SaveIO's typed failure code/message; slots
-## never reached because an earlier candidate already succeeded are not
-## reported. No migration logic lives here: SaveIO.read() delegates to
-## save_migrations.gd for an older schema version and rejects pre-release saves.
+## Slot policy on top of SaveIO's validate-before-replace writer/reader. One directory
+## (default "user://saves") holds "manual.json" (written only by save_manual()) and three
+## rotating "autosave-N.json" slots.
+## Recency is the (epoch, tick) recorded inside each slot, compared lexicographically, never
+## file mtime: a higher epoch (a New Game, see next_epoch()) outranks any tick of a lower one.
+## save_autosave() overwrites the oldest autosave slot (empty/unreadable counts as oldest).
+## load_best() tries the slots newest-first until one validates and reports every rejected
+## candidate in trial order. The last-known-good pointer only advances to a strictly newer
+## validated save. Migrations live in SaveIO.read()/save_migrations.gd, not here.
 
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
@@ -70,8 +34,7 @@ func save_manual(world: WorldState, epoch: int = 0) -> Dictionary:
 		_advance_last_known_good(MANUAL_SLOT, _manual_path(), epoch, int(state["tick"]))
 	return result
 
-## Never writes or evicts the manual slot; only rotates among the three
-## autosave files (see header comment for the eviction rule).
+## Never touches the manual slot; overwrites the oldest autosave.
 func save_autosave(world: WorldState, epoch: int = 0) -> Dictionary:
 	var state: Dictionary = StateCodecType.encode(world)
 	state["epoch"] = epoch
@@ -82,10 +45,8 @@ func save_autosave(world: WorldState, epoch: int = 0) -> Dictionary:
 		_advance_last_known_good(_autosave_slot_name(index), path, epoch, int(state["tick"]))
 	return result
 
-## Returns {"ok": true, "slot", "file", "tick", "epoch", "state", "skipped"}
-## for the newest slot that validates, or {"ok": false, "skipped"} if none
-## do. "skipped" is an ordered Array of {"slot", "file", "code", "message"}
-## for every rejected candidate tried before the result above.
+## {"ok": true, "slot", "file", "tick", "epoch", "state", "skipped"} for the newest slot that
+## validates, else {"ok": false, "skipped"}; "skipped" lists rejected candidates in order.
 func load_best() -> Dictionary:
 	var ordered := _order_candidates_newest_first()
 	var skipped: Array[Dictionary] = []
@@ -105,18 +66,11 @@ func load_best() -> Dictionary:
 		})
 	return {"ok": false, "skipped": skipped}
 
-## Null until a candidate has actually validated (by write or by
-## load_best()); afterward {"slot", "file", "epoch", "tick"} of the newest
-## (epoch, tick) pair seen.
+## Null until something validated; then {"slot", "file", "epoch", "tick"} of the newest seen.
 func get_last_known_good():
 	return _last_known_good
 
-## The highest "epoch" recorded across all four slots on disk (readable or
-## not, matching _peek_epoch_tick()'s own tolerance), or -1 when none exist
-## or none carry one. boot.gd's New Game control uses this (see next_epoch()
-## below) to mint a session marker strictly newer than anything already
-## saved, so a fresh game's own saves always outrank whatever came before
-## regardless of tick.
+## The highest "epoch" recorded in any slot on disk (readable or not), or -1.
 func highest_known_epoch() -> int:
 	var highest := -1
 	for path in _all_slot_paths():
@@ -125,10 +79,7 @@ func highest_known_epoch() -> int:
 			highest = int(peeked["epoch"])
 	return highest
 
-## A new epoch strictly greater than every epoch already recorded on disk.
-## Callers that also track an epoch already active in memory (boot.gd) must
-## still max() this against that in-memory value themselves -- this manager
-## only knows what has actually been written.
+## A new epoch above every one on disk; boot.gd still max()es it with its in-memory epoch.
 func next_epoch() -> int:
 	return highest_known_epoch() + 1
 
@@ -143,9 +94,7 @@ func _advance_last_known_good(slot: String, file: String, epoch: int, tick: int)
 		return
 	_last_known_good = {"slot": slot, "file": file, "epoch": epoch, "tick": tick}
 
-## (epoch, tick) lexicographic ordering shared by every comparison in this
-## file: a higher epoch always outranks a lower one regardless of tick;
-## within the same epoch, the higher tick wins (see header comment).
+## (epoch, tick) lexicographic order: a higher epoch wins regardless of tick.
 static func _epoch_tick_before(epoch_a: int, tick_a: int, epoch_b: int, tick_b: int) -> bool:
 	if epoch_a != epoch_b:
 		return epoch_a < epoch_b
@@ -184,14 +133,8 @@ func _order_candidates_newest_first() -> Array[Dictionary]:
 	present.sort_custom(func(a, b): return _epoch_tick_before(int(b["sort_epoch"]), int(b["sort_tick"]), int(a["sort_epoch"]), int(a["sort_tick"])))
 	return present
 
-## Reads the "epoch"/"tick" recorded inside a candidate's own envelope
-## without requiring it to pass integrity/schema validation, so a candidate
-## that SaveIO.read() will later reject for a body reason (integrity
-## mismatch, schema error) can still be ordered by its recorded position.
-## Returns null when the file cannot even be parsed enough to find one (for
-## example a truncated write), in which case callers fall back to treating
-## it as oldest. "epoch" defaults to 0 when a body lacks it (a pre-release
-## save, which SaveIO.read() then rejects) so it still orders sanely.
+## The recorded epoch/tick without full validation, so a body-invalid candidate can still be
+## ordered; null when unparseable (treated as oldest). A missing epoch reads as 0.
 static func _peek_epoch_tick(path: String):
 	if not FileAccess.file_exists(path):
 		return null

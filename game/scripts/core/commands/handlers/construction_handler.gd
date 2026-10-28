@@ -1,11 +1,7 @@
 class_name ConstructionHandler
 extends RefCounted
 
-## Construction and object commands: build, build_line, cancel_site,
-## place_object, remove_object. Plain data, no scene/node/RNG/wall-clock
-## dependency; sibling modules are injected, every WorldState rule it needs
-## arrives as a Callable.
-##
+## Construction and object commands: build, build_line, cancel_site, place_object, remove_object.
 ## Invariants:
 ## - build/build_line rules live in ConstructionSystem, the rest in
 ##   CommandChecks; CommandRouter.preview() runs the same functions.

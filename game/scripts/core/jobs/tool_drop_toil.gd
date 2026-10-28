@@ -1,34 +1,15 @@
 class_name ToolDropToil
 extends RefCounted
 
-## drop_tool toil, the tool handover wait, and the destroyed-mid-job failure
-## path (ADR 013, extending the fetch_tool toil). Extracted from
-## toil_executor.gd to keep that file within its line budget
-## (docs/architecture/core-budgets.json) and injected the same way
-## tool_fetch_toil.gd is; it has no dependency on WorldState or on Godot
-## scene/node state.
-##
-## Holds three things:
-##  - the holder side of the handover: a colonist whose held tool is reserved
-##    by a job other than its own runs this toil -- dropping in place, or at
-##    the nearest free stockpile cell within TOOL_DROP_RADIUS
-##    (HaulGiver.find_free_haul_cell()'s pattern, reused read-only through
-##    injected callables; haul_giver.gd itself is unchanged) -- before its own
-##    next dispatched job's first toil;
-##  - the requester side of the same handover: waiting_for_handover() lets
-##    ToilExecutor.advance() skip fetch_tool's travel/pickup while the tool it
-##    reserved is still physically held by someone else, so it is only picked
-##    up once actually dropped. No persisted "waiting" state is needed:
-##    dropping (tool_item_store.gd's set_ground()/set_stockpile()) releases
-##    whatever reservation the tool carries, including the requester's, so the
-##    requester's next advance() finds itself unreserved and re-reserves and
-##    fetches the dropped item like any other free candidate
-##    (docs/decisions/013-tool-toils.md, "Requester side: the handover wait");
-##  - the destroyed-mid-job failure path: a job's reserved tool (held, or
-##    still being travelled to) that disappears from tracking fails the job's
-##    current toil, releases every reservation the job held, and re-queues it
-##    through the same on_no_tool_found -> backoff path as an ordinary
-##    fetch_tool failure.
+## drop_tool toil, the tool handover wait and the destroyed-mid-job failure path (ADR 013),
+## injected into ToilExecutor like tool_fetch_toil.gd; no WorldState or scene dependency.
+##  - holder side: a colonist whose held tool is reserved by another job drops it (in place,
+##    or at the nearest free stockpile cell within TOOL_DROP_RADIUS) before its next job;
+##  - requester side: waiting_for_handover() holds fetch_tool until the tool is dropped. No
+##    persisted wait state: dropping releases the tool's reservation, so the requester
+##    re-reserves it like any free candidate;
+##  - a reserved tool that disappears fails the current toil, releases every reservation of
+##    the job and requeues it through on_no_tool_found's backoff.
 
 const TOIL_DROP_TOOL := "drop_tool"
 const TOIL_FETCH_TOOL := "fetch_tool"
@@ -53,40 +34,19 @@ var _work_progress_clear: Callable
 var _reroutes: Dictionary
 var _advance_go_to: Callable
 var _record: Callable
-## WorldState._worker_view (A5): the live worker actors, read only.
+## WorldState's worker view (A5): the live worker actors, read only.
 var _get_colonists: Callable
 var _get_tool_items: Callable
-## Live colonist lookup by id (mutating the returned Dictionary mutates
-## WorldState._colonists in place, mirroring world_state.gd's own private
-## _find_colonist() -- injected the same way ToolItemStore._find_colonist
-## already is). Used only by fail_for_destroyed_tool()'s own
-## _reconcile_stale_holders() below to fix a foreign colonist's held_tool,
-## never job_id's own colonist (already reachable as an ordinary parameter).
+## Live colonist lookup by id (returns the live record); only _reconcile_stale_holders()
+## uses it, to fix a foreign colonist's held_tool.
 var _find_colonist: Callable
-## WorldState.get_assignments() (colonist_id -> {"job_id", ...}), for
-## _reconcile_stale_holders() below to find a foreign holder's own active job
-## id -- the only way to look up that job's own drop-leg marker (_get_active_
-## item below is keyed by job_id, not colonist_id).
+## WorldState.get_assignments(), to find a foreign holder's active job (the drop-leg marker
+## is keyed by job_id).
 var _get_assignments: Callable
-## Drop-leg identity marker: per job, the item id of the tool that job's
-## colonist is dropping right now. It is the only thing is_dropping() below
-## consults to identify an in-flight leg. Set when advance() below starts
-## driving a job's drop and cleared as soon as that drop finishes or fails --
-## never re-derived from the ReservationTable, colonist.held_tool's kind, or
-## any other signal that can change for reasons unrelated to which leg is in
-## flight (a foreign job being cancelled, or a different job's reservation on
-## a different tool being released by its holder's drop). Reservation-derived
-## signals decide whether to start a drop (needs_drop() below) but cannot
-## reliably say whether a route already in flight is one.
-## The marker is persisted on JobQueue's live active-job record through
-## JobQueue.set_active_item_marker()/get_active_item_marker()
-## (_set_active_item/_get_active_item below), reusing the job's
-## blockingJobId field, which already round-trips through state_codec.gd, so
-## no schema change or restore-time reconstruction is needed. It must not be
-## itemId: that is a haul job's cargo identity (see job_queue.gd's
-## set_active_item_marker() doc comment), and drop_tool runs for any active
-## job kind, haul included. See docs/decisions/013-tool-toils.md,
-## "Drop-leg identity marker".
+## Drop-leg identity marker: per job, the tool item id its colonist is dropping right now;
+## the only signal is_dropping() reads. Set when a drop starts, cleared when it ends; never
+## re-derived from reservations or held_tool. Persisted on the active job's blockingJobId
+## (JobQueue.set_active_item_marker()), never itemId, which is a haul's cargo (ADR 013).
 var _set_active_item: Callable
 var _get_active_item: Callable
 
@@ -120,10 +80,8 @@ func _init(job_kinds: Dictionary, work_ticks: Dictionary, passability: Callable,
 	_find_colonist = find_colonist
 	_get_assignments = get_assignments
 
-## True once colonist's held tool is reserved by a job other than job_id: the
-## decision to start a fresh drop (ToilExecutor.advance()'s own idle-gated
-## check). A genuine decision, not a leg-continuation check -- see
-## is_dropping() below for why those must never be conflated.
+## True once the held tool is reserved by a job other than job_id: the decision to start a
+## fresh drop, never a leg-continuation check (see is_dropping()).
 func needs_drop(colonist: Dictionary, job_id: String) -> bool:
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty():
@@ -131,11 +89,8 @@ func needs_drop(colonist: Dictionary, job_id: String) -> bool:
 	var owner := String(_tool_reservation_of.call(held_id))
 	return not owner.is_empty() and owner != job_id
 
-## job_id's own currently reserved tool item id, read straight off the
-## ReservationTable (not off the live tool-item list, unlike tool_fetch_toil.
-## gd's own _reserved_tool_for()): a destroyed item is erased from tracking
-## but its dangling reservation is not, so this is the only lookup that still
-## finds it -- exactly what active_tool_missing() below needs.
+## job_id's reserved tool id, read off the ReservationTable: a destroyed item leaves its
+## reservation behind, so only this lookup still finds it.
 func _reserved_item_id_for(job_id: String) -> String:
 	var owners: Dictionary = (_tool_reservation_table.call() as ReservationTable).snapshot()
 	for item_id in owners:
@@ -143,12 +98,8 @@ func _reserved_item_id_for(job_id: String) -> String:
 			return String(item_id)
 	return ""
 
-## Every item id job_id currently reserves, for active_tool_missing()/
-## fail_for_destroyed_tool() below to check exhaustively. A job can hold more
-## than one reservation at once (fetch_tool's candidate plus a stale one, or
-## two acquired in different ticks), and iteration order over the
-## ReservationTable's Dictionary snapshot is not guaranteed to surface the
-## destroyed one first.
+## Every item id job_id reserves: a job can hold several, and the ReservationTable's
+## iteration order need not surface the destroyed one first.
 func _reserved_item_ids_for(job_id: String) -> Array[String]:
 	var owners: Dictionary = (_tool_reservation_table.call() as ReservationTable).snapshot()
 	var ids: Array[String] = []
@@ -157,18 +108,9 @@ func _reserved_item_ids_for(job_id: String) -> Array[String]:
 			ids.append(String(item_id))
 	return ids
 
-## True while job_id's own reserved tool is currently physically held by a
-## different, currently busy colonist who has not yet dropped it (a tool
-## fetch_tool found held but unreserved): {} when not waiting, else {"item_id",
-## "holder_colonist_id"}. Both ToilExecutor.advance()'s own wait gate and
-## WorldState.get_jobs()'s presentation overlay (tool_handover.gd) call this
-## same method, so the two can never disagree about when a job is actually
-## waiting. The holder must be busy (route or work in flight, i.e. actually
-## has a job the scheduler is driving through advance()) for the wait to make
-## sense: a fully idle holder (no assignment at all, e.g. a tool taken away
-## while its own job was interrupted and reassigned elsewhere) never gets a
-## "next dispatched job" to insert a drop_tool toil into, so waiting on it
-## would stall the requester forever -- direct pickup is correct there.
+## {} unless job_id's reserved tool is held by another, busy colonist that has not dropped it,
+## else {"item_id", "holder_colonist_id"}. ToilExecutor's wait gate and the tool_handover.gd
+## overlay share it so they never disagree. An idle holder is never waited on (it would never drop).
 func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 	var item_id := _reserved_item_id_for(job_id)
 	if item_id.is_empty():
@@ -190,30 +132,17 @@ func _colonist_busy(colonist_id: String) -> bool:
 			return c.get("route") != null or c.get("work") != null
 	return false
 
-## True once any item id job_id actively reserves no longer exists (destroyed/
-## removed) -- whether already held, or still only reserved while fetch_tool
-## is travelling toward it. Checks every reservation the job holds, not just
-## the first the ReservationTable snapshot happens to yield, since a surviving
-## reservation must never mask the destruction of a different one.
+## True once any item id job_id reserves no longer exists, held or still being travelled to;
+## a surviving reservation must never mask a destroyed one.
 func active_tool_missing(job_id: String) -> bool:
 	for item_id in _reserved_item_ids_for(job_id):
 		if _tool_item_lookup.call(item_id).is_empty():
 			return true
 	return false
 
-## Destroyed-mid-job failure: fails the actual current toil
-## (work, drop_tool, fetch_tool, or the return-to-target go_to -- never
-## hardcoded), releases every reservation job_id held (not just the one
-## destroyed item), reconciles any colonist whose held_tool still names a
-## destroyed id (not just job_id's own colonist -- see
-## _reconcile_stale_holders() below), clears its execution state, and
-## re-queues through the same on_no_tool_found -> backoff path as an ordinary
-## fetch_tool failure. colonist.held_tool is cleared only when the destroyed
-## item is the one actually held: a colonist can be holding a leftover, unrelated tool
-## (its own item location still correctly says "held" by it) while this job's
-## reservation on a different, not-yet-picked-up tool is the one that was
-## destroyed -- clearing held_tool unconditionally would desync it from that
-## surviving item's own location.
+## Destroyed-mid-job failure: fails the toil actually in flight, releases every reservation
+## of job_id, reconciles every stale holder, clears execution state and requeues through
+## on_no_tool_found. held_tool is cleared only when the destroyed item is the one held.
 func fail_for_destroyed_tool(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var destroyed_ids: Array[String] = []
 	for item_id in _reserved_item_ids_for(job_id):
@@ -229,18 +158,9 @@ func fail_for_destroyed_tool(colonist: Dictionary, job_id: String, job: Dictiona
 	(hooks["on_no_tool_found"] as Callable).call(job_id, String(colonist["id"]), kind)
 	_record.call(current_toil, "failed:tool_destroyed")
 
-## Which toil is actually driving colonist's execution right now, read off
-## execution state rather than whether a tool is still needed:
-## _tool_fetch.needs() necessarily reports "needs a replacement" the instant
-## the destroyed item is gone, which would misclassify the return-to-target
-## go_to leg (colonist already picked the tool up before it was destroyed) as
-## fetch_tool. is_dropping() identifies a concurrent drop_tool leg for a
-## different held tool (job_id's own drop leg for a leftover foreign-reserved
-## tool, independent of whichever other reservation was destroyed); it reads
-## the marker/route/held_tool triple, never a reservation snapshot. Once
-## work/dropping are ruled out, whether the destroyed id is the one colonist
-## physically held decides fetch vs. return: held it already (go_to, the
-## return leg) vs. never got that far (fetch_tool, still travelling toward it).
+## The toil driving the colonist now, read off execution state (not off needs(), which
+## reports a replacement the instant the tool vanishes): work, a concurrent drop, else
+## go_to (return leg) if the destroyed id was held, fetch_tool if not yet picked up.
 func _toil_in_flight(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, destroyed_ids: Array[String]) -> String:
 	if colonist.get("work") != null:
 		return TOIL_WORK
@@ -250,21 +170,9 @@ func _toil_in_flight(colonist: Dictionary, job_id: String, job: Dictionary, hook
 		return TOIL_GO_TO
 	return TOIL_FETCH_TOOL
 
-## Clears held_tool for the actual physical holder of any of destroyed_ids,
-## whoever that is -- releasing job_id's own reservations
-## above only fixes the requester's bookkeeping, never a foreign colonist's
-## hand. tool_item_store.gd's set_ground()/set_held() both refuse
-## to touch a colonist's held_tool once the item itself is gone (there is no
-## location left for their own _clear_holder() to read), so a stale reference
-## here is otherwise permanent: a foreign holder's own later attempt to pick
-## up a genuinely new tool keeps failing set_held()'s "already holds a
-## different item" guard forever. Also unwinds the holder's own in-flight
-## drop_tool leg for the same vanished item (destruction mid-drop):
-## is_dropping()'s marker check would otherwise desync the
-## instant held_tool clears below (the marker still names the destroyed id,
-## held_tool no longer does), leaving a dangling route for the holder's own
-## job to misread as its ordinary go_to leg next tick and arrive at the wrong
-## tile.
+## Clears held_tool for whoever physically holds a destroyed id (ToolItemStore cannot once
+## the item is gone, and set_held() would refuse that holder forever), and unwinds that
+## holder's in-flight drop leg for the same item so its route is not misread next tick.
 func _reconcile_stale_holders(destroyed_ids: Array[String]) -> void:
 	if destroyed_ids.is_empty():
 		return
@@ -284,20 +192,9 @@ func _reconcile_stale_holders(destroyed_ids: Array[String]) -> void:
 			_set_active_item.call(holder_job_id, "")
 		live["held_tool"] = ""
 
-## True while a drop leg begun by advance() below is still in flight for
-## job_id: purely whether JobQueue's live active-job record still marks job_id
-## as dropping the same item the colonist physically holds -- never
-## re-derived from the route's destination or from any reservation-table
-## signal. Deriving it from reservation state is unsound in both directions:
-## cancelling the foreign job that triggered an in-flight drop can make
-## needs_drop() false while the holder's next job needs a different tool, so
-## a still-walking drop leg would look like a fetch; and a requester's fetch
-## route can briefly lose its reservation (the holder dropped the target
-## tool) while the requester also holds an unrelated foreign-reserved tool, so
-## a fetch leg would look like a drop. Which toil drives a route is a fact
-## about the route's history (which toil started it), which the persisted
-## marker records directly (see the class-level field doc comment above and
-## docs/decisions/013-tool-toils.md, "Drop-leg identity marker").
+## True while a drop leg started by advance() is in flight: the persisted marker names the
+## item the colonist holds. Never derived from reservations, which can flip either way for
+## unrelated reasons (ADR 013, "Drop-leg identity marker").
 func is_dropping(colonist: Dictionary, job_id: String, _job: Dictionary = {}, _hooks: Dictionary = {}) -> bool:
 	var marked := String(_get_active_item.call(job_id))
 	return colonist.get("route") != null and not marked.is_empty() \
@@ -310,20 +207,10 @@ func _route_effective_target(route: Dictionary) -> Vector2i:
 	var path: Array = route["path"]
 	return path[path.size() - 1]
 
-## drop_tool toil: drop in place, or walk to the nearest free
-## stockpile cell within TOOL_DROP_RADIUS. The destination is computed once,
-## when starting (colonist.route == null); a continuing leg reuses the
-## route's own already-chosen destination (_route_effective_target()) rather
-## than recomputing the nearest cell every tick, so a cell that stops being
-## free partway through travel can never silently retarget the colonist
-## elsewhere (ADR 013, "Destination consistency"). Arrival instead
-## revalidates the same destination and falls back to dropping in place if it
-## is no longer free, or no longer belongs to any stockpile zone (a zone
-## removed mid-travel must not leave location.type "stockpile" recorded for a
-## cell that is no longer inside one). The JobQueue-persisted marker
-## (_set_active_item) is set at entry (idempotent across every call while
-## this leg is in flight) and cleared at every completion path, per
-## is_dropping()'s own doc comment above.
+## drop_tool toil: drop in place, or at the nearest free stockpile cell within
+## TOOL_DROP_RADIUS chosen once at start, never retargeted mid-travel (ADR 013). Arrival
+## re-validates the cell (free, still in a zone) and falls back to dropping in place.
+## The marker is set at entry and cleared on every completion path.
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty():
@@ -354,13 +241,8 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		_drop_tool_ground.call(held_id, int(colonist["x"]), int(colonist["y"]))
 		_set_active_item.call(job_id, "")
 
-## Also excludes a cell already occupied by a ground/
-## stockpiled tool item -- WorldState's general cell_occupied callable only
-## checks colonists and stackable items, never tool items, so a drop could
-## otherwise land on top of an existing axe/pick. Checked locally via the
-## injected get_tool_items (also used read-only by ToolFetchToil) rather than
-## widening the shared cell_occupied callable in the line-budget-capped
-## world_state.gd.
+## Also refuses a cell holding a tool item: the shared cell_occupied callable only checks
+## colonists and stackable items.
 func _cell_still_free(cell: Vector2i, excluding_colonist_id) -> bool:
 	if not (bool(_is_cell_free.call(cell.x, cell.y)) and bool(_passability.call(cell.x, cell.y)["passable"]) \
 			and not bool(_cell_occupied.call(cell.x, cell.y, excluding_colonist_id))):
@@ -379,13 +261,8 @@ func _in_any_zone(cell: Vector2i) -> bool:
 			return true
 	return false
 
-## Nearest free stockpile cell within TOOL_DROP_RADIUS (HaulGiver.
-## find_free_haul_cell()'s checks, reused read-only). The job's own
-## ordinary/fetch target and its neighbourhood are not excluded: since
-## is_dropping() above identifies an in-flight leg purely from the persisted
-## marker, a drop cell coinciding with (or next to) that target is not
-## ambiguous with any other leg, so every qualifying free cell in radius is
-## eligible, including the exact target tile itself when passable and free.
+## Nearest free stockpile cell within TOOL_DROP_RADIUS (HaulGiver.find_free_haul_cell()'s
+## checks, read-only). The job's own target is eligible: is_dropping() reads only the marker.
 func _find_drop_cell(from: Vector2i) -> Variant:
 	if not _get_zones.is_valid():
 		return null

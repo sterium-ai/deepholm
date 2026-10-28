@@ -1,25 +1,15 @@
 class_name ToilBindings
 extends RefCounted
 
-## The per-kind callbacks ToilExecutor calls while it drives a job's toils (`hooks`, passed
-## to ToilExecutor.advance()/is_dropping_leg()), their completion effects, and the
-## carried-item drop/deposit helpers every terminal path shares. ToilExecutor decides *when*
-## a toil runs; these decide what a kind does at that point (AGENTS.md "one work engine").
-##
-## Invariants:
-## - This module persists nothing and hashes nothing: route/work and hands live on the
-##   colonist records, reroutes in WorldState._reroutes, site-fetch caches in
-##   ConstructionSystem. `hooks` is built once and never changes.
-## - Carried cargo is never lost at a terminal transition: drop_carried_item_from() and
-##   drop_carried_haul_item() fall back to _force_drop_carried_item() (writes straight to
-##   the ground, like ToolDropToil's _drop_tool_ground) when place() refuses the tile.
-## - A job paused by a need interrupt lives only in NeedsSystem.paused_jobs: its carrier
-##   deposits the cargo there without touching route/work, which belong to the need job.
-## - A site_fetch job's "cell" is null while fetching and the site origin once delivering
-##   (_toil_is_first_leg()); job["site"] always names the site it is delivering to, so a
-##   mid-chain save/load needs no extra persisted field.
-## - Incident, flee and approach jobs are never resubmitted on unreachable (submit() is
-##   may_be_ordered-gated); their givers pick a fresh target on the next tick.
+## The per-kind callbacks ToilExecutor calls while driving a job's toils (`hooks`), their
+## completion effects and the shared carried-item drop/deposit helpers. ToilExecutor decides
+## *when* a toil runs; these decide what a kind does then. Invariants:
+## - persists and hashes nothing; `hooks` is built once and never changes.
+## - carried cargo is never lost at a terminal transition (_force_drop_carried_item() fallback).
+## - a need-paused job's cargo is deposited without touching route/work (the need job's).
+## - site_fetch's "cell" is null while fetching, the site origin once delivering; job["site"]
+##   always names its site, so a mid-chain load needs no extra field.
+## - incident, flee and approach jobs are never resubmitted on unreachable.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -43,9 +33,8 @@ const TILE_WATER := ContentRegistryType.TILE_WATER
 ## Comparison-only stand-in for "unreachable" (hands-filling rules): _route_cost returns
 ## -1, and _toil_on_pick_up_success() needs a total order against a real cost.
 const _UNREACHABLE_ROUTE_COST := 1 << 30
-
-## hook name -> Callable, ToilExecutor's `hooks` argument. Every kind's hooks ignore the
-## site_fetch-only entries (pick_up_count_for, site_id_for, on_deposit_success,
+## hook name -> Callable, ToilExecutor's `hooks` argument; non-site_fetch kinds ignore the
+## site_fetch-only entries.
 ## is_first_leg, on_pick_up_success, go_to_skip_assignment_path).
 var hooks: Dictionary = {}
 
@@ -71,10 +60,8 @@ var _route_cost: Callable
 var _need_giver_resolve_job: Callable
 var _rescue_giver_resolve_job: Callable
 
-## reroutes is WorldState._reroutes, shared by reference (StateCodec restores into it).
-## tool_requirements_by_kind: job kind -> {"kind","retry_base_ticks","retry_cap_ticks"},
-## from jobs.json's needs_tool entries. get_colonists and the two resolve_job lambdas:
-## StateCodec.decode() reassigns WorldState._colonists and rebuilds NeedGiver/RescueGiver.
+## reroutes is WorldState._reroutes, shared by reference. get_colonists and the resolve_job
+## lambdas are Callables because StateCodec.decode() replaces the roster and the givers.
 func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemTableType,
 		tool_store: ToolItemStoreType, tile_grid: TileGridType, object_table: ObjectTableType,
 		passability: PassabilityType, construction: ConstructionSystemType, trench: TrenchSystemType,

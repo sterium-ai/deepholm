@@ -1,11 +1,7 @@
 class_name IncidentHandler
 extends RefCounted
 
-## Incident commands: spawn_incident (tests, the viewer's debug buttons) and
-## accept_trade (a visiting trader's offer, ADR 035/036). Plain data, no
-## scene/node/RNG/wall-clock dependency; sibling modules are injected, every
-## WorldState rule it needs arrives as a Callable.
-##
+## Incident commands: spawn_incident (tests, debug buttons) and accept_trade (ADR 035/036).
 ## Invariant: spawn_incident proposes the incident's actors now, bypassing
 ## min_day/cooldown/budget gating; each actor spawns only once its job activates.
 

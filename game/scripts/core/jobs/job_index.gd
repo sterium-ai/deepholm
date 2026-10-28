@@ -1,41 +1,16 @@
 extends RefCounted
 
-## JobQueue's lookup indexes over its job list (B1), so a read by id, kind or
-## reservation state costs what it returns instead of a scan -- or a deep copy
-## -- of every job, which a whole-map order (~58k jobs) made seconds per tick.
-## Plain data over the same live Dictionaries JobQueue holds; no state of its
-## own beyond them.
-##
+## JobQueue's lookup indexes (B1): reads by id, kind or reservation state cost what they
+## return, not a scan of every job. Plain data over JobQueue's live Dictionaries.
 ## Invariants:
-## - Jobs are only ever appended to the list and never change id or kind; a
-##   job leaves the indexes only through remove(), on its terminal transition
-##   (A5). The list and _by_kind may still hold removed jobs until the next
-##   compaction, which runs once they outnumber half the list (amortized O(1)
-##   per removal) and filters both in place, keeping the list's identity.
-##   Every read skips them: only _by_id names a live job.
-## - _position is a job's submission ordinal (list order), never reused, so
-##   compaction needs no renumbering and JobHistory can merge by it.
-## - Every read takes the caller's current job list and answers from the
-##   indexes only while it is the list they were built for (covers()):
-##   AssignmentQueue.advance_selection() temporarily swaps JobQueue._jobs for
-##   a subset, and every read then scans that subset exactly as before.
-## - _watched is a superset of the jobs reservations() reports: every job made
-##   active or given a retry_at backoff is watch()ed, and only those two
-##   transitions can make a job count; a watched job that no longer counts is
-##   dropped as reservations() reads.
-## - _labour_disabled holds exactly the jobs whose reason is labour_disabled
-##   (JobQueue._set_reason() is the only reason writer).
-## - _pending_by_target[tile] lists, in list order, the live pending jobs
-##   targeting tile other than construction-site jobs (whose target moves
-##   and whose tile Cancel resolves through the site itself), kept by the same
-##   job_queued / terminal events as _designations (AreaOrders' Cancel).
-## - _designations[tile] counts the pending (queued or active) jobs targeting
-##   tile, site_fetch excepted (its target moves between sources): a job is
-##   pending from its job_queued event until its terminal one, and on_event()
-##   sees every JobQueue event. Each count change appends its tile to
-##   _designation_log, append-only like WorldState.get_dirty_cells(); a
-##   restored index logs every pending tile once, so reading the log from 0
-##   always yields the full current picture.
+## - Jobs are appended, never change id or kind, and leave only through remove() (A5);
+##   removed jobs linger in the list until compaction (> half removed). Only _by_id is live.
+## - _position is the submission ordinal, never reused, so JobHistory can merge by it.
+## - Reads answer from the indexes only while covers(jobs) (advance_selection() swaps lists).
+## - _watched ⊇ the jobs reservations() reports (activation or a retry_at backoff).
+## - _labour_disabled is exactly the jobs whose reason is labour_disabled.
+## - _designations/_pending_by_target count pending jobs per tile (site jobs excepted);
+##   _designation_log is append-only, and a restored index logs every pending tile once.
 
 var _jobs: Array[Dictionary]
 var _labour_disabled_reason: String
@@ -138,8 +113,7 @@ func of_kinds(jobs: Array[Dictionary], kinds: Array) -> Array[Dictionary]:
 		result.sort_custom(_before)
 	return result
 
-## job id -> kind for every job in `jobs`. While covered, the live index:
-## callers read it and must never mutate it.
+## job id -> kind for every job; while covered, the live index (never mutate).
 func kinds_of(jobs: Array[Dictionary]) -> Dictionary:
 	if covers(jobs):
 		return _kinds
@@ -148,8 +122,7 @@ func kinds_of(jobs: Array[Dictionary]) -> Dictionary:
 		kinds[job["id"]] = String(job.get("kind", ""))
 	return kinds
 
-## The live jobs named by job_ids, each once, in list order: what a scan of
-## `jobs` testing `job["id"] in job_ids` returns, at the cost of the ids.
+## The live jobs named by job_ids, each once, in list order.
 func with_ids(jobs: Array[Dictionary], job_ids: Array[String]) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if not covers(jobs):
@@ -171,8 +144,7 @@ func on_event(event_type: String, job: Dictionary) -> void:
 	if job.is_empty():
 		return
 	match event_type:
-		# Every activation emits job_active right away; every haul destination
-		# backoff (a new retry_at) follows a haul_destination_attempt.
+		# Every activation emits job_active; every haul backoff follows a haul_destination_attempt.
 		"job_active", "haul_destination_attempt":
 			watch(job)
 		"job_queued":
@@ -182,9 +154,8 @@ func on_event(event_type: String, job: Dictionary) -> void:
 			_designate(job, -1)
 			_track_pending(job, false)
 
-## {"next": the log position to read from next time, "tiles": tile -> pending
-## job count for every tile whose count changed since log position `from`}.
-## A negative `from` reads nothing (just "next").
+## {"next": log position to read next, "tiles": tile -> pending count changed since `from`}.
+## A negative `from` reads nothing.
 func designation_changes(from: int) -> Dictionary:
 	var tiles: Dictionary = {}
 	for index in range(maxi(from, 0) if from >= 0 else _designation_log.size(), _designation_log.size()):
@@ -239,9 +210,7 @@ func note_reason(job: Dictionary) -> void:
 func labour_disabled_ids() -> Array:
 	return _labour_disabled.keys()
 
-## JobQueue.get_reservations()'s rule (see its doc comment) over the jobs
-## that can satisfy it: every active job's target, then every still-backed-off
-## queued job's target not already present, each in list order.
+## JobQueue.get_reservations()'s rule: active targets, then backed-off queued targets, in list order.
 func reservations(jobs: Array[Dictionary], tick: int) -> Dictionary:
 	var candidates: Array[Dictionary] = jobs
 	if covers(jobs):
@@ -263,10 +232,8 @@ func reservations(jobs: Array[Dictionary], tick: int) -> Dictionary:
 				result[job["target"]] = job["id"]
 	return result
 
-## {"queued": how many jobs are queued, "first_blocked": {reason, remedy} of
-## the queued job with the lowest String id whose reason is non-empty, or {}}:
-## what ColonistPanel shows an idle colonist, read off the live jobs without
-## copying them.
+## {"queued": count, "first_blocked": reason/remedy of the lowest-id blocked queued job, or {}},
+## for ColonistPanel, without copying jobs.
 func queued_summary() -> Dictionary:
 	var queued := 0
 	var first: Dictionary = {}

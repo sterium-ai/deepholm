@@ -11,9 +11,7 @@ extends RefCounted
 ## mutating its argument), add tests/fixtures/save_schema_vN+1_fixture.json, and a
 ## test that the vN fixture loads through SaveIO.read() as vN+1.
 
-## Chains single-version steps so a save from any older version reaches to_version
-## through every intermediate schema; SaveIO.read() calls
-## migrate(state, version, SCHEMA_VERSION) unchanged as versions are added.
+## Chains single-version steps through every intermediate schema up to to_version.
 static func migrate(state: Dictionary, from_version: int, to_version: int) -> Dictionary:
 	var current_state := state
 	var current_version := from_version
@@ -37,11 +35,9 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 				"message": "no migration is available for this save schema",
 			}
 
-## v1 -> v2 (A5, ADR 053): drops every completed/failed/cancelled job from "jobs"
-## (JobQueue keeps them only in its unsaved, bounded history now). Nothing else in a
-## v1 save names a terminal job: each terminal transition already cleared its
-## assignment, activation snapshot, work-progress owner and giver associations.
-## Entries that are not job objects are kept for the validator to reject.
+## v1 -> v2 (A5, ADR 053): drops completed/failed/cancelled jobs (JobQueue keeps them only in
+## its unsaved history); nothing else in a v1 save names one. Non-job entries are left for the
+## validator to reject.
 static func _v1_to_v2(state: Dictionary) -> Dictionary:
 	if not (state.get("jobs") is Array):
 		return {"ok": false, "code": "schema_error", "message": "v1 save has no jobs array"}
@@ -57,12 +53,8 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 
 # --- content-version renames ---------------------------------------------
 
-## Content renames, keyed by the exact stored contentVersion a save was written
-## under (foundation-for-breadth.md F1: "a content version goes into every save
-## ... with a migration hook for content renames"). A remap is a
-## Callable(state: Dictionary) -> Dictionary returning a new state with every
-## renamed content id remapped, never mutating its argument. None is registered
-## today: every v1 save carries the current content version.
+## Content renames keyed by the exact stored contentVersion (F1's content-rename hook); each
+## remap returns a new state and never mutates its argument. None is registered today.
 static var _content_renames: Dictionary = {}
 
 ## Registers the remap for saves written under from_content_version.
@@ -73,11 +65,8 @@ static func register_content_rename(from_content_version: String, remap: Callabl
 static func unregister_content_rename(from_content_version: String) -> void:
 	_content_renames.erase(from_content_version)
 
-## {"ok": false} when no rename is registered for state's exact stored
-## contentVersion -- the caller (SaveIO._read_and_verify()) turns that into
-## the content_version_mismatch error. On success the returned state's
-## contentVersion is already set to to_content_version, so the caller needs no
-## further patching before re-validating.
+## {"ok": false} when no rename matches (SaveIO reports content_version_mismatch); on success
+## the returned state already carries to_content_version.
 static func resolve_content_version(state: Dictionary, to_content_version: String) -> Dictionary:
 	var from_content_version := String(state.get("contentVersion", ""))
 	if not _content_renames.has(from_content_version):

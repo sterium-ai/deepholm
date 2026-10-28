@@ -122,15 +122,15 @@ for the scheduler's own routing/`get_reservations()` bookkeeping exactly like
 dig/chop's target -- the real reservations are `"item:<item_id>"` and
 `"cell:x,y"` keys on the shared `ReservationTable`, acquired together by
 `_tick_haul()` before the job ever goes active (colonist-ai.md 3.4: "reserve
-the item and one free destination cell"). WorldState drives the two travel
-legs and the two instant toils (`pick_up`, `place`) itself; `job_queue.gd`
+the item and one free destination cell"). `ToilExecutor` drives the two travel
+legs and the two instant toils (`pick_up`, `place`); `job_queue.gd`
 only owns activation.
 
 A haul job with no free destination blocks `blocked_destination_full` and
 retries on a backoff (base ticks, doubling to a cap; both injected via
-`set_haul_backoff()` from `WorldState.HAUL_RETRY_BASE_TICKS`/
-`HAUL_RETRY_CAP_TICKS`, mirroring how `MOVE_TICKS_PER_TILE`/`WORK_TICKS` are
-injected into `ToilExecutor`) instead of every tick like dig/chop's blocks.
+`set_haul_backoff()` from the `haul` entry's `retry_base_ticks`/
+`retry_cap_ticks` in `content/jobs.json`, mirroring how the move and work
+ticks are injected into `ToilExecutor`) instead of every tick like dig/chop's blocks.
 Backing off must not let unbounded ADR 004 aging
 ([`004-global-assignment-fairness-policy.md`](../../../../docs/decisions/004-global-assignment-fairness-policy.md))
 let one permanently blocked job monopolize a worker's scoring competition

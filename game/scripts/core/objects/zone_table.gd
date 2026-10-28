@@ -1,9 +1,7 @@
 class_name ZoneTable
 extends RefCounted
 
-## WorldState's stockpile zones: id -> {id, x, y, width, height} rectangles
-## and the id counter. Plain data, no scene/node/wall-clock dependency.
-##
+## Stockpile zones: id -> {id, x, y, width, height} rectangles and the id counter.
 ## Invariants:
 ## - Ids are "zone_%d" drawn from next_zone_id and never reused; zones never
 ##   overlap (zone_add checks overlaps() first).

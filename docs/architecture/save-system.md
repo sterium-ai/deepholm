@@ -348,7 +348,7 @@ through `get_items() -> Array[Dictionary]` (id-sorted, detached
 `{id, x, y, kind, count, faction_id}` copies) and the derived
 `get_ground_wood(x, y) -> int` (the sum of every wood item's `count` at that
 tile). A chop job's completion creates one wood item with a fresh id
-(`ItemTable.spawn_wood_item()`).
+(`ItemTable.spawn_item()`, with the work effect from `jobs.json`, ADR 051).
 
 A colonist's `hands` field ([ADR 037](../decisions/037-hands-multi-unit-carrying.md))
 is an array of at most 4 `{kind, count}` entries, one per distinct kind held,

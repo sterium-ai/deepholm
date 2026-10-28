@@ -1,16 +1,9 @@
 class_name ToolItemStore
 extends RefCounted
 
-## Identity-bearing tool item CRUD + reservation lifecycle (axe/pick: a stable
-## id and a location -- ground, held, or stockpile -- distinct from
-## WorldState._items' stackable piles), extracted from world_state.gd to
-## keep that file within its line budget (docs/architecture/
-## core-budgets.json). Holds exactly the state world_state.gd owned directly
-## before (items, next_id, reservations); state_hash()/state_codec.gd read and
-## rebuild them through the plain fields below exactly as they read any other
-## WorldState-owned collection. find_colonist is injected (not a WorldState
-## reference) so this stays plain data-in/data-out like WorldState's other
-## injected collaborators (colonist-ai.md/AGENTS.md's simulation rules).
+## Identity-bearing tool items (axe/pick): a stable id and a location (ground, held or
+## stockpile), unlike ItemTable's stackable piles, plus their job reservations.
+## state_hash() and StateCodec read items, next_id and reservations directly.
 
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
@@ -24,9 +17,7 @@ var _find_colonist: Callable
 func _init(find_colonist: Callable) -> void:
 	_find_colonist = find_colonist
 
-## Every tool item, id-sorted for determinism, detached. Each entry's
-## "location" is one of {"type":"ground","x","y"}, {"type":"held","colonist_id"}
-## or {"type":"stockpile","x","y"}.
+## Every tool item, id-sorted, detached; "location" is ground {x, y}, held {colonist_id} or stockpile {x, y}.
 func get_items() -> Array[Dictionary]:
 	var keys := items.keys()
 	keys.sort()
@@ -41,17 +32,14 @@ func get_item(item_id: String) -> Dictionary:
 		return {}
 	return (items[item_id] as Dictionary).duplicate(true)
 
-## Declares a new tool item lying on the ground at (x, y) and returns its id.
-## Caller (WorldState.spawn_ground_tool_item) already checked kind is a
-## declared tool kind.
+## A new tool on the ground at (x, y); the caller already checked kind is a tool kind.
 func spawn_ground(kind: String, x: int, y: int) -> String:
 	var item_id := "tool_%d" % next_id
 	next_id += 1
 	items[item_id] = {"id": item_id, "kind": kind, "location": {"type": "ground", "x": x, "y": y}}
 	return item_id
 
-## Moves an existing tool item to lie on the ground, clearing held_tool and
-## releasing whatever job reservation it carried. False when item_id unknown.
+## To the ground, clearing held_tool and releasing its reservation; false when unknown.
 func set_ground(item_id: String, x: int, y: int) -> bool:
 	if not items.has(item_id):
 		return false
@@ -60,8 +48,7 @@ func set_ground(item_id: String, x: int, y: int) -> bool:
 	items[item_id]["location"] = {"type": "ground", "x": x, "y": y}
 	return true
 
-## Moves an existing tool item onto a stockpile cell, same as set_ground().
-## False when item_id is unknown.
+## Onto a stockpile cell, like set_ground().
 func set_stockpile(item_id: String, x: int, y: int) -> bool:
 	if not items.has(item_id):
 		return false
@@ -70,9 +57,7 @@ func set_stockpile(item_id: String, x: int, y: int) -> bool:
 	items[item_id]["location"] = {"type": "stockpile", "x": x, "y": y}
 	return true
 
-## Moves an existing tool item into colonist_id's hand. False when
-## item_id/colonist_id is unknown, or colonist_id already holds a different
-## item -- a caller must drop/move that item first.
+## Into colonist_id's hand; false when either is unknown or the hand holds another tool.
 func set_held(item_id: String, colonist_id: String) -> bool:
 	if not items.has(item_id):
 		return false
@@ -87,8 +72,7 @@ func set_held(item_id: String, colonist_id: String) -> bool:
 	WorkerType.set_held_tool(colonist, item_id)
 	return true
 
-## Clears held_tool from whichever colonist currently holds item_id, if it is
-## currently held by one; a no-op otherwise.
+## Clears held_tool from item_id's holder, if any.
 func _clear_holder(item_id: String) -> void:
 	var location: Dictionary = (items.get(item_id, {}) as Dictionary).get("location", {})
 	if String(location.get("type", "")) != "held":
@@ -97,9 +81,7 @@ func _clear_holder(item_id: String) -> void:
 	if not colonist.is_empty() and WorkerType.get_held_tool(colonist) == item_id:
 		WorkerType.clear_held_tool(colonist)
 
-## Releases whatever job reservation item_id currently carries, for an
-## explicit drop -- distinct from set_held()'s pickup path, which must not
-## clear the picking-up job's own reservation.
+## For an explicit drop only: a pickup must keep the picking-up job's reservation.
 func _release_reservation_for_drop(item_id: String) -> void:
 	var owner_job_id := reservations.owner(item_id)
 	if not owner_job_id.is_empty():
@@ -111,8 +93,7 @@ func reserve(item_id: String, job_id: String) -> bool:
 		return false
 	return reservations.acquire(item_id, job_id)
 
-## Releases item_id's reservation; call on every terminal job transition so no
-## reservation ever outlives its job.
+## Called on every terminal job transition, so no reservation outlives its job.
 func release(item_id: String, job_id: String) -> bool:
 	return reservations.release(item_id, job_id)
 

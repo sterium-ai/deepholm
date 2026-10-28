@@ -1,38 +1,18 @@
 class_name ItemTable
 extends RefCounted
 
-## WorldState's stackable ground items: the item map and its id counter, the
-## per-item faction map, the per-tile ground-berries counters, and the work
-## find roll (ADR 026, ADR 051) with its own injected seeded RNG. Identity-bearing tools
-## (axe/pick) live in tool_item_store.gd instead. Plain data, no
-## scene/node/wall-clock dependency; every WorldState rule it needs arrives as
-## a Callable.
-##
+## Stackable ground items (tools live in tool_item_store.gd), item factions, per-tile ground
+## berries and the work find roll (ADR 026, 051) with its own seeded RNG.
 ## Invariants:
-## - items[id] is exactly {id, x, y, kind, count}; a faction lives in the
-##   parallel item_factions map (absent means "colony"), never inside the item,
-##   because StateCodec's item encoding assumes that fixed shape.
-## - Every ground-item spawn draws its id from next_item_id ("item_%d"), so an
-##   id is never reused; next_item_id is persisted and hashed.
-## - ground_berries is a per-tile counter keyed "%d_%d" (like WorldState's
-##   _objects), not a pickable item; the key is dropped when it reaches zero.
-## - state_hash() covers items, next_item_id, ground_berries and the dig-find
-##   RNG (hash_into()); item_factions, ground_berries_factions and
-##   pending_dig_finds are deliberately left out (ADR 047: factions decide
-##   nothing during a tick).
-## - ground_berries_factions is persisted with ground_berries (one factionId
-##   per groundBerries entry, ADR 047), so a load restores it.
-## - pending_dig_finds ({job_id, kind, x, y}; any kind with a find_table, not
-##   only dig) is staged during a tick and drained by resolve_dig_finds() in
-##   ascending job-id order, so the find sequence never depends on colonist
-##   iteration order. Always empty between ticks; not saved.
-## - roll draws exactly one randi_range() per staged find, whatever the outcome.
-## - _ids_at (tile -> ground item ids, A4) is trusted only between begin_tick() and
-##   end_tick(): WorldState.tick() brackets itself with them, and inside a tick every
-##   item is placed through _place_ground_item() and removed through
-##   _remove_ground_item(). Outside a tick (the viewer's debug scenario and tests
-##   write items directly) has_item_at()/get_ground_wood() scan items as before.
-##   Derived, never saved or hashed.
+## - items[id] is exactly {id, x, y, kind, count}; factions live in item_factions (absent = "colony").
+## - Ids come from next_item_id ("item_%d") and are never reused.
+## - ground_berries is a "%d_%d"-keyed counter, not an item; a key is dropped at zero.
+## - Hashed: items, next_item_id, ground_berries, the find RNG. Not hashed: item_factions,
+##   ground_berries_factions (persisted, ADR 047), pending_dig_finds.
+## - pending_dig_finds is drained in ascending job-id order, one randi_range() per find;
+##   empty between ticks, never saved.
+## - _ids_at is trusted only between begin_tick()/end_tick() (TickPipeline brackets the tick);
+##   outside a tick lookups scan items. Derived, never saved or hashed.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
@@ -239,8 +219,7 @@ func has_item_of_kind(kind: String) -> bool:
 			return true
 	return false
 
-## sow's effect: one unit of `kind`, ground/stockpile first (id order), else a
-## carried one. false when none exist, so the caller fails the job.
+## sow's effect: one ground unit first (id order), else a carried one; false when none.
 func remove_one_item_of_kind(kind: String) -> bool:
 	var ids := items.keys()
 	ids.sort()
@@ -270,8 +249,7 @@ func _consume_carried_item_of_kind(kind: String) -> bool:
 		return true
 	return false
 
-## accept_trade's stockpile draw: the lowest-id unreserved item of item_kind
-## with at least quantity, inside a stockpile zone, or "".
+## accept_trade's draw: the lowest-id unreserved stockpiled item_kind with >= quantity, or "".
 func find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
 	var table: Variant = _reservation_table.call()
 	var ids := items.keys()
@@ -304,16 +282,14 @@ func work_effects(kind: String) -> Dictionary:
 	var effects: Dictionary = _content.get_entry("jobs", kind).get("effects", {})
 	return effects
 
-## Where a yield of kind lands: effects.yields.placement "adjacent" uses
-## dig_item_placement(), "target" the tile itself.
+## Where a yield lands: "adjacent" uses dig_item_placement(), "target" the tile itself.
 func yield_placement(kind: String, x: int, y: int) -> Vector2i:
 	var yields: Dictionary = work_effects(kind).get("yields", {})
 	if yields.get("placement", "") == "adjacent":
 		return dig_item_placement(x, y)
 	return Vector2i(x, y)
 
-## ADR 026's placement rule: the first passable, non-trench orthogonal
-## neighbour in row-major order (N, W, E, S), else (x, y) itself.
+## ADR 026: the first passable, non-trench neighbour (N, W, E, S), else (x, y) itself.
 func dig_item_placement(x: int, y: int) -> Vector2i:
 	for neighbor in [Vector2i(x, y - 1), Vector2i(x - 1, y), Vector2i(x + 1, y), Vector2i(x, y + 1)]:
 		if bool(_passability.call(neighbor.x, neighbor.y)["passable"]) and _get_tile.call(neighbor.x, neighbor.y) != ContentRegistryType.TILE_TRENCH:

@@ -4,13 +4,8 @@ extends SaveCheck
 ## Save validation for the calendar and incident continuation state: "calendarAlerts",
 ## "incidentScheduler".
 
-## world._calendar_alerts_fired's wire shape is {fired: [windowId, ...]}
-## (StateCodec._encode_calendar_alerts()), a flat set of calendar window ids
-## that have already fired their one-shot alert (ADR 008 consequence 6).
-## Window ids come from content/calendar.json, whose own schema
-## (game/content/schemas/calendar.schema.json) allows any non-empty string
-## -- not the stricter ^[a-z0-9_-]+$ entity/job/item id pattern -- so a valid
-## calendar id like "SpringSow" must still validate here.
+## {fired: [windowId, ...]}, the calendar windows that already fired (ADR 008). Window ids
+## are any non-empty string (calendar.schema.json), not the entity id pattern.
 static func _valid_calendar_alerts(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid calendarAlerts type")
@@ -29,15 +24,8 @@ static func _valid_calendar_alerts(value) -> Dictionary:
 		seen_ids[window_id] = true
 	return {"ok": true}
 
-## world._incidents' own continuation state (StateCodec._encode_incident_scheduler(),
-## ADR 004 "WorldState's diagnostic hash includes this continuation state"):
-## a per-incident-id day when its cooldown next clears, the day the scheduler
-## last ran its daily draw, and its own independent RNG stream. Every
-## cooldownUntilDay key must reference a currently-declared incidents.json id
-## pattern -- like every other id-keyed map in this file -- though (unlike
-## toolReservations/toolFetchExcluded) it is never cross-checked against
-## content/incidents.json itself: that would require SaveIO to load content,
-## which no other check here does either.
+## IncidentScheduler's continuation (ADR 004): cooldownUntilDay per incident id (id pattern
+## only; SaveIO never loads content), last processed day and RNG.
 static func _valid_incident_scheduler(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid incidentScheduler type")

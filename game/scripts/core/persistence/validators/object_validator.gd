@@ -4,17 +4,9 @@ extends SaveCheck
 ## Save validation for what ObjectTable, ConstructionSystem, ZoneTable and AreaOrders persist:
 ## "objects", "constructionSites", "zones", "nextZoneId", "areaOrders".
 
-## The optional "health" key is present only for an object whose kind
-## declares "max_health", mirroring how "rerouting" is optional on
-## an entity's route (EntityValidator._valid_entity_route()) -- allowed via the
-## required+optional union passed to _keys_allowed(), not through
-## _require_fields() (whose single "required" array doubles as the exhaustive
-## allowed set, which would reject "health" outright as unexpected). The
-## optional "orientation" key is this same union's other member:
-## "horizontal", "vertical", "" or absent, with "" and absent both meaning
-## "no rotation" (the schema and codec must accept an explicit ""
-## identically to the key's absence, since either represents the default
-## orientation of every footprint-[1,1] kind).
+## Optional keys: "health" only for kinds with max_health; "orientation" is "horizontal",
+## "vertical", "" or absent ("" and absent both mean unrotated). Both go through the
+## required+optional union of _keys_allowed(), since _require_fields() allows only required.
 static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid objects entry type")
@@ -39,18 +31,8 @@ static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
 		return {"ok": true}
 	return _valid_object_health(object_entry["health"])
 
-## Mirrors the schema's "object.health" $def. Optional at the
-## objects-entry level -- the key's absence is allowed (checked by the caller
-## above) for a bare/non-damageable object, exactly like route.rerouting
-## (EntityValidator._valid_entity_route());
-## present only for an object whose kind declares "max_health"
-## (content/objects.json), same as world._object_health. Once the key is
-## present, though, its value must be a valid Dictionary: an explicit
-## `"health": null` is rejected here, not waved through as
-## "absent" -- the schema's object $def has no null variant, and
-## StateCodec._decode_objects() assigns item["health"] straight into a typed
-## Dictionary variable the instant item.has("health") is true, which errors
-## on null rather than failing gracefully.
+## Absent is fine, but a present "health" must be a Dictionary: an explicit null is rejected
+## (StateCodec._decode_objects() assigns it into a typed Dictionary).
 static func _valid_object_health(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid objects entry health type")
@@ -64,8 +46,7 @@ static func _valid_object_health(value) -> Dictionary:
 		return _fail("invalid objects entry health maxHp")
 	return {"ok": true}
 
-## Mirrors the schema's "constructionSite" $def -- one record per
-## active construction site, structurally independent of any job.
+## One record per active construction site, independent of any job.
 static func _valid_construction_site(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid constructionSites entry type")
@@ -153,11 +134,9 @@ static func _valid_zone(value, map_width: int, map_height: int) -> Dictionary:
 		return _fail("invalid zone bounds")
 	return {"ok": true}
 
-## "areaOrders" (ADR 044): {nextId, list, created}, each
-## list entry one pending area_order expansion as AreaOrders.encode() writes
-## it -- a known order kind, a non-empty in-map rectangle, a next tile index
-## inside it and distinct "done" indexes from next on; each "created" entry a
-## [first, end, order id] job-number range, ascending and disjoint.
+## "areaOrders" (ADR 044): {nextId, list, created}. Each list entry has a known kind, a
+## non-empty in-map rectangle, next inside it and distinct "done" indexes from next on; each
+## "created" entry is a [first, end, order id] range, ascending and disjoint.
 static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid areaOrders type")

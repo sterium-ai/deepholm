@@ -1,23 +1,13 @@
 class_name TradeSystem
 extends RefCounted
 
-## Trader visits (ADR 035, ADR 036): a visitor incident actor's trade_offer and
-## the accept_trade command that performs the two-way swap. Plain data, no
-## scene/node/RNG/wall-clock dependency; sibling modules are injected, every
-## WorldState rule it needs arrives as a Callable.
-##
+## Trader visits (ADR 035, 036): a visitor's trade_offer and the accept_trade swap.
 ## Invariants:
-## - A visitor posts its offer exactly once, on its incident job's first work
-##   tick (not at the wait's end), so accept_trade has a window before the
-##   trader's unchanged despawn. pending_offers itself is the "already posted" guard.
-## - The pick is deterministic from the trader id's hash over the sorted non-tool
-##   item kinds: no global randomness and no persisted RNG stream.
-## - accept_trade only takes an unreserved stockpiled unit
-##   (ItemTable.find_available_stockpiled_item()), never an item in a colonist's hands.
-## - An offer never outlives its trader: WorldState._finish_job() erases it on
-##   every terminal transition of the trader's incident job, accepted or not.
-## - pending_offers is not persisted and not hashed: an offer in flight across a
-##   save/load is lost, and the trader still leaves on schedule.
+## - A visitor posts once, on its incident job's first work tick (pending_offers is the guard).
+## - The pick is deterministic from the trader id's hash: no RNG stream.
+## - accept_trade takes only an unreserved stockpiled unit, never one in a colonist's hands.
+## - WorldState._finish_job() erases an offer on any terminal transition of its trader's job.
+## - pending_offers is neither persisted nor hashed: an offer is lost across a save/load.
 
 const SeededClockType = preload("res://scripts/core/seeded_clock.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
@@ -63,8 +53,7 @@ func _init(clock: SeededClockType, content: ContentRegistryType, item_table: Ite
 	_finish_job = finish_job
 	_remove_colonist_by_id = remove_colonist_by_id
 
-## Every trader's own outstanding trade_offer, for the presentation layer
-## (colonist_panel.gd) to render and wire to accept_trade.
+## Every outstanding trade_offer, for the presentation layer.
 func get_pending_trade_offers() -> Array[Dictionary]:
 	var offers: Array[Dictionary] = []
 	for trader_id in pending_offers:
@@ -72,8 +61,7 @@ func get_pending_trade_offers() -> Array[Dictionary]:
 		offers.append({"trader_id": trader_id, "give_item": String(offer["give_item"]), "want_item": String(offer["want_item"])})
 	return offers
 
-## job_id's incident actor posts its trade_offer once; a no-op for a
-## non-visitor (wolf, raider) or one that already posted.
+## Posts job_id's trader offer once; a no-op for a non-visitor or one that already posted.
 func maybe_post_trade_offer(job_id: String) -> void:
 	var actor: Dictionary = _find_job_colonist.call(job_id)
 	if actor.is_empty() or not ActorTableType.has_component(actor, "visitor", _content):
@@ -83,8 +71,7 @@ func maybe_post_trade_offer(job_id: String) -> void:
 		return
 	_post_trade_offer(actor)
 
-## give_item goes into the trader's "inventory" component (F2) so accept_trade
-## has something concrete to move; want_item is taken only on accept_trade.
+## give_item goes into the trader's inventory component; want_item is taken only on accept.
 func _post_trade_offer(actor: Dictionary) -> void:
 	var trader_id: String = String(actor["id"])
 	var picks := _pick_trade_items(trader_id)
@@ -98,8 +85,7 @@ func _post_trade_offer(actor: Dictionary) -> void:
 		"data": {"trader_id": trader_id, "give_item": give_item, "want_item": want_item},
 	})
 
-## Two distinct non-tool item kinds. Tools are excluded: trading one would
-## need ToolItemStore's reservation/handover machinery.
+## Two distinct non-tool kinds (tools would need ToolItemStore's reservation machinery).
 func _pick_trade_items(trader_id: String) -> Array:
 	var kinds: Array[String] = []
 	for entry in _content.list("items"):
@@ -112,10 +98,8 @@ func _pick_trade_items(trader_id: String) -> Array:
 		base += kinds.size()
 	return [kinds[base], kinds[(base + 1) % kinds.size()]]
 
-## accept_trade {trader_id}: validate, then swap one stockpiled want_item unit
-## for the trader's give_item, spawned on the tile that unit vacated (still in
-## the zone). Then the trader's incident job is cancelled through _finish_job,
-## so it leaves exactly like an unaccepted despawn. Refusing is never calling this.
+## accept_trade {trader_id}: swaps one stockpiled want_item unit for give_item on the vacated
+## tile, then cancels the trader's job so it leaves like an unaccepted despawn.
 func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if not (payload.get("trader_id") is String) or String(payload.get("trader_id", "")).is_empty():
@@ -149,8 +133,7 @@ func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 		_remove_colonist_by_id.call(trader_id)
 	return _event_log.applied(command)
 
-## One unit of `kind` into actor's "inventory" component items (F2's
-## per-instance shape, no "id" field).
+## One unit of `kind` into actor's inventory component (per-instance shape, no "id").
 func _append_trader_inventory_item(actor: Dictionary, kind: String) -> void:
 	var inventory: Variant = actor.get("inventory")
 	if inventory is Dictionary:

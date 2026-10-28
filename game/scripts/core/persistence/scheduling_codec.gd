@@ -6,15 +6,8 @@ extends RefCounted
 
 const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.gd")
 
-## site: a site_fetch/site_work job's own construction-site origin tile --
-## job_queue.gd's own native field (attach_site()), mirroring itemId/cell's
-## own optional shape exactly, so an in-flight wall order and an in-flight
-## door order at the same tick decode to different job dicts and hash
-## differently (WorldState.state_hash()'s "jobs" entry reads get_jobs()
-## directly, no separate wiring needed here beyond round-tripping the field).
-## No buildKind field any more: the object kind to place lives on the
-## construction site record itself (state["constructionSites"]), not
-## duplicated onto every job that happens to be working that site.
+## "site" is a site_fetch/site_work job's site origin (JobQueue.attach_site()), optional like
+## itemId/cell; the object kind lives on the site record, not on its jobs.
 static func _encode_jobs(jobs: Array[Dictionary]) -> Array:
 	var encoded: Array = []
 	for job in jobs:
@@ -78,9 +71,7 @@ static func _decode_scheduling(scheduling: Dictionary) -> Dictionary:
 		"activated_entries": _decode_activated_entries(scheduling["activatedEntries"]),
 	}
 
-## scheduler._activated_entries is keyed by job id (see
-## GlobalAssignment.get_activated_entries()); sorted keys give a
-## deterministic encoding order, matching every other keyed-map encoder here.
+## GlobalAssignment's activated entries keyed by job id, sorted.
 static func _encode_activated_entries(entries: Dictionary) -> Dictionary:
 	var keys := entries.keys()
 	keys.sort()
@@ -107,8 +98,7 @@ static func _encode_entry(entry: Dictionary) -> Dictionary:
 		"base": entry["base"], "submittedTick": entry["submitted_tick"],
 		"ordinal": entry["ordinal"], "restrictTo": String(entry.get("restrict_to", "")),
 	}
-	# ADR 014 Amendment: present on the wire only when true, so
-	# every ordinary entry keeps its original shape.
+	# ADR 014 amendment: written only when true, so ordinary entries keep their shape.
 	if bool(entry.get("autonomous", false)):
 		encoded["autonomous"] = true
 	return encoded

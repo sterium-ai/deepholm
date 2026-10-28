@@ -1,35 +1,15 @@
 class_name AreaOrders
 extends RefCounted
 
-## The `area_order` command and its saved expansion queue (ADR 044, B1).
-## Dragging an order over a large rectangle used to submit one command per
-## tile in a single frame: a whole 256x256 map took seconds of one frame even
-## after every per-command cost was made O(1). An area_order names the
-## rectangle instead, and is expanded -- in row-major order, through the very
-## same per-tile command apply() runs for a single click -- TILES_PER_STEP of
-## its own tiles at acceptance, then TILES_PER_STEP tiles at the start of
-## every tick for the pending orders, first-in first-out, until done. Nothing
-## here reads wall-clock time: the pace is fixed per tick, so the same seed and
-## command stream expand identically.
-##
+## The `area_order` command and its saved expansion queue (ADR 044): a rectangle expanded
+## row-major through the same per-tile command a click applies, TILES_PER_STEP tiles at
+## acceptance and per tick (FIFO). The pace is fixed per tick, never wall-clock.
 ## Invariants:
-## - Per tile, orders expand in acceptance order: before an order expands a
-##   tile, every earlier pending order whose rectangle holds it and has not
-##   expanded it yet does so first ("pulled forward": the tile index goes in
-##   that order's "done" list, skipped when its row-major cursor "next"
-##   reaches it). So a new order never waits behind a backlog, and acts on a
-##   tile exactly as if every earlier order had already finished there. A save
-##   taken mid-expansion (StateCodec "areaOrders") resumes exactly there.
-## - A tile's command is built when the tile is expanded, against the world
-##   at that moment, exactly as the viewer built it at release time before;
-##   it is applied with the expanding tick, so its command_applied /
-##   command_rejected events and envelopes are the per-tile command's own.
-## - cancel only ever picks a job, or a construction site, that existed when
-##   the order was accepted (jobLimit / siteLimit: the next job / site number
-##   at that moment), or a job an earlier area order created since ("created":
-##   [first, end, order id] job-number ranges, recorded while a later cancel
-##   is pending) -- one created otherwise during the expansion is never
-##   cancelled by an order issued before it. Area orders never create sites.
+## - Per tile, orders expand in acceptance order: earlier pending orders covering a tile are
+##   "pulled forward" first. A save mid-expansion ("areaOrders") resumes exactly there.
+## - A tile's command is built against the world when expanded and emits its own events.
+## - cancel only picks a job/site that existed at acceptance (jobLimit/siteLimit) or one an
+##   earlier area order created since ("created" ranges). Area orders never create sites.
 
 const TILES_PER_STEP := 128
 const ORDERS := ["dig", "chop", "forage", "till", "sow", "mine", "cancel", "remove_object"]
@@ -47,10 +27,7 @@ var _next_site_number: Callable
 var _event_log: EventLog
 var _clock: SeededClock
 
-## apply(command) -> envelope (WorldState.apply()); get_construction_site(x, y)
-## -> site or {}; get_job_index() -> JobQueue's current JobIndex;
-## next_job_number() / next_site_number() -> the next id number either table
-## will hand out.
+## next_job_number()/next_site_number() return the next id number either table hands out.
 func _init(apply: Callable, get_construction_site: Callable, get_job_index: Callable,
 		next_job_number: Callable, next_site_number: Callable, event_log: EventLog, clock: SeededClock) -> void:
 	_apply = apply
@@ -61,10 +38,7 @@ func _init(apply: Callable, get_construction_site: Callable, get_job_index: Call
 	_event_log = event_log
 	_clock = clock
 
-## area_order payload rule, shared by apply_command() and preview()
-## (CommandChecks.check()): {order, x, y, width, height[, priority]} with order
-## one of ORDERS, integer fields, and a rectangle of at least one tile inside
-## the map. {} when valid.
+## area_order payload rule shared by apply_command() and preview(); {} when valid.
 static func check(payload: Dictionary, map_width: int, map_height: int) -> Dictionary:
 	for key in payload.keys():
 		if key not in ["order", "x", "y", "width", "height", "priority"]:
@@ -81,11 +55,8 @@ static func check(payload: Dictionary, map_width: int, map_height: int) -> Dicti
 		return {"reason": "invalid_target", "params": {"detail": "area_rect_invalid"}}
 	return {}
 
-## WorldState.apply()'s area_order handler (the envelope is already valid):
-## queues the order and expands its own first TILES_PER_STEP tiles now. The
-## envelope adds "area_order_id", "remaining" (its tiles left for later ticks)
-## and "skipped" ({x, y, reason} per tile command of this order rejected so
-## far, row-major).
+## Queues the order and expands its first TILES_PER_STEP tiles now; the envelope adds
+## "area_order_id", "remaining" and "skipped" ({x, y, reason} per rejected tile).
 func apply_command(command: Dictionary, map_width: int, map_height: int) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var rejection := check(payload, map_width, map_height)
@@ -108,9 +79,7 @@ func apply_command(command: Dictionary, map_width: int, map_height: int) -> Dict
 	applied["remaining"] = remaining_tiles(int(order["id"]))
 	return applied
 
-## Expands up to TILES_PER_STEP tiles of the pending orders, first-in
-## first-out; returns the per-tile rejections as {x, y, reason}. WorldState
-## calls it at the start of every tick().
+## TickPipeline's first phase: up to TILES_PER_STEP tiles, FIFO; returns the rejections.
 func advance() -> Array[Dictionary]:
 	var skipped: Array[Dictionary] = []
 	var budget := TILES_PER_STEP
@@ -118,10 +87,8 @@ func advance() -> Array[Dictionary]:
 		budget -= _expand(0, budget, skipped)
 	return skipped
 
-## Expands up to `budget` not yet expanded tiles of _orders[position],
-## row-major, each pulled forward from the earlier orders first; appends the
-## order's own rejections to `skipped`, drops the order once done, and
-## returns how many of its tiles it expanded.
+## Expands up to `budget` tiles of _orders[position] (earlier orders pulled forward first);
+## returns how many it expanded.
 func _expand(position: int, budget: int, skipped: Array[Dictionary]) -> int:
 	var order: Dictionary = _orders[position]
 	var width: int = order["width"]
@@ -145,9 +112,7 @@ func _expand(position: int, budget: int, skipped: Array[Dictionary]) -> int:
 			_created = []
 	return used
 
-## Expands `tile` of the earlier `order` now, out of row-major order, unless
-## it lies outside the order or is already expanded. Its rejections are the
-## per-tile command_rejected events only.
+## Expands `tile` of the earlier `order` now, unless outside it or already done.
 func _pull_forward(order: Dictionary, tile: Vector2i) -> void:
 	var local := tile - Vector2i(int(order["x"]), int(order["y"]))
 	if not Rect2i(0, 0, int(order["width"]), int(order["height"])).has_point(local):
@@ -199,9 +164,7 @@ func remaining_tiles(id: int) -> int:
 			return int(order["width"]) * int(order["height"]) - int(order["next"]) - (order["done"] as Array).size()
 	return 0
 
-## The per-tile command `order` expands to at `tile`, or {} when there is
-## nothing to order there (Cancel over a tile with no pending order -- never a
-## rejection, as a single click never was).
+## The per-tile command for `tile`, or {} when there is nothing to order (never a rejection).
 func tile_command(order: Dictionary, tile: Vector2i) -> Dictionary:
 	var type: String = order["order"]
 	var command := {"actor": order["actor"], "command_id": "%s:%d,%d" % [order["commandId"], tile.x, tile.y],
@@ -229,10 +192,8 @@ func tile_command(order: Dictionary, tile: Vector2i) -> Dictionary:
 		command["payload"] = {"job_id": String(job["id"])}
 	return command
 
-## The pending job Cancel picks among `jobs` (JobIndex.pending_at(): the
-## queued/active jobs targeting one tile, construction-site jobs excluded --
-## a tile with a pending site job always has its site, which Cancel takes
-## first): queued before active, then higher priority, then lower String id.
+## Cancel's pick among a tile's pending jobs: queued before active, then higher priority,
+## then lower id.
 static func best_cancel_candidate(jobs: Array) -> Dictionary:
 	var best := {}
 	for job in jobs:
@@ -255,14 +216,11 @@ static func cancel_before(candidate: Dictionary, current: Dictionary) -> bool:
 static func _number(id: String) -> int:
 	return int(id.get_slice("_", id.get_slice_count("_") - 1))
 
-## True when no order is pending. WorldState.state_hash() covers the queue
-## only while it is not idle: pending expansion decides what the next ticks
-## create, while an idle queue's nextId is never observable outside the save.
+## True when no order is pending; state_hash() covers the queue only while it is not idle.
 func is_idle() -> bool:
 	return _orders.is_empty()
 
-## Persisted as StateCodec "areaOrders": {nextId, list, created} (every field
-## above: JSON-safe ints, strings and int arrays).
+## Persisted as StateCodec "areaOrders": {nextId, list, created}.
 func encode() -> Dictionary:
 	return {"nextId": _next_id, "list": _orders.duplicate(true), "created": _created.duplicate(true)}
 

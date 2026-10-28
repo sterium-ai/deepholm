@@ -1,30 +1,16 @@
 class_name EventLog
 extends RefCounted
 
-## WorldState's event log: the sorted event list, the sequence counter every
-## event draws from, the JobQueue event collector, and the applied/rejected
-## command envelopes. Plain data, no scene/node/RNG/wall-clock dependency.
-##
+## The event log: sorted events, the shared sequence counter, the JobQueue event collector
+## and the applied/rejected command envelopes.
 ## Invariants:
-## - _events stays sorted by (tick, system_priority, entity_id, sequence) at
-##   all times (binary-search insert in insert_event(), at the same index the
-##   former backward scan found), and so does each _by_type list.
-## - insert_event() is the only way in: _by_type indexes every event by type
-##   so get_events(types) never walks or copies the whole log (B1), and
-##   _arrival keeps the same events in insertion order for
-##   get_events_since() (A6).
-## - Bounded retention (A6): once the log holds more than MAX_EVENTS, the
-##   oldest events in log order are dropped down to RETAINED_EVENTS, from
-##   _events, _by_type and _arrival alike. _trimmed_sequence remembers the
-##   highest sequence dropped, so a get_events_since() cursor at or below it
-##   is reported as truncated instead of silently missing events.
-## - Only the two counters are persisted (StateCodec "scheduling".
-##   eventSequence/queueEventSequence); the event list itself is never saved
-##   and starts empty after a load.
-## - Nothing here is part of state_hash(): two runs that differ only in their
-##   event log hash equal.
-## - pure_rejection() never appends an event or advances the sequence -- the
-##   only rejection path preview() may call.
+## - _events and each _by_type list stay sorted by (tick, system_priority, entity_id, sequence);
+##   insert_event() is the only way in; _arrival keeps insertion order (A6).
+## - Past MAX_EVENTS the oldest are trimmed to RETAINED_EVENTS everywhere; a cursor at or
+##   below _trimmed_sequence is reported truncated.
+## - Only eventSequence/queueEventSequence are persisted; events start empty after a load.
+## - Nothing here is hashed.
+## - pure_rejection() never appends an event or draws a sequence (preview()'s only path).
 
 const MAX_EVENTS := 8192
 const RETAINED_EVENTS := 6144
@@ -33,9 +19,7 @@ var _events: Array[Dictionary] = []
 var _by_type: Dictionary = {}
 ## The retained events in insertion order (sequence order on every core path).
 var _arrival: Array[Dictionary] = []
-## False once an event arrived with a sequence below its predecessor's (only a
-## test inserting a hand-made event): get_events_since() then scans _arrival
-## whole instead of binary-searching it.
+## False once a (test-made) event arrived out of sequence: get_events_since() then scans.
 var _arrival_sorted := true
 ## Highest sequence among the events retention dropped; -1 while none was.
 var _trimmed_sequence: int = -1
@@ -95,14 +79,9 @@ func get_events(types: Array = []) -> Array[Dictionary]:
 		copy.append(event.duplicate(true))
 	return copy
 
-## The log as a stream (A6): {"events", "next", "truncated"}. "events" are deep
-## copies of the retained events whose sequence is at least `sequence` (only
-## those whose type is in a non-empty `types`), in log order; "next" is the
-## cursor for the following call; "truncated" is true when retention already
-## dropped an event at or after `sequence`. A later read can return an event
-## that sorts before one an earlier read returned (a command applied at tick T
-## orders before tick T's tick_advanced): the reads merged in log order are
-## the log.
+## The log as a stream (A6): {"events", "next", "truncated"}, events with sequence >= `sequence`.
+## A later read may return an event that sorts before an earlier one; merged in log order,
+## the reads are the log.
 func get_events_since(sequence: int, types: Array = []) -> Dictionary:
 	var start := _arrival_start(sequence) if _arrival_sorted else 0
 	var picked: Array[Dictionary] = []
@@ -192,9 +171,7 @@ func insert_event(event: Dictionary) -> void:
 	if _events.size() > MAX_EVENTS:
 		_trim()
 
-## Drops the oldest events in log order down to RETAINED_EVENTS. They are a
-## prefix of _events' total order, so every index keeps exactly the events
-## not ordered before the first kept one.
+## Drops the oldest events (a prefix of _events' order) down to RETAINED_EVENTS.
 func _trim() -> void:
 	var drop := _events.size() - RETAINED_EVENTS
 	for i in drop:

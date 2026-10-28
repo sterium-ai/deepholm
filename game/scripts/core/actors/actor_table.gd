@@ -1,27 +1,10 @@
 class_name ActorTable
 extends RefCounted
 
-## F2 actor table (docs/architecture/foundation-for-breadth.md section F2,
-## docs/decisions/012-actors-and-components.md): builds a new actor
-## Dictionary from its content/actors.json definition, and answers
-## "does this actor's definition declare component X" / "read component X's
-## per-instance state off this actor" against the same definition. Plain,
-## scene-independent GDScript (AGENTS.md): every method is static and takes
-## the ContentRegistry it needs explicitly, so it is constructible and
-## callable from a headless test exactly like ContentRegistry/WorldState
-## themselves, with no hidden instance state.
-##
-## Scope-limiting design decision (see the ADR): has_component()/
-## get_component() are a pure lookup against the actor's own def_id (its
-## "kind" field) in the content bundle -- never a per-instance flag or a new
-## nested key -- so calling ActorTable.spawn("colonist", ...) produces
-## exactly the same Dictionary shape WorldState's own colonist spawning has
-## always produced (id, kind, x, y, needs, labourTable, route, work,
-## carrying, held_tool), with has_component() still correctly reporting the
-## colonist definition's declared components. The colonist shape also
-## carries "health" (hp/maxHp/dead), since health is genuine per-instance
-## state for a colonist just as it is for a generic actor; everything else
-## about the accessor layer is unchanged.
+## Actor table (foundation-for-breadth.md F2, ADR 012): builds an actor Dictionary from its
+## content/actors.json definition and answers component queries against that definition. All
+## static, registry passed explicitly. has_component()/get_component() look up the actor's "kind",
+## never a per-instance flag, so a colonist keeps its historic field set and order.
 
 const MoverType = preload("res://scripts/core/actors/components/mover.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
@@ -32,9 +15,7 @@ const CombatType = preload("res://scripts/core/actors/components/combat.gd")
 const WildType = preload("res://scripts/core/actors/components/wild.gd")
 const VisitorType = preload("res://scripts/core/actors/components/visitor.gd")
 
-## The closed vocabulary content_registry.gd's _check_references() enforces
-## for an actor definition's "components" array, mirroring how
-## ToilExecutor.is_known_toil() closes jobs.json's toil vocabulary.
+## The closed component vocabulary content_registry.gd's _check_references() enforces.
 const COMPONENT_NAMES: Array[String] = [
 	"mover", "worker", "needs", "health", "inventory", "combat", "wild", "visitor",
 ]
@@ -42,16 +23,8 @@ const COMPONENT_NAMES: Array[String] = [
 static func is_known_component(name: String) -> bool:
 	return COMPONENT_NAMES.has(name)
 
-## Dispatches to the named component's own validate(tunables) static method.
-## Used by content_registry.gd to reject an actor definition whose declared
-## component has tunables outside that component's own rules (a required
-## tunable missing entirely, or a cross-field rule like health.hp <= maxHp or
-## worker.labour_min <= labour_default <= labour_max that the registry's
-## single-field JSON-Schema-subset validator cannot express) with
-## ERROR_SCHEMA_VIOLATION, mirroring how is_known_component() backs the
-## dangling-reference check for an unknown component name. False for a name
-## outside COMPONENT_NAMES; the registry only calls this after its own
-## dangling-reference check has already confirmed name is known.
+## Dispatches to the component's validate(tunables) for cross-field rules the registry's schema
+## subset cannot express. Only called after the name is known; false outside COMPONENT_NAMES.
 static func validate_component(name: String, tunables: Dictionary) -> bool:
 	match name:
 		"mover":
@@ -73,13 +46,9 @@ static func validate_component(name: String, tunables: Dictionary) -> bool:
 		_:
 			return false
 
-## Builds a new actor Dictionary for def_id (an id in content/actors.json's
-## "actors" collection) at (x, y) with the given id, reading every tunable
-## from registry rather than a local literal. "colonist" is special-cased to
-## preserve the exact pre-F2 field set/order (see the class doc comment);
-## every other def_id gets a component-keyed shape (a "needs"/"health"/
-## "inventory"/"combat" key per declared component, "wild"/"visitor" as a
-## bare true flag, "route" for mover).
+## Builds actor def_id at (x, y), every tunable from the registry. "colonist" keeps its exact
+## field set/order; every other kind gets component-keyed fields ("wild"/"visitor" as true flags,
+## "route" for mover).
 static func spawn(def_id: String, x: int, y: int, registry, id: String) -> Dictionary:
 	var definition: Dictionary = registry.get_entry("actors", def_id)
 	var components: Array = definition.get("components", [])
@@ -124,9 +93,7 @@ static func _spawn_generic_actor(def_id: String, x: int, y: int, id: String, com
 		actor["visitor"] = true
 	return actor
 
-## True when actor's own definition (looked up by its "kind" field, the def_id
-## every spawned actor carries) declares a component named name -- never a
-## per-instance flag, so this is correct for a colonist's legacy shape too.
+## True when the actor's definition (by "kind") declares component `name`.
 static func has_component(actor: Dictionary, name: String, registry) -> bool:
 	var def_id := String(actor.get("kind", ""))
 	var definition: Dictionary = registry.get_entry("actors", def_id)
@@ -135,12 +102,8 @@ static func has_component(actor: Dictionary, name: String, registry) -> bool:
 	var components: Array = definition.get("components", [])
 	return components.has(name)
 
-## The named component's per-instance state, assembled from actor's existing
-## fields, or null when actor's definition does not declare that component.
-## "worker" is the scope-limiting special case: assembled from the legacy
-## "labourTable"/"held_tool" fields rather than a nested "worker" key.
-## "mover" reads the shared "route" field every actor kind uses. Every other
-## known component reads its own like-named key.
+## The component's per-instance state, or null when undeclared. "worker" is assembled from
+## "labourTable"/"held_tool", "mover" reads "route"; others read their like-named key.
 static func get_component(actor: Dictionary, name: String, registry) -> Variant:
 	if not has_component(actor, name, registry):
 		return null

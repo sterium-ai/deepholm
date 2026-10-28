@@ -17,7 +17,10 @@ Audit date: 2026-10-25, at `main` `052d8c4` (Phase R through R3; `world_state.gd
 lines). R4 (`95b06b8`) landed afterwards and moved only the work-progress functions, none
 of them cited here. R5 (`b9736b3`) then moved the construction flow into
 `objects/construction_system.gd` (`ConstructionSystem`). The four construction functions
-in §3.1 items 6 and 7 are cited at their R5 home (R5 is a reviewed move, not a rewrite). This page is the evidence. A plain-language summary for the owner, in Spanish, is
+in §3.1 items 6 and 7 are cited at their R5 home (R5 is a reviewed move, not a rewrite). R6–R14 and the
+A-tasks moved or replaced more of the cited code (R16, 2026-10-28): each function is cited at its
+current owner, and one that no longer exists says which task replaced it. The findings and numbers
+are unchanged. This page is the evidence. A plain-language summary for the owner, in Spanish, is
 [foundation-audit-summary.md](foundation-audit-summary.md).
 
 ## 0. Method and how to reproduce
@@ -136,7 +139,7 @@ synchronised need onset costs O(W·A²) (§3.1, item 1).
 | --- | --- | --- | --- | --- | --- | --- |
 | mean tick (ms) | 17.5 | 15.3 | 14.6 | 20.2 | 19.7 | 25.3 |
 | jobs in `_jobs` (terminal) | 149 (129) | 229 (204) | 296 (280) | 374 (353) | 428 (410) | 498 (479) |
-| `JobQueue._events` / `EventLog._events` | 685 / 1,834 | 1,061 / 3,281 | 1,594 / 4,900 | 2,366 / 6,744 | 2,974 / 8,402 | 3,706 / 10,198 |
+| `JobQueue` events / `EventLog` events | 685 / 1,834 | 1,061 / 3,281 | 1,594 / 4,900 | 2,366 / 6,744 | 2,974 / 8,402 | 3,706 / 10,198 |
 
 | Open orders at once | 0 | 100 | 500 | 2,000 |
 | --- | --- | --- | --- | --- |
@@ -244,8 +247,8 @@ before it starts a search.
    colonists, 9.6 s at 25, 38 s at 50 and 153 s at 100. That is ×4 per doubling, on a map
    with 2,218 water tiles of which 234 are reachable.
    - `NeedGiver._start_search()` runs once per colonist whose need crosses its threshold. It
-     calls `WorldState._need_source_candidates("water")`, which hands every water tile to
-     `_reachable_candidates_only()`.
+     calls `NeedsSystem.need_source_candidates("water")` (then on `WorldState`), which hands every water tile to
+     `_reachable_candidates_only()` (removed in A4: candidates are now computed per region).
    - `_reachable_candidates_only()` keeps a tile if `_colonists.any(...)` can reach it, so each
      unreachable tile is checked against every colonist. That is O(W·A) per searching colonist
      and O(W·A²) when they all start together.
@@ -253,7 +256,7 @@ before it starts a search.
      `"tile:%d,%d"` key per candidate, and sorts all candidates with a lambda.
    - Synchronised onsets are the normal case, not a contrived one. Every spawned colonist
      starts with the same needs (`ActorTable._spawn_colonist()` →
-     `NeedsType.build_full_needs()`) and decays at the same rate (`_decay_needs()`).
+     `NeedsType.build_full_needs()`) and decays at the same rate (`NeedsSystem.decay_needs()`).
    - After the onset, the searches cost 7.8 ms per tick at 10 colonists and 45 ms at 50,
      because each search resumes once per tick. No colonist reached water within 30 ticks.
      In a 120-tick run (`bench_tick_scaling.gd -- --workloads=needs --actors=10 --ticks=120`,
@@ -274,7 +277,7 @@ before it starts a search.
    - `WorldState._find_colonist()` is reached through `_actor_faction()` from
      `Passability.passable_for_worker()`, the route cost for autonomous actors. That makes every route-cost call for an incident
      actor O(A).
-   - `_rescue_candidates()` checks components per actor on every tick: `rescue_giver` costs
+   - `TrenchSystem.rescue_candidates()` checks components per actor on every tick: `rescue_giver` costs
      96 ms per tick at 1,000 idle colonists.
 3. **Scheduler and route search, once colonists have work.** With one order per colonist,
    the `scheduler` phase is 333 ms at 500 colonists and 2,186 ms at 1,000. On the first tick
@@ -283,7 +286,8 @@ before it starts a search.
      copies all jobs (`queue.get_jobs()`), and sorts up to 32·A proposals.
    - Each activation runs a route search. `RouteSearch` is plain Dijkstra:
      `_pop_min_index()` scans the whole frontier on every step, and `_ordered_neighbors()`
-     allocates a 4-element array and sorts it with a lambda on every expansion. There is no
+     allocates a 4-element array and sorts it with a lambda on every expansion (both replaced in
+     A3 by a cost-bucketed min-heap and the constant `NEIGHBOR_OFFSETS`). There is no
      heuristic, so expansions grow with the square of the distance (§2.3).
    - At the 64-step budget, a route across the 256×256 map needs 242 ticks before the
      colonist moves. At the base speed of 2 ticks per second
@@ -334,7 +338,7 @@ before it starts a search.
 **Smallest structural change.** None of these needs a new architecture. They need data
 structures under the existing APIs:
 
-- a per-tile cost and object index, kept current at the existing `_mark_dirty()` choke point
+- a per-tile cost and object index, kept current at the existing `TileGrid.mark_dirty()` choke point
   (A2, after R3 creates `map/passability.gd` and `map/tile_grid.gd`);
 - a heap-based search with no per-step allocation (A3, identical results);
 - need-source candidates computed once per tick per need kind and per region, and a per-tile
@@ -351,9 +355,9 @@ The tick loop, the job engine and the contracts stay as they are.
 
 - `JobQueue._jobs` keeps every terminal job. The only writes are `append` in `submit` and
   the whole-array replacement in `restore`.
-- `JobQueue._events` is never trimmed, and `_emit()` re-sorts the whole list
-  (`_events.sort_custom(_event_before)`) on every event.
-- `EventLog._events` is never trimmed. `insert_event()` is an insertion into an ever-growing
+- `JobQueue`'s event list is never trimmed, and `_emit()` re-sorts the whole list
+  (`sort_custom(_event_before)`) on every event (B1 replaced it with `JobEventLog`).
+- `EventLog`'s event list is never trimmed (A6 bounded it). `insert_event()` is an insertion into an ever-growing
   array, and `get_events()` deep-copies all of it for the viewer
   (`viewer/status_text.gd`, `viewer/work_table_panel.gd`).
 - `TileGrid.dirty_cells` is append-only by contract, and `get_dirty_cells()` copies the
@@ -402,21 +406,24 @@ about 0.2 s (§2.5).
 
 **Breaks first: kinds are content, but behaviours are still code.**
 
-- `WorldState._toil_on_work_complete()` has a `match job["kind"]` with one arm per work kind
+- `ToilBindings._toil_on_work_complete()` (then on `WorldState`) had a `match job["kind"]` with one arm per work kind
   (dig, chop, mine, forage, till, sow, site_work), each hard-coding its tile change and its
-  yield (`spawn_item("sand")`, `spawn_wood_item()`, `spawn_stone_item()`). A new work kind is
-  a code change in the largest file.
-- Needs match on `food`/`water`/`rest` with `"bed"` (`_need_source_candidates()`).
-  `ItemTable` has dedicated `spawn_wood_item`/`spawn_stone_item`/`spawn_berries_item`.
+  yield (`spawn_item("sand")`, `spawn_wood_item`, `spawn_stone_item`). A new work kind was
+  a code change in the largest file. (A14 replaced the arms with `jobs.json` effects applied by
+  `ToilBindings.apply_work_effects()`, ADR 051.)
+- Needs match on `food`/`water`/`rest` with `"bed"` (`NeedsSystem.need_source_candidates()`).
+  `ItemTable` has dedicated `spawn_wood_item`/`spawn_stone_item`/`spawn_berries_item` (A14 kept
+  only `spawn_berries_item()` beside the generic `spawn_item()`).
   Berries are a separate `ground_berries` map, not an item.
 - The save validator repeats content as code: tile and job whitelists and need keys in
   `save_io.gd` `_validate_state()`, and `ENTITY_COMPONENT_FIELDS` keyed by colonist, wolf and
-  trader. `LABOUR_KINDS` exists both in `world_state.gd` and `save_io.gd`.
+  trader. `LABOUR_KINDS` exists both in `world_state.gd` and `save_io.gd` (since R14 the save copy is a
+  literal list in `persistence/validators/entity_validator.gd`).
 - `lint_content_literals.ps1` only catches three const patterns, so bare literals in `match`
   arms pass. Counts in core today: `"site_fetch"` 28, `"haul"` 19, `"dig"` 14, `"chop"` 10.
 - The registry's JSON-Schema subset has no `enum`, `oneOf`, `$ref` or `pattern`
   (`_validate_node()`), and `_freeze_collection()` silently overwrites a duplicate id.
-- The registry uses a hand-written GDScript JSON parser (`_parse_json()`, needed to keep ints
+- The registry uses a hand-written GDScript JSON parser (`parse_json()`, since A13 in `content/content_json.gd`, needed to keep ints
   as ints). Together with validation, a load takes about 30× longer per byte than a native parse
   (§2.5). That is harmless at today's 13 KB, but it is the main cost for a large bundle.
 
@@ -433,7 +440,7 @@ Save validation reads its whitelists from the registry (A7 or A13).
 
 **Breaks first.** There is no condition, trigger, flag, chain, choice or quest state
 anywhere. The incident schema forbids extra fields. Spawn edges are a hard-coded `match`
-(`incident_scheduler.gd` `_spawn_tile()`), and the daily draw has no random roll
+(`incident_scheduler.gd` `_edge_line()`), and the daily draw has no random roll
 (`_run_daily_draw()`). A story beat today would be new code in `WorldState`.
 
 **Smallest change.** A design first (A17, ADR only): rules of the form trigger → condition
@@ -446,8 +453,8 @@ not need a new engine.
 
 **Breaks first.** There is no scenario format. A new game is `WorldState.new(seed, rate,
 width, height)` plus generator constants. The only alternative start is code:
-`viewer/debug_scenario.gd`, which also writes `world._items` and `world._next_item_id`
-directly. Map size, roster size (`mapgen.json` `colonist_count`), starting items and the
+`viewer/debug_scenario.gd`, which also writes `ItemTable`'s item map and next-id counter
+directly, through `WorldState`'s debug accessors. Map size, roster size (`mapgen.json` `colonist_count`), starting items and the
 enabled incidents are not grouped into anything a level designer could edit.
 
 **Smallest change.** A `scenarios.json` content kind with a schema (map size, seed or fixed
@@ -455,14 +462,14 @@ map, starting roster, items and objects, enabled incidents, calendar), and a new
 that builds a world from one scenario entry. `debug_scenario.gd` becomes the first entry
 (A16).
 
-**Status (A16, [ADR 053](../decisions/053-scenarios-as-content.md)).** `scenarios.json` ships
+**Status (A16, [ADR 054](../decisions/054-scenarios-as-content.md)).** `scenarios.json` ships
 two entries: `new_game` (the default New Game) and `debug`, which replaces the old
 `debug_scenario.gd` code.
 - `core/world/scenario_builder.gd` builds a world from either entry, and the New Game dialog
   picks one.
 - Map size, seed, tick rate, the incident switch, items and objects are scenario fields.
-- The `world._items`/`world._next_item_id` writes moved out of the viewer into the builder's
-  documented bootstrap step.
+- The viewer's direct writes to `ItemTable`'s item map and next item id moved into the
+  builder's documented bootstrap step.
 - The owner deferred the starting roster, calendar and per-incident list to A16b.
 
 ### 3.7 Localisation and mods or data packs
@@ -528,9 +535,9 @@ viewer's direct field reads (§4.3) are what would break.
 | Deep copy of all jobs inside the core | `JobQueue.get_jobs()` callers listed in §3.1 | A5: read-only view |
 | Deep copy of all actors | `GlobalAssignment.tick()`, `get_colonists()` from toils and givers | A5: read-only view, id index |
 | Sort per call | `ContentRegistry.list()`, `ItemTable.get_items()`, `_advance_colonists()`, `JobQueue._emit()` | sort once, or keep sorted |
-| Array allocation and lambda sort per expansion | `RouteSearch._ordered_neighbors()` | A3: constant neighbour order (already row-major) |
+| Array allocation and lambda sort per expansion | `RouteSearch._ordered_neighbors()` (removed by A3) | A3: constant neighbour order (already row-major) |
 | Search snapshot per tick while rerouting | `toil_executor.gd` `_begin_go_to_reroute()`/`_resume_go_to_reroute()` store `search.snapshot()` (frontier, visited, came_from) on every call | A3/A7: snapshot only at save time |
-| O(objects) backfill every tick | `ObjectTable.ensure_object_health()` (from `WorldState._decay_needs()`), plus `_ensure_needs()`/`_ensure_health()`/`_ensure_combat()` over all actors | run at load and spawn only |
+| O(objects) backfill every tick | `ObjectTable.ensure_object_health()` (from `NeedsSystem.decay_needs()`), plus `NeedsSystem.ensure_needs()`/`CombatSystem.ensure_health()`/`ensure_combat()` over all actors | run at load and spawn only |
 
 ### 4.2 Memory: worlds are never freed
 
@@ -551,17 +558,17 @@ the world (viewer save wiring), plus a test that the object count returns to its
 - `viewer/control_bar.gd` reads `world._content.list("incidents")`;
 - `viewer/order_input.gd` reads `world._content.list("objects")`;
 - `viewer/debug_scenario.gd` iterates `world._colonists` and writes `world._next_item_id`
-  and `world._items[...]`, which is a direct mutation of simulation state.
+  and an entry in `ItemTable`'s item map (through `WorldState`'s debug accessor), which is a direct mutation of simulation state.
 
 The viewer also pulls deep copies every tick (`get_colonists()`, `get_jobs()`, `get_items()`,
 `get_objects()`), rebuilds one Label/Button row per colonist on every tick
 (`viewer/colonist_panel.gd` `refresh()`), scans all jobs once per colonist
-(`viewer/colonist_sprites.gd` `_is_building()`), and draws each actor as an
+(`viewer/colonist_sprites.gd` `_is_building()`, removed by B2), and draws each actor as an
 `AnimatedSprite2D` plus up to five more nodes (`colonist_sprites.gd` `_refresh()`, health
 bars). At 1,000 actors that is about 4,000 to 6,000 CanvasItems, rebuilt from copies on every
 tick. A9 covers this: a read-only snapshot per tick, batched actor drawing (one
 `MultiMeshInstance2D` or one `_draw()` per layer), incremental panels, and a purity rule
-that also rejects `world._field` access.
+that also rejects private `world._*` field access.
 
 ### 4.4 Save pipeline
 
@@ -574,7 +581,7 @@ What does not scale (numbers in §2.4):
 - **One JSON document**, with tiles as an array of 65,536 strings (`state_codec.gd`
   `encode()`, `"tiles": world._tile_grid.encode()["tiles"]`, which is `TileGrid.encode()`'s
   `tiles.duplicate()`).
-- **In-flight route searches saved in full.** `StateCodec._encode_route()` writes
+- **In-flight route searches saved in full.** `SchedulingCodec._encode_route()` writes
   `visited`, `cameFrom` and `frontier`. One long search is up to about 2 MB of JSON (§2.3,
   `snapshot_json`).
 - **`write_atomic()` does the work several times.** It runs `_validate_state()`, which
@@ -596,7 +603,7 @@ Today's snapshot is not a full continuation either. `RouteSearch.snapshot()`
 `RouteSearch.restore()` then calls `_rebuild_costs()`, which walks `came_from` and sums
 `_cost_of(tile)`, which is the *current* `_cost_fn`. If a visited tile's cost changed after
 it was expanded, the rebuilt costs differ from the ones the uninterrupted search holds.
-`_pop_min_index()` orders the frontier by `_cost`, so the resumed search can pop tiles in a
+`_pop_min_index()` (A3: now the cost heap) orders the frontier by `_cost`, so the resumed search can pop tiles in a
 different order and return a different path from identical snapshots. This defect is read
 from the code, not measured. No current test changes the map between expansion and save.
 

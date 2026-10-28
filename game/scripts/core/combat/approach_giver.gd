@@ -1,105 +1,21 @@
 class_name ApproachGiver
 extends RefCounted
 
-## Job-giver for `approach` (ADR 033): decides when a hostile actor
-## (one with a `combat` component whose own faction's relation to `colony` is
-## `hostile`, read via `Relations.relation()` off each side's runtime
-## `factionId` field exactly like CombatTargeting -- never
-## `Relations.is_hostile()`, which reads the wrong content key per ADR 021's
-## documented pitfall) should walk toward a hostile target it is not already
-## adjacent to. Runs once per tick, after `CombatResolver.resolve_tick()` and
-## `CombatGiver.advance()` (both inside `CombatSystem.apply_combat()`, earlier
-## in `tick()`), so the adjacent-only attack rule and the flee decision both
-## get first say. Wired from `WorldState.tick()` itself, after
-## `_advance_colonists()` (not alongside `CombatSystem.apply_combat()`): its own rule-1
-## adjacency check must see this tick's post-movement positions -- the exact
-## ones `CombatResolver.resolve_tick()` will check first thing next tick,
-## since nothing moves in between -- and running after `_advance_colonists()`
-## means an actor trapped this very tick already carries `trapped` by the
-## time this giver ever looks at it, so it can never win a same-tick race for
-## that actor's own scheduler slot against a freshly submitted `escape_trench`
-## job (see `WorldState.tick()`'s own doc comment on this call site).
-##
-## Per-tick decision table. `advance()` evaluates rule 2, then a tracked
-## job's own target-loss/blocked-unreachable cleanup (rule 2.5), then rule 1,
-## in that fixed order:
-## 1. `CombatTargeting.nearest_adjacent_hostile()` is non-empty for this actor
-##    -- do nothing further; the existing attack rule already has it. Checked
-##    last among the "do nothing" rules (see below) so it never skips the
-##    cleanup that must happen first.
-## 2. `CombatGiver.owns(actor_id)` (an open flee episode) -- do nothing at
-##    all: never submit, interrupt, or keep tracking an approach job for an
-##    actor CombatGiver currently owns, so "fleeing keeps its priority over
-##    approaching" holds by construction, not by a race. Checked first: it
-##    must fire even on the tick adjacency also becomes true, or a fleeing
-##    actor that just walked adjacent keeps a stale approach association
-##    instead of having it released.
-## 2.5. A tracked job's own recorded target having died/been destroyed, or
-##    the job itself having gone queued+blocked-unreachable (see
-##    "Retargeting" below), cancels it and drops the association -- checked
-##    before rule 1's own adjacency check, never after: the actor can stand
-##    adjacent to a different hostile (the attack rule's own target, not this
-##    stale job's) on the very tick its own tracked target is lost, and rule
-##    1's "do nothing" must never skip this cleanup (otherwise a dead
-##    target's job, and its reservation, would stay tracked forever whenever
-##    another hostile happened to be adjacent).
-## 3. A non-terminal `approach` job is still tracked after 2.5 above (i.e. it
-##    was not cancelled) -- leave it running, regardless of adjacency.
-## 4. No job is tracked (never was, or 2.5 just cancelled one) and rule 1's
-##    adjacency check is also empty -- pick the single nearest reachable
-##    target (see `_start_search()`) and submit one fresh single-leg
-##    `approach` job through `GlobalAssignment.submit_autonomous()` (the same
-##    entry point `CombatGiver`/`IncidentScheduler` use), so a non-colony
-##    actor is never refused by the ordinary `may_be_ordered` gate.
-## 5. No reachable target at all -- do nothing that tick, re-evaluated fresh
-##    every tick (never a permanent latch); the
-##    incident-driven walk-to-a-bare-tile-then-wait behaviour is untouched.
-##
-## Target selection mirrors `need_giver.gd`'s own single-subject, multi-
-## candidate, real-route-ranked search (one actor, many candidate tiles,
-## budgeted one `RerouteType.resume()` per tick through the shared
-## `_route_budget` ledger `rescue_giver.gd`/`combat_giver.gd` also share, ADR
-## 004 -- never a fresh synchronous full search): every living actor and
-## every placed object with a health entry that this actor's own faction
-## relation makes it hostile to is a candidate target; for each, the single
-## Chebyshev-adjacent tile nearest this actor (among those passable,
-## reservation-eligible, unreserved and region-reachable for it) is that
-## target's own candidate tile. Candidates are ranked by real route length,
-## tied-broken deterministically: an actor candidate before an object
-## candidate, then ascending target id (actor) or ascending `"%d_%d"` tile key
-## (object).
-##
-## Retargeting (replaces an earlier design that permanently retired an
-## actor after its first approach). A tracked job's own recorded target
-## (`_job_targets`) is checked before its scheduler status, and before rule
-## 1's own adjacency check (see rule 2.5 above), every tick this giver looks
-## at it: a dead actor target or a
-## destroyed/cleared object target (its health/`objectAt` entry gone)
-## cancels the job through `_cancel_job` (the same shared finish boundary
-## `combat_giver.gd`'s own `_cancel_job`/`rescue_giver.gd`'s own
-## `_retire_job` use) regardless of the job's current status -- active or
-## queued, the target is gone either way, and regardless of whether the
-## actor now stands adjacent to some other hostile the attack rule already
-## covers. A job still "queued" with `JobQueueType.BLOCKED_TARGET_UNREACHABLE`
-## (the same reason `combat_giver.gd` already watches for its own flee legs:
-## JobQueue retries an unreachable queued target forever on its own, it never
-## resolves itself) is cancelled the same way. Either cancellation drops the
-## association (`_tracking`/`_job_targets`/`_job_actor`) and falls through
-## into rule 1's adjacency check and then, if empty, rule 4's own search on
-## the same tick -- never waits a tick, and never latches a permanent "no
-## further search" state. A job already cancelled
-## elsewhere this tick (`WorldState._toil_on_unreachable()`, a route that
-## became unreachable mid-walk after activation) is detected by its status no
-## longer being "active"/"queued" and falls through exactly the same way. If
-## the fresh search (rule 4) finds no reachable target at all, this giver
-## simply does nothing that tick -- rule 5, re-evaluated fresh every tick,
-## never a permanent latch -- and the actor is free for `IncidentScheduler`'s
-## own walk-then-wait to drive; this giver never cancels or interferes with
-## an unrelated incident job (a dormant approach job merely sitting queued
-## behind a busy incident job's own active assignment is never touched here
-## either -- GlobalAssignment.tick() itself never re-selects a busy worker's
-## other queued entries for reachability re-checking, so it is left exactly
-## as queued until the incident job itself frees the worker).
+## Job-giver for `approach` (ADR 033): walks a hostile actor (a `combat` component and a `hostile`
+## relation to `colony`, read with `Relations.relation()` on runtime `factionId`, never
+## `Relations.is_hostile()`, ADR 021) toward the nearest hostile target it is not adjacent to.
+## TickPipeline runs it after advance_colonists and after CombatSystem.apply_combat(), so adjacency
+## is checked on post-movement positions and a just-trapped actor already carries `trapped`.
+## advance() rules per actor, in this fixed order:
+## 2. CombatGiver.owns(actor) (fleeing): release tracking, never submit; flee keeps priority.
+## 2.5. A tracked job whose target died/was destroyed, or that is queued+BLOCKED_TARGET_UNREACHABLE,
+##    is cancelled and dropped; checked before rule 1 so adjacency never skips the cleanup.
+## 1. Adjacent to a hostile: do nothing; the attack rule has it.
+## 3. A non-terminal approach job is still tracked: leave it running.
+## 4. Otherwise rank reachable targets by real route length (one budgeted resume() per tick through
+##    the shared `_route_budget`, ADR 004; ties: actor before object, then id / "%d_%d" tile key)
+##    and submit one single-leg job through submit_autonomous().
+## 5. No reachable target: do nothing; retried every tick, never latched. Incident jobs are never touched.
 
 const TargetingType = preload("res://scripts/core/combat/combat_targeting.gd")
 const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
@@ -107,10 +23,7 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const APPROACH_KIND := "approach"
 const APPROACH_PRIORITY := 1
 
-## JobQueue's own reason for a queued job the scheduler's coarse reachability
-## check has proven can never progress on its own: a local copy
-## of its typed-reason vocabulary, exactly like `combat_giver.gd`'s own
-## identical constant.
+## JobQueue's reason for a queued job that can never progress (same constant as combat_giver.gd).
 const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
 
 ## The 8 Chebyshev-adjacent offsets around a target tile, cardinal first
@@ -138,61 +51,23 @@ var _list_objects: Callable
 var _object_at: Callable
 var _object_health_at: Callable
 var _object_faction_at: Callable
-## cancel_job(job_id)->void must be WorldState._cancel_autonomous_job
-## (the same shared _finish_job() boundary combat_giver.gd's own `_cancel_job`
-## already uses) so a tracked job whose target has died/been destroyed, or
-## that has gone queued+BLOCKED_TARGET_UNREACHABLE, can be retired without
-## waiting on `_toil_on_unreachable()`, which only ever fires once a job has
-## activated.
+## Must be WorldState._cancel_autonomous_job (the shared _finish_job() boundary), so a job can be
+## retired before it activates.
 var _cancel_job: Callable
 
-## actor_id -> job_id for the approach job currently tracked for it -- rebuilt
-## from the scheduler's own restored queue after a load (see
-## `restore_job_targets()`), never persisted directly, mirroring
-## `CombatGiver._fleeing`/`RescueGiver._pending`.
+## actor_id -> tracked approach job_id; never persisted, rebuilt by restore_job_targets().
 var _tracking: Dictionary = {}
-## actor_id -> {candidates, cursor, search, found, ranked, commit_cursor}:
-## live while an actor has no tracked job but a multi-tick target search is
-## in progress, mirroring need_giver.gd's own `_searching`.
+## actor_id -> in-progress multi-tick target search state (like need_giver.gd's `_searching`).
 var _searching: Dictionary = {}
-## job_id -> {"kind": "actor", "id": actor_id} or {"kind": "object", "tile":
-## Vector2i}: this giver's own record of which target an approach job was
-## submitted for, mirroring `rescue_giver.gd`'s `_job_victim` -- never a
-## per-job field. Not reconstructable after a load (an object target has no
-## living record to re-scan), so `state_codec.gd` persists it verbatim via
-## `get_job_targets()`/`restore_job_targets()`.
+## job_id -> {"kind": "actor", "id"} or {"kind": "object", "tile"}: the job's target. Persisted
+## verbatim by state_codec.gd (an object target cannot be rebuilt after a load).
 var _job_targets: Dictionary = {}
-## job_id -> actor_id for every job with a live `_job_targets` entry,
-## including one `_release_tracking()` (rule 2) has dropped from `_tracking`
-## while CombatGiver owns the actor: `_tracking` only reflects who this giver
-## is currently driving, so it is the wrong map for `forget()` to consult
-## when an actor is removed mid-flee, after its approach
-## job has been released from `_tracking` but is still paused, not
-## terminated. Never persisted directly -- rebuilt in `restore_job_targets()`
-## exactly like `_tracking` itself, since it is derivable from the scheduler's
-## restored queue.
+## job_id -> actor_id for every live `_job_targets` entry, including jobs released from `_tracking`
+## while CombatGiver owns the actor; forget() walks this map. Never persisted (rebuilt on restore).
 var _job_actor: Dictionary = {}
 
-## submit_job(target, priority, tick, kind, worker)->Dictionary must be
-## WorldState._scheduler.submit_autonomous. get_job(job_id)->Dictionary must
-## be WorldState._get_job. list_jobs()->Array must be
-## WorldState._scheduler.queue.get_jobs. restrict_to_for(job_id)->String must
-## be WorldState._job_restricted_to (the same raw-waiting-queue fallback
-## CombatGiver uses, so a save/load mid-search still finds its own actor's
-## restriction). passable_for_actor(actor_id,x,y)->Dictionary must be a
-## faction-aware WorldState passability wrapper (Passability.passable_for_flee,
-## shared with CombatGiver -- generic despite the name). may_reserve_target
-## (actor_id,target)->bool must be WorldState._actor_may_reserve_target.
-## reachable(from,target)->bool must be Passability.region_reachable.
-## is_target_reserved(x,y)->bool must be WorldState._flee_target_reserved
-## (shared with CombatGiver -- generic despite the name). routable_to(target,
-## faction_id)->Callable must be WorldState._routable_to. content/relations
-## are WorldState's own frozen ContentRegistry/Relations instances.
-## route_budget must be WorldState._route_budget itself (shared by reference).
-## combat_owns(actor_id)->bool must be CombatGiver.owns. list_objects()->Array
-## must be WorldState.get_objects. object_at/object_health_at/object_faction_at
-## must be WorldState.get_object/ObjectTable.object_health_at/get_object_faction_id.
-## cancel_job(job_id)->void must be WorldState._cancel_autonomous_job.
+## Every Callable is wired by WorldState (see its ApproachGiverType.new call); route_budget is the
+## per-tick route ledger shared by reference with the scheduler and the other givers.
 func _init(submit_job: Callable, get_job: Callable, list_jobs: Callable, restrict_to_for: Callable,
 		passable_for_actor: Callable, may_reserve_target: Callable, reachable: Callable,
 		is_target_reserved: Callable, routable_to: Callable, bounds_max: Vector2i, content, relations,
@@ -218,17 +93,9 @@ func _init(submit_job: Callable, get_job: Callable, list_jobs: Callable, restric
 	_object_faction_at = object_faction_at
 	_cancel_job = cancel_job
 
-## Drops every association this giver holds for actor_id, including its
-## job's own persisted target (unlike the plain rule-2 release in advance()
-## below) -- called by WorldState on death/removal (mirroring
-## CombatGiver.forget()) or once this actor's own faction relation to colony
-## stops being hostile, both permanent: no future tick will ever re-adopt
-## this actor's job again. Walks `_job_actor`, not `_tracking`:
-## `_tracking` alone misses a job `_release_tracking()` (rule 2) had
-## already dropped from it while CombatGiver owned this actor -- exactly the
-## paused-approach-then-removed sequence that left a stale `_job_targets`
-## entry (and a stale persisted association) behind. `_job_actor` covers both
-## the actively-tracked and the paused-while-owned case in one scan.
+## Drops every association for actor_id, including the persisted target; called on death/removal or
+## when the actor stops being hostile. Walks `_job_actor` so a job paused while CombatGiver owned the
+## actor is dropped too.
 func forget(actor_id: String) -> void:
 	_tracking.erase(actor_id)
 	_searching.erase(actor_id)
@@ -237,21 +104,13 @@ func forget(actor_id: String) -> void:
 			_job_targets.erase(job_id)
 			_job_actor.erase(job_id)
 
-## job_id -> target lookups for a job re-adopted after CombatGiver releases
-## an actor it owned (see advance()'s rule 2 handling) must still resolve, so
-## only `_tracking`/`_searching` -- never `_job_targets` -- are cleared here:
-## the underlying job can survive a flee interrupt paused (not cancelled) and
-## resume once the episode closes, and this giver must still recognise it as
-## its own when that happens.
+## Clears only `_tracking`/`_searching`, never `_job_targets`: a flee-paused job resumes later and must
+## still be recognised as this giver's.
 func _release_tracking(actor_id: String) -> void:
 	_tracking.erase(actor_id)
 	_searching.erase(actor_id)
 
-## True (and adopted into `_tracking`) when a non-terminal `approach` job
-## already exists restricted to actor_id -- the case right after this actor's
-## own flee episode closes (CombatGiver's interrupt paused, rather than
-## cancelled, the job this giver had submitted) or right after a fresh load,
-## mirroring CombatGiver._adopt_existing_flee_job().
+## Adopts a non-terminal approach job already restricted to actor_id (after a flee episode or a load).
 func _adopt_existing_job(actor_id: String) -> bool:
 	for job in (_list_jobs.call() as Array):
 		if String(job.get("kind", "")) != APPROACH_KIND or String(job.get("status", "")) not in ["queued", "active"]:
@@ -262,17 +121,12 @@ func _adopt_existing_job(actor_id: String) -> bool:
 		return true
 	return false
 
-## This giver's own job_id -> target association, for state_codec.gd's
-## encode() to persist verbatim (mirrors RescueGiver.get_job_victims()).
+## For state_codec.gd's encode().
 func get_job_targets() -> Dictionary:
 	return _job_targets.duplicate(true)
 
-## state_codec.gd's decode() counterpart: replaces `_job_targets` wholesale
-## (already filtered by the caller to jobs that survived decode), then
-## reconciles `_tracking` against the scheduler's restored queue -- every
-## non-terminal `approach` job is re-adopted for the actor it is restricted
-## to, mirroring CombatGiver.restore_blocked_targets(). Must run after the
-## scheduler queue/scheduling state has been restored.
+## state_codec.gd's decode() counterpart; must run after the scheduler queue is restored, since it
+## re-adopts every non-terminal approach job for the actor it is restricted to.
 func restore_job_targets(data: Dictionary) -> void:
 	_job_targets = data.duplicate(true)
 	_tracking.clear()
@@ -287,10 +141,8 @@ func restore_job_targets(data: Dictionary) -> void:
 		_tracking[actor_id] = String(job["id"])
 		_job_actor[String(job["id"])] = actor_id
 
-## Runs once per tick, after CombatResolver.resolve_tick() and
-## CombatGiver.advance() (see CombatSystem.apply_combat()).
-## Nothing here moves or removes an actor (cancelling an approach job despawns
-## nobody), so one actors_by_tile() map serves the whole pass (A4).
+## Once per tick (see class doc for the rule order). Nothing here moves or removes an actor, so one
+## actors_by_tile() map serves the whole pass.
 func advance(actors: Array[Dictionary], tick: int) -> void:
 	var by_tile := TargetingType.actors_by_tile(actors)
 	for actor in actors:
@@ -304,10 +156,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 		if _relations.relation(own_faction, "colony") != "hostile":
 			forget(actor_id)
 			continue
-		# Rule 2 checked before rule 1: ownership must
-		# release tracking even on a tick where adjacency also just became true,
-		# or a fleeing actor that walked adjacent this same tick keeps a stale
-		# approach association instead of having it released.
+		# Rule 2 before rule 1: release even on the tick adjacency becomes true.
 		if _combat_owns.call(actor_id):
 			_release_tracking(actor_id) # rule 2: never keep tracking while CombatGiver owns this actor
 			continue
@@ -317,20 +166,8 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 			var job_id: String = String(_tracking[actor_id])
 			var job: Dictionary = _get_job.call(job_id)
 			var status := String(job.get("status", ""))
-			# Rule 2.5: a tracked job's own recorded target dying/
-			# being destroyed, or the job itself going queued+blocked-
-			# unreachable (mirroring combat_giver.gd's own flee-leg watch),
-			# cancels it through the shared finish boundary regardless of
-			# status -- active or queued, the target loss is real either way
-			# -- and drops the tracking, falling through to a fresh rule-4
-			# search on the same tick rather than waiting a tick. Checked
-			# before rule 1's own adjacency early-return: a
-			# stale job's target can die/be destroyed on a tick the actor
-			# also happens to stand adjacent to a different hostile (the
-			# attack rule's own target, not this job's), and that stale
-			# association must still be cancelled -- if rule 1 returned early
-			# first it would skip this cleanup entirely, leaving a dead
-			# target's job (and its reservation) tracked forever.
+			# Rule 2.5, before rule 1's early return: a stale job's target can die while the actor stands
+			# next to a different hostile, and the stale job (and its reservation) must still be cancelled.
 			var lost := _target_lost(job_id, actors)
 			var blocked_unreachable := status == "queued" and String(job.get("reason", "")) == BLOCKED_TARGET_UNREACHABLE
 			if lost or blocked_unreachable:
@@ -341,14 +178,7 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 			elif status in ["active", "queued"]:
 				continue # rule 3: still a live, valid target -- leave it running regardless of adjacency
 			else:
-				# Every other way a tracked job ends without this giver
-				# cancelling it here (completed successfully, or already
-				# cancelled elsewhere this tick by
-				# WorldState._toil_on_unreachable() once its route became
-				# unreachable mid-walk after activation) also falls through
-				# into a fresh rule-4 search on the same tick: a retry
-				# every tick a job is not tracked, never a one-shot
-				# retirement.
+				# Completed, or cancelled elsewhere (unreachable mid-walk): fall through to a fresh search.
 				_tracking.erase(actor_id)
 				_job_targets.erase(job_id)
 				_job_actor.erase(job_id)
@@ -360,13 +190,8 @@ func advance(actors: Array[Dictionary], tick: int) -> void:
 			continue
 		_start_search(actor, actor_id, actors, tick)
 
-## True when job_id's own recorded target (`_job_targets`) is gone: an actor
-## target no longer present in `actors` (removed) or now dead, or an object
-## target whose health entry and placed-object record have both cleared
-## (destroyed via `_damage_object()`'s own zero-hp `_set_object(x, y, "")`, or
-## cleared by any other system) -- rule 2.5's death/destruction
-## retarget trigger. `{}` (no recorded target at all, e.g. a job this giver
-## never submitted) is never "lost" -- nothing to have lost.
+## True when job_id's recorded target is gone: an actor removed or dead, or an object whose health
+## and placed-object records have both cleared. No recorded target is never "lost".
 func _target_lost(job_id: String, actors: Array[Dictionary]) -> bool:
 	var target: Dictionary = _job_targets.get(job_id, {})
 	if target.is_empty():
@@ -380,8 +205,7 @@ func _target_lost(job_id: String, actors: Array[Dictionary]) -> bool:
 	var tile: Vector2i = target["tile"]
 	return _object_health_at.call(tile.x, tile.y).is_empty() or String(_object_at.call(tile.x, tile.y)).is_empty()
 
-## Every living actor and every placed object with a health entry that
-## `actor`'s own faction relation makes it hostile to (rule 4's target set).
+## Every living actor and placed object with health that `actor`'s faction is hostile to.
 func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dictionary]:
 	var own_faction := TargetingType.actor_faction(actor)
 	var targets: Array[Dictionary] = []
@@ -404,10 +228,8 @@ func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dic
 		targets.append({"kind": "object", "tile_key": "%d_%d" % [x, y], "tile": Vector2i(x, y)})
 	return targets
 
-## The Chebyshev-adjacent tile of target_tile nearest `start` (Manhattan,
-## fixed-offset-order tie-break) that is in bounds, passable for actor_id's
-## own faction, reservation-eligible, not already another job's live target
-## reservation, and region-reachable from `start` -- null when none qualify.
+## The Chebyshev-adjacent tile of target_tile nearest `start` that is in bounds, passable, reservable,
+## unreserved and region-reachable; null when none qualifies.
 func _best_adjacent_tile(actor_id: String, start: Vector2i, target_tile: Vector2i):
 	var best: Variant = null
 	var best_distance := -1
@@ -429,9 +251,7 @@ func _best_adjacent_tile(actor_id: String, start: Vector2i, target_tile: Vector2
 			best_distance = distance
 	return best
 
-## Deterministic tie-break for two candidates at an equal real route length:
-## an actor candidate before an object candidate; within the same kind,
-## ascending target id (actor) or ascending tile key (object).
+## Tie-break at equal route length: actor before object, then ascending id / tile key.
 static func _target_precedes(a: Dictionary, b: Dictionary) -> bool:
 	var a_is_actor := String(a["kind"]) == "actor"
 	var b_is_actor := String(b["kind"]) == "actor"
@@ -441,16 +261,8 @@ static func _target_precedes(a: Dictionary, b: Dictionary) -> bool:
 		return String(a["id"]) < String(b["id"])
 	return String(a["tile_key"]) < String(b["tile_key"])
 
-## Starts a fresh search: one candidate tile per hostile target (its own
-## nearest valid Chebyshev-adjacent tile), pre-sorted by Chebyshev distance
-## for a cheap search order and early-stop pruning (see _search_can_stop()).
-## Chebyshev, not Manhattan: movement permits
-## diagonals, so Manhattan distance can exceed a candidate's true route cost
-## and is not a safe (admissible) lower bound -- pruning against it could
-## stop the search before a genuinely nearer target is ever tried. Chebyshev
-## distance never exceeds the real route length regardless of diagonal moves.
-## No target at all with any valid adjacent tile is rule 5: do nothing, no
-## state kept, retried fresh next tick.
+## One candidate tile per hostile target, sorted by Chebyshev distance: an admissible lower bound
+## with diagonal moves (Manhattan is not), so _search_can_stop() never prunes a nearer target.
 func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary], tick: int) -> void:
 	var start := Vector2i(int(actor["x"]), int(actor["y"]))
 	var candidates: Array = []
@@ -469,13 +281,9 @@ func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary
 	_searching[actor_id] = {"candidates": candidates, "cursor": 0, "search": null, "found": []}
 	_advance_search(actor, actor_id, tick)
 
-## Search phase (state["ranked"] absent): one bounded resume() per tick
-## against the current candidate tile, recording every reachable one (with
-## its real route length) into state["found"], stopping early once the next
-## candidate's own Chebyshev distance already exceeds the shortest route
-## found so far (it could never win). Commit phase (state["ranked"] present):
-## rechecks exactly one ranked candidate per tick for a reservation race
-## before committing.
+## Search phase: one bounded resume() per tick, recording reachable candidates and stopping once the
+## next one's Chebyshev distance exceeds the best route. Commit phase: recheck one ranked candidate
+## per tick for a reservation race.
 func _advance_search(actor: Dictionary, actor_id: String, tick: int) -> void:
 	var state: Dictionary = _searching[actor_id]
 	if not state.has("ranked"):
@@ -549,9 +357,7 @@ func _advance_commit(actor_id: String, state: Dictionary, tick: int) -> void:
 	_searching.erase(actor_id)
 	_commit(actor_id, entry["target"], tile, tick)
 
-## Submits through the same submit_autonomous() entry point CombatGiver/
-## IncidentScheduler use, so a non-colony actor is never refused by the
-## ordinary may_be_ordered gate, and records the target association.
+## Submits through submit_autonomous() (never refused by may_be_ordered) and records the target.
 func _commit(actor_id: String, target: Dictionary, tile: Vector2i, tick: int) -> void:
 	var result: Dictionary = _submit_job.call(tile, APPROACH_PRIORITY, tick, APPROACH_KIND, actor_id)
 	if not result.get("ok", false):

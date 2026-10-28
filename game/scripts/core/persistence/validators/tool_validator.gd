@@ -4,10 +4,8 @@ extends SaveCheck
 ## Save validation for what ToolItemStore and the tool toils persist: "toolItems",
 ## "toolReservations", "toolFetchExcluded".
 
-## Mirrors _valid_items()/_valid_item(): world._tool_items' wire shape is
-## {nextId, list} like the ground-item store, but each entry is
-## {id, kind, location} (identity-bearing, colonist-ai.md 2/3.4) rather than
-## {id, x, y, kind, count} (stackable).
+## ToolItemStore.items as {nextId, list}, each entry {id, kind, location} (identity-bearing,
+## not stackable).
 static func _valid_tool_items(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid toolItems type")
@@ -43,9 +41,7 @@ static func _valid_tool_item(value, map_width: int, map_height: int) -> Dictiona
 		return _fail("invalid toolItems entry kind")
 	return _valid_tool_location(item["location"], map_width, map_height)
 
-## A tool item's location (StateCodec._encode_tool_location()) is a ground or
-## stockpile tile, or a held-by-colonist reference -- never both a tile and a
-## colonist id.
+## A ground/stockpile tile or a holder's colonist id, never both.
 static func _valid_tool_location(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid tool location type")
@@ -71,11 +67,8 @@ static func _valid_tool_location(value, map_width: int, map_height: int) -> Dict
 		_:
 			return _fail("invalid tool location type value")
 
-## world._tool_reservations' wire shape is a plain item id -> job id map
-## (ReservationTable.snapshot(), colonist-ai.md 3.4), mirroring "inventory"'s
-## additionalProperties/propertyNames style rather than an array of entries.
-## Every key must reference a currently-declared tool item: a reservation
-## can never outlive the item it targets, let alone the job that holds it.
+## ToolItemStore.reservations as item id -> job id; every key must be a declared tool item
+## (a reservation never outlives its item).
 static func _valid_tool_reservations(value, tool_items_value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid toolReservations type")
@@ -94,11 +87,7 @@ static func _valid_tool_reservations(value, tool_items_value) -> Dictionary:
 			return _fail("invalid toolReservations value")
 	return {"ok": true}
 
-## _tool_fetch's per-job excluded-candidate set (ADR 013) is an array of {jobId, toolIds} entries (StateCodec.
-## _encode_tool_fetch_excluded()), one per job with at least one candidate
-## already proven unreachable this fetch attempt. Every toolId must reference
-## a currently-declared tool item, mirroring toolReservations' own cross-check
-## -- an excluded candidate can never outlive the item it names.
+## ToolFetchToil's [{jobId, toolIds}] (ADR 013); every toolId must be a declared tool item.
 static func _valid_tool_fetch_excluded(value, tool_items_value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid toolFetchExcluded type")

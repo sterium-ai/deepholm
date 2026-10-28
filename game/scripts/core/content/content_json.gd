@@ -1,9 +1,6 @@
 extends RefCounted
 
-## Content JSON reader for ContentRegistry (ADR 010): reads a content or schema
-## file and parses it with a hand-rolled parser that keeps JSON's int/float
-## distinction. Static and dependency-free; moved out of content_registry.gd
-## unchanged (A13) so the registry fits the ADR 048 file size rule.
+## Content JSON reader for ContentRegistry (ADR 010). Static and dependency-free.
 
 static func read_json(path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
@@ -19,16 +16,9 @@ static func read_json(path: String) -> Dictionary:
 		return {"ok": false, "message": "%s did not parse as a JSON object or array" % path}
 	return {"ok": true, "value": value}
 
-## Godot's built-in JSON.parse_string() always returns JSON numbers as
-## TYPE_FLOAT -- verified directly: JSON.parse_string('{"a":1}')'s "a" has
-## typeof() == TYPE_FLOAT, never TYPE_INT, regardless of whether the source
-## literal was "1" or "1.0". That is correct per the JSON spec (which has one
-## "number" type, not separate int/float), but it means the int/float
-## distinction JSON Schema's "integer" type depends on is destroyed before
-## _validate_node ever runs. This hand-rolled recursive-descent parser
-## replaces JSON.parse_string for content/schema files so that distinction
-## survives: a number literal with no '.' and no exponent parses as a
-## GDScript int, everything else as a float.
+## Recursive-descent parser that keeps JSON Schema's integer/number split, which
+## JSON.parse_string() loses (every number becomes a float): a literal without '.' or
+## exponent parses as int, anything else as float.
 static func parse_json(text: String) -> Dictionary:
 	var cursor := _JsonCursor.new(text)
 	var value: Variant = _json_parse_value(cursor)
@@ -217,12 +207,8 @@ static func _is_hex_digit(ch: String) -> bool:
 static func _is_digit(ch: String) -> bool:
 	return ch >= "0" and ch <= "9"
 
-## Full RFC 8259 SS6 number grammar, not a lenient superset of it: a leading
-## zero followed by another digit (e.g. "01"), a decimal point with no digit
-## after it (e.g. "1."), and an exponent marker with no digit after it (e.g.
-## "1e") are each rejected rather than silently truncated, since a truncated
-## read here would leave the cursor mid-token and desync every error message
-## and offset that follows.
+## Strict RFC 8259 number grammar: "01", "1." and "1e" are rejected, never truncated (a
+## truncated read would desync every later error offset).
 static func _json_parse_number(c: _JsonCursor):
 	var start := c.pos
 	var is_float := false

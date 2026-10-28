@@ -1,7 +1,8 @@
 class_name JobQueue
 extends RefCounted
 
-## Standalone deterministic dig queue. See README.md for the integration contract.
+## Deterministic job queue: lifecycle, activation gates and reservations. See README.md.
+## Reservations exist only while their job is active; terminal jobs retire to JobHistory.
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
 const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
 const JobIndexType = preload("res://scripts/core/jobs/job_index.gd")
@@ -21,15 +22,8 @@ const SYSTEM_PRIORITY := 50
 const TARGET_KEY_PREFIX := "tile:"
 const ITEM_KEY_PREFIX := "item:"
 const HAUL_KIND := "haul"
-## Construction site activation (ADR 040, superseding
-## ADR 028/038's single-worker `build` job): a site_fetch job reserves only
-## its source item -- the site's own footprint tiles are reserved directly by
-## WorldState the instant the `build` command is accepted (owner "site:<id>",
-## never a job id), so activation must never also try to acquire them (they
-## are never unowned). A site_work job reserves nothing at all: the number of
-## concurrent builders is capped by the site record's own builder_ids/
-## max_builders, not by the ReservationTable. See _tick_site_fetch()/
-## _tick_site_work() below.
+## site_fetch reserves only its source item; site_work reserves nothing. A site's footprint
+## tiles are reserved to "site:<id>" by ConstructionSystem, never to a job (ADR 040).
 const SITE_FETCH_KIND := "site_fetch"
 const SITE_WORK_KIND := "site_work"
 
@@ -40,51 +34,23 @@ var _next_id: int = 1
 var _sequence: int = 0
 ## Live (queued/active) jobs only: _finish() retires a job to _history (A5).
 var _jobs: Array[Dictionary] = []
-## Lookup indexes over _jobs and the event log (B1, see each module's doc).
 var _index := JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
 var _history := JobHistoryType.new()
 var _table: ReservationTableType = ReservationTableType.new()
 var _events := JobEventLogType.new()
-## haul-only: item_id -> a free destination cell, or null when none is free
-## (colonist-ai.md 3.4's free-cell lookup). Injected post-construction
-## (set_haul_destination_finder()) since AssignmentQueue's constructor
-## signature is fixed; WorldState is the only real caller.
+## haul-only: item_id -> a free destination cell, or null (colonist-ai.md 3.4).
 var _find_haul_destination: Callable = Callable()
-## job_id -> {"reason","remedy"}, consulted once by fail()/invalidate() so a
-## caller (WorldState) can report a specific typed reason for a haul
-## termination through the same terminal path GlobalAssignment.finish()
-## already drives. Always empty except transiently within one WorldState
-## call; never persisted (see restore()).
+## job_id -> {"reason","remedy"} consumed once by fail()/invalidate(); never persisted.
 var _pending_fail_reasons: Dictionary = {}
-## Backoff for a haul job whose destination search keeps failing
-## (colonist-ai.md 3.3): retried after this many ticks, doubling on each
-## further failure up to the cap. Injected via set_haul_backoff() (mirroring
-## how MOVE_TICKS_PER_TILE/WORK_TICKS are injected into ToilExecutor) since
-## AssignmentQueue's constructor signature is fixed and has no room for them;
-## the defaults below only matter for a JobQueue built directly by a test that
-## never calls the setter. A backed-off job keeps its `_waiting` aging
-## position untouched (see global_assignment.gd's submit()/finish()): this
-## only gates how often _tick_haul() re-attempts the destination search,
-## never the job's place in the fair queue.
+## Haul destination-search backoff (colonist-ai.md 3.3), doubling up to the cap. It gates
+## only the retry, never the job's aging position in the fair queue.
 var _haul_retry_base_ticks: int = 10
 var _haul_retry_cap_ticks: int = 40
-## tool_requirement_of(job_kind) -> {} or {"kind","retry_base_ticks",
-## "retry_cap_ticks"}; tool_available(job_id, tool_kind) -> bool. Injected
-## post-construction like set_haul_backoff(). Gating logic lives in
-## ToolMatching.gate_check()/gate_force_backoff() (ADR 013).
+## Tool gate callables (ADR 013); logic in ToolMatching.gate_check()/gate_force_backoff().
 var _tool_requirement_of: Callable = Callable()
 var _tool_available: Callable = Callable()
-## job_id -> Array[String] of extra ReservationTable keys a job needs
-## alongside its own ordinary target key, injected like set_haul_backoff().
-## A rescue job's own
-## "trapped:<victim_id>" key must move in lockstep with the target key --
-## acquired only while the job is actually active, released for free by
-## release_all() on any terminal transition (already generic), and
-## re-acquired here on reactivate() -- never held while merely queued, the
-## same "reservations exist only while in progress" invariant suspend()'s own
-## doc comment already states. Generic across every job kind: a caller with
-## no extra keys for job_id returns an empty array (the default Callable()
-## below, unset, is treated as "no extra keys for anyone").
+## job_id -> extra ReservationTable keys (e.g. a rescue's "trapped:<victim>") held in
+## lockstep with the target key: acquired on activation/reactivate, never while queued.
 var _extra_keys_for_job: Callable = Callable()
 
 ## The caller owns/seeds the generator; this queue does not consume random draws.
@@ -101,20 +67,15 @@ func set_tool_requirement(tool_requirement_of: Callable, tool_available: Callabl
 	_tool_requirement_of = tool_requirement_of
 	_tool_available = tool_available
 
-## See _extra_keys_for_job's own doc comment above.
 func set_extra_reservation_keys(extra_keys_for_job: Callable) -> void:
 	_extra_keys_for_job = extra_keys_for_job
 
-## job_id's own extra keys (see _extra_keys_for_job above), or an empty array
-## when no callable is wired or it names none for job_id.
 func _extra_keys(job_id: String) -> Array[String]:
 	if not _extra_keys_for_job.is_valid():
 		return []
 	return _extra_keys_for_job.call(job_id) as Array[String]
 
-## "" when every key in keys is either unowned or already owned by job_id;
-## otherwise the id of the other job blocking activation on the first
-## conflicting key.
+## "" when no key is owned by another job, else the first blocking owner.
 func _extra_keys_conflict(keys: Array[String], job_id: String) -> String:
 	for key in keys:
 		var owner: String = _table.owner(key)
@@ -122,14 +83,8 @@ func _extra_keys_conflict(keys: Array[String], job_id: String) -> String:
 			return owner
 	return ""
 
-## Pure pre-mutation predicate for submit_dig()'s own target/priority validation,
-## shared with CommandChecks.check()'s preview path for dig/chop/forage/till/sow
-## (game/scripts/core/commands/command_checks.gd) so a preview can predict this exact
-## rejection without calling submit_dig() itself -- which would emit a real job_rejected event
-## and advance the sequence counter, side effects preview() must never cause. Returns {} when
-## target/priority may be submitted, or the rejection submit_dig() would produce otherwise
-## (job_id/tick omitted: preview() has no tick to report and never sees a job_id here). Never
-## mutates.
+## Pure check shared with CommandChecks' preview, which must not emit events or advance
+## the sequence. {} when allowed, else submit_dig()'s rejection. Never mutates.
 static func check_submission(target: Vector2i, priority: int) -> Dictionary:
 	if priority not in [Priority.LOW, Priority.NORMAL, Priority.HIGH]:
 		return {"reason": "invalid_priority", "remedy": "choose_supported_priority"}
@@ -147,14 +102,9 @@ func submit_dig(target: Vector2i, priority: int = Priority.NORMAL, kind: String 
 		"id": job_id, "kind": kind, "status": "queued",
 		"priority": priority, "target": target,
 		"reason": "", "remedy": "", "blocking_job_id": "",
-		# haul-only fields (colonist-ai.md 3.3/3.4); always present with
-		# harmless defaults so dig/chop jobs carry the same shape unchanged.
+		# haul-only fields (colonist-ai.md 3.3/3.4), defaulted for every kind.
 		"item_id": "", "cell": null, "backoff_ticks": 0, "retry_at": 0,
-		# site_fetch/site_work-only field: the construction
-		# site's own origin tile -- see attach_site() below. A site_fetch
-		# job's "target" still names the reserved source item's own tile
-		# (leg one, mirroring haul's "target"/"cell" split); a site_work
-		# job's "target" is the site's origin tile directly (its only leg).
+		# site_fetch/site_work: the site's origin tile (attach_site()).
 		"site": null,
 	}
 	_jobs.append(job)
@@ -162,11 +112,8 @@ func submit_dig(target: Vector2i, priority: int = Priority.NORMAL, kind: String 
 	_emit("job_queued", job_id, {})
 	return {"ok": true, "job_id": job_id}
 
-## Injected post-submission (WorldState.submit() has no item_id parameter,
-## see global_assignment.gd's fixed signature): attaches the ground item a
-## queued haul job will reserve/carry. A no-op false for an unknown or
-## already-active/terminal job, so a stale caller can never mutate a job
-## whose activation has already captured its item_id.
+## Attaches a queued haul job's ground item. No-op false unless the job is queued, so a
+## stale caller cannot change an item already captured by activation.
 func attach_item(job_id: String, item_id: String) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
@@ -174,15 +121,8 @@ func attach_item(job_id: String, item_id: String) -> bool:
 	job["item_id"] = item_id
 	return true
 
-## Injected post-submission like attach_item() (ConstructionGiver's own
-## submit-and-attach wrappers, world_state.gd, call this right after
-## submitting a fresh site_fetch/site_work job): records the construction
-## site's own origin tile, read by _tick_site_fetch()/_tick_site_work() below.
-## Neither kind acquires a "tile:" reservation of its own for this field --
-## the site itself already reserved every footprint tile the instant its
-## `build` command was accepted (owner "site:<id>", not a job id) -- so this
-## is bookkeeping only, never gates activation the way attach_build() once did.
-## Same no-op-false guard as attach_item().
+## Records the site origin of a queued site_fetch/site_work job (bookkeeping only; the
+## site already reserves its footprint). Same no-op-false guard as attach_item().
 func attach_site(job_id: String, site: Vector2i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
@@ -190,19 +130,9 @@ func attach_site(job_id: String, site: Vector2i) -> bool:
 	job["site"] = site
 	return true
 
-## Hands-filling rules: retargets an active site_fetch
-## job's own "current source" -- item_id and target move together, exactly
-## like attach_item()/attach_site() set them once at submission, but gated on
-## "active" instead of "queued" since this fires mid-execution, once
-## WorldState's own on-demand planner (world_state.gd, the only caller -- see
-## _toil_on_pick_up_success()/_resolve_freshly_activated_site_fetch_sources())
-## has already reserved item_id's own "item:" key directly on
-## get_reservation_table() before calling this. No new job field: the
-## previous source's own reservation is simply left owned by job_id (its
-## ground item is already fully or partially consumed by the time this runs)
-## until release_all() sweeps it at any terminal transition, exactly like a
-## single-source site_fetch job's one reservation always has. A no-op false
-## for an unknown, non-active or non-site_fetch job.
+## Moves an active site_fetch job's current source (item_id and target together) after the
+## caller (ToilBindings/ConstructionSystem) has reserved the new item. The old source's
+## reservation stays with the job until release_all(). No-op false otherwise.
 func retarget_site_fetch_source(job_id: String, item_id: String, target: Vector2i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
@@ -211,14 +141,8 @@ func retarget_site_fetch_source(job_id: String, item_id: String, target: Vector2
 	job["target"] = target
 	return true
 
-## Hands-filling rules: stamps "cell" -- otherwise a haul-only field, null
-## for site_fetch until this call -- with the job's own site, WorldState.
-## _toil_is_first_leg()'s signal that this job has decided to stop fetching
-## and deliver whatever hands currently hold (job["item_id"]/["target"] keep
-## naming the last source visited either way, unconditionally reserved and
-## reacquired on suspend/reactivate exactly like a single-source site_fetch
-## job always was -- _reactivate_site_fetch()/restore() need no change for
-## this). A no-op false for an unknown, non-active or non-site_fetch job.
+## Sets "cell" = "site": the job stops fetching and delivers what its hands hold
+## (ToilBindings._toil_is_first_leg() reads it). No-op false unless active site_fetch.
 func mark_site_fetch_delivering(job_id: String) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
@@ -226,22 +150,8 @@ func mark_site_fetch_delivering(job_id: String) -> bool:
 	job["cell"] = job["site"]
 	return true
 
-## Chains an already-delivering site_fetch job onto a further sibling
-## construction site: a colonist whose hands still hold units of
-## the job's own kind after a successful `deposit` may continue to a second,
-## third or fourth site instead of completing. Stamps "site" (job_id's own
-## current-delivery-target record, read by _toil_site_id_for()/
-## ConstructionGiver's own committed-site bookkeeping) and "cell" (site_fetch's
-## own "delivering" flag/_toil_go_to_target() destination, first set equal to
-## "site" by mark_site_fetch_delivering()) with the new site's origin together,
-## keeping them in lockstep exactly like mark_site_fetch_delivering() first
-## set them. item_id/target are left untouched: they still name the last
-## source visited, exactly as they do for a job delivering to its very first
-## site -- no new persisted field, "site" simply names whichever site the job
-## is currently delivering to, round-tripping through save/load unchanged. A
-## no-op false for an unknown, non-active, non-site_fetch, or not-yet-
-## delivering (cell == null) job: chaining is only ever a delivering-leg
-## transition, never a fetching one.
+## Chains a delivering site_fetch job onto another site: "site" and "cell" move together.
+## Only a delivering-leg transition (cell != null); no new persisted field.
 func retarget_site_fetch_site(job_id: String, site: Vector2i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
@@ -256,8 +166,7 @@ func retarget_site_fetch_site(job_id: String, site: Vector2i) -> bool:
 func set_haul_destination_finder(finder: Callable) -> void:
 	_find_haul_destination = finder
 
-## Marker lives in blocking_job_id, not item_id (a haul job already uses item_id for its own
-## carried-item id). See docs/decisions/013-tool-toils.md, "Drop-leg identity marker".
+## The marker lives in blocking_job_id, not item_id (ADR 013, "Drop-leg identity marker").
 func set_active_item_marker(job_id: String, item_id: String) -> void:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active":
@@ -271,33 +180,13 @@ func get_active_item_marker(job_id: String) -> String:
 		return ""
 	return String(job["blocking_job_id"])
 
-## Consulted once by the next fail()/invalidate() call for job_id (see
-## _pending_fail_reasons). Lets WorldState report a specific typed reason
-## (e.g. "blocked_destination_gone") through GlobalAssignment.finish()'s
-## existing cleanup path instead of a new termination API.
+## Lets a caller report a typed reason (e.g. blocked_destination_gone) through the next
+## fail()/invalidate() of job_id instead of a new termination API.
 func set_pending_fail_reason(job_id: String, reason: String, remedy: String) -> void:
 	_pending_fail_reasons[job_id] = {"reason": reason, "remedy": remedy}
 
-## Non-terminal block reason for a queued job whose labour is off for every
-## colonist that could ever do it (colonist-ai.md 3.2): driven entirely by
-## GlobalAssignment's own per-tick scan (this queue has no colonist/labour-
-## table knowledge of its own), mirroring the existing _block()/job_unblocked
-## pattern BLOCKED_TARGET_RESERVED/BLOCKED_DESTINATION_FULL already use,
-## rather than repurposing set_pending_fail_reason() (that path is only
-## consulted by fail()/invalidate(), a terminal transition -- this reason
-## must leave the job queued). A no-op for an unknown job or one that is not
-## currently queued (an active/terminal job is untouched).
-##
-## Called once per tick for every waiting entry, before this job could ever be
-## selected/advanced again this same tick (GlobalAssignment.tick() now checks
-## labour eligibility before its own reservation-recheck branch, so a
-## disabled job is never added to `selected` and this queue's own tick()
-## never touches its reason while disabled). Freely overwrites a haul job's
-## BLOCKED_DESTINATION_FULL reason -- unlike the displayed reason, the
-## backoff itself (`retry_at`) is tracked independently (see _tick_haul()'s
-## and get_reservations()'s own gates below) and is never reset by this call,
-## so a labour toggle can never shorten an in-progress retry delay even
-## though it now shows labour_disabled immediately.
+## Non-terminal labour_disabled block for a queued job, driven by GlobalAssignment's
+## per-tick scan (colonist-ai.md 3.2). Never resets a haul's retry_at backoff.
 func set_labour_disabled(job_id: String, disabled: bool) -> void:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
@@ -350,24 +239,11 @@ func tick() -> void:
 			_emit("reservation_acquired", job["id"], {"target": target})
 			_emit("job_active", job["id"], {})
 
-## Haul activation (colonist-ai.md 3.3/3.4): reserves the item and one
-## free destination cell together, before any travel begins, using "item:"/
-## "cell:" ReservationTable keys distinct from dig/chop's own "tile:" key
-## (job["target"] stays the item's tile purely for the scheduler's routing/
-## get_reservations() bookkeeping, unrelated to these two keys). A missing
-## free cell blocks with BLOCKED_DESTINATION_FULL under an explicit backoff
-## (HAUL_RETRY_BASE_TICKS, doubling to HAUL_RETRY_CAP_TICKS) rather than
-## retrying every tick like dig/chop's reservation/reachability blocks.
+## Haul activation (colonist-ai.md 3.3/3.4): reserves the item and a free destination cell
+## together before travel; no free cell blocks with an explicit doubling backoff.
 func _tick_haul(job: Dictionary) -> void:
-	# Backed off: return before touching reachability/item ownership, whatever
-	# reason is currently displayed (may read labour_disabled -- see
-	# set_labour_disabled() -- while this backoff still applies).
-	# get_reservations() reports this job's target "reserved" for as long as
-	# this holds, keeping global_assignment.gd refreshing it as a cheap no-op
-	# without a real route search/scoring competition; calling _can_reach()
-	# here regardless would misreport a reachable item as
-	# blocked_target_unreachable since no search ran, pulling the job back
-	# into scoring -- the exact starvation this reason exists to prevent.
+		# Backed off: return before the reachability check, whatever reason is shown; a
+		# reachability call here would misreport the job unreachable and starve it.
 	if _tick < int(job["retry_at"]):
 		return
 	var item_key := ITEM_KEY_PREFIX + String(job["item_id"])
@@ -405,13 +281,7 @@ func _tick_haul(job: Dictionary) -> void:
 	_emit("reservation_acquired", job["id"], {"target": cell, "key": cell_key})
 	_emit("job_active", job["id"], {})
 
-## site_fetch activation: reserves only the source item, before
-## any travel begins -- the same "acquire only on activation" shape
-## _tick_haul() uses, but with no destination-cell search and no site-tile
-## reservation of its own: the site's every footprint tile is already
-## reserved directly by WorldState (owner "site:<id>") the instant its
-## `build` command was accepted, so a fetch job must never also try to
-## acquire it (it is never unowned, and would therefore block forever).
+## site_fetch activation: reserves only the source item (see SITE_FETCH_KIND).
 func _tick_site_fetch(job: Dictionary) -> void:
 	var item_key := ITEM_KEY_PREFIX + String(job["item_id"])
 	var item_owner: String = _table.owner(item_key)
@@ -428,13 +298,7 @@ func _tick_site_fetch(job: Dictionary) -> void:
 	_emit("reservation_acquired", job["id"], {"target": job["item_id"], "key": item_key})
 	_emit("job_active", job["id"], {})
 
-## site_work activation: holds no reservation at all -- the
-## number of concurrent builders on a site is capped by the site record's own
-## builder_ids/max_builders (ConstructionSiteTable), not by this table, and
-## the site's own footprint tiles are already reserved to the site itself.
-## Activation is therefore just a reachability gate; ConstructionGiver never
-## submits more than max_builders of these per site, and the mechanism
-## places no lower gate here.
+## site_work activation: reachability only; ConstructionGiver caps builders per site.
 func _tick_site_work(job: Dictionary) -> void:
 	if _blocked_unreachable(job, job["target"]):
 		return
@@ -444,8 +308,6 @@ func _tick_site_work(job: Dictionary) -> void:
 	job["status"] = "active"
 	_emit("job_active", job["id"], {})
 
-## The reachability gate every activation shares: blocks job and returns true
-## unless can_reach(target) answers true.
 func _blocked_unreachable(job: Dictionary, target: Variant) -> bool:
 	var reachable: Variant = _can_reach.call(target) if _can_reach.is_valid() else null
 	if not reachable is bool:
@@ -455,14 +317,12 @@ func _blocked_unreachable(job: Dictionary, target: Variant) -> bool:
 		_block(job, BLOCKED_TARGET_UNREACHABLE, "restore_target_access")
 	return not reachable
 
-## Gates activation on a matching free tool existing anywhere (colonist-ai.md
-## 2/3.3, ADR 013). Backoff/blocking logic lives in
-## ToolMatching.gate_check(), extracted to stay under this file's line budget.
+## Gates activation on a matching free tool existing anywhere (ADR 013).
 func _tool_requirement_satisfied(job: Dictionary) -> bool:
 	return ToolMatchingType.gate_check(job, _tick, _tool_requirement_of, _tool_available, _block_no_tool)
 
-## Applies job_id's own needs_tool backoff once fetch_tool proves no reachable
-## candidate remains (WorldState._toil_on_no_tool_found()). No-op otherwise.
+## Applies the needs_tool backoff once fetch_tool finds no candidate
+## (ToilBindings._toil_on_no_tool_found()). No-op unless queued.
 func block_no_tool(job_id: String) -> void:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
@@ -473,16 +333,8 @@ func _block_no_tool(job: Dictionary, remedy: String) -> void:
 	_index.watch(job) # every ToolMatching retry_at backoff ends here
 	_block(job, BLOCKED_NO_TOOL, remedy)
 
-## Critical-need interrupt support (colonist-ai.md 3.6/ADR 009): releases
-## job_id's own reservation and returns it to "queued" without touching its
-## target/kind/priority, so it re-enters JobQueue's ordinary queued lifecycle
-## exactly as if freshly blocked -- a different job may claim the same target
-## while the colonist working it is away, instead of the target staying
-## reserved to a job nobody is currently advancing (colonist-ai.md 3.4:
-## reservations exist only while their job is actually in progress). Not a
-## terminal transition (see _finish()): job_id remains eligible for suspend()/
-## reactivate()/complete()/fail() exactly like any other queued job. A no-op
-## rejection for a job that is not currently active.
+## Need interrupt (ADR 009): releases the job's reservations and requeues it unchanged, so
+## another job may claim the target meanwhile. Not terminal; rejects unless active.
 func suspend(job_id: String) -> Dictionary:
 	var job := _find_job(job_id)
 	if job.is_empty():
@@ -496,18 +348,8 @@ func suspend(job_id: String) -> Dictionary:
 	_set_reason(job, "", "")
 	return {"ok": true, "job_id": job_id}
 
-## Reverses suspend(): re-derives job_id's activation directly by ownership
-## alone -- reachability was already proven when the job first activated, and
-## re-running a full route search is outside JobQueue's own remit -- used only
-## to resume a job suspend() paused once the colonist doing it is free again.
-## Returns true and re-acquires the same reservation(s) when nothing else has
-## claimed them meanwhile; otherwise leaves the job queued (still eligible for
-## the ordinary fair-queue path -- colonist-ai.md 3.6's "the colonist is
-## reassigned" -- rather than forcing a double reservation) and returns false.
-## A haul job holds two reservations at once (its item and its destination
-## cell, both acquired together at activation -- see _tick_haul()), so it
-## re-acquires both or neither, mirroring restore()'s own haul-aware
-## reservation rebuild for the same reason.
+## Reverses suspend() by ownership alone (reachability was proven at activation). Returns
+## false and leaves the job queued if another job claimed a key; a haul re-takes both keys or neither.
 func reactivate(job_id: String) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
@@ -556,11 +398,6 @@ func _reactivate_haul(job: Dictionary) -> bool:
 	_emit("job_active", job_id, {})
 	return true
 
-## Mirrors _reactivate_haul()'s item-only half for a site_fetch job: only
-## the source item is ever a job-owned reservation for this kind
-## (see _tick_site_fetch()); the site's own footprint stays reserved to the
-## site the entire time, suspended or not, so there is no second key to
-## reacquire here.
 func _reactivate_site_fetch(job: Dictionary) -> bool:
 	var job_id: String = job["id"]
 	var item_key := ITEM_KEY_PREFIX + String(job["item_id"])
@@ -583,8 +420,7 @@ func fail(job_id: String) -> Dictionary:
 		return _finish(job_id, "failed", override["reason"], override["remedy"])
 	return _finish(job_id, "failed", "job_execution_failed", "inspect_target_and_resubmit")
 
-## The owning simulation calls this when the target/order ceases to be valid.
-## Invalidation is terminal failure, not a sixth persisted status.
+## Invalidation is a terminal failure, not a separate persisted status.
 func invalidate(job_id: String) -> Dictionary:
 	var override := _take_pending_fail_reason(job_id)
 	if not override.is_empty():
@@ -604,8 +440,7 @@ func complete(job_id: String) -> Dictionary:
 func get_tick() -> int:
 	return _tick
 
-## Job-ID/event-sequence counters, exposed for save/restore round-tripping
-## (state_codec.gd). Not consumed by in-process decision logic; only incremented.
+## Counters exposed for save/restore (state_codec.gd); only ever incremented.
 func get_next_id() -> int:
 	return _next_id
 
@@ -625,8 +460,7 @@ func get_jobs(include_retired: bool = true) -> Array[Dictionary]:
 func get_jobs_of_kinds(kinds: Array, include_retired: bool = true) -> Array[Dictionary]:
 	return _history.merged(_index.of_kinds(_jobs, kinds), _index.position_of, kinds, include_retired)
 
-## Read-only views for core readers (A5): the records themselves, never mutated. view_job() is
-## get_job() without the copy; view_jobs_of_kinds() the live jobs of `kinds`, in a fresh array.
+## Read-only views (A5): view_job() is get_job() without the copy; never mutate the result.
 func view_job(job_id: String) -> Dictionary:
 	var job := _find_job(job_id)
 	return job if not job.is_empty() else _history.find(job_id)
@@ -642,32 +476,14 @@ func get_job_kinds() -> Dictionary:
 func get_index() -> JobIndexType:
 	return _index
 
-## Vector2i target -> owning job id, for every active job, plus every queued
-## haul job still within its destination backoff (colonist-ai.md 3.4,
-## gated on `retry_at` alone -- see _tick_haul()'s gate -- never the
-## currently displayed reason, which may read labour_disabled). Derived from
-## _jobs, not _table directly: today exactly one reservation exists per
-## active job, on its own target. The backed-off-haul half is a deliberate
-## extension: without it a backed-off haul job's unboundedly aging score
-## (ADR 004) would keep winning global_assignment.gd's per-worker "best pair"
-## every tick forever, since its pre-scoring "already reserved" exclusion
-## never applies -- reporting its target "reserved" here routes it through
-## that same exclusion, still refreshed each selection but never competing
-## for a route-search slot or a chosen assignment while backed off.
-## Any backed-off queued job (haul or needs_tool, sharing "retry_at" -- see
-## _tick_haul()/_tool_requirement_satisfied()) also counts as reserved, so its
-## aging score can't keep winning a route-search slot while backed off.
+## Vector2i target -> job id for every active job, plus every queued job still in a
+## retry_at backoff (haul or needs_tool), so its aging score (ADR 004) cannot keep
+## winning a route-search slot while backed off.
 func get_reservations() -> Dictionary:
 	return _index.reservations(_jobs, _tick)
 
-## The actual shared ReservationTable (colonist-ai.md 3.4), for callers that
-## need the generic String-keyed ledger directly -- e.g. the reserve toil
-## acquiring a future item/cell key on this same table, or the reusable
-## invariant helper -- rather than get_reservations()'s detached Vector2i
-## read model. ReservationTable is a RefCounted: this is share-by-reference,
-## unlike every other getter on this class, so a future item/cell reservation
-## acquired through it is real and this queue's own release_all() on that
-## job's terminal transition frees it too.
+## The shared ReservationTable itself (by reference): keys acquired through it are freed
+## by this queue's release_all() on the job's terminal transition.
 func get_reservation_table() -> ReservationTableType:
 	return _table
 
@@ -678,18 +494,12 @@ func get_events() -> Array[Dictionary]:
 func get_events_after(after_sequence: int) -> Array[Dictionary]:
 	return _events.get_after(after_sequence)
 
-## Share-by-reference like get_reservation_table(): the event log itself, for
-## its cursor stream and collection-driven retention (A6, job_event_log.gd).
+## The event log itself, by reference (A6, job_event_log.gd).
 func get_event_log() -> JobEventLogType:
 	return _events
 
-## Overwrites the job list and counters from a prior save state. Reservations
-## are not a separate input: they are re-derived from active jobs' targets,
-## the same invariant tick() maintains (exactly one reservation per active
-## job, on that job's own target). The event log is not restored: it is
-## diagnostic only, and every event a future tick() emits still gets a
-## correctly continued sequence number from the restored counters. A terminal job in `jobs`
-## (none in a save since A5) is retired to the history at once; `jobs` is compacted in place.
+## Overwrites jobs and counters from a save. Reservations are re-derived from active jobs;
+## the event log is not restored. Terminal jobs in `jobs` retire to the history.
 func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: int) -> void:
 	_jobs = jobs
 	_index = JobIndexType.new(_jobs, BLOCKED_LABOUR_DISABLED)
@@ -720,26 +530,19 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 				_table.acquire(key, job["id"])
 	_events.reset(_sequence)
 
-## Namespaces a tile target into the ReservationTable's generic String key
-## space (colonist-ai.md 3.4), so an "item:"/"cell:" key can never collide
-## with a tile key.
+## Tile keys are namespaced so "item:"/"cell:" keys never collide with them.
 func _target_key(target: Vector2i) -> String:
 	return "%s%d,%d" % [TARGET_KEY_PREFIX, target.x, target.y]
 
-## Matches WorldState._cell_key()'s format exactly: both name the same
-## ReservationTable key, so is_cell_free() sees the reservation this queue
-## acquires on a haul job's destination cell.
+## Same format as WorldState._cell_key(): is_cell_free() must see haul cell reservations.
 func _cell_key(cell: Vector2i) -> String:
 	return "cell:%d,%d" % [cell.x, cell.y]
 
 func _find_job(job_id: String) -> Dictionary:
 	return _index.find(_jobs, job_id)
 
-## Pure pre-mutation predicate for _finish()'s own unknown-job/already-terminal/not-active
-## rules, shared with CommandChecks.check_terminal_job_command()'s preview
-## path (game/scripts/core/commands/command_checks.gd) so the two can never drift. active_only
-## mirrors complete()'s own active-only transition. Returns {} when job_id may transition to a
-## terminal status, or the rejection _finish() would produce otherwise. Never mutates.
+## Pure check shared with CommandChecks.check_terminal_job_command() so the two never
+## drift. {} when job_id may finish, else _finish()'s rejection. Never mutates.
 func check_terminal(job_id: String, active_only: bool = false) -> Dictionary:
 	var job := view_job(job_id)
 	if job.is_empty():

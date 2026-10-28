@@ -1,21 +1,10 @@
 class_name ActorNeeds
 extends RefCounted
 
-## F2 needs component. Per-instance state lives at the actor's own "needs"
-## key, Dictionary[kind -> int], exactly the shape a pre-F2 colonist has
-## always carried, plus a sibling "needsAccumulator" key, Dictionary[kind ->
-## int in [0, day_length_ticks)]: a deterministic integer
-## sub-point carry so a point-per-day rate need not divide evenly into a
-## single tick's decay. Tunables (content/actors.json): {"rates":
-## Dictionary[kind -> int >= 0]}, the per-day decay rate for each need kind
-## this actor tracks -- duplicated from content/needs.json's own per-kind
-## "rate_per_day" field because an actor definition has no other route to it
-## without importing the whole needs loader.
-##
-## Wired into WorldState's own decay path (world_state.gd's _decay_needs()
-## calls apply_tick() below, passing "day_length_ticks" alongside "rates" in
-## the same tunables Dictionary); see docs/decisions/012-actors-and-components.md
-## and docs/decisions/024-needs-decay-points-per-day.md.
+## Needs component (ADR 012/024): "needs" is Dictionary[kind -> int]; the sibling
+## "needsAccumulator" is Dictionary[kind -> int in [0, day_length_ticks)], an integer sub-point
+## carry. Tunables: {"rates": Dictionary[kind -> int >= 0]} per day (duplicated from needs.json).
+## NeedsSystem.decay_needs() calls apply_tick() with "day_length_ticks" in the tunables.
 
 static func validate(tunables: Dictionary) -> bool:
 	if not tunables.has("rates"):
@@ -28,27 +17,22 @@ static func validate(tunables: Dictionary) -> bool:
 			return false
 	return true
 
-## Every declared need kind's own "full" value (content/needs.json), the same
-## initial value a pre-F2 colonist's _full_needs() has always produced.
+## Every declared need kind at its "full" value (content/needs.json).
 static func build_full_needs(registry) -> Dictionary:
 	var needs: Dictionary = {}
 	for need in registry.list("needs"):
 		needs[String(need["kind"])] = int(need["full"])
 	return needs
 
-## Every declared need kind's own fresh accumulator (0), the sibling of
-## build_full_needs() above for a freshly spawned actor's "needsAccumulator".
+## Every declared need kind's fresh accumulator (0).
 static func build_full_accumulator(registry) -> Dictionary:
 	var accumulator: Dictionary = {}
 	for need in registry.list("needs"):
 		accumulator[String(need["kind"])] = 0
 	return accumulator
 
-## Decays every tracked need by its own rate_per_day, applied as a
-## deterministic integer accumulator: each tick adds rate_per_day
-## to that kind's carry, and while the carry reaches day_length_ticks it is
-## reduced by day_length_ticks and the need drops by one point, clamped at 0.
-## Integer-only and platform-independent by construction (no float division).
+## Adds rate_per_day to each carry; each full day_length_ticks drops the need one point (clamped at
+## 0). Integer-only, so platform-independent.
 static func apply_tick(actor: Dictionary, tunables: Dictionary) -> void:
 	var needs: Variant = actor.get("needs")
 	if not (needs is Dictionary):

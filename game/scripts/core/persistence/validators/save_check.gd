@@ -8,20 +8,13 @@ extends RefCounted
 static func _fail(message: String) -> Dictionary:
 	return {"ok": false, "code": "schema_error", "message": message}
 
-## docs/architecture/simulation-boundaries.md's persistence boundary and ADR
-## 003 principle 3 both require a missing required field to fail with a
-## migration error, never a silent default. Reuse the migration stub's own
-## code: from the reader's view a missing field is exactly what a migration
-## would need to backfill, and none is available yet.
+## A missing required field fails as a migration error, never a silent default
+## (simulation-boundaries.md, ADR 003 principle 3).
 static func _fail_missing(message: String) -> Dictionary:
 	return {"ok": false, "code": "no_migration_available", "message": message}
 
-## Shared shape check for every nested object in the tree: an unexpected key
-## is a schema_error (the producer wrote something this schema never
-## declared), but any absent required key -- at any nesting depth -- is a
-## missing-field migration error, never schema_error. Centralizing this here
-## is what keeps that rule uniform across every nested validator below,
-## instead of re-deciding it per call site.
+## Invariant at every depth: an unexpected key is schema_error, a missing required key is the
+## migration error. Centralised here so every validator applies it the same way.
 static func _require_fields(dict: Dictionary, required: Array, label: String) -> Dictionary:
 	if not _keys_allowed(dict, required):
 		return _fail("unexpected %s field" % label)
@@ -57,9 +50,7 @@ static func _matches_id_pattern(value) -> bool:
 			return false
 	return true
 
-## Matches the schema's `^[a-z0-9_-]*$` job.itemId pattern: like
-## _matches_id_pattern but an empty string is valid (a non-haul job's
-## harmless default, see JobQueue.submit_dig()).
+## Like _matches_id_pattern but "" is valid (a non-haul job's itemId).
 static func _matches_optional_id_pattern(value) -> bool:
 	if not (value is String):
 		return false
@@ -68,10 +59,8 @@ static func _matches_optional_id_pattern(value) -> bool:
 		return true
 	return _matches_id_pattern(text)
 
-## Every persisted tile coordinate is bounds-checked against the map's own declared width/height, not just non-negative -- a
-## job target/cell, route/search tile, or scheduling entry naming a
-## coordinate outside the live map can never be smuggled in through a
-## hand-edited or corrupted save (docs/architecture/save-system.md).
+## Every tile is bounded by the map's declared width/height, so a corrupted save cannot smuggle
+## in an out-of-map target.
 static func _valid_tile(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid tile type")

@@ -26,7 +26,7 @@ canonical:
     authority: command recording, replay file format, and checkpoint/divergence rules
   scenarios:
     path: game/content/schemas/scenarios.schema.json
-    authority: scenario entry shape and setup-step vocabulary for New Game worlds (ADR 053; steps in game/scripts/core/world/scenario_builder.gd)
+    authority: scenario entry shape and setup-step vocabulary for New Game worlds (ADR 054; steps in game/scripts/core/world/scenario_builder.gd)
   map_experience:
     path: docs/architecture/map-experience.md
     authority: PC camera, HUD isolation, coordinate conversion, and designation presentation
@@ -35,6 +35,7 @@ canonical:
     authority: pixel-art rules, sprite sizes, grounding, and shoreline layering
   decisions:
     path: docs/decisions/
+    index: docs/decisions/README.md
     authority: dated decisions that supersede or clarify contracts
 evidence:
   research:

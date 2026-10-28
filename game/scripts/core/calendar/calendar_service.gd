@@ -1,38 +1,19 @@
 class_name CalendarService
 extends RefCounted
 
-## Calendar content and pure calendar queries (colonist-ai.md 3.7): content
-## declares a day length in ticks and a list of labour boost windows
-## ({labour, from, to, boost, label}, day numbers 1-indexed and inclusive).
-## No season-length content exists yet (no other subsystem tracks seasons),
-## so a window's "from"/"to" are plain day-of-year numbers and day 1 is
-## documented here as spring day 1 -- the seed window ("sow", days 1-20)
-## is exactly colonist-ai.md's "spring days 1-20" under that reading.
-## Adding more seasons later only needs windows whose day
-## numbers account for the seasons that come before them; this service does
-## not need to change.
-##
-## Like ToilExecutor/WorldState's own content loaders, this class reads
-## CALENDAR_CONTENT_PATH once, in the constructor, and caches it; every
-## method after that (day_of_tick, active_boost, alert_state) is a pure
-## function of its arguments and the cached content -- no FileAccess,
-## RandomNumberGenerator or OS time anywhere else in this file.
+## Calendar content and pure calendar queries (colonist-ai.md 3.7): a day length in ticks and
+## labour boost windows ({labour, from, to, boost, label}, 1-indexed inclusive day-of-year; day 1
+## is spring day 1). Content is read once in the constructor; every query is a pure function.
 
 const CALENDAR_CONTENT_PATH := "res://content/calendar.json"
 
-## alert_state() reports a window as "due" exactly this many days before it
-## opens (colonist-ai.md 3.7: "warns N days before a window"). Fixed here so
-## test_calendar.gd can assert against the same constant instead of a
-## hand-copied literal.
+## A window is "due" exactly this many days before it opens (colonist-ai.md 3.7).
 const ALERT_LEAD_DAYS := 3
 
 var _day_length_ticks: int = 1
 var _windows: Array[Dictionary] = []
 
-## content_override lets a test exercise this class's pure logic against a
-## synthetic window list (e.g. one whose "from" is far enough from day 1 to
-## show a due alert) without writing a second content file; production code
-## always uses the zero-argument form, which loads CALENDAR_CONTENT_PATH.
+## content_override is for tests; production uses the zero-argument form.
 func _init(content_path: String = CALENDAR_CONTENT_PATH, content_override: Dictionary = {}) -> void:
 	var raw := content_override if not content_override.is_empty() else _read_content_file(content_path)
 	_day_length_ticks = maxi(1, int(raw.get("day_length_ticks", 1)))
@@ -51,9 +32,7 @@ func day_length_ticks() -> int:
 func window_definitions() -> Array[Dictionary]:
 	return _windows.duplicate(true)
 
-## Pure day-of-tick lookup: day 1 covers ticks [0, day_length_ticks), day 2
-## the next day_length_ticks ticks, and so on -- driven only by the
-## content-injected day length and the tick passed in.
+## Day 1 covers ticks [0, day_length_ticks).
 func day_of_tick(tick: int) -> int:
 	return int(floor(float(maxi(tick, 0)) / float(_day_length_ticks))) + 1
 
@@ -69,13 +48,9 @@ func active_boost(labour: String, tick: int) -> int:
 			total += int(window.get("boost", 0))
 	return total
 
-## Reports on the soonest not-yet-open window (the one with the smallest
-## non-negative days_until at this tick). due is true only when that window
-## is exactly ALERT_LEAD_DAYS days from opening, nobody already has its
-## labour enabled, the colony already has both a plowed plot and seed
-## stock, and the window has not already fired. Colony facts are taken as
-## plain booleans (not read from WorldState) so callers can wire this up
-## without depending on colonist or farm-order state existing.
+## The soonest not-yet-open window; due only when it opens in exactly ALERT_LEAD_DAYS, nobody has
+## its labour enabled, there is a plowed plot and seed stock, and it has not fired. Colony facts
+## are plain booleans so this stays independent of WorldState.
 func alert_state(tick: int, has_labour_enabled: bool, has_plowed_plot: bool, has_seed_stock: bool,
 		already_fired: bool) -> Dictionary:
 	var day := day_of_tick(tick)

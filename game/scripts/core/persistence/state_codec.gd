@@ -1,14 +1,11 @@
 class_name StateCodec
 extends RefCounted
 
-## Converts between a live WorldState and the JSON-schema-safe Dictionary
-## shape defined by docs/architecture/contracts/game-state.schema.json
-## (see SCHEMA_VERSION below). No file I/O: callers own reading/writing
-## bytes. This is
-## the only module that knows both WorldState's native-Variant internals
-## (Vector2i keys/values, RouteSearch/MeasuredRoute snapshots) and the
-## JSON-safe encoding (objects with "x"/"y", string-keyed maps, arrays of
-## pairs instead of Vector2i-keyed dictionaries).
+## Converts a live WorldState to and from the JSON-safe Dictionary of
+## docs/architecture/contracts/game-state.schema.json; no file I/O. The only module that knows
+## both the native Variants (Vector2i keys, route snapshots) and their wire encoding.
+## Invariant: decode(encode(world)) ticks identically to world, and every map is written in
+## sorted-key order so the same state always yields the same bytes.
 
 const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
@@ -18,13 +15,8 @@ const InventoryType = preload("res://scripts/core/actors/components/inventory.gd
 ## ADR 053). Every later shape change bumps this and adds a SaveMigrations step and a fixture.
 const SCHEMA_VERSION := 2
 
-## content/manifest.json's version, read fresh through a new ContentRegistry
-## each call (mirroring how WorldState._init() itself builds one) rather than
-## cached at load time, so a save always records the content bundle that is
-## actually on disk right now instead of whatever was current at process
-## start. "" when the registry itself is invalid (ContentRegistry.version()'s
-## own documented fallback), which _validate_state()'s non-empty-string check
-## already rejects -- no separate handling is needed here.
+## content/manifest.json's version, read fresh each call so a save records the bundle on disk
+## now; "" when the registry is invalid, which SaveIO._validate_state() rejects.
 static func content_version() -> String:
 	return ContentRegistryType.new().version()
 
@@ -38,13 +30,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"contentVersion": content_version(),
 		"seed": world._seed,
 		"tick": world._clock.tick,
-		# SaveManager's own game-session marker (see save_manager.gd's header
-		# comment): WorldState carries no session concept of its own, so
-		# encode() always emits the game-agnostic default here; SaveManager
-		# overwrites this field on the returned Dictionary before writing a
-		# manual/autosave slot. Every direct encode()/write_atomic() caller that
-		# never touches this field (tests, StateCodec.decode() round trips) gets a
-		# valid, schema-complete state without needing to know epoch exists.
+		# SaveManager's session marker; WorldState has no session, so SaveManager overwrites it.
 		"epoch": 0,
 		"map": {
 			"width": world.get_map_width(),
@@ -66,88 +52,52 @@ static func encode(world: WorldState) -> Dictionary:
 		"nextZoneId": zone_table["nextZoneId"],
 		"groundBerries": item_table["groundBerries"],
 		"workProgress": work_progress["workProgress"],
-		# The exact job_id that owns each workProgress
-		# key, so decode() restores real ownership instead of guessing it from
-		# whichever job happens to target that key (see the WorkProgress
-		# class doc).
+		# The exact owning job_id per key, so decode() never guesses ownership from job targets.
 		"workProgressOwners": work_progress["workProgressOwners"],
-		# A suspended (still-queued, not
-		# terminated) job's own work-toil ticks, moved out of the live
-		# "workProgress"/"workProgressOwners" tile cache so a different job
-		# that later works the same tile can never inherit or clobber them
-		# (WorkProgress.suspend()/resume()).
+		# A suspended job's own ticks, kept apart so another job on that tile cannot inherit them.
 		"suspendedWorkProgress": work_progress["suspendedWorkProgress"],
 		"pausedJobs": world._needs_system.encode()["pausedJobs"],
 		"toolItems": _encode_tool_items(world._tool_store.items, world._tool_store.next_id),
 		"toolReservations": world._tool_store.reservations.snapshot(),
 		"needJobAssignments": _encode_paused_jobs(world._need_giver.get_pending_assignments()),
-		# RescueGiver's own job_id ->
-		# victim_id association, persisted verbatim (see
-		# _encode_rescue_victim_assignments()'s own doc comment) rather than
-		# re-derived from target-tile adjacency, which cannot uniquely
-		# identify a victim whenever two victims share a target or have
-		# overlapping adjacency sets.
+		# Persisted verbatim: adjacency cannot tell two victims of one target apart.
 		"rescueVictimAssignments": GiverCodec._encode_rescue_victim_assignments(world._rescue_giver.get_job_victims()),
 		"combatBlockedTargets": GiverCodec._encode_combat_blocked_targets(world._combat_giver.get_blocked_targets()),
-		# ApproachGiver's own job_id -> target association,
-		# persisted verbatim (see _encode_approach_job_targets()'s own doc
-		# comment) for the same reason rescueVictimAssignments is -- an object
-		# target has no living record to re-scan after a load.
+		# Persisted verbatim: an object target has no live record to re-scan after a load.
 		"approachJobTargets": GiverCodec._encode_approach_job_targets(world._approach_giver.get_job_targets()),
 		"calendarAlerts": GiverCodec._encode_calendar_alerts(world._calendar_alerts_fired),
 		"toolFetchExcluded": GiverCodec._encode_tool_fetch_excluded(world._toils.get_fetch_tool_excluded()),
 		"incidentScheduler": GiverCodec._encode_incident_scheduler(world._incidents),
-		# ADR 026: dig's own find-roll RNG continuation (ItemTable.dig_find_random),
-		# mirroring "rng" above and "incidentScheduler.rng"; when absent, ItemTable.decode()
-		# keeps the constructor's fresh seed + WorldState.DIG_FIND_SEED_SALT stream.
+		# ADR 026: dig find-roll RNG continuation; absent keeps the constructor's salted stream.
 		"digFindRng": item_table["digFindRng"],
-		# ADR 044: pending area_order expansions, each with
-		# the next row-major tile to expand, so a save taken mid-expansion
-		# resumes exactly there (AreaOrders.encode()).
+		# ADR 044: pending area_order expansions, resumed at their next row-major tile.
 		"areaOrders": world._area_orders.encode(),
 	}
 
-## Reconstructs a WorldState that ticks identically to the instance that
-## produced state (see encode()), including in-flight route searches and
-## scheduler continuation state. The constructor's own map/colonist
-## generation and random draws are discarded and fully overwritten below.
+## Reconstructs a WorldState that ticks identically to the one that produced state,
+## including in-flight route searches; the constructor's own generation is overwritten.
 static func decode(state: Dictionary) -> WorldState:
 	var map: Dictionary = state["map"]
 	var width := int(map["width"])
 	var height := int(map["height"])
 	var world := WorldState.new(int(state["seed"]), 10, width, height)
-	# The constructor above clamps p_width/p_height into WorldGenerator's
-	# 16..512 new-game range (resolve_size()), which a saved map is never
-	# subject to on restore (SaveIO._validate_state() only rejects a map
-	# above that upper bound; a smaller saved fixture, e.g. 3x2, is valid and
-	# must decode at its own exact size). Overwrite the constructor's resolved
-	# width/height with the saved dimensions before replacing the tiles, or
-	# every tile index below would use the wrong row stride.
+	# The constructor clamps size to the new-game 16..512 range; a saved map keeps its own size
+	# (e.g. a 3x2 fixture), set before the tiles or the row stride is wrong.
 	world._tile_grid.width = width
 	world._tile_grid.height = height
-	# The constructor above already built
-	# NeedGiver/IncidentScheduler against its own resolve_size()-clamped
-	# width/height (16..512), before the two lines above corrected
-	# world._tile_grid.width/height to the saved map's real, possibly-smaller size.
-	# Rebuild both services now, from the corrected dimensions, before
-	# anything below (restore_pending_assignments, the reroute rebuild,
-	# _reconcile_incident_jobs_after_load) touches them.
+	# NeedGiver/IncidentScheduler were built at the clamped size: rebuild them before use.
 	world._build_dimension_services(false)
 	world._generator_version = int(map.get("generatorVersion", WorldGeneratorType.GENERATOR_VERSION))
 	world._tile_grid.decode(state["map"])
 	world._colonists = EntityCodec._decode_entities(state["entities"])
-	# "items", "groundBerries" and the optional "digFindRng". Nothing else in
-	# decode() reads them or draws from the dig-find stream, so restoring all
-	# three here (berries and the RNG used to be restored later) is order-safe.
+	# Items, ground berries and the dig-find RNG; nothing else in decode() draws from it.
 	world._item_table.decode(state)
-	# One record per placed origin tile, expanded back to every footprint tile
-	# by ObjectTable.decode() (it needs the object definitions' footprint/rotatable).
+	# One record per origin, expanded to the footprint by ObjectTable.decode().
 	world._object_table.decode(state)
 	# Absent "constructionSites" restores an empty table (ConstructionSystem.decode()).
 	world._construction.decode(state)
 	world._zone_table.decode(state)
-	# "workProgress" and the optional "suspendedWorkProgress"; the persisted owners
-	# are applied by restore_owners() below, once jobs are restored.
+	# Owners are applied by restore_owners() below, once jobs exist.
 	var work_progress_owners := world._progress_table.decode(state)
 	world._needs_system.decode(state)
 	var tool_items_data := _decode_tool_items(state["toolItems"])
@@ -167,15 +117,8 @@ static func decode(state: Dictionary) -> WorldState:
 
 	var jobs := SchedulingCodec._decode_jobs(state["jobs"])
 	var rescue_jobs := GiverCodec._surviving_rescue_jobs(jobs)
-	# RescueGiver's own job_id ->
-	# victim_id association is persisted verbatim on the wire (see
-	# _encode_rescue_victim_assignments()'s own doc comment) -- restore it
-	# before queue.restore() runs immediately below: that call's own
-	# active-job reservation rebuild needs extra_keys_for_job() (see
-	# job_queue.gd), which reads this. Filtered to jobs that actually survived
-	# decode: a terminal job carries no live association (see
-	# RescueGiver.resolve_job()), and a corrupted/hand-built fixture must
-	# never seed an association for a job that no longer exists.
+	# Restored before queue.restore(): its reservation rebuild reads extra_keys_for_job(). Only
+	# jobs that survived decode keep an association.
 	var surviving_rescue_job_ids: Dictionary = {}
 	for job in rescue_jobs:
 		surviving_rescue_job_ids[String(job["id"])] = true
@@ -184,9 +127,7 @@ static func decode(state: Dictionary) -> WorldState:
 		if not surviving_rescue_job_ids.has(job_id):
 			rescue_victims.erase(job_id)
 	world._rescue_giver.restore_victim_assignments(rescue_victims)
-	# Filtered to jobs that actually survived decode, the
-	# same way rescue_victims is above -- a corrupted/hand-built fixture must
-	# never seed an association for a job that no longer exists.
+	# Filtered to surviving jobs, like rescue_victims above.
 	var surviving_approach_job_ids: Dictionary = {}
 	for job in GiverCodec._surviving_approach_jobs(jobs):
 		surviving_approach_job_ids[String(job["id"])] = true
@@ -196,45 +137,25 @@ static func decode(state: Dictionary) -> WorldState:
 			approach_targets.erase(job_id)
 	world._scheduler.queue.restore(jobs, int(scheduling["jobTick"]),
 		int(scheduling["nextJobId"]), int(scheduling["jobSequence"]))
-	# Repoints RescueGiver's own ReservationTable reference at the table
-	# queue.restore() just built in place of the one _build_dimension_services()
-	# handed it -- otherwise every is_reserved()/owner() peek this giver makes
-	# from now on reads an obsolete, orphaned table.
+	# Repoint RescueGiver at the reservation table queue.restore() just built.
 	world._rescue_giver.set_reservation_table(world._scheduler.queue.get_reservation_table())
-	# The work-progress owners are restored from the persisted job_id above
-	# (guessing it from job-target iteration order could hand one job's
-	# progress to another queued at the same tile), right after jobs
-	# restore and before _reconcile_incident_jobs_after_load() below may
-	# cancel one through the shared _finish_job() boundary, so that
-	# cancellation's own ownership-gated work-progress cleanup fires correctly immediately after a load.
+	# Owners from the persisted job_id, after the jobs and before the incident reconcile below
+	# may cancel one (its ownership-gated cleanup needs them).
 	world._progress_table.restore_owners(work_progress_owners, world._colonists, world._needs_system.paused_jobs)
 
 	var bounds_max := Vector2i(width - 1, height - 1)
 	world._scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(scheduling),
 		world._passability.is_passable, Vector2i.ZERO, bounds_max)
-	# rescuer_id -> job_id needs no save data of its own either: every
-	# surviving rescue job's own restrict_to, now available from the just-
-	# restored scheduler, already names its rescuer (the same field a
-	# player-ordered dig/chop job's own assignee restriction already
-	# persists, see WorldState._resubmit_unreachable_job()'s own comment).
+	# rescuer_id -> job_id needs no save data: each rescue job's restrict_to names its rescuer.
 	world._rescue_giver.restore_pending_assignments(GiverCodec._rescue_pending_from_scheduler(rescue_jobs, world._scheduler))
 	_restore_reroutes(world, bounds_max)
-	# Re-associate each restored incident job with its actor,
-	# or retire it (see WorldState).
+	# Re-associate each restored incident job with its actor, or retire it.
 	world._reconcile_incident_jobs_after_load()
-	# Restored after the queue/scheduling restore above, so
-	# CombatGiver can re-adopt every restored non-terminal flee job for its
-	# owned episode right here, before the first tick's own decisions.
+	# After the scheduling restore, so CombatGiver re-adopts its flee jobs before the first tick.
 	world._combat_giver.restore_blocked_targets(GiverCodec._decode_combat_blocked_targets(state.get("combatBlockedTargets", [])))
-	# Restored after the queue/scheduling restore above, so
-	# ApproachGiver can re-adopt every restored non-terminal `approach` job for
-	# its actor right here, before the first tick's own decisions (mirrors
-	# CombatGiver.restore_blocked_targets() immediately above).
+	# Same for ApproachGiver and its approach jobs.
 	world._approach_giver.restore_job_targets(approach_targets)
-	# ADR 004 ("WorldState's diagnostic hash includes this continuation
-	# state"): IncidentScheduler's own cooldowns/last-drawn-day/RNG are read
-	# and written here directly, since incident_scheduler.gd exposes no
-	# accessor for them.
+	# ADR 004: the scheduler's continuation state is hashed; IncidentScheduler has no accessor.
 	var incident_scheduler: Dictionary = state["incidentScheduler"]
 	world._incidents._cooldown_until_day = SchedulingCodec._decode_int_dict(incident_scheduler["cooldownUntilDay"])
 	world._incidents._last_processed_day = int(incident_scheduler["lastProcessedDay"])
@@ -243,41 +164,10 @@ static func decode(state: Dictionary) -> WorldState:
 
 	return world
 
-## Rebuilds world._reroutes's live in-flight search objects from each
-## colonist's persisted route.rerouting snapshot (see WorldState._begin_reroute()/
-## _begin_haul_leg()), mirroring how GlobalAssignment.restore_scheduling()
-## rebuilds its own pending route searches from their snapshots. A haul
-## colonist already carrying its item is mid-leg-two: that search targets
-## job["cell"] with plain passability, never job["target"] (the item's tile,
-## leg one's own target) with the tree/target exception dig/chop's re-routes
-## need. A colonist still mid-fetch_tool (ToilExecutor.needs_fetch_tool() true
-## -- a read-only check, see tool_fetch_toil.gd's needs()) instead rebuilds
-## the passability exception from snapshot["target"] itself -- the search's
-## own already-persisted original target (see ToolFetchToil.advance(), which
-## bakes the tool's position in at the moment the search starts into the very
-## same field _encode_route()/_decode_route() already round-trip) -- rather
-## than recomputing the tool's current location from toolItems/toolReservations
-## (those differ once a held tool's holder moves
-## after the search began, silently applying the exception to the wrong
-## tile). A colonist mid-drop_tool (ToilExecutor.is_dropping_leg()) instead
-## rebuilds with plain passability, no exception at
-## all: the live drop toil never applies one either (a drop destination is
-## always pre-verified passable, see tool_drop_toil.gd), so using job["target"]'s
-## own exception here was wrong whenever that tile sat between the holder and
-## the chosen stockpile cell -- it could open a "shortcut" through what should
-## still be an impassable tile, a divergence only this branch, not a live
-## uninterrupted run, could ever produce. Every other in-flight search uses
-## job["target"] as before.
-## The two `world._routable_to()` branches below now pass the
-## acting colonist's own factionId (defaulting "colony", a no-op for an
-## ordinary colonist) instead of `_routable_to()`'s colony default -- a
-## restored search for a non-colony actor (a raider mid-flee) must be gated by
-## its own faction's door permissions, exactly like the live, uninterrupted
-## search tick()'s own _toil_go_to_passable()/_advance_go_to_or_resubmit()
-## already are, or a save mid-search could diverge from an uninterrupted run.
-## The two `world._passability.is_passable` branches (haul leg-two, dropping) stay
-## colony-only by construction -- see their own comments above -- and are
-## untouched.
+## Rebuilds world._reroutes from each colonist's persisted route.rerouting snapshot, with the
+## same cost function the live search used: plain passability for a carrying haul leg and a
+## drop_tool leg, snapshot["target"] for a fetch_tool leg (the tool may have moved since), and
+## the job target's exception with the actor's own faction otherwise.
 static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 	for colonist in world._colonists:
 		var route: Variant = colonist.get("route")
@@ -290,17 +180,14 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		var job := world._scheduler.queue.get_job(job_id)
 		var faction_id := String(colonist.get("factionId", "colony"))
 		var cost_fn: Callable
-		# A job finished by a command since the last tick is not saved (A5, ADR 053) but
-		# may still name this route: with no assignment, the next _advance_colonists()
-		# drops the route before any resume, so the cost callable is never consulted.
+		# A job finished by a command since the last tick is not saved (ADR 053); the next
+		# TickPipeline._advance_colonists() drops the route before the callable is used.
 		if job.is_empty():
 			cost_fn = world._passability.is_passable
 		elif String(job.get("kind", "")) == "haul" and InventoryType.is_carrying(colonist):
 			cost_fn = world._passability.is_passable
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
-			# A carrying build's live second leg searches toward job.site with
-			# the site-tile exception (WorldState._toil_go_to_passable()), never
-			# toward job.target, the wood's own tile.
+			# The carrying build leg routes to job.site (ToilBindings._toil_go_to_passable()).
 			cost_fn = world._routable_to(job["site"], faction_id)
 		elif world._toils.is_dropping_leg(colonist, job_id, job, world._toil_hooks):
 			cost_fn = world._passability.is_passable
@@ -338,13 +225,8 @@ static func _decode_tile_array(tiles: Array) -> Array:
 
 # --- items -----------------------------------------------------------------
 
-## ItemTable.items is keyed by item id; sorted keys give a deterministic
-## encoding order. next_id is ItemTable.next_item_id, carried alongside the list
-## so a restored WorldState never reuses an id a save already handed out.
-## item_factions is ItemTable.item_factions (the persisted counterpart of the
-## "faction_id" runtime field get_items() adds), a parallel map keyed by item id rather than a nested value inside
-## items itself -- mirroring _encode_objects()'s own parallel
-## object_factions map.
+## Sorted by item id. next_id travels with the list so a restored world never reuses an id;
+## item_factions is a parallel map keyed by item id, like the objects' factions.
 static func _encode_items(items: Dictionary, next_id: int, item_factions: Dictionary) -> Dictionary:
 	var keys := items.keys()
 	keys.sort()
@@ -372,10 +254,7 @@ static func _decode_items(field: Dictionary) -> Dictionary:
 
 # --- tool items (colonist-ai.md 2/3.4) ---------------------------
 
-## world._tool_store.items is keyed by item id; sorted keys give a
-## deterministic encoding order, mirroring _encode_items()/_encode_objects().
-## next_id is world._tool_store.next_id, carried alongside the list like
-## _next_item_id.
+## Sorted by item id; next_id travels with the list, as for ground items.
 static func _encode_tool_items(tool_items: Dictionary, next_id: int) -> Dictionary:
 	var keys := tool_items.keys()
 	keys.sort()
@@ -398,8 +277,7 @@ static func _decode_tool_items(field: Dictionary) -> Dictionary:
 		}
 	return {"items": items, "next_id": int(field["nextId"])}
 
-## A tool item's location is one of three shapes (WorldState.set_tool_item_*):
-## ground/stockpile carry a tile, held carries the holding colonist's id.
+## A location is ground/stockpile (a tile) or held (the holder's colonist id).
 static func _encode_tool_location(location: Dictionary) -> Dictionary:
 	if String(location["type"]) == "held":
 		return {"type": "held", "colonistId": String(location["colonist_id"])}
@@ -412,11 +290,7 @@ static func _decode_tool_location(location: Dictionary) -> Dictionary:
 
 # --- zones -------------------------------------------------------------
 
-## ZoneTable.zones is keyed by zone id; sorted keys give a deterministic
-## encoding order. Zones are a plain array on the wire (like objects); the
-## next-id counter that keeps a restored world from reusing an id a save
-## already handed out is carried separately as the top-level "nextZoneId"
-## field (see encode()/decode()), not nested inside "zones".
+## Sorted by zone id; the next-id counter travels as the top-level "nextZoneId".
 static func _encode_zones(zones: Dictionary) -> Array:
 	var keys := zones.keys()
 	keys.sort()
@@ -441,25 +315,9 @@ static func _decode_zones(list: Array) -> Dictionary:
 
 # --- objects ---------------------------------------------------------------
 
-## ObjectTable.objects is keyed by "%d_%d" % [x, y] (see object_table.gd); the
-## sorted keys give a deterministic encoding order. object_factions is
-## ObjectTable.object_factions (the persisted counterpart of the "faction_id"
-## runtime field get_objects() adds), a parallel map
-## keyed the same way as objects rather than a nested value inside it.
-## object_health is ObjectTable.object_health, the same kind of parallel
-## map: present only for a key whose object kind declares "max_health"
-## (content/objects.json), so a bare/non-damageable object omits the "health"
-## wire field (optional in game-state.schema.json's "object" $def, like
-## route.rerouting). A load that omits it falls back to
-## ObjectTable.ensure_object_health()'s own backfill.
-## object_origin/object_orientation are ObjectTable.object_origin/
-## object_orientation -- one record is written per placed *object*, not per
-## occupied tile: a key present in object_origin names a non-origin footprint
-## tile of a multi-tile object and is skipped entirely (its origin's own
-## record, plus ObjectTable.decode()'s object_footprint_tiles() expansion, already
-## accounts for it). "orientation" is written only when object_orientation
-## names this origin (absent, not "", for an unrotated or footprint-[1,1]
-## object, exactly like game-state.schema.json's optional field).
+## One record per placed object (origin key, sorted), never per footprint tile. Factions,
+## health and orientation are parallel maps; "health" only for kinds with max_health and
+## "orientation" only when set (absent, not ""), both optional in the schema.
 static func _encode_objects(objects: Dictionary, object_factions: Dictionary, object_health: Dictionary,
 		object_origin: Dictionary, object_orientation: Dictionary) -> Array:
 	var keys := objects.keys()
@@ -480,12 +338,8 @@ static func _encode_objects(objects: Dictionary, object_factions: Dictionary, ob
 		encoded.append(entry)
 	return encoded
 
-## One raw {origin, kind, factionId, orientation, health?} record
-## per placed object, in wire order -- ObjectTable.decode() expands each back out
-## to every tile of its footprint (object_footprint_tiles(), needing the
-## object definitions, which this static function has no access to).
-## orientation defaults to "" (no rotation) exactly like a save from before
-## object orientation existed, which never wrote the field at all.
+## Raw records in wire order; ObjectTable.decode() expands footprints (it has the defs).
+## A missing orientation means unrotated.
 static func _decode_objects(objects: Array) -> Array:
 	var records: Array = []
 	for item in objects:
@@ -499,13 +353,8 @@ static func _decode_objects(objects: Array) -> Array:
 
 # --- ground berries ----------------------------------------------------
 
-## ItemTable.ground_berries is keyed by "%d_%d" (see item_table.gd, mirroring
-## _objects); the sorted keys give a deterministic encoding order. Field name
-## "berries" mirrors the old per-tile groundItems wire shape's "wood" field
-## ({target, wood}): ground berries stay a simple per-tile counter, not a
-## first-class pickable item like wood. "factionId" (ADR 047)
-## comes from the parallel ground_berries_factions map, defaulting to "colony"
-## like _encode_items() does for an untracked item.
+## Sorted "%d_%d" keys; berries stay a per-tile counter, not items. factionId (ADR 047)
+## defaults to "colony", like an untracked item.
 static func _encode_ground_berries(ground_berries: Dictionary, factions: Dictionary) -> Array:
 	var keys := ground_berries.keys()
 	keys.sort()
@@ -530,10 +379,8 @@ static func _decode_ground_berries(list: Array) -> Dictionary:
 
 # --- work progress (colonist-ai.md 3.6) -------------------------------------
 
-## WorkProgress.progress is keyed by "%d_%d", or by "<jobId>:%d_%d" for a
-## job-scoped (rescue) key; WorkProgress.key_parts()/key_of() split and build
-## it, so the wire entry names its tile and scope ("ownerJobId", present only
-## for a scoped key) explicitly. Sorted keys give a deterministic encoding order.
+## Keys are "%d_%d", or "<jobId>:%d_%d" for a job-scoped (rescue) key; the wire names tile
+## and scope ("ownerJobId") explicitly. Sorted by key.
 static func _encode_work_progress(work_progress: Dictionary) -> Array:
 	var keys := work_progress.keys()
 	keys.sort()
@@ -553,13 +400,8 @@ static func _decode_work_progress(list: Array) -> Dictionary:
 		decoded[key] = int(entry["ticksRemaining"])
 	return decoded
 
-## WorkProgress.owners is keyed like WorkProgress.progress -> job_id. Each
-## owner is an explicit {target, jobId, ownerJobId?} record (ADR 047): target + ownerJobId name the progress key exactly as a
-## workProgress entry does, jobId the owning job. Sorted keys match
-## _encode_work_progress()'s order. Only keys with a non-empty owner appear --
-## an "incident" job's stamped wait never participates in job-id ownership
-## (see WorkProgress.release_owned()), so it is absent here, not encoded with
-## an empty id.
+## {target, jobId, ownerJobId?} per owned key (ADR 047), in _encode_work_progress() order.
+## Only non-empty owners: an incident's stamped wait never owns progress.
 static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Array:
 	var keys := work_progress_owner.keys()
 	keys.sort()
@@ -572,9 +414,7 @@ static func _encode_work_progress_owners(work_progress_owner: Dictionary) -> Arr
 		encoded.append(entry)
 	return encoded
 
-## Returns the raw key -> job_id map; WorkProgress.restore_owners()
-## cross-checks each job_id against the just-restored job list before trusting
-## it (see that function's own doc comment).
+## Raw key -> job_id; WorkProgress.restore_owners() checks each against the restored jobs.
 static func _decode_work_progress_owners(list: Array) -> Dictionary:
 	var decoded: Dictionary = {}
 	for entry in list:
@@ -582,9 +422,7 @@ static func _decode_work_progress_owners(list: Array) -> Dictionary:
 		decoded[key] = String(entry["jobId"])
 	return decoded
 
-## WorkProgress.suspended is keyed by job_id directly: a suspended job's own snapshot, so no tile coordinate
-## participates in the key at all -- sorted job_id keys give a deterministic
-## encoding order.
+## Keyed by job_id (a suspended job's own snapshot, no tile); sorted by job_id.
 static func _encode_suspended_work_progress(suspended_work_progress: Dictionary) -> Array:
 	var keys := suspended_work_progress.keys()
 	keys.sort()
@@ -601,11 +439,7 @@ static func _decode_suspended_work_progress(list: Array) -> Dictionary:
 
 # --- paused jobs (colonist-ai.md 3.6) ---------------------------------------
 
-## NeedsSystem.paused_jobs is keyed by colonist id; sorted keys give a
-## deterministic encoding order, matching every other keyed-map encoder here.
-## Reused as-is for NeedGiver's own colonist_id -> job_id association (see
-## encode()'s "needJobAssignments"): both are the same {colonistId, jobId}
-## shape.
+## Sorted by colonist id; also encodes NeedGiver's colonist -> job map (same shape).
 static func _encode_paused_jobs(paused_jobs: Dictionary) -> Array:
 	var keys := paused_jobs.keys()
 	keys.sort()
@@ -619,16 +453,6 @@ static func _decode_paused_jobs(list: Array) -> Dictionary:
 	for entry in list:
 		decoded[String(entry["colonistId"])] = String(entry["jobId"])
 	return decoded
-
-# --- rescue giver restoration ----------------------------------
-
-# --- combat giver flee-destination exclusions ----
-
-# --- approach giver target association (ADR 033) ---------------
-
-# --- calendar alerts (ADR 008, colonist-ai.md 3.7) --------------------------
-
-# --- tool fetch excluded candidates (ADR 013) ----------
 
 # --- construction sites ------------------------------------
 
@@ -644,10 +468,7 @@ static func _decode_materials(materials: Array) -> Array[Dictionary]:
 		decoded.append({"item": String(entry["item"]), "quantity": int(entry["quantity"])})
 	return decoded
 
-## One record per active site, mirroring the object codec's own
-## "origin record, expanded to the whole footprint on load" shape -- a site
-## has no per-tile duplication to begin with (ConstructionSiteTable already
-## stores exactly one record per site), so this is a direct field mapping.
+## One record per active site; ConstructionSiteTable already stores one per site.
 static func _encode_construction_sites(sites: Array[Dictionary]) -> Array:
 	var encoded: Array = []
 	for site in sites:
@@ -677,10 +498,7 @@ static func _decode_construction_sites(sites: Array) -> Array[Dictionary]:
 		})
 	return decoded
 
-## ConstructionSiteTable.restore()'s own next_id counter: re-derived from the
-## highest "site_<N>" id already present rather than persisted separately, so
-## no new top-level field/counter is needed at all -- the same "site_%d"
-## naming create() always uses.
+## The site counter is re-derived from the highest "site_<N>" id, so it is never persisted.
 static func _next_construction_site_id(sites: Array[Dictionary]) -> int:
 	var next_id := 1
 	for site in sites:
@@ -689,7 +507,7 @@ static func _next_construction_site_id(sites: Array[Dictionary]) -> int:
 			next_id = maxi(next_id, int(id.substr(5)) + 1)
 	return next_id
 
-# --- moved encoders still called as StateCodec.* by WorldState.state_hash() ----
+# --- encoders also called as StateCodec.* by WorldState.state_hash() ----
 
 static func _hash_colonists(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
 	return EntityCodec._hash_colonists(colonists, reroutes)

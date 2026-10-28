@@ -7,8 +7,7 @@
     "game/scripts/core/scheduling/global_assignment.gd": {"cap": 688, "why": "pre-ADR 048 cap, below the rule; never raised"}
   },
   "file_exceptions": {
-    "game/scripts/core/worldgen/world_generator.gd": {"cap": 1178, "until": "unassigned"},
-    "game/scripts/core/jobs/toil_executor.gd": {"cap": 963, "until": "unassigned"}
+    "game/scripts/core/worldgen/world_generator.gd": {"cap": 870, "until": "unassigned"}
   },
   "function_exceptions": {
     "game/scripts/core/scheduling/global_assignment.gd::tick": {"cap": 150, "until": "unassigned"},

@@ -23,8 +23,7 @@ func summary() -> Dictionary:
 	state["resume_calls"] = resume_calls
 	return state
 
-## See RouteSearch.restore(): also restores the instrumentation counters so a
-## restored search reports accurate telemetry deltas on its next resume().
+## See RouteSearch.restore(); also restores the instrumentation counters.
 func restore(state: Dictionary) -> void:
 	super.restore(state)
 	expansions = int(state.get("expansions", 0))
