@@ -638,6 +638,36 @@ one.
   duplicate id fails with `schema_violation`; a save with a missing pack fails with a typed
   error; the real bundle loads unchanged.
 - **Non-goals:** script mods; a mod browser UI.
+- **Scope (owner decisions, 2026-10-28):** R14 (save schema reset) owns persistence while it is
+  in flight. The owner's note: *"no toques save_io/state_codec/save_migrations. Si el registro
+  de contenido necesita algo del guardado, anotalo como seguimiento"*. So the save half of the
+  goal and acceptance moves to **A13b**: `SaveIO` whitelists from the registry, packs recorded
+  in saves, and the typed missing-pack error. Owned paths added in the review:
+  `content/content_json.gd` (the JSON parser moved out of `content_registry.gd`
+  unchanged, so the registry fits ADR 048), and `viewer/new_game_setup.gd`, which takes the
+  session registry so a New Game spawns the tools the pack's jobs need.
+
+#### A13b — Content packs in saves · `todo` · after R14 and A13
+
+- **Goal:** a save records the content packs it was made with (`ContentRegistry.packs()`:
+  ordered `{id, version}`). Loading a save whose packs are not loaded in the session (missing,
+  different version, or different order) fails with a typed error and never runs on the wrong
+  content. `SaveIO` validation reads its tile, job and need whitelists from the session
+  registry instead of literals. `StateCodec`, `SaveIO` and `SaveMigrations` receive the session
+  registry instead of building their own (`content_version()`, `max_world_size`, `decode()`'s
+  `WorldState`, the migrations' registry and `CalendarService.new()`), and so do the debug
+  scenario's `WorldState` and the viewer's load path.
+- **Owned paths:** `persistence/save_io.gd`, `persistence/state_codec.gd`,
+  `persistence/save_migrations.gd`, `persistence/save_manager.gd`, `calendar/calendar_service.gd`,
+  `viewer/save_wiring.gd`, `viewer/debug_scenario.gd`, `boot.gd`, the save schema and its
+  fixtures, ADR 010 (amendment 2), tests.
+- **Acceptance:** a save made with a test pack loads on the same packs; the same save fails
+  with a typed error when the pack is missing, has another version, or is listed in another
+  order; a save made with no packs is byte-identical to `main`'s, or ships with its schema
+  bump, migration and fixture; `SaveIO` keeps no tile, job or need literals (grep in the
+  report); the full suite passes.
+- **Non-goals:** loading a save onto different packs with automatic repair; a mod browser UI;
+  hot-reloading packs.
 
 #### A14 — Data-driven work effects · `todo` · after R11
 

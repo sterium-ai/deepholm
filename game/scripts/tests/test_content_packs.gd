@@ -8,7 +8,8 @@ extends SceneTree
 ## WorldState; 3) roots apply in order; 4) a duplicate id, in the base or in a
 ## pack, fails with schema_violation, and every other pack rule fails typed;
 ## 5) the validator's enum is enforced; 6) cross-file checks run on the merged
-## bundle.
+## bundle; 7) a real New Game (boot.gd's build_default_world()) places the
+## starting tools the pack's jobs need, not the base ones.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -37,6 +38,7 @@ func _init() -> void:
 	_check_pack_shape_rules_fail_typed()
 	_check_enum_is_enforced()
 	_check_cross_references_run_on_merged_bundle()
+	_check_new_game_spawns_pack_tool_requirement()
 
 	if _failed:
 		quit(1)
@@ -193,6 +195,37 @@ func _check_cross_references_run_on_merged_bundle() -> void:
 	var registry := ContentRegistryType.new(BASE, SCHEMAS, [PACK_A_DIR] as Array[String])
 	_cleanup_dir(PACK_A_DIR)
 	_expect_error(registry, ContentRegistryType.ERROR_DANGLING_REFERENCE, "jobs.json", "a pack breaking a base cross-reference")
+
+## Review round 1 (A13): new_game_setup.gd built its own base-only registry, so
+## a pack that moves chop from the axe to a new tool still spawned the axe and
+## left chop with no tool to fetch. The New Game path must read the session
+## registry the world was built from.
+func _check_new_game_spawns_pack_tool_requirement() -> void:
+	var chop: Dictionary = ContentRegistryType.new().get_entry("jobs", "chop").duplicate(true)
+	_expect(chop.get("needs_tool") == "axe", "fixture: base chop must need the axe, got %s" % [chop.get("needs_tool")])
+	chop["needs_tool"] = "pack_saw"
+	_write_pack(PACK_A_DIR, "pack_a", {
+		"items": {"items": [{"id": "pack_saw", "kind": "tool"}]},
+		"jobs": {"overrides": [chop]},
+	})
+	var registry := ContentRegistryType.new(BASE, SCHEMAS, [PACK_A_DIR] as Array[String])
+	_cleanup_dir(PACK_A_DIR)
+	_expect(registry.is_valid(), "a pack moving chop to a new tool must load: %s" % registry.get_error())
+	if not registry.is_valid():
+		return
+	var world := BootType.build_default_world(BootType.DEFAULT_BOOT_SEED, 10, registry)
+	var kinds: Array[String] = []
+	for tool_item in world.get_tool_items():
+		kinds.append(String(tool_item["kind"]))
+	kinds.sort()
+	_expect(", ".join(kinds) == "pack_saw, pick",
+		"New Game on the pack must spawn exactly the tools its jobs need (pack_saw, pick), got %s" % [kinds])
+	var base_world := BootType.build_default_world()
+	var base_kinds: Array[String] = []
+	for tool_item in base_world.get_tool_items():
+		base_kinds.append(String(tool_item["kind"]))
+	base_kinds.sort()
+	_expect(", ".join(base_kinds) == "axe, pick", "New Game on the base must still spawn axe and pick, got %s" % [base_kinds])
 
 func _expect_error(registry: ContentRegistryType, code: String, file_suffix: String, what: String) -> void:
 	_expect(not registry.is_valid(), "%s must fail construction" % what)

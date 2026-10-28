@@ -89,13 +89,16 @@ func _init() -> void:
 ## The default boot world is a real New Game at mapgen.json's default size with
 ## incidents enabled (only the live viewer wants spawn_incident reachable), never
 ## the debug scenario. Pure, so test_viewer_hash.gd can call it directly.
-static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: int = 10) -> WorldStateType:
-	var content := session_content()
+## content defaults to the session registry; a test passes its own to build on a pack.
+static func build_default_world(seed_value: int = DEFAULT_BOOT_SEED, tick_rate: int = 10,
+		content: ContentRegistryType = null) -> WorldStateType:
+	if content == null:
+		content = session_content()
 	var mapgen: Dictionary = content.document("mapgen")
 	var size := WorldGeneratorType.default_new_game_size(mapgen)
 	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content)
 	world.enable_incidents()
-	NewGameSetupType.spawn_starting_items(world, mapgen, world.spawn_ground_tool_item)
+	NewGameSetupType.spawn_starting_items(world, mapgen, world.spawn_ground_tool_item, content)
 	return world
 
 static func session_content() -> ContentRegistryType:
