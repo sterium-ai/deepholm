@@ -42,7 +42,7 @@ base envelope described in `game/scripts/core/commands/README.md`. Their
 
 A valid `dig`/`chop`/`forage`/`mine` submits a job to the queue via the scheduler; a
 valid `cancel_job` forwards to the queue's `cancel()`. Both paths return the
-queue's own rejection `reason`/`message` (mapped from `reason`/`remedy`) when
+queue's own rejection `reason`, with its `remedy` code in `params` (ADR 052), when
 the queue itself refuses the request, e.g. `unknown_job` or
 `job_already_terminal` for a `cancel_job` naming a job that no longer exists
 or has already finished. See `game/scripts/core/world_state.gd`

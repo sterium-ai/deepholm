@@ -64,7 +64,7 @@ func refresh() -> void:
 			label.text = _line_for(colonist)
 			row.add_child(label)
 			var recruit_button := Button.new()
-			recruit_button.text = "Recruit"
+			recruit_button.text = _text_table.get_string("colonists.recruit")
 			recruit_button.pressed.connect(_on_recruit_pressed.bind(String(colonist["id"])))
 			row.add_child(recruit_button)
 			_list.add_child(row)
@@ -104,8 +104,7 @@ func _on_recruit_pressed(actor_id: String) -> void:
 ## (state only, extension-points.md's Presentation rule -- no decision made
 ## here about whether to accept) and the Accept button issues the new
 ## accept_trade command exactly the way boot.gd's own debug buttons already
-## issue world.apply(). Hard-coded English text; unlike every other line
-## here, this prompt is not yet routed through the text table.
+## issue world.apply().
 func _refresh_trade_offers() -> void:
 	var offers := world.get_pending_trade_offers()
 	offers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["trader_id"]) < String(b["trader_id"]))
@@ -113,10 +112,10 @@ func _refresh_trade_offers() -> void:
 		var trader_id: String = String(offer["trader_id"])
 		var row := HBoxContainer.new()
 		var label := Label.new()
-		label.text = "Trade offer from %s: gives %s, wants %s" % [trader_id, offer["give_item"], offer["want_item"]]
+		label.text = _text_table.format("colonists.trade_offer_label", [trader_id, offer["give_item"], offer["want_item"]])
 		row.add_child(label)
 		var accept_button := Button.new()
-		accept_button.text = "Accept"
+		accept_button.text = _text_table.get_string("colonists.accept_trade")
 		accept_button.pressed.connect(_on_accept_trade_pressed.bind(trader_id))
 		row.add_child(accept_button)
 		_list.add_child(row)

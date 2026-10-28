@@ -63,14 +63,14 @@ func apply_job_command(command: Dictionary) -> Dictionary:
 	if command["type"] in ["dig", "chop", "forage", "till", "sow", "mine"]:
 		var check: Dictionary = _check.call(CommandChecks.check_target_job_command, command)
 		if not check.is_empty():
-			return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+			return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 		var target := Vector2i(payload["x"], payload["y"])
 		# assignee (F3), dig/chop/forage/mine only: submit()'s restrict_to, as need_giver.gd uses it.
 		var assignee := String(payload.get("assignee", "")) if command["type"] in ["dig", "chop", "forage", "mine"] else ""
 		result = _scheduler.submit(target, payload.get("priority", 1), _clock.tick, command["type"], assignee)
 	else:
 		if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
-			return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload", "A non-empty job_id is required.")
+			return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload", {"detail": "missing_job_id"})
 		# Cancelling/failing/invalidating a haul or site_fetch job mid-carry drops the carried item (colonist-ai.md 3.3).
 		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
@@ -89,7 +89,7 @@ func apply_job_command(command: Dictionary) -> Dictionary:
 	_resolve_refused_reservations.call()
 	_event_log.collect_queue_events()
 	if not result["ok"]:
-		return _event_log.rejection(command["command_id"], command["actor"], result["rejection"]["reason"], result["rejection"]["remedy"])
+		return _event_log.rejection(command["command_id"], command["actor"], result["rejection"]["reason"], {"remedy": result["rejection"]["remedy"]})
 	var applied := _event_log.applied(command)
 	applied["job_id"] = result["job_id"]
 	return applied

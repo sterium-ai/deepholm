@@ -65,16 +65,18 @@ static func session_path(replay_log: ReplayLogType) -> String:
 static func write_file(replay_log: ReplayLogType, path: String) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		return {"ok": false, "code": "write_failed", "message": "cannot open %s: %s" % [path, error_string(FileAccess.get_open_error())]}
+		return {"ok": false, "code": "write_failed", "path": path, "error": error_string(FileAccess.get_open_error())}
 	file.store_string(JSON.stringify(replay_log.to_dict(), "\t"))
 	file.close()
 	return {"ok": true, "path": path}
 
-## ReplayLog.from_dict()'s result, or missing_file / invalid_replay.
+## ReplayLog.from_dict()'s result, or missing_file / invalid_replay. Only the
+## headless replay tool reads replays, so the messages are developer text,
+## like ReplayLog's own (dev-text: test_viewer_text_lint.gd skips those lines).
 static func read_file(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
-		return {"ok": false, "code": "missing_file", "message": "no replay file at %s" % path}
+		return {"ok": false, "code": "missing_file", "message": "no replay file at %s" % path}  # dev-text
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	if typeof(parsed) != TYPE_DICTIONARY:
-		return {"ok": false, "code": "invalid_replay", "message": "%s is not a JSON object" % path}
+		return {"ok": false, "code": "invalid_replay", "message": "%s is not a JSON object" % path}  # dev-text
 	return ReplayLogType.from_dict(parsed)

@@ -3,6 +3,8 @@ extends SceneTree
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
+const StatusTextType = preload("res://scripts/viewer/status_text.gd")
+const TextTableType = preload("res://scripts/viewer/text_table.gd")
 
 var _failed := false
 
@@ -263,7 +265,9 @@ func _check_dig_and_chop_targets() -> void:
 		if chop_result["ok"] or chop_result["rejection"]["reason"] != "invalid_target":
 			_fail("chop on non-tree tile must reject invalid_target")
 			return
-		if target == Vector2i(1, 1) and chop_result["rejection"]["message"] != "Choose a tree tile within the map.":
+		# ADR 052: the core names the rule ("detail"); the viewer's text table words it.
+		if target == Vector2i(1, 1) and (chop_result["rejection"]["params"].get("detail") != "target_not_tree"
+				or StatusTextType.rejection_text(TextTableType.new(), chop_result["rejection"]) != "Choose a tree tile within the map."):
 			_fail("chop rejection must explain that a tree tile is required")
 			return
 	for target in [Vector2i(2, 1), Vector2i(0, 0), Vector2i(3, 1)]:
