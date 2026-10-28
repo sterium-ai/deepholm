@@ -59,7 +59,11 @@ reachable map, budget slice by budget slice, before it could report the target u
    as `STATUS_UNREACHABLE`, with no expansion and an empty snapshot. Every simulation caller
    passes `Passability.region_reachable`: `WorldState._route_search_factory()` (ToilExecutor's
    go_to re-routes and `_route_cost()`), `NeedGiver`, `RescueGiver` and `ApproachGiver`.
-   `GlobalAssignment.tick()` keeps its own identical pre-check (unchanged). Region membership
+   `GlobalAssignment.tick()` keeps its own identical pre-check (unchanged), and
+   `GlobalAssignment.restore_scheduling()` (called by `StateCodec` on load) passes it to
+   `_resolve_path()`, which re-runs each pending "found" pair's search without a step budget: a
+   target cut off between being found and being saved is refused instead of sweeping the map
+   synchronously on load. Region membership
    follows the colony's passability, which no faction exceeds (factions differ only at doors and
    the colony may pass doors), so the check never refuses a target the search could reach.
 7. **Saves.** `snapshot()` keeps its shape (`start`, `target`, `status`, `frontier` as the open

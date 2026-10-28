@@ -134,7 +134,8 @@ same region, or an impassable work target with a neighbor in that region):
 `WorldState._route_search_factory()` (ToilExecutor's go_to re-routes and
 `_route_cost()`), `NeedGiver`, `RescueGiver` and `ApproachGiver`.
 `GlobalAssignment.tick()` makes the same check itself before it creates its
-search. Regions follow the colony's passability, which no faction's
+search, and `GlobalAssignment.restore_scheduling()` passes it (from
+`StateCodec`) to the unbudgeted re-run of each pending "found" pair on load. Regions follow the colony's passability, which no faction's
 passability exceeds (only doors differ, and the colony may pass them), so the
 check never refuses a target the search could reach; it only ends a doomed
 search at once instead of after it exhausts the map.

@@ -145,7 +145,7 @@ static func decode(state: Dictionary) -> WorldState:
 
 	var bounds_max := Vector2i(width - 1, height - 1)
 	world._scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(scheduling),
-		world._passability.is_passable, Vector2i.ZERO, bounds_max)
+		world._passability.is_passable, Vector2i.ZERO, bounds_max, world._passability.region_reachable)
 	# rescuer_id -> job_id needs no save data: each rescue job's restrict_to names its rescuer.
 	world._rescue_giver.restore_pending_assignments(GiverCodec._rescue_pending_from_scheduler(rescue_jobs, world._scheduler))
 	_restore_reroutes(world, bounds_max)

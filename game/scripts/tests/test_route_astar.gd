@@ -16,6 +16,10 @@ extends SceneTree
 ##   a stockpile cell walled off by a full-width rock row): the drop leg's
 ##   re-route is refused on the tick it starts, never reported "searching",
 ##   and the pick falls back to the ground on the holder's side.
+## - Save restore (review round 1): GlobalAssignment.restore_scheduling()
+##   re-runs every pending "found" pair's search to completion; a found target
+##   walled off before the save is refused by the region check instead of
+##   sweeping the whole map synchronously on load.
 
 const MeasuredRouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -34,6 +38,7 @@ func _init() -> void:
 	_check_region_check_refuses_walled_target_before_expanding()
 	_check_region_check_never_refuses_a_reachable_target()
 	_check_walled_off_drop_target_is_refused_without_searching()
+	_check_restore_refuses_found_pair_cut_off_before_save()
 
 	if _failed:
 		quit(1)
@@ -176,6 +181,56 @@ func _check_walled_off_drop_target_is_refused_without_searching() -> void:
 	var location: Dictionary = world.get_tool_item(pick_id).get("location", {})
 	_expect(String(location.get("type", "")) == "ground" and int(location.get("y", 99)) < 6,
 		"with no crossing, the pick must fall back to the ground on the holder's side, got %s" % [location])
+
+func _check_restore_refuses_found_pair_cut_off_before_save() -> void:
+	var world := WorldStateType.new(5150)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_SOIL)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "factionId": "colony",
+		"needs": {"food": 100, "water": 100, "rest": 100},
+		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
+		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
+		"route": null, "work": null, "hands": [], "held_tool": "",
+		"health": {"hp": 100, "maxHp": 100, "dead": false}})
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.tile_grid(world).regions = null
+	var near := Vector2i(5, 8)
+	var scheduler := TestAccess.scheduler(world)
+	_expect(scheduler.submit(near, 1, world.get_tick(), "till").get("ok", false), "setup: the near till order must be accepted")
+	_expect(scheduler.submit(Vector2i(40, 40), 1, world.get_tick(), "till").get("ok", false), "setup: the far till order must be accepted")
+	world.tick() # the near candidate's search resolves into "found"
+	world.tick() # the far candidate's search is still running
+	var request: Dictionary = scheduler.get_pending().get("colonist_0", {})
+	_expect(not request.is_empty() and (request["found"] as Array).size() == 1 and request["route"] != null,
+		"setup: colonist_0 must hold a pending batch with the near pair found and the far search in flight")
+	if request.is_empty() or (request["found"] as Array).size() != 1:
+		return
+	for tile in [near + Vector2i(0, -1), near + Vector2i(-1, 0), near + Vector2i(1, 0), near + Vector2i(0, 1)]:
+		TestAccess.set_tile(world, tile.x, tile.y, WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.tile_grid(world).regions = null
+	TestAccess.tile_grid(world).rooms = null
+	var state := world.to_save_state()
+	_expect(WorldStateType.from_save_state(state).state_hash() == world.state_hash(), "a save/load round trip must keep state_hash()")
+
+	var passability := TestAccess.passability(world)
+	var bounds_max := Vector2i(TestAccess.tile_grid(world).width - 1, TestAccess.tile_grid(world).height - 1)
+	var calls := [0]
+	var counting := func(tile: Vector2i) -> float:
+		calls[0] += 1
+		return passability.is_passable(tile)
+	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector2i.ZERO, bounds_max, passability.region_reachable)
+	var checked_calls: int = calls[0]
+	var checked_path: Array = scheduler.get_pending()["colonist_0"]["found"][0]["path"]
+	calls[0] = 0
+	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector2i.ZERO, bounds_max)
+	var unchecked_calls: int = calls[0]
+	var unchecked_path: Array = scheduler.get_pending()["colonist_0"]["found"][0]["path"]
+	_expect(checked_path.is_empty() and unchecked_path.is_empty(), "a found target cut off before the save has no path after the restore, with or without the check")
+	_expect(unchecked_calls > 2000, "without the region check the restore must sweep the map (%d cost calls)" % unchecked_calls)
+	_expect(checked_calls < 1000, "with the region check the restore must not sweep the map (%d cost calls, %d without)" % [checked_calls, unchecked_calls])
 
 func _open_map(world: WorldStateType) -> void:
 	TestAccess.object_table(world).objects.clear()
