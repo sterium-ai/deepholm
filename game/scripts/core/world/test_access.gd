@@ -33,7 +33,9 @@ const TickPipelineType = preload("res://scripts/core/world/tick_pipeline.gd")
 const ActorIndexType = preload("res://scripts/core/actors/actor_index.gd")
 const JobEventLogType = preload("res://scripts/core/jobs/job_event_log.gd")
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
+const JobHistoryType = preload("res://scripts/core/jobs/job_history.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
+const SchedulingCodecType = preload("res://scripts/core/persistence/scheduling_codec.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 
 # --- Map ---------------------------------------------------------------------------------
@@ -92,6 +94,7 @@ static func get_job(w: WorldState, job_id: String) -> Dictionary: return w._get_
 static func job_restricted_to(w: WorldState, job_id: String) -> String: return w._job_restricted_to(job_id)
 static func queue_jobs(w: WorldState) -> Array[Dictionary]: return w._scheduler.queue._jobs
 static func queue_events(w: WorldState) -> JobEventLogType: return w._scheduler.queue._events
+static func queue_history(w: WorldState) -> JobHistoryType: return w._scheduler.queue._history
 static func queue_haul_retry_base_ticks(w: WorldState) -> int: return w._scheduler.queue._haul_retry_base_ticks
 static func queue_haul_retry_cap_ticks(w: WorldState) -> int: return w._scheduler.queue._haul_retry_cap_ticks
 static func scheduler_find_waiting_entry(w: WorldState, job_id: String) -> Dictionary:
@@ -152,6 +155,9 @@ static func event_log_sequence(w: WorldState) -> int: return w._event_log._event
 static func assignment_pending(s: AssignmentType) -> Dictionary: return s._pending
 static func queue_emit(q: JobQueueType, event_type: String, job_id: String, data: Dictionary) -> void:
 	q._emit(event_type, job_id, data)
+## The queue's live (queued/active) list itself, not get_jobs()'s copy.
+static func queue_live_jobs(q: JobQueueType) -> Array[Dictionary]: return q._jobs
+static func scheduling_encode_jobs(jobs: Array[Dictionary]) -> Array: return SchedulingCodecType._encode_jobs(jobs)
 static func save_validate_state(state: Dictionary) -> Dictionary: return SaveIOType._validate_state(state)
 static func save_sha256(bytes: PackedByteArray) -> String: return SaveIOType._sha256(bytes)
 static func generator_scatter_rock_outcrops(rng: RandomNumberGenerator, map: Array[String], width: int, height: int,

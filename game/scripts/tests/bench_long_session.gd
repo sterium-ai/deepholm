@@ -56,7 +56,7 @@ func _retention() -> void:
 		window_usec += Time.get_ticks_usec() - t
 		if tick % WINDOW == 0:
 			var jobs: Array = TestAccess.queue_jobs(world)
-			var retained: int = TestAccess.scheduler(world).queue._history.size()
+			var retained: int = TestAccess.queue_history(world).size()
 			print("bench_long_session: retention ticks=%d mean_tick=%.2fms queue_jobs=%d (open=%d terminal=%d) queue_events=%d world_events=%d dirty_cells=%d top_phases: %s" % [
 				tick, window_usec / 1000.0 / WINDOW, jobs.size(), _open_jobs(world), retained,
 				TestAccess.queue_events(world).size(), TestAccess.event_log_events(world).size(), TestAccess.tile_grid(world).dirty_cells.size(),

@@ -11,7 +11,6 @@ extends SceneTree
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
 const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
-const SchedulingCodecType = preload("res://scripts/core/persistence/scheduling_codec.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
@@ -132,7 +131,7 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		world.tick()
 	var v1_state := StateCodecType.encode(world)
 	var live_jobs: Array = v1_state["jobs"]
-	v1_state["jobs"] = SchedulingCodecType._encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
+	v1_state["jobs"] = TestAccess.scheduling_encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
 	v1_state["schemaVersion"] = 1
 	_expect(v1_state["jobs"].size() > live_jobs.size(), "the v1 state must really list terminal jobs for this to prove anything")
 	var path := _write_state_fixture(V1_TERMINAL_JOBS_DIR, v1_state)
