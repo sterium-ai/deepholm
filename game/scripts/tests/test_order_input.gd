@@ -156,7 +156,7 @@ func _run() -> void:
 	# on rock), and Cancel resolves a pending build by its construction site,
 	# not by the wood tile its scheduler target names.
 	var stock_tile := place_target
-	world._item_table.items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "kind": "wood", "count": 1}
 	_expect(world.apply({"actor": "test", "command_id": "ui_build_zone", "tick": world.get_tick(), "type": "zone_add",
 		"payload": {"x": stock_tile.x, "y": stock_tile.y, "width": 1, "height": 1}}).get("ok", false),
 		"a stockpile zone over the build wood must be accepted")
@@ -211,10 +211,10 @@ func _check_wall_gesture(boot) -> void:
 	if boot._map_view == null:
 		boot._build_ui()
 	var world := preload("res://scripts/core/world_state.gd").new(452, 10)
-	world._tile_grid.tiles.fill("floor")
-	world._colonists.clear()
-	world._object_table.objects.clear()
-	world._item_table.items.clear()
+	TestAccess.tile_grid(world).tiles.fill("floor")
+	TestAccess.colonists(world).clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.item_table(world).items.clear()
 	boot._replace_world(world)
 	var view = boot._map_view
 	boot._tool_buttons[BootType.Tool.WALL].pressed.emit()
@@ -270,10 +270,10 @@ func _check_wall_gesture(boot) -> void:
 	view.preview_validity = boot._preview_validity
 	# Only the complete north row seals this room; per-tile previews miss it.
 	var enclosed := preload("res://scripts/core/world_state.gd").new(4521, 10)
-	enclosed._tile_grid.tiles.fill("floor")
-	enclosed._colonists.clear()
-	enclosed._object_table.objects.clear()
-	enclosed._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5,
+	TestAccess.tile_grid(enclosed).tiles.fill("floor")
+	TestAccess.colonists(enclosed).clear()
+	TestAccess.object_table(enclosed).objects.clear()
+	TestAccess.colonists(enclosed).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	boot._replace_world(enclosed)
 	var sides: Array[Vector2i] = [Vector2i(4, 7), Vector2i(5, 7), Vector2i(6, 7), Vector2i(7, 7),

@@ -74,10 +74,10 @@ func _check_new_kind_from_content_only() -> void:
 	# A13: the world is built on the fixture as its session registry, so its own ItemTable
 	# reads the fixture kinds' effects.
 	var world := WorldStateType.new(7, 10, 12, 12, false, registry)
-	var grid = world._tile_grid
-	var objects = world._object_table
-	var items = world._item_table
-	world._colonists.clear()
+	var grid = TestAccess.tile_grid(world)
+	var objects = TestAccess.object_table(world)
+	var items = TestAccess.item_table(world)
+	TestAccess.colonists(world).clear()
 	grid.tiles.fill(WorldStateType.TILE_FLOOR)
 	objects.objects.clear()
 	objects.object_factions.clear()

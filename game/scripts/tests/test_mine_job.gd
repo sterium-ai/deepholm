@@ -12,6 +12,7 @@ extends SceneTree
 ## tile does not disturb passability() for any other, un-mined rock tile.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const RouteSearchType = preload("res://scripts/core/routing/route_search.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 
@@ -39,33 +40,23 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _command(world: WorldStateType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
-
 ## A small all-floor world with one colonist at (0, 0); MAP_SIZE keeps tick()
 ## cheap while leaving room for a rock target, a stockpile zone and a route
 ## search, none of which need the real world generator's terrain.
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, MAP_SIZE, MAP_SIZE)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	return world
-
-func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
-	for job in world.get_jobs():
-		if String(job["id"]) == job_id:
-			return job
-	return {}
 
 ## mine's own target check (world_state.gd's _check_mine_target_command()) must reject a
 ## non-rock tile as invalid_target, mirroring chop's own tree-only rule.
 func _check_invalid_target_on_non_rock_tile() -> void:
 	var world := _build_world(352001)
-	var result := _command(world, "mine_wrong_tile", "mine", {"x": 5, "y": 0, "priority": 1})
+	var result := Scenarios.command(world, "mine_wrong_tile", "mine", {"x": 5, "y": 0, "priority": 1})
 	_expect(not result.get("ok", true), "mine on a non-rock (floor) tile must be rejected")
 	_expect(String(result.get("rejection", {}).get("reason", "")) == "invalid_target",
 		"mine on a non-rock tile must be rejected invalid_target, got %s" % result.get("rejection"))
@@ -76,15 +67,15 @@ func _check_invalid_target_on_non_rock_tile() -> void:
 ## other_work()) -- staying a queued, non-terminal job.
 func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 	var world := _build_world(352002)
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_ROCK
-	var submitted := _command(world, "mine_1", "mine", {"x": 2, "y": 0, "priority": 1})
+	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_ROCK)
+	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": 2, "y": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "mine submission on a rock tile must be accepted even with no pick anywhere")
 	var job_id := String(submitted.get("job_id", ""))
 
 	var blocked := false
 	for _i in 20:
 		world.tick()
-		var job := _find_job(world, job_id)
+		var job := Scenarios.find_job(world, job_id)
 		if String(job.get("reason", "")) == "blocked_no_tool":
 			blocked = true
 			_expect(String(job.get("status", "")) == "queued",
@@ -101,19 +92,19 @@ func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 	var world := _build_world(352003)
 	var target := Vector2i(5, 0)
-	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
+	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_ROCK)
 	var untouched_rock := Vector2i(15, 15)
-	world._tile_grid.tiles[world._tile_grid.tile_index(untouched_rock.x, untouched_rock.y)] = WorldStateType.TILE_ROCK
+	TestAccess.set_tile(world, untouched_rock.x, untouched_rock.y, WorldStateType.TILE_ROCK)
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var submitted := _command(world, "mine_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
 	_expect(submitted.get("ok", false), "mine submission on a rock tile with a reachable pick must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
 	var completed := false
 	for _i in 100:
 		world.tick()
-		if String(_find_job(world, job_id).get("status", "")) == "completed":
+		if String(Scenarios.find_job(world, job_id).get("status", "")) == "completed":
 			completed = true
 			break
 	_expect(completed, "a mine job with a reachable pick must complete via fetch_tool/reserve/go_to/work/release_all within the tick budget")
@@ -153,9 +144,9 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 
 	# Now haul the stone item into a stockpile zone through the ordinary, unmodified generic
 	# haul job kind (WorldState auto-submits one haul job per unreserved ground item every tick).
-	var zone_result := _command(world, "zone_setup", "zone_add", {"x": 12, "y": 0, "width": 2, "height": 2})
+	var zone_result := Scenarios.command(world, "zone_setup", "zone_add", {"x": 12, "y": 0, "width": 2, "height": 2})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var zone: Dictionary = world._zone_table.zones[String(zone_result["zone_id"])]
+	var zone: Dictionary = TestAccess.zone_table(world).zones[String(zone_result["zone_id"])]
 
 	var hauled := false
 	for _i in 200:
@@ -181,12 +172,12 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 func _check_overlapping_mine_orders_produce_one_stone() -> void:
 	var world := _build_world(352004)
 	var target := Vector2i(2, 0)
-	world._tile_grid.tiles[world._tile_grid.tile_index(target.x, target.y)] = WorldStateType.TILE_ROCK
+	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_ROCK)
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var mine_1 := _command(world, "mine_dup_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var mine_1 := Scenarios.command(world, "mine_dup_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
 	_expect(mine_1.get("ok", false), "first mine submission on a rock tile must be accepted")
-	var mine_2 := _command(world, "mine_dup_2", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var mine_2 := Scenarios.command(world, "mine_dup_2", "mine", {"x": target.x, "y": target.y, "priority": 1})
 	_expect(mine_2.get("ok", false), "second mine submission for the same rock tile must also be accepted")
 
 	var job_ids := [String(mine_1["job_id"]), String(mine_2["job_id"])]
@@ -197,7 +188,7 @@ func _check_overlapping_mine_orders_produce_one_stone() -> void:
 		completed_count = 0
 		failed_count = 0
 		for job_id in job_ids:
-			match String(_find_job(world, job_id).get("status", "")):
+			match String(Scenarios.find_job(world, job_id).get("status", "")):
 				"completed": completed_count += 1
 				"failed": failed_count += 1
 		if completed_count + failed_count == 2:
@@ -206,7 +197,7 @@ func _check_overlapping_mine_orders_produce_one_stone() -> void:
 	_expect(completed_count == 1, "exactly one of two mine orders queued for the same rock tile must complete, got %d" % completed_count)
 	_expect(failed_count == 1, "exactly one of two mine orders queued for the same rock tile must fail, got %d" % failed_count)
 	for job_id in job_ids:
-		var job := _find_job(world, job_id)
+		var job := Scenarios.find_job(world, job_id)
 		if String(job.get("status", "")) == "failed":
 			_expect(String(job.get("reason", "")) == "invalid_target",
 				"the second mine order to reach an already-mined tile must fail invalid_target, got %s" % job)
@@ -219,8 +210,8 @@ func _check_overlapping_mine_orders_produce_one_stone() -> void:
 	_expect(stone_items.size() == 1,
 		"exactly one stone item must exist after two overlapping mine orders on the same rock tile, got %d" % stone_items.size())
 
-	_expect(not world._scheduler.queue.get_reservation_table().is_reserved("tile:%d,%d" % [target.x, target.y]),
+	_expect(not TestAccess.scheduler(world).queue.get_reservation_table().is_reserved("tile:%d,%d" % [target.x, target.y]),
 		"the target tile must be unreserved once both mine orders are terminal")
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(
-		world._scheduler.queue.get_reservation_table(), world.get_jobs())
+		TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect(orphans.is_empty(), "the stale mine order must not leave any orphaned reservation, got %s" % [orphans])

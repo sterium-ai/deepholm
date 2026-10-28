@@ -69,7 +69,7 @@ func _remove_command(world: WorldStateType, command_id: String, x: int, y: int) 
 func _find_tile(world: WorldStateType, kind: String) -> Vector2i:
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH:
-			if world.get_tile(x, y) == kind and not world._colonist_at(x, y):
+			if world.get_tile(x, y) == kind and not TestAccess.colonist_at(world, x, y):
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
@@ -189,7 +189,7 @@ func _find_floor_pair(world: WorldStateType) -> Vector2i:
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH - 1:
 			if (world.get_tile(x, y) == WorldStateType.TILE_FLOOR and world.get_tile(x + 1, y) == WorldStateType.TILE_FLOOR
-					and not world._colonist_at(x, y) and not world._colonist_at(x + 1, y)):
+					and not TestAccess.colonist_at(world, x, y) and not TestAccess.colonist_at(world, x + 1, y)):
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
@@ -228,14 +228,14 @@ func _check_place_object_footprint_rejects_overlap_on_second_tile() -> void:
 ## naturally-occurring floor/tree pair could silently find none and skip this
 ## case entirely, so this forces the fixture deterministically instead --
 ## _find_floor_pair() guarantees an adjacent floor pair, then the second tile
-## is overwritten to TILE_TREE directly (the same world._tile_grid.tiles[...] pattern
+## is overwritten to TILE_TREE directly (the same TestAccess.tile_grid(world).tiles[...] pattern
 ## test_build.gd already uses to force terrain for a fixture).
 func _check_place_object_footprint_rejects_tree_on_second_tile() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(12, 10)
 	var origin := _find_floor_pair(world)
-	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_TREE
+	TestAccess.set_tile(world, origin.x + 1, origin.y, WorldStateType.TILE_TREE)
 	var result := _place_command(world, "footprint_tree", origin.x, origin.y, "test_footprint_crate", "horizontal")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is a tree must be rejected invalid_target")
@@ -250,7 +250,7 @@ func _check_place_object_footprint_rejects_water_on_second_tile() -> void:
 		return
 	var world := WorldStateType.new(15, 10)
 	var origin := _find_floor_pair(world)
-	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x + 1, origin.y)] = WorldStateType.TILE_WATER
+	TestAccess.set_tile(world, origin.x + 1, origin.y, WorldStateType.TILE_WATER)
 	var result := _place_command(world, "footprint_water", origin.x, origin.y, "test_footprint_crate", "horizontal")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile is water must be rejected invalid_target")
@@ -266,7 +266,7 @@ func _check_place_object_rejects_water_tile() -> void:
 		return
 	var world := WorldStateType.new(16, 10)
 	var tile := _find_tile(world, WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(tile.x, tile.y)] = WorldStateType.TILE_WATER
+	TestAccess.set_tile(world, tile.x, tile.y, WorldStateType.TILE_WATER)
 	var result := _place_command(world, "place_water", tile.x, tile.y, "chair")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object on a water tile must be rejected invalid_target")
@@ -276,7 +276,7 @@ func _check_place_object_rejects_water_tile() -> void:
 ## single-tile placement already uses for a colonist's own tile. Forces the
 ## fixture deterministically -- _find_floor_pair() guarantees an adjacent
 ## floor pair, then the first colonist is moved onto the second tile
-## directly (the same world._colonists[0]["x"]/["y"] pattern
+## directly (the same TestAccess.colonists(world)[0]["x"]/["y"] pattern
 ## test_colonist_sprites.gd already uses) -- rather than depending on this
 ## seed's colonist already standing next to a floor tile.
 func _check_place_object_footprint_rejects_colonist_on_second_tile() -> void:
@@ -284,8 +284,8 @@ func _check_place_object_footprint_rejects_colonist_on_second_tile() -> void:
 		return
 	var world := WorldStateType.new(13, 10)
 	var origin := _find_floor_pair(world)
-	world._colonists[0]["x"] = origin.x + 1
-	world._colonists[0]["y"] = origin.y
+	TestAccess.colonists(world)[0]["x"] = origin.x + 1
+	TestAccess.colonists(world)[0]["y"] = origin.y
 	var result := _place_command(world, "footprint_colonist", origin.x, origin.y, "test_footprint_crate", "horizontal")
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_target",
 		"place_object whose second footprint tile holds a colonist must be rejected invalid_target")

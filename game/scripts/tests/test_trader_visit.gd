@@ -49,10 +49,10 @@ func _expect(condition: bool, message: String) -> void:
 ## random same-region bare target) is fully determined by the seed alone.
 func _build_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, TICK_RATE, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, true)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
 	return world
 
 func _spawn_trader(world: WorldStateType, command_id: String) -> String:
@@ -106,7 +106,7 @@ func _has_offer(trader_id: String) -> Callable:
 		return false
 
 func _gone(actor_id: String) -> Callable:
-	return func(world: WorldStateType) -> bool: return world._find_colonist(actor_id).is_empty()
+	return func(world: WorldStateType) -> bool: return TestAccess.find_colonist(world, actor_id).is_empty()
 
 func _offer_for(world: WorldStateType, trader_id: String) -> Dictionary:
 	for offer in world.get_pending_trade_offers():
@@ -116,7 +116,7 @@ func _offer_for(world: WorldStateType, trader_id: String) -> Dictionary:
 
 func _item_kinds(world: WorldStateType) -> Array:
 	var kinds: Array = []
-	for entry in world._content.list("items"):
+	for entry in TestAccess.content(world).list("items"):
 		kinds.append(String(entry["id"]))
 	return kinds
 
@@ -158,7 +158,7 @@ func _check_trade_offer_posted_with_two_valid_items() -> void:
 			"the trade_offer event must name the same two items the getter exposes")
 	# The trader must still be present (its own unchanged wait is still
 	# running) right after the offer is posted -- accept_trade needs it alive.
-	_expect(not world._find_colonist(trader_id).is_empty(), "the trader must still be in the world once its offer is posted")
+	_expect(not TestAccess.find_colonist(world, trader_id).is_empty(), "the trader must still be in the world once its offer is posted")
 
 func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 	if _failed: return
@@ -175,8 +175,8 @@ func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 	# accept_trade now draws only from _find_available_build_item()'s own
 	# zone/reservation invariant, never a bare ground item outside a zone.
 	_add_zone(world, "zone_1", 4, 4, 2, 2)
-	world._item_table.items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "kind": want_item, "count": 1}
-	var trader_ref := world._find_colonist(trader_id)
+	TestAccess.item_table(world).items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "kind": want_item, "count": 1}
+	var trader_ref := TestAccess.find_colonist(world, trader_id)
 	_expect(_inventory_kinds(trader_ref).has(give_item), "the trader must carry give_item before the trade")
 	_expect(not _inventory_kinds(trader_ref).has(want_item), "the trader must not carry want_item before the trade")
 	var give_before := _count_of_kind(world, give_item)
@@ -192,7 +192,7 @@ func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 		"give_item must land in the colony's stockpile, at the tile the traded-away want_item vacated")
 	_expect(_inventory_kinds(trader_ref).has(want_item), "the trader must carry want_item after the trade")
 	_expect(not _inventory_kinds(trader_ref).has(give_item), "the trader must no longer carry give_item after the trade")
-	_expect(world._find_colonist(trader_id).is_empty(), "the trader must leave (be removed) once its trade is accepted")
+	_expect(TestAccess.find_colonist(world, trader_id).is_empty(), "the trader must leave (be removed) once its trade is accepted")
 	_expect(world.get_pending_trade_offers().is_empty(), "no pending trade offer may remain once accepted")
 	# Already-departed: a second accept_trade for the same trader_id must be
 	# rejected with a typed reason, never silently ignored or reapplied.
@@ -215,13 +215,13 @@ func _check_accept_trade_requires_stockpiled_item_not_carried() -> void:
 	var want_item := String(offer.get("want_item", ""))
 	# No zone, no ground item: want_item exists only in a colonist's carrying
 	# slot, mid-haul -- never an eligible stockpiled item.
-	world._colonists.append({"id": "carrier_1", "kind": "colonist", "x": 3, "y": 3,
+	TestAccess.colonists(world).append({"id": "carrier_1", "kind": "colonist", "x": 3, "y": 3,
 		"route": null, "work": null, "carrying": {"kind": want_item, "count": 1}})
 	var result := _accept_trade(world, "accept_carry", trader_id)
 	_expect(not result.get("ok", true), "accept_trade must reject when want_item is only carried, not stockpiled")
 	_expect(String(result.get("rejection", {}).get("reason", "")) == "blocked_missing_input",
 		"a carried-only want_item must be rejected blocked_missing_input, got %s" % result)
-	_expect(not world._find_colonist(trader_id).is_empty(), "a rejected accept_trade must leave the trader in place")
+	_expect(not TestAccess.find_colonist(world, trader_id).is_empty(), "a rejected accept_trade must leave the trader in place")
 	_expect(not world.get_pending_trade_offers().is_empty(), "a rejected accept_trade must leave the offer pending")
 
 func _check_refused_trade_trader_leaves_and_stockpile_unchanged() -> void:
@@ -233,7 +233,7 @@ func _check_refused_trade_trader_leaves_and_stockpile_unchanged() -> void:
 	var before_items := world.get_items().duplicate(true)
 	# accept_trade is never called: the trader must still leave once its own
 	# content-declared wait elapses, and the stockpile must be untouched.
-	var wait_ticks := int(world._content.get_entry("incidents", "trader_visit")["spawn"]["wait_ticks"])
+	var wait_ticks := int(TestAccess.content(world).get_entry("incidents", "trader_visit")["spawn"]["wait_ticks"])
 	_expect(_tick_until(world, _gone(trader_id), wait_ticks + 20) >= 0,
 		"a trader whose offer was never accepted must still leave after its wait")
 	_expect(world.get_items() == before_items, "a refused trade must leave the stockpile completely unchanged")

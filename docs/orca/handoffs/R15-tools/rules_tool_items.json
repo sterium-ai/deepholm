@@ -1,0 +1,5 @@
+[["save", "save"],
+ ["reservations", "^_check_reservation|dropping_a_reserved"],
+ ["handover", "drop|handover|requester|holder|misclassified"],
+ ["fetch", "fetch|blocked_no_tool|destroyed|held_tool_reuse|need_interrupt|rejected_complete|interrupted_job|held_tool_skips"],
+ ["", "."]]

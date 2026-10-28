@@ -12,6 +12,7 @@ extends SceneTree
 ## percentage points of the table's declared 5/20/10/10/55 weights.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const DIG_COUNT := 1000
 const MAX_TICKS := 60
@@ -44,10 +45,6 @@ func _expect(condition: bool, message: String) -> void:
 		_failed = true
 		push_error(message)
 
-func _command(world: WorldType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
-
 ## A single soil tile at (1,0) next to the colonist's own (0,0); everything
 ## else rock, so routing is trivial. No "needs" key (mirrors
 ## test_movement_and_work.gd's own _build_world()): no need job can ever fire
@@ -57,13 +54,13 @@ func _command(world: WorldType, command_id: String, kind: String, payload: Dicti
 ## stockpile zone) haul job instead of finishing this test's one dig.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_SOIL
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.set_tile(world, 0, 0, WorldType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldType.TILE_SOIL)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 0, "build": 3, "craft": 3, "cook": 3}})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
@@ -84,7 +81,7 @@ func _check_find_distribution() -> void:
 
 	for i in DIG_COUNT:
 		var world := _build_world(BASE_SEED + i)
-		var result := _command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
+		var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
 		_expect(result["ok"], "dig %d must be accepted: %s" % [i, result])
 		if not result["ok"]:
 			return
@@ -121,32 +118,32 @@ func _check_find_distribution() -> void:
 ## coordinate rather than a loose "is sand somewhere near the trench" check.
 func _check_placement_rules() -> void:
 	var world := WorldType.new(1, 10)
-	world._tile_grid.tiles.fill(WorldType.TILE_FLOOR)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_FLOOR)
 
 	# All four neighbours open: row-major order (north, west, east, south) picks north.
-	var picked := world._item_table.dig_item_placement(5, 5)
+	var picked := TestAccess.item_table(world).dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 4), "an open north neighbour must win, got %s" % [picked])
 
 	# North blocked by an impassable tile (rock): west wins next.
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 4)] = WorldType.TILE_ROCK
-	picked = world._item_table.dig_item_placement(5, 5)
+	TestAccess.set_tile(world, 5, 4, WorldType.TILE_ROCK)
+	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
 	_expect(picked == Vector2i(4, 5), "with north impassable, west must win, got %s" % [picked])
 
 	# North+west blocked -- west is a trench tile specifically (passable but
 	# excluded by kind, not by impassability): east wins.
-	world._tile_grid.tiles[world._tile_grid.tile_index(4, 5)] = WorldType.TILE_TRENCH
-	picked = world._item_table.dig_item_placement(5, 5)
+	TestAccess.set_tile(world, 4, 5, WorldType.TILE_TRENCH)
+	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
 	_expect(picked == Vector2i(6, 5),
 		"a passable trench neighbour must still be excluded, east must win, got %s" % [picked])
 
 	# North+west+east blocked: south wins.
-	world._tile_grid.tiles[world._tile_grid.tile_index(6, 5)] = WorldType.TILE_ROCK
-	picked = world._item_table.dig_item_placement(5, 5)
+	TestAccess.set_tile(world, 6, 5, WorldType.TILE_ROCK)
+	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 6), "with only south open, south must win, got %s" % [picked])
 
 	# All four neighbours blocked: falls back to the dug tile itself.
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 6)] = WorldType.TILE_ROCK
-	picked = world._item_table.dig_item_placement(5, 5)
+	TestAccess.set_tile(world, 5, 6, WorldType.TILE_ROCK)
+	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
 	_expect(picked == Vector2i(5, 5),
 		"with every neighbour blocked, placement must fall back to the tile itself, got %s" % [picked])
 
@@ -155,7 +152,7 @@ func _check_placement_rules() -> void:
 ## computed coordinate, never inside the trench, and exactly once.
 func _check_single_completion_placement() -> void:
 	var world := _build_world(20260923)
-	var result := _command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
+	var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
 	_expect(result["ok"], "single-completion dig must be accepted: %s" % [result])
 	if not result["ok"]:
 		return
@@ -210,7 +207,7 @@ func _kind_for_roll(find_table: Array, roll: int) -> String:
 ## bypassed, since tick-level timing is not what this test targets.
 func _check_simultaneous_resolution_order() -> void:
 	var probe := WorldType.new(1, 10)
-	var find_table: Array = probe._content.get_entry("jobs", "dig").get("effects", {}).get("yields", {}).get("find_table", [])
+	var find_table: Array = TestAccess.content(probe).get_entry("jobs", "dig").get("effects", {}).get("yields", {}).get("find_table", [])
 
 	# Search for a world seed whose first draw (the lower job id's, resolved
 	# first) lands on "no find", so that outcome is exercised explicitly
@@ -227,25 +224,25 @@ func _check_simultaneous_resolution_order() -> void:
 		return
 
 	var world := WorldType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# Two isolated trench tiles, each with exactly one open neighbour, far
 	# enough apart that their placements can never collide.
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldType.TILE_TRENCH
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(9, 9)] = WorldType.TILE_TRENCH
-	world._tile_grid.tiles[world._tile_grid.tile_index(9, 8)] = WorldType.TILE_FLOOR
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
-	world._item_table.items.clear()
-	world._item_table.item_factions.clear()
+	TestAccess.set_tile(world, 1, 0, WorldType.TILE_TRENCH)
+	TestAccess.set_tile(world, 0, 0, WorldType.TILE_FLOOR)
+	TestAccess.set_tile(world, 9, 9, WorldType.TILE_TRENCH)
+	TestAccess.set_tile(world, 9, 8, WorldType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.item_table(world).items.clear()
+	TestAccess.item_table(world).item_factions.clear()
 
 	# job_5 appended before job_2: the order a colonist array iterated out of
 	# job-id order would produce, not ascending job-id order.
-	world._item_table.pending_dig_finds = [
+	TestAccess.item_table(world).pending_dig_finds = [
 		{"job_id": "job_5", "kind": "dig", "x": 9, "y": 9},
 		{"job_id": "job_2", "kind": "dig", "x": 1, "y": 0},
 	]
-	world._item_table.resolve_dig_finds()
+	TestAccess.item_table(world).resolve_dig_finds()
 
 	var reference := RandomNumberGenerator.new()
 	reference.seed = seed_value + WorldType.DIG_FIND_SEED_SALT
@@ -266,5 +263,5 @@ func _check_simultaneous_resolution_order() -> void:
 				found = true
 		_expect(found, "job_5's find '%s' must land at its own placement (9, 8)" % expected_kind_job5)
 
-	_expect(world._item_table.dig_find_random.state == reference.state,
+	_expect(TestAccess.item_table(world).dig_find_random.state == reference.state,
 		"resolving 2 pending finds must consume exactly 2 draws in ascending job-id order, state mismatch")

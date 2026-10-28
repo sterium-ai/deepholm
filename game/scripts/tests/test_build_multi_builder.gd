@@ -14,6 +14,7 @@ extends SceneTree
 ## this file owns everything that only exists once a second builder can join.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const MAX_TICKS := 500
 
@@ -39,39 +40,10 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._object_table.objects.clear()
-	return world
-
-func _colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y,
-		"needs": {"food": 100, "water": 100, "rest": 100},
-		"route": null, "work": null, "carrying": null}
-
-func _command(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": command_type, "payload": payload})
-
 func _command_ok(world: WorldStateType, command_id: String, command_type: String, payload: Dictionary) -> Dictionary:
-	var result := _command(world, command_id, command_type, payload)
+	var result := Scenarios.command(world, command_id, command_type, payload)
 	_expect(bool(result.get("ok", false)), "%s must be accepted: %s" % [command_id, result])
 	return result
-
-func _add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
-	var id := "item_%d" % world._item_table.next_item_id
-	world._item_table.items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
-	world._item_table.next_item_id += 1
-
-## Zeroes every need kind's decay rate except `kind` (mirrors test_need_jobs.gd's
-## own helper): only test D deliberately drives a need interrupt, and must not
-## risk a second, unrelated need crossing its own threshold mid-run.
-func _isolate_need(world: WorldStateType, kind: String) -> void:
-	for other in world._need_definitions.keys():
-		if other != kind:
-			world._need_definitions[other]["rate_per_day"] = 0
 
 ## Every colonist id currently driving an active site_fetch/site_work job on
 ## `origin` -- unlike ConstructionSiteTable's own builder_ids (site_work
@@ -84,7 +56,7 @@ func _active_site_builders(world: WorldStateType, origin: Vector2i) -> Array[Str
 				and String(job.get("status", "")) == "active":
 			active_job_ids[String(job["id"])] = true
 	var ids: Array[String] = []
-	var assignments = world._scheduler.get_assignments()
+	var assignments = TestAccess.scheduler(world).get_assignments()
 	for worker in assignments.keys():
 		if active_job_ids.has(String(assignments[worker]["job_id"])):
 			ids.append(String(worker))
@@ -106,13 +78,13 @@ func _held_site_job_count(world: WorldStateType, origin: Vector2i) -> int:
 ## -- and never more than max_builders (2) jobs are held on the site at once,
 ## whichever mix of fetching/working they are.
 func _check_two_builders_assigned_third_never_assigned() -> void:
-	var world := _build_world(340001)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
-	world._colonists.append(_colonist("colonist_1", 1, 0))
-	world._colonists.append(_colonist("colonist_2", 2, 0))
+	var world := Scenarios.empty_floor_world(340001)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 1, 0))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_2", 2, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 3, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 1, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 1, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var ever_builders := {}
@@ -138,14 +110,14 @@ func _check_two_builders_assigned_third_never_assigned() -> void:
 ## exclusion (_next_site_fetch_source()) must have routed the second one onto
 ## the other source rather than duplicating the first's own pick.
 func _check_two_concurrent_fetchers_pick_different_nearest_unclaimed_sources() -> void:
-	var world := _build_world(340002)
-	world._colonists.append(_colonist("colonist_0", 10, 15))
-	world._colonists.append(_colonist("colonist_1", 11, 15))
+	var world := Scenarios.empty_floor_world(340002)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 10, 15))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 11, 15))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 5, "width": 25, "height": 15})
-	var item_a_id := "item_%d" % world._item_table.next_item_id
-	_add_stock(world, "wood", 1, 5, 10)
-	var item_b_id := "item_%d" % world._item_table.next_item_id
-	_add_stock(world, "wood", 1, 16, 10)
+	var item_a_id := "item_%d" % TestAccess.item_table(world).next_item_id
+	Scenarios.add_stock(world, "wood", 1, 5, 10)
+	var item_b_id := "item_%d" % TestAccess.item_table(world).next_item_id
+	Scenarios.add_stock(world, "wood", 1, 16, 10)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var chosen_items: Dictionary = {}
@@ -171,15 +143,15 @@ func _check_two_concurrent_fetchers_pick_different_nearest_unclaimed_sources() -
 ## Test C: "with both builders actively working, the site's progress
 ## reaches build_ticks in build_ticks / 2 ticks."
 func _check_two_active_builders_double_the_progress_rate() -> void:
-	var world := _build_world(340003)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
-	world._colonists.append(_colonist("colonist_1", 1, 0))
+	var world := Scenarios.empty_floor_world(340003)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 1, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 2, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 1, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 1, 0)
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
-	var build_ticks := int(world._object_definitions["workbench"]["build_ticks"])
+	var build_ticks := int(TestAccess.object_definitions(world)["workbench"]["build_ticks"])
 	var tick_both := -1
 	var progress_both := -1
 	for _i in MAX_TICKS:
@@ -223,18 +195,18 @@ func _check_two_active_builders_double_the_progress_rate() -> void:
 ## again; the remaining builder's progress continues from its last value,
 ## never resetting or double-counting."
 func _check_builder_leaving_mid_work_halves_rate_and_preserves_progress() -> void:
-	var world := _build_world(340004)
-	_isolate_need(world, "food")
-	world._colonists.append(_colonist("colonist_0", 0, 0))
-	world._colonists.append(_colonist("colonist_1", 1, 0))
+	var world := Scenarios.empty_floor_world(340004)
+	Scenarios.isolate_need(world, "food")
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 1, 0))
 	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 2, "height": 1})
-	_add_stock(world, "wood", 3, 0, 0)
-	_add_stock(world, "stone", 4, 1, 0)
+	Scenarios.add_stock(world, "wood", 3, 0, 0)
+	Scenarios.add_stock(world, "stone", 4, 1, 0)
 	# A genuinely reachable food source, so the critical interrupt actually
 	# sends the leaving builder away rather than finding nothing to search
 	# for and resuming in the same tick (colonist-ai.md 3.8's need_unmet
 	# "keeps working" fallback, test_need_jobs.gd's own precedent).
-	world._item_table.ground_berries["0_5"] = 1
+	TestAccess.item_table(world).ground_berries["0_5"] = 1
 	var site_origin := Vector2i(10, 10)
 	_command_ok(world, "wb", "build", {"kind": "workbench", "x": site_origin.x, "y": site_origin.y})
 	var builder_ids: Array = []
@@ -259,9 +231,9 @@ func _check_builder_leaving_mid_work_halves_rate_and_preserves_progress() -> voi
 	var progress_before_interrupt := int(site_before["progress"])
 	var leaving_id := String(builder_ids[0])
 	var staying_id := String(builder_ids[1])
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == leaving_id:
-			world._colonists[i]["needs"]["food"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == leaving_id:
+			TestAccess.colonists(world)[i]["needs"]["food"] = 5
 	world.tick()
 	var site_after_interrupt := world.get_construction_site(site_origin.x, site_origin.y)
 	_expect(not site_after_interrupt.is_empty(), "the site must still be under construction right after the interrupt")

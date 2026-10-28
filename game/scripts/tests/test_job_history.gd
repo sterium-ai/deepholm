@@ -97,7 +97,7 @@ func _check_live_list_is_compacted() -> void:
 		ids.append(_submit(queue, i))
 	for i in 390:
 		queue.cancel(ids[i])
-	_expect(queue._jobs.size() <= 2 * 10 + 1, "retired jobs must not pile up in the live list: %d entries for 10 live" % queue._jobs.size())
+	_expect(TestAccess.queue_live_jobs(queue).size() <= 2 * 10 + 1, "retired jobs must not pile up in the live list: %d entries for 10 live" % TestAccess.queue_live_jobs(queue).size())
 	_expect(_ids(queue.get_jobs(false)) == ids.slice(390), "the live list must keep the 10 open jobs in order")
 
 func _check_views_are_live_records() -> void:

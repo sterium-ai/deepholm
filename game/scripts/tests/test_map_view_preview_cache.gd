@@ -60,10 +60,10 @@ func _init() -> void:
 	_expect(colonist_tile != Vector2i(-1, -1), "a fresh 48x48 world must have a third floor tile for the build colonist")
 	var build_site := _find_tile(world, "floor", [hover_tile, moved_tile, colonist_tile])
 	_expect(build_site != Vector2i(-1, -1), "a fresh 48x48 world must have a fourth floor tile for the build site")
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": colonist_tile.x, "y": colonist_tile.y,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": colonist_tile.x, "y": colonist_tile.y,
 		"route": null, "work": null, "carrying": null})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": colonist_tile.x, "y": colonist_tile.y, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": colonist_tile.x, "y": colonist_tile.y, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	world.apply({"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": colonist_tile.x, "y": colonist_tile.y, "width": 1, "height": 1}})
 

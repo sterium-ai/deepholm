@@ -44,13 +44,14 @@ extends SceneTree
 ## test_trapped_actors.gd exercises it on purpose.
 
 const WorldType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 const JOBS_CONTENT_PATH := "res://content/jobs.json"
 
 ## Both literals also cover snapshot keys that stay empty in this run, because
 ## each key changes the dict shape regardless of its value: the colonist
 ## "combat" component (content/actors.json, backfilled by
-## WorldState._ensure_combat()), world._object_table.object_health, CombatGiver's
+## WorldState._ensure_combat()), TestAccess.object_table(world).object_health, CombatGiver's
 ## excluded-flee-destination set, "suspended_work_progress",
 ## "approach_job_targets" (ADR 033), RescueGiver's
 ## "rescue_victim_assignments" (hashed as a sorted {jobId, victimId} array so
@@ -83,7 +84,7 @@ func _init() -> void:
 		if job["status"] == "completed":
 			completed += 1
 	_expect(completed == 6, "all six scripted dig/chop orders must complete within the fixed tick budget (got %d)" % completed)
-	for colonist in world._colonists:
+	for colonist in TestAccess.colonists(world):
 		_expect(colonist.get("trapped") == null,
 			"no colonist should be trapped by the end of this scenario (got %s on %s)" % [colonist.get("trapped"), colonist["id"]])
 
@@ -139,10 +140,6 @@ func _check_jobs_content_file() -> void:
 			and kinds.has("incident") and kinds.has("escape_trench") and kinds.has("flee") and kinds.has("rescue") and kinds.has("approach"),
 		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, haul, site_fetch, site_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
 
-func _command(world: WorldType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
-
 ## Two parallel corridors (y=0, y=2; x=0..9) with a tree at the far end of
 ## each row and a one-tile rock buffer (y=1) between them; everything else is
 ## rock. Two colonists start at the near end of each row so dig/chop targets,
@@ -157,21 +154,21 @@ func _command(world: WorldType, command_id: String, kind: String, payload: Dicti
 ## rather than restricting assignment.
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020) before overwriting
 	# tiles: a stray one would leak into state_hash() even though it cannot
 	# affect this fixture's two corridors, moving EXPECTED_HASH /
 	# COLONY_EXPECTED_HASH for a reason unrelated to what either documents.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in range(0, 10):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldType.TILE_SOIL
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 2)] = WorldType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(9, 0)] = WorldType.TILE_TREE
-	world._tile_grid.tiles[world._tile_grid.tile_index(9, 2)] = WorldType.TILE_TREE
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "route": null, "work": null})
+		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
+		TestAccess.set_tile(world, x, 2, WorldType.TILE_SOIL)
+	TestAccess.set_tile(world, 9, 0, WorldType.TILE_TREE)
+	TestAccess.set_tile(world, 9, 2, WorldType.TILE_TREE)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "route": null, "work": null})
 	# Axe sits past every dig target (x=8, just short of the tree at x=9),
 	# pick at the start (x=0, before every dig target) -- see _run_scenario()'s
 	# own comment for why this placement, combined with its priorities, keeps
@@ -200,14 +197,14 @@ func _build_world(seed_value: int) -> WorldType:
 ## tree at 9: no dig target is ever revisited after the trap-on-entry rule
 ## turns it to trench.
 func _run_scenario(world: WorldType) -> void:
-	_command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 2})
-	_command(world, "dig_2", "dig", {"x": 5, "y": 0, "priority": 2})
+	Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 2})
+	Scenarios.command(world, "dig_2", "dig", {"x": 5, "y": 0, "priority": 2})
 	world.tick()
 	world.tick()
-	_command(world, "chop_1", "chop", {"x": 9, "y": 0, "priority": 1})
-	_command(world, "dig_3", "dig", {"x": 3, "y": 2, "priority": 2})
+	Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "priority": 1})
+	Scenarios.command(world, "dig_3", "dig", {"x": 3, "y": 2, "priority": 2})
 	world.tick()
 	world.tick()
 	world.tick()
-	_command(world, "chop_2", "chop", {"x": 9, "y": 2, "priority": 1})
-	_command(world, "dig_4", "dig", {"x": 7, "y": 0, "priority": 2})
+	Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 2, "priority": 1})
+	Scenarios.command(world, "dig_4", "dig", {"x": 7, "y": 0, "priority": 2})

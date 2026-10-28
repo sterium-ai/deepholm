@@ -90,19 +90,19 @@ func _find_soil(world: WorldStateType) -> Vector2i:
 ## freshly spawned colonist with no picks reaches the reserve step directly
 ## instead of blocking on fetch_tool first.
 func _submit_and_await_refusal(world: WorldStateType, colonist_id: String, target: Vector2i) -> Dictionary:
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	for _i in range(TICK_BOUND):
 		world.tick()
-		var job: Dictionary = world._scheduler.queue.get_job(job_id)
+		var job: Dictionary = TestAccess.scheduler(world).queue.get_job(job_id)
 		if not job.is_empty() and String(job.get("status", "")) == "failed":
 			return job
-	return world._scheduler.queue.get_job(job_id)
+	return TestAccess.scheduler(world).queue.get_job(job_id)
 
 func _check_invariants(world: WorldStateType, label: String) -> void:
 	var report := ReservationInvariantsType.check(
-		world._scheduler.queue.get_reservation_table(), world.get_jobs())
+		TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(),
 		"%s: ReservationInvariants.check() must report no orphaned_reservations after a refused attempt" % label)
 
@@ -164,26 +164,26 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 	if _failed:
 		return
 	var world := WorldStateType.new(3, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
 	_expect(_set_faction(world, "set_allies_haul_reserve", colonist_id, "allies").get("ok", false),
 		"set_faction to allies must be accepted")
-	var submit_result: Dictionary = world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
-	_expect(world._scheduler.queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
+	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "failed":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "failed":
 			break
-	var job := world._scheduler.queue.get_job(job_id)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"an allies-faction actor's haul job must be refused not_ordered_by_player on its item:/cell: reserve step")
 	_expect(_reservation_acquired_events(world, job_id).is_empty(),
@@ -206,28 +206,28 @@ func _check_resume_after_faction_change_refuses_reacquisition() -> void:
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
 	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	var activated := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "active":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "active":
 			activated = true
 			break
 	_expect(activated, "the job must activate for a colony-faction colonist before this check can proceed")
 	if not activated:
 		return
-	world._scheduler.suspend_assignment(colonist_id, job_id)
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.scheduler(world).suspend_assignment(colonist_id, job_id)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"suspend_assignment must release the job's reservation back to queued")
 	_expect(_set_faction(world, "set_raider_mid_pause", colonist_id, "raiders").get("ok", false),
 		"set_faction while the job is suspended must be accepted")
-	world._scheduler.resume_assignment(colonist_id, job_id)
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.scheduler(world).resume_assignment(colonist_id, job_id)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"resume_assignment must not reacquire a reservation for a now-disallowed faction")
-	world._resolve_refused_reservations()
-	var job := world._scheduler.queue.get_job(job_id)
+	TestAccess.resolve_refused_reservations(world)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a resumed job must be refused not_ordered_by_player once the actor's faction changed while suspended")
 	_expect(_reservation_acquired_events(world, job_id).size() == 1,
@@ -243,12 +243,12 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(5, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_elig", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
@@ -265,7 +265,7 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	var completed := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		_expect(not world._scheduler.get_assignments().has("colonist_1"),
+		_expect(not TestAccess.scheduler(world).get_assignments().has("colonist_1"),
 			"an order-ineligible colonist must never be assigned the ambient haul job, leaving it available to the eligible colonist")
 		for job in world.get_jobs():
 			if String(job.get("kind", "")) == "haul" and String(job.get("item_id", "")) == "item_1" and String(job.get("status", "")) == "completed":
@@ -290,13 +290,13 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 ## before or after the walls come back down.
 func _build_two_row_colony_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 5):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 1)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null, "hands": []})
+		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
+		TestAccess.set_tile(world, x, 1, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null, "hands": []})
 	# dig needs_tool "pick" (content/jobs.json); spawned on colonist_0's own
 	# tile so fetch_tool resolves immediately, matching test_reroute.gd's own
 	# _build_two_row_world() fixture.
@@ -315,7 +315,7 @@ func _find_queued_job_for_target(world: WorldStateType, target: Vector2i) -> Dic
 ## job's restrict_to instead lives on its own _waiting entry, read here
 ## directly rather than waiting for it to activate first.
 func _waiting_restrict_to(world: WorldStateType, job_id: String) -> String:
-	for entry in world._scheduler.get_waiting():
+	for entry in TestAccess.scheduler(world).get_waiting():
 		if String(entry.get("id", "")) == job_id:
 			return String(entry.get("restrict_to", ""))
 	return ""
@@ -339,8 +339,8 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 		ticks += 1
 		var colonist_0 := world.get_colonists()[0]
 		if not walled and int(colonist_0["x"]) == 2 and int(colonist_0["y"]) == 0:
-			world._object_table.set_object(3, 0, "wall")
-			world._object_table.set_object(4, 1, "wall")
+			TestAccess.object_table(world).set_object(3, 0, "wall")
+			TestAccess.object_table(world).set_object(4, 1, "wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -349,13 +349,13 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 				replacement_job_id = String(blocked_job["id"])
 				_expect(_waiting_restrict_to(world, replacement_job_id) == "colonist_0",
 					"the replacement job must preserve the original assignee's restrict_to")
-				world._object_table.set_object(3, 0, "")
-				world._object_table.set_object(4, 1, "")
+				TestAccess.object_table(world).set_object(3, 0, "")
+				TestAccess.object_table(world).set_object(4, 1, "")
 		if released:
-			var assignments := world._scheduler.get_assignments()
+			var assignments := TestAccess.scheduler(world).get_assignments()
 			if assignments.has("colonist_1") and String(assignments["colonist_1"]["job_id"]) == replacement_job_id:
 				wrong_worker_seen = true
-			if String(world._scheduler.queue.get_job(replacement_job_id).get("status", "")) == "completed":
+			if String(TestAccess.scheduler(world).queue.get_job(replacement_job_id).get("status", "")) == "completed":
 				break
 
 	_expect(walled, "test fixture must enclose the target before colonist_0 reaches it")
@@ -363,7 +363,7 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 	_expect(replacement_job_id != "", "a replacement job must exist once the target was released")
 	_expect(not wrong_worker_seen, "colonist_1 (not the assignee) must never receive the replacement job")
 	if replacement_job_id != "":
-		_expect(String(world._scheduler.queue.get_job(replacement_job_id).get("status", "")) == "completed",
+		_expect(String(TestAccess.scheduler(world).queue.get_job(replacement_job_id).get("status", "")) == "completed",
 			"the assignee must take and complete the replacement job within the declared tick bound (%d)" % ASSIGNEE_PRESERVED_TICK_BOUND)
 	_check_invariants(world, "assignee_preserved")
 
@@ -378,39 +378,39 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(6, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var submit_result: Dictionary = world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
-	_expect(world._scheduler.queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
+	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
 	var carrying := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if InventoryType.is_carrying(world._find_colonist(colonist_id)):
+		if InventoryType.is_carrying(TestAccess.find_colonist(world, colonist_id)):
 			carrying = true
 			break
 	_expect(carrying, "the colonist must pick up the item before this check can proceed")
 	if not carrying:
 		return
-	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.needs_system(world).interrupt_current_job(TestAccess.find_colonist(world, colonist_id))
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry haul must suspend its reservation back to queued")
 	_expect(_set_faction(world, "set_raider_mid_carry", colonist_id, "raiders").get("ok", false),
 		"set_faction while the haul is suspended mid-carry must be accepted")
-	world._needs_system.resume_interrupted_job(colonist_id)
-	world._resolve_refused_reservations()
-	var job := world._scheduler.queue.get_job(job_id)
+	TestAccess.needs_system(world).resume_interrupted_job(colonist_id)
+	TestAccess.resolve_refused_reservations(world)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a refused resumption must terminally fail the haul job not_ordered_by_player")
-	_expect(not InventoryType.is_carrying(world._find_colonist(colonist_id)),
+	_expect(not InventoryType.is_carrying(TestAccess.find_colonist(world, colonist_id)),
 		"a refused resumption must drop the colonist's carried item instead of stranding it")
 	var ground_count := 0
 	for item in world.get_items():
@@ -431,43 +431,43 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	if _failed:
 		return
 	var world := WorldStateType.new(12, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return_blocked", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var submit_result: Dictionary = world._scheduler.submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
-	_expect(world._scheduler.queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
+	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
 	var carrying := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if InventoryType.is_carrying(world._find_colonist(colonist_id)):
+		if InventoryType.is_carrying(TestAccess.find_colonist(world, colonist_id)):
 			carrying = true
 			break
 	_expect(carrying, "the colonist must pick up the item before this check can proceed")
 	if not carrying:
 		return
-	var carrier := world._find_colonist(colonist_id)
+	var carrier := TestAccess.find_colonist(world, colonist_id)
 	var blocker_tile := Vector2i(int(carrier["x"]), int(carrier["y"]))
-	world._colonists.append({"id": "colonist_1", "kind": "colonist",
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist",
 		"x": blocker_tile.x, "y": blocker_tile.y, "route": null, "work": null, "hands": []})
-	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.needs_system(world).interrupt_current_job(TestAccess.find_colonist(world, colonist_id))
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry haul must suspend its reservation back to queued")
 	_expect(_set_faction(world, "set_raider_mid_carry_blocked", colonist_id, "raiders").get("ok", false),
 		"set_faction while the haul is suspended mid-carry must be accepted")
-	world._needs_system.resume_interrupted_job(colonist_id)
-	world._resolve_refused_reservations()
-	var job := world._scheduler.queue.get_job(job_id)
+	TestAccess.needs_system(world).resume_interrupted_job(colonist_id)
+	TestAccess.resolve_refused_reservations(world)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a refused resumption must terminally fail the haul job not_ordered_by_player even when the colonist's own tile is blocked")
-	_expect(not InventoryType.is_carrying(world._find_colonist(colonist_id)),
+	_expect(not InventoryType.is_carrying(TestAccess.find_colonist(world, colonist_id)),
 		"a refused resumption must clear the colonist's carried item even when its own tile is occupied")
 	var ground_count := 0
 	for item in world.get_items():
@@ -491,16 +491,16 @@ func _check_reservation_gate_refuses_initial_tile_reservation() -> void:
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
 	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
-	world._scheduler.set_order_eligibility(func(_worker: String) -> bool: return true)
-	world._scheduler.set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
+	TestAccess.scheduler(world).set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "failed":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "failed":
 			break
-	var job := world._scheduler.queue.get_job(job_id)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a restrict_to'd order must be refused when the assignee fails ONLY may_reserve_colony_items, even with may_be_ordered true")
 	_expect(_reservation_acquired_events(world, job_id).is_empty(),
@@ -515,26 +515,26 @@ func _check_reservation_gate_refuses_haul_item_and_cell_reservation() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(14, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	world._colonists.append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve_gate", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	world._scheduler.set_order_eligibility(func(_worker: String) -> bool: return true)
-	world._scheduler.set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
-	var submit_result: Dictionary = world._scheduler.submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
+	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
+	TestAccess.scheduler(world).set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
-	_expect(world._scheduler.queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
+	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "failed":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "failed":
 			break
-	var job := world._scheduler.queue.get_job(job_id)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a reservation-ineligible actor's haul job must be refused on its item:/cell: reserve step even with may_be_ordered true")
 	_expect(_reservation_acquired_events(world, job_id).is_empty(),
@@ -553,28 +553,28 @@ func _check_reservation_gate_refuses_suspended_resumption() -> void:
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
 	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
-	world._scheduler.set_order_eligibility(func(_worker: String) -> bool: return true)
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	var activated := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "active":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "active":
 			activated = true
 			break
 	_expect(activated, "the job must activate while may_reserve_colony_items still passes before this check can proceed")
 	if not activated:
 		return
-	world._scheduler.suspend_assignment(colonist_id, job_id)
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.scheduler(world).suspend_assignment(colonist_id, job_id)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"suspend_assignment must release the job's reservation back to queued")
-	world._scheduler.set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
-	world._scheduler.resume_assignment(colonist_id, job_id)
-	_expect(String(world._scheduler.queue.get_job(job_id).get("status", "")) == "queued",
+	TestAccess.scheduler(world).set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
+	TestAccess.scheduler(world).resume_assignment(colonist_id, job_id)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"resume_assignment must not reacquire a reservation for a now reservation-ineligible actor, even with may_be_ordered true")
-	world._resolve_refused_reservations()
-	var job := world._scheduler.queue.get_job(job_id)
+	TestAccess.resolve_refused_reservations(world)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"resume_assignment must refuse a reservation-ineligible actor even when may_be_ordered alone would allow it")
 	_expect(_reservation_acquired_events(world, job_id).size() == 1,
@@ -595,38 +595,38 @@ func _check_command_boundary_drains_refusal_without_manual_call() -> void:
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
 	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var till_job_id: String = String(submit_result.get("job_id", ""))
 	var working := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if (world._find_colonist(colonist_id).get("work") != null
-				and String(world._scheduler.queue.get_job(till_job_id).get("status", "")) == "active"):
+		if (TestAccess.find_colonist(world, colonist_id).get("work") != null
+				and String(TestAccess.scheduler(world).queue.get_job(till_job_id).get("status", "")) == "active"):
 			working = true
 			break
 	_expect(working, "the colonist must be actively working the till job before this check can proceed")
 	if not working:
 		return
-	world._needs_system.interrupt_current_job(world._find_colonist(colonist_id))
-	_expect(String(world._scheduler.queue.get_job(till_job_id).get("status", "")) == "queued",
+	TestAccess.needs_system(world).interrupt_current_job(TestAccess.find_colonist(world, colonist_id))
+	_expect(String(TestAccess.scheduler(world).queue.get_job(till_job_id).get("status", "")) == "queued",
 		"interrupting the till job must suspend its reservation back to queued")
 	# Fakes a NeedGiver commitment through the same seam need_giver.gd itself
 	# uses (submit()'s restrict_to + _pending), so cancelling it below drives
 	# the real resolve_job() -> resume_interrupted_job() path.
-	var need_submit: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "drink_water", colonist_id)
+	var need_submit: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "drink_water", colonist_id)
 	_expect(need_submit.get("ok", false), "direct scheduler submission of the need job must be accepted")
 	var need_job_id: String = String(need_submit.get("job_id", ""))
-	world._need_giver._pending[colonist_id] = need_job_id
+	TestAccess.need_giver_pending(world)[colonist_id] = need_job_id
 	_expect(_set_faction(world, "set_raider_command_boundary", colonist_id, "raiders").get("ok", false),
 		"set_faction while the till job is suspended must be accepted")
 	var cancel_result := world.apply({"actor": "test", "command_id": "cancel_need_boundary", "tick": world.get_tick(),
 		"type": "cancel_job", "payload": {"job_id": need_job_id}})
 	_expect(cancel_result.get("ok", false), "cancelling the need job must be accepted")
-	var till_job := world._scheduler.queue.get_job(till_job_id)
+	var till_job := TestAccess.scheduler(world).queue.get_job(till_job_id)
 	_expect(String(till_job.get("status", "")) == "failed" and String(till_job.get("reason", "")) == "not_ordered_by_player",
 		"cancelling a need job outside tick() must synchronously refuse and terminate the suspended till job before apply() returns")
-	_expect(world._scheduler.take_refused_reservations().is_empty(),
+	_expect(TestAccess.scheduler(world).take_refused_reservations().is_empty(),
 		"no refusal may be left undrained in GlobalAssignment once _apply_job_command() has returned")
 	_check_invariants(world, "command_boundary_drain")
 	var restored := WorldStateType.from_save_state(world.to_save_state())
@@ -648,44 +648,44 @@ func _check_order_eligibility_revalidated_independent_of_reservation_gate() -> v
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
 	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
-	world._scheduler.set_order_eligibility(func(worker: String) -> bool: return worker != colonist_id)
-	world._scheduler.set_reservation_gate(func(_worker: String) -> bool: return true)
-	var submit_result: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	TestAccess.scheduler(world).set_order_eligibility(func(worker: String) -> bool: return worker != colonist_id)
+	TestAccess.scheduler(world).set_reservation_gate(func(_worker: String) -> bool: return true)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id).get("status", "")) == "failed":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "failed":
 			break
-	var job := world._scheduler.queue.get_job(job_id)
+	var job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a restrict_to'd order must be refused when the assignee fails ONLY may_be_ordered, even with may_reserve_colony_items true")
 	_expect(_reservation_acquired_events(world, job_id).is_empty(),
 		"an order-ineligible actor's restrict_to'd job must never acquire a reservation, not even transiently")
 	_check_invariants(world, "order_eligibility_independent_of_reservation_fresh")
 
-	world._scheduler.set_order_eligibility(func(_worker: String) -> bool: return true)
-	var submit_result2: Dictionary = world._scheduler.submit(target, 1, world.get_tick(), "till", colonist_id)
+	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
+	var submit_result2: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result2.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id2: String = String(submit_result2.get("job_id", ""))
 	var activated := false
 	for _i in range(TICK_BOUND):
 		world.tick()
-		if String(world._scheduler.queue.get_job(job_id2).get("status", "")) == "active":
+		if String(TestAccess.scheduler(world).queue.get_job(job_id2).get("status", "")) == "active":
 			activated = true
 			break
 	_expect(activated, "the job must activate while both gates pass before this check can proceed")
 	if not activated:
 		return
-	world._scheduler.suspend_assignment(colonist_id, job_id2)
-	_expect(String(world._scheduler.queue.get_job(job_id2).get("status", "")) == "queued",
+	TestAccess.scheduler(world).suspend_assignment(colonist_id, job_id2)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id2).get("status", "")) == "queued",
 		"suspend_assignment must release the job's reservation back to queued")
-	world._scheduler.set_order_eligibility(func(worker: String) -> bool: return worker != colonist_id)
-	world._scheduler.resume_assignment(colonist_id, job_id2)
-	_expect(String(world._scheduler.queue.get_job(job_id2).get("status", "")) == "queued",
+	TestAccess.scheduler(world).set_order_eligibility(func(worker: String) -> bool: return worker != colonist_id)
+	TestAccess.scheduler(world).resume_assignment(colonist_id, job_id2)
+	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id2).get("status", "")) == "queued",
 		"resume_assignment must not reacquire a reservation for a now order-ineligible actor, even with may_reserve_colony_items true")
-	world._resolve_refused_reservations()
-	var job2 := world._scheduler.queue.get_job(job_id2)
+	TestAccess.resolve_refused_reservations(world)
+	var job2 := TestAccess.scheduler(world).queue.get_job(job_id2)
 	_expect(String(job2.get("status", "")) == "failed" and String(job2.get("reason", "")) == "not_ordered_by_player",
 		"resume_assignment must refuse an order-ineligible actor even when may_reserve_colony_items alone would allow it")
 	_expect(_reservation_acquired_events(world, job_id2).size() == 1,

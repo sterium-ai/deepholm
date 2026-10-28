@@ -88,38 +88,38 @@ func _run(workload: String, actor_count: int, ticks: int) -> void:
 	var stats := BenchCommon.stats_ms(samples.slice(1))
 	var real_stats := BenchCommon.stats_ms(twin_samples.slice(1))
 	var active := 0
-	for job in world._scheduler.queue.get_jobs():
+	for job in TestAccess.scheduler(world).queue.get_jobs():
 		if String(job.get("status", "")) == "active":
 			active += 1
 	print("bench_tick_scaling: workload=%s actors=%d setup=%.0fms tick[profiled, ticks 2..n] %s" % [workload,
-		world._colonists.size(), build_usec / 1000.0, BenchCommon.format_stats(stats)])
+		TestAccess.colonists(world).size(), build_usec / 1000.0, BenchCommon.format_stats(stats)])
 	var water_tiles := 0
 	var water_candidates := 0
 	if workload == "needs":
-		water_tiles = world._tile_grid.get_water_tiles().size()
-		water_candidates = world._needs_system.need_source_candidates("water").size()
+		water_tiles = TestAccess.tile_grid(world).get_water_tiles().size()
+		water_candidates = TestAccess.needs_system(world).need_source_candidates("water").size()
 		print("bench_tick_scaling: workload=needs actors=%d water_tiles=%d reachable_water_candidates=%d" % [
-			world._colonists.size(), water_tiles, water_candidates])
+			TestAccess.colonists(world).size(), water_tiles, water_candidates])
 	print("bench_tick_scaling: workload=%s actors=%d tick[real, ticks 2..n] %s first=%.2fms hash_match=%s jobs=%d active=%d events=%d" % [
-		workload, twin._colonists.size(), BenchCommon.format_stats(real_stats),
+		workload, TestAccess.colonists(twin).size(), BenchCommon.format_stats(real_stats),
 		int(twin_samples[0]) / 1000.0 if not twin_samples.is_empty() else 0.0, hash_match,
-		world._scheduler.queue.get_jobs().size(), active, world._event_log._events.size()])
+		TestAccess.scheduler(world).queue.get_jobs().size(), active, TestAccess.event_log_events(world).size()])
 	var values := {"setup ms": "%.0f" % (build_usec / 1000.0),
 		"first ms": "%.2f" % (int(twin_samples[0]) / 1000.0 if not twin_samples.is_empty() else 0.0)}
 	values.merge(BenchCommon.stats_values(real_stats))
 	values["profiled mean ms"] = "%.2f" % stats["mean"]
-	values.merge({"hash match": hash_match, "jobs": world._scheduler.queue.get_jobs().size(), "active": active,
-		"events": world._event_log._events.size()})
+	values.merge({"hash match": hash_match, "jobs": TestAccess.scheduler(world).queue.get_jobs().size(), "active": active,
+		"events": TestAccess.event_log_events(world).size()})
 	if workload == "needs":
 		values.merge({"water tiles": water_tiles, "reachable water": water_candidates})
 	BenchCommon.row("bench_tick_scaling", "ticks (real tick(), ticks 2..n)", "%s actors=%d" % [workload,
-		twin._colonists.size()], values)
+		TestAccess.colonists(twin).size()], values)
 	_print_phases("ticks 2..n", workload, world, totals, samples.size() - 1)
 
 ## Phases under 0.05 ms/tick are left out to keep the line readable.
 func _print_phases(label: String, workload: String, world: WorldStateType, totals: Dictionary, tick_count: int) -> void:
 	var phase_line := "bench_tick_scaling: workload=%s actors=%d phases[%s] (ms/tick):" % [workload,
-		world._colonists.size(), label]
+		TestAccess.colonists(world).size(), label]
 	var values := {}
 	for phase in BenchCommon.PHASES:
 		var per_tick: float = int(totals.get(phase, 0)) / 1000.0 / maxi(1, tick_count)
@@ -128,7 +128,7 @@ func _print_phases(label: String, workload: String, world: WorldStateType, total
 			values[phase] = "%.2f" % per_tick
 	print(phase_line)
 	BenchCommon.row("bench_tick_scaling", "phases %s (ms/tick)" % label, "%s actors=%d" % [workload,
-		world._colonists.size()], values)
+		TestAccess.colonists(world).size()], values)
 
 func _build(workload: String, actor_count: int) -> WorldStateType:
 	var world := BenchCommon.world_with_colonists(SEED, SIZE, SIZE, actor_count)
@@ -136,7 +136,7 @@ func _build(workload: String, actor_count: int) -> WorldStateType:
 		"busy":
 			BenchCommon.submit_till_orders(world, actor_count)
 		"needs":
-			for colonist in world._colonists:
+			for colonist in TestAccess.colonists(world):
 				colonist["needs"]["water"] = 20
 	return world
 

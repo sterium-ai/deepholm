@@ -199,7 +199,7 @@ func _check_haul_unaffected_by_labour_disabled() -> void:
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
 		"type": "zone_add", "payload": {"x": 3, "y": 3, "width": 2, "height": 2}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	world._item_table.items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "kind": "wood", "count": 1}
 
 	world.tick()
 	var haul_jobs: Array[Dictionary] = []
@@ -224,7 +224,7 @@ func _check_calendar_boost_orders_dig_first_inside_window() -> void:
 	})
 
 	var inside := _single_colonist_world(3)
-	inside._calendar = boosted_calendar
+	TestAccess.set_calendar(inside, boosted_calendar)
 	var chop_inside := inside.apply({"actor": "test", "command_id": "chop_1", "tick": inside.get_tick(),
 		"type": "chop", "payload": {"x": 0, "y": 1, "priority": 1}})
 	var dig_inside := inside.apply({"actor": "test", "command_id": "dig_1", "tick": inside.get_tick(),
@@ -242,10 +242,10 @@ func _check_calendar_boost_orders_dig_first_inside_window() -> void:
 		"inside the boosted window, chop must still be queued")
 
 	var outside := _single_colonist_world(4)
-	outside._calendar = CalendarServiceType.new("", {
+	TestAccess.set_calendar(outside, CalendarServiceType.new("", {
 		"day_length_ticks": 10,
 		"windows": [{"id": "test_mine_boost", "labour": "mine", "from": 1, "to": 1, "boost": 2, "label": "test"}],
-	})
+	}))
 	for i in 10:
 		outside.tick()
 	var chop_outside := outside.apply({"actor": "test", "command_id": "chop_1", "tick": outside.get_tick(),
@@ -298,21 +298,21 @@ func _check_replay_determinism() -> void:
 ## as hard as possible in work's favor; the need job must still win.
 func _check_committed_need_job_precedes_work_with_labour_and_calendar_boost() -> void:
 	var world := _needs_isolated_world(700)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
 	# Water placed far enough away (distance 10, move_ticks_per_tile 4) that
 	# travel spans many ticks -- long enough to observe the committed need job
 	# still pending (not yet completed) across several scheduler ticks, rather
 	# than the whole commit-travel-consume cycle collapsing into a single
 	# tick the way an adjacent source would.
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 10)] = WorldStateType.TILE_WATER
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.set_tile(world, 0, 10, WorldStateType.TILE_WATER)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _default_labour_table()})
-	world._calendar = CalendarServiceType.new("", {
+	TestAccess.set_calendar(world, CalendarServiceType.new("", {
 		"day_length_ticks": 1000,
 		"windows": [{"id": "test_mine_boost", "labour": "mine", "from": 1, "to": 1, "boost": 10, "label": "test"}],
-	})
+	}))
 	var dig_result := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(),
 		"type": "dig", "payload": {"x": 1, "y": 0, "priority": 2}})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
@@ -367,7 +367,7 @@ func _check_negative_calendar_boost_during_pending_route() -> void:
 	var bounds := Vector2i(130, 0)
 	var job_id := String(scheduler.submit(Vector2i(100, 0), 1, 0, "dig")["job_id"])
 	scheduler.tick(1, workers, passable, Vector2i.ZERO, bounds, get_labour, dynamic_boost)
-	_expect(scheduler._pending.has("a"), "a distant target must leave a route batch pending across ticks")
+	_expect(TestAccess.assignment_pending(scheduler).has("a"), "a distant target must leave a route batch pending across ticks")
 	_dynamic_boost_value = -5
 	scheduler.tick(2, workers, passable, Vector2i.ZERO, bounds, get_labour, dynamic_boost)
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == job_id,
@@ -380,9 +380,9 @@ func _labour_table_with(kind: String, level: int) -> Dictionary:
 
 func _needs_isolated_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	for kind in world._need_definitions.keys():
-		world._need_definitions[kind]["rate_per_day"] = 0
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	for kind in TestAccess.need_definitions(world).keys():
+		TestAccess.need_definitions(world)[kind]["rate_per_day"] = 0
 	return world
 
 ## Regression: _refresh_labour_disabled_reasons() used to read tick()'s own
@@ -399,40 +399,40 @@ func _needs_isolated_world(seed_value: int) -> WorldStateType:
 func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	# (a) the colony's only mine-enabled colonist is mid-search.
 	var only_enabled_searching := _needs_isolated_world(701)
-	only_enabled_searching._tile_grid.tiles[only_enabled_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	only_enabled_searching._tile_grid.tiles[only_enabled_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
-	only_enabled_searching._colonists.clear()
-	only_enabled_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.set_tile(only_enabled_searching, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(only_enabled_searching, 0, 1, WorldStateType.TILE_WATER)
+	TestAccess.colonists(only_enabled_searching).clear()
+	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 3)})
-	only_enabled_searching._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_a := only_enabled_searching.apply({"actor": "test", "command_id": "dig_1",
 		"tick": only_enabled_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
 	_expect(dig_a.get("ok", false), "dig submission must be accepted")
 	only_enabled_searching.tick()
-	_expect(only_enabled_searching._need_giver.searching_colonist_ids().has("colonist_0"),
+	_expect(TestAccess.need_giver(only_enabled_searching).searching_colonist_ids().has("colonist_0"),
 		"colonist_0 must be mid-search for water the tick its onset starts")
 	_expect(String(_find_job(only_enabled_searching, String(dig_a["job_id"]))["reason"]) != "labour_disabled",
 		"the only colonist with mine enabled must still count while it is mid-search")
 
 	# (b) every colonist has mine off and is mid-search at once.
 	var all_searching := _needs_isolated_world(702)
-	all_searching._tile_grid.tiles[all_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	all_searching._tile_grid.tiles[all_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
-	all_searching._colonists.clear()
-	all_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.set_tile(all_searching, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(all_searching, 0, 1, WorldStateType.TILE_WATER)
+	TestAccess.colonists(all_searching).clear()
+	TestAccess.colonists(all_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
-	all_searching._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(all_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_b := all_searching.apply({"actor": "test", "command_id": "dig_1",
 		"tick": all_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
 	_expect(dig_b.get("ok", false), "dig submission must be accepted")
 	all_searching.tick()
-	_expect(all_searching._need_giver.searching_colonist_ids().size() == 2,
+	_expect(TestAccess.need_giver(all_searching).searching_colonist_ids().size() == 2,
 		"both colonists must be mid-search this tick")
 	_expect(String(_find_job(all_searching, String(dig_b["job_id"]))["reason"]) == "labour_disabled",
 		"every colonist's mine being off must be reported even while every colonist is mid-search")
@@ -440,13 +440,13 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	# (c) re-enabling labour on a colonist the very tick it starts a fresh
 	# search must still clear the reason on that same scan.
 	var reenable_while_searching := _needs_isolated_world(703)
-	reenable_while_searching._tile_grid.tiles[reenable_while_searching._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	reenable_while_searching._tile_grid.tiles[reenable_while_searching._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_WATER
-	reenable_while_searching._colonists.clear()
-	reenable_while_searching._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.set_tile(reenable_while_searching, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(reenable_while_searching, 0, 1, WorldStateType.TILE_WATER)
+	TestAccess.colonists(reenable_while_searching).clear()
+	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
-	reenable_while_searching._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_c := reenable_while_searching.apply({"actor": "test", "command_id": "dig_1",
@@ -457,9 +457,9 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 		"both colonists' mine off with neither searching must still report labour_disabled")
 	_expect(_set_labour(reenable_while_searching, "on_mine_0", "colonist_0", "mine", 2).get("ok", false),
 		"re-enabling mine must be accepted")
-	reenable_while_searching._colonists[0]["needs"]["water"] = 10
+	TestAccess.colonists(reenable_while_searching)[0]["needs"]["water"] = 10
 	reenable_while_searching.tick()
-	_expect(reenable_while_searching._need_giver.searching_colonist_ids().has("colonist_0"),
+	_expect(TestAccess.need_giver(reenable_while_searching).searching_colonist_ids().has("colonist_0"),
 		"colonist_0 must be excluded from this tick's own scheduling pool while re-enabling its labour")
 	var dig_c_job := _find_job(reenable_while_searching, String(dig_c["job_id"]))
 	_expect(String(dig_c_job["reason"]) != "labour_disabled",
@@ -607,7 +607,7 @@ func _check_committed_need_discards_stale_pending_work_batch() -> void:
 
 	var work_job_id := String(scheduler.submit(Vector2i(100, 0), 1, 0, "dig")["job_id"])
 	scheduler.tick(1, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost)
-	_expect(scheduler._pending.has("a"), "a distant target must leave a route batch pending across ticks")
+	_expect(TestAccess.assignment_pending(scheduler).has("a"), "a distant target must leave a route batch pending across ticks")
 	_expect(_pending_has_job(scheduler, "a", work_job_id), "the pending batch must be for the ordinary work job")
 
 	var need_job_id := String(scheduler.submit(Vector2i(0, 1), 1, 1, "dig", "a")["job_id"])
@@ -687,7 +687,7 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 
 	var job_id := String(scheduler.submit(Vector2i(20, 0), 1, 0, "dig")["job_id"])
 	scheduler.tick(1, workers, wall_passable, Vector2i.ZERO, bounds, get_labour, no_boost)
-	_expect(scheduler._pending.has("a"), "an unreachable target across a wall must leave a route batch pending")
+	_expect(TestAccess.assignment_pending(scheduler).has("a"), "an unreachable target across a wall must leave a route batch pending")
 
 	workers[0]["labourTable"]["mine"] = 0
 	var tick_number := 1
@@ -697,7 +697,7 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 		scheduler.tick(tick_number, workers, wall_passable, Vector2i.ZERO, bounds, get_labour, no_boost)
 		_expect(String(scheduler.queue.get_job(job_id)["reason"]) == "labour_disabled",
 			"a globally disabled job's reason must hold through its own failing route search, got tick %d" % tick_number)
-		if not scheduler._pending.has("a"):
+		if not TestAccess.assignment_pending(scheduler).has("a"):
 			concluded = true
 			break
 	_expect(concluded, "the unreachable route search must eventually conclude within this test's tick budget")
@@ -811,10 +811,10 @@ func _events_for_job(world: WorldStateType, event_type: String, job_id: String) 
 ## real BLOCKED_DESTINATION_FULL backoff (colonist-ai.md 3.3/3.4).
 func _haul_backoff_world(seed_value: int) -> WorldStateType:
 	var world := _needs_isolated_world(seed_value)
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._item_table.items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "kind": "wood", "count": 1}
 	return world
 
 func _settle_with_needs(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector2i,
@@ -829,9 +829,9 @@ func _settle_with_needs(scheduler: SchedulerType, workers: Array[Dictionary], pa
 	return tick_number
 
 func _pending_has_job(scheduler: SchedulerType, worker: String, job_id: String) -> bool:
-	if not scheduler._pending.has(worker):
+	if not TestAccess.assignment_pending(scheduler).has(worker):
 		return false
-	for entry in scheduler._pending[worker]["candidates"]:
+	for entry in TestAccess.assignment_pending(scheduler)[worker]["candidates"]:
 		if entry["id"] == job_id:
 			return true
 	return false
@@ -863,11 +863,11 @@ func _default_labour_table() -> Dictionary:
 ## in a single tick.
 func _single_colonist_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	world.spawn_ground_tool_item("axe", 0, 0)
@@ -875,11 +875,11 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 
 func _deterministic_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	return world

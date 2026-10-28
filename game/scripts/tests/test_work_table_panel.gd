@@ -15,6 +15,7 @@ extends SceneTree
 ## scrollable content area.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const WorkTablePanelType = preload("res://scripts/viewer/work_table_panel.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const DebugScenarioType = preload("res://scripts/viewer/debug_scenario.gd")
@@ -57,12 +58,6 @@ func _panel_for(world: WorldStateType) -> WorkTablePanelType:
 	panel.setup(world, TextTableType.new())
 	return panel
 
-func _colonist_by_id(world: WorldStateType, id: String) -> Dictionary:
-	for colonist in world.get_colonists():
-		if String(colonist["id"]) == id:
-			return colonist
-	return {}
-
 ## The panel's row count must track world.get_colonists() exactly, and its
 ## column count the fixed labour-kind vocabulary -- every (colonist, labour)
 ## combination must have exactly one cell button.
@@ -93,13 +88,13 @@ func _check_cell_activation_cycles_level_via_set_labour() -> void:
 	var colonist_id := String(world.get_colonists()[0]["id"])
 	var labour := "farm"
 
-	_expect(int(_colonist_by_id(world, colonist_id)["labourTable"][labour]) == WorldStateType.LABOUR_DEFAULT,
+	_expect(int(Scenarios.colonist_by_id(world, colonist_id)["labourTable"][labour]) == WorldStateType.LABOUR_DEFAULT,
 		"a fresh colonist's labour level must start at the documented default (3)")
 
 	var expected_sequence := [4, 0, 1, 2, 3]
 	for expected_level in expected_sequence:
 		panel._on_cell_pressed(colonist_id, labour)
-		var actual_level := int(_colonist_by_id(world, colonist_id)["labourTable"][labour])
+		var actual_level := int(Scenarios.colonist_by_id(world, colonist_id)["labourTable"][labour])
 		_expect(actual_level == expected_level,
 			"cycling must reach level %d next, got %d" % [expected_level, actual_level])
 
@@ -133,16 +128,16 @@ func _check_calendar_boost_reflected_in_column_header() -> void:
 
 ## Appends a synthetic calendar_alert event (the same {type, tick, data:
 ## {id, label, days_until}} shape CalendarAlertGiver emits) directly through
-## world._event_log.insert_event() (its only way in since B1's per-type index;
+## TestAccess.event_log(world).insert_event() (its only way in since B1's per-type index;
 ## formerly a raw _events.append()) -- a test-only poke, same as test_calendar.gd's own direct
 ## WorldState-field setup, and outside scripts/viewer/'s purity scan since
 ## this file lives under scripts/tests/. The panel must reflect it without
 ## any special wiring beyond world.get_events_since(). It draws a real sequence
 ## (next_sequence()), like every core emitter, so a cursor reader sees it.
 func _fire_synthetic_alert(world: WorldStateType, tick: int, days_until: int, id: String = "sow", label: String = "calendar.window.sow") -> void:
-	world._event_log.insert_event({
+	TestAccess.event_log(world).insert_event({
 		"type": "calendar_alert", "tick": tick, "system_priority": 0,
-		"entity_id": "world", "sequence": world._event_log.next_sequence(),
+		"entity_id": "world", "sequence": TestAccess.event_log(world).next_sequence(),
 		"data": {"id": id, "label": label, "days_until": days_until},
 	})
 
@@ -236,12 +231,12 @@ func _check_cell_button_survives_refresh_across_a_tick() -> void:
 	_expect(button_before == button_after,
 		"an ordinary refresh (colonist set unchanged) must not replace an existing cell button")
 
-	var before_level := int(_colonist_by_id(world, colonist_id)["labourTable"][labour])
+	var before_level := int(Scenarios.colonist_by_id(world, colonist_id)["labourTable"][labour])
 	var expected_level := before_level + 1
 	if expected_level > WorldStateType.LABOUR_MAX:
 		expected_level = WorldStateType.LABOUR_MIN
 	button_after.emit_signal("pressed")
-	var after_level := int(_colonist_by_id(world, colonist_id)["labourTable"][labour])
+	var after_level := int(Scenarios.colonist_by_id(world, colonist_id)["labourTable"][labour])
 	_expect(after_level == expected_level,
 		"pressing the surviving button after a refresh must issue exactly one set_labour command, cycling the level once (expected %d, got %d)"
 			% [expected_level, after_level])
@@ -253,7 +248,7 @@ func _check_grid_reconciles_rows_when_colonist_set_changes() -> void:
 	var panel := _panel_for(world)
 	var original_count := panel.cell_count()
 
-	world._colonists.append({
+	TestAccess.colonists(world).append({
 		"id": "colonist_extra", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},

@@ -10,6 +10,7 @@ extends SceneTree
 ## godot --path game --script res://scripts/tests/test_colonist_sprites.gd -- --capture
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ColonistSpritesType = preload("res://scripts/viewer/colonist_sprites.gd")
 const TickDriverType = preload("res://scripts/viewer/tick_driver.gd")
 const Boot = preload("res://scripts/boot.gd")
@@ -70,9 +71,9 @@ func _expect(condition: bool, message: String) -> void:
 
 func _build_world(colonist_x: int, colonist_y: int) -> WorldStateType:
 	var world := WorldStateType.new(1, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({
 		"id": "colonist_0", "kind": "colonist", "x": colonist_x, "y": colonist_y,
 		"route": null, "work": null, "carrying": null,
 	})
@@ -97,8 +98,8 @@ func _check_glide(dx: int, dy: int, expected_facing: String, expect_flip: bool, 
 	var tick_interval := driver.seconds_per_tick() * world.get_move_ticks_per_tile()
 	_expect(tick_interval > 0.0, label + ": x1 must report a positive tick interval")
 
-	world._colonists[0]["x"] = 5 + dx
-	world._colonists[0]["y"] = 5 + dy
+	TestAccess.colonists(world)[0]["x"] = 5 + dx
+	TestAccess.colonists(world)[0]["y"] = 5 + dy
 	sprites.refresh()
 
 	var sprite: AnimatedSprite2D = sprites._sprites["colonist_0"]
@@ -135,7 +136,7 @@ func _check_snap_on_large_jump() -> void:
 	sprites.set_tick_driver(driver)
 	sprites.set_world(world)
 
-	world._colonists[0]["x"] = 10
+	TestAccess.colonists(world)[0]["x"] = 10
 	sprites.refresh()
 	sprites.advance(driver.seconds_per_tick())
 
@@ -168,7 +169,7 @@ func _check_paused_freezes_t() -> void:
 	sprites.set_tick_driver(driver)
 	sprites.set_world(world)
 
-	world._colonists[0]["x"] = 6
+	TestAccess.colonists(world)[0]["x"] = 6
 	sprites.refresh()
 	sprites.advance(driver.seconds_per_tick() * 0.5)
 
@@ -191,14 +192,14 @@ func _check_paused_freezes_t() -> void:
 func _check_snap_on_new_game() -> void:
 	var world_a := _build_world(3, 3)
 	var world_b := WorldStateType.new(2, 10)
-	world_b._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world_b._colonists.clear()
-	world_b._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 7, "y": 7, "route": null, "work": null, "carrying": null})
-	world_b._colonists.append({"id": "colonist_2", "kind": "colonist", "x": 9, "y": 1, "route": null, "work": null, "carrying": null})
+	TestAccess.tile_grid(world_b).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world_b).clear()
+	TestAccess.colonists(world_b).append({"id": "colonist_1", "kind": "colonist", "x": 7, "y": 7, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world_b).append({"id": "colonist_2", "kind": "colonist", "x": 9, "y": 1, "route": null, "work": null, "carrying": null})
 
 	var sprites := ColonistSpritesType.new()
 	sprites.set_world(world_a)
-	world_a._colonists[0]["x"] = 4
+	TestAccess.colonists(world_a)[0]["x"] = 4
 	sprites.refresh() # mid-glide state for world_a's own colonist, discarded below
 
 	sprites.set_world(world_b)
@@ -211,19 +212,15 @@ func _check_snap_on_new_game() -> void:
 
 func _check_trapped_marker_visibility() -> void:
 	var world := _build_world(4, 4)
-	world._colonists[0]["trapped"] = {"tile": Vector2i(4, 4), "ticksRemaining": 40, "fromTile": Vector2i(3, 4)}
+	TestAccess.colonists(world)[0]["trapped"] = {"tile": Vector2i(4, 4), "ticksRemaining": 40, "fromTile": Vector2i(3, 4)}
 	var sprites := ColonistSpritesType.new()
 	sprites.set_world(world)
 	var marker: Sprite2D = sprites._trapped_markers["colonist_0"]
 	_expect(marker.visible, "a trapped colonist must show the actor-atlas warning marker")
-	world._colonists[0]["trapped"] = null
+	TestAccess.colonists(world)[0]["trapped"] = null
 	sprites.refresh()
 	_expect(not marker.visible, "the trapped marker must hide after WorldState clears trapped")
 	sprites.free()
-
-func _command(world: WorldStateType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
 
 ## A single colonist on open floor, forage-ordered against a berry_bush placed
 ## 11 tiles away: forage's router trims the final (impassable, per
@@ -232,9 +229,9 @@ func _command(world: WorldStateType, command_id: String, kind: String, payload: 
 ## the walk below is the whole story, no fetch_tool leg first).
 func _build_straight_route_world() -> WorldStateType:
 	var world := _build_world(0, 5)
-	var place_result := _command(world, "place_bush", "place_object", {"x": 11, "y": 5, "kind": "berry_bush"})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 11, "y": 5, "kind": "berry_bush"})
 	_expect(place_result["ok"], "straight-route fixture: placing the berry_bush must be accepted")
-	var forage_result := _command(world, "forage_1", "forage", {"x": 11, "y": 5, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 11, "y": 5, "priority": 1})
 	_expect(forage_result["ok"], "straight-route fixture: forage order must be accepted")
 	return world
 
@@ -244,16 +241,16 @@ func _build_straight_route_world() -> WorldStateType:
 ## a berry_bush placed on the corridor's own last cell (5,6).
 func _build_l_route_world() -> WorldStateType:
 	var world := WorldStateType.new(1, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
 	for x in range(0, 6):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_FLOOR
+		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_FLOOR)
 	for y in range(0, 7):
-		world._tile_grid.tiles[world._tile_grid.tile_index(5, y)] = WorldStateType.TILE_FLOOR
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
-	var place_result := _command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"})
+		TestAccess.set_tile(world, 5, y, WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"})
 	_expect(place_result["ok"], "L-route fixture: placing the berry_bush must be accepted")
-	var forage_result := _command(world, "forage_1", "forage", {"x": 5, "y": 6, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 5, "y": 6, "priority": 1})
 	_expect(forage_result["ok"], "L-route fixture: forage order must be accepted")
 	return world
 
@@ -280,7 +277,7 @@ func _drive_and_sample(world: WorldStateType, sprites: ColonistSpritesType, colo
 			var pos: Vector2 = (sprites._sprites[colonist_id] as AnimatedSprite2D).position
 			samples.append({"frame": frame_index, "tick": world.get_tick(), "x": pos.x, "y": pos.y})
 			frame_index += 1
-		var colonist: Dictionary = world._find_colonist(colonist_id)
+		var colonist: Dictionary = TestAccess.find_colonist(world, colonist_id)
 		if settle_ticks_left < 0 and colonist["route"] == null and colonist.get("work") != null:
 			settle_ticks_left = move_ticks_per_tile
 		elif settle_ticks_left >= 0:
@@ -424,10 +421,10 @@ func _capture_evidence() -> void:
 	for entry in [["down", Vector2i(0, 1), false], ["up", Vector2i(0, -1), false], ["side", Vector2i(1, 0), true]]:
 		var facing: String = entry[0]
 		var step: Vector2i = entry[1]
-		var colonist: Dictionary = boot.world._find_colonist(colonist_id)
+		var colonist: Dictionary = TestAccess.find_colonist(boot.world, colonist_id)
 		var origin := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		boot.world._colonists[0]["x"] = origin.x + step.x
-		boot.world._colonists[0]["y"] = origin.y + step.y
+		TestAccess.colonists(boot.world)[0]["x"] = origin.x + step.x
+		TestAccess.colonists(boot.world)[0]["y"] = origin.y + step.y
 		boot._map_view.refresh()
 		sprites.advance(tick_interval * 0.5)
 		await RenderingServer.frame_post_draw

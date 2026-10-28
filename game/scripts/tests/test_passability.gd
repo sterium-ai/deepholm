@@ -17,11 +17,11 @@ func _init() -> void:
 
 func _check_tile_kinds() -> void:
 	var world := WorldStateType.new(178, 10)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 1)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 1)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 1)] = WorldStateType.TILE_ROCK
-	world._tile_grid.tiles[world._tile_grid.tile_index(4, 1)] = WorldStateType.TILE_HAZARD
-	world._tile_grid.tiles[world._tile_grid.tile_index(5, 1)] = WorldStateType.TILE_TREE
+	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 3, 1, WorldStateType.TILE_ROCK)
+	TestAccess.set_tile(world, 4, 1, WorldStateType.TILE_HAZARD)
+	TestAccess.set_tile(world, 5, 1, WorldStateType.TILE_TREE)
 	_expect(world.passability(1, 1) == {"passable": true, "cost": 1, "is_door": false}, "floor must cost 1")
 	_expect(world.passability(2, 1)["passable"] and world.passability(2, 1)["cost"] == 1, "soil must cost 1")
 	for x in [3, 4, 5]:
@@ -29,14 +29,14 @@ func _check_tile_kinds() -> void:
 
 func _check_objects() -> void:
 	var world := WorldStateType.new(179, 10)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 2)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 2)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 2)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(4, 2)] = WorldStateType.TILE_FLOOR
-	world._object_table.set_object(1, 2, "chair")
-	world._object_table.set_object(2, 2, "door")
-	world._object_table.set_object(3, 2, "wall")
-	world._object_table.set_object(4, 2, "table")
+	TestAccess.set_tile(world, 1, 2, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 2, 2, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 3, 2, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 4, 2, WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).set_object(1, 2, "chair")
+	TestAccess.object_table(world).set_object(2, 2, "door")
+	TestAccess.object_table(world).set_object(3, 2, "wall")
+	TestAccess.object_table(world).set_object(4, 2, "table")
 	var chair := world.passability(1, 2)
 	var door := world.passability(2, 2)
 	_expect(chair["passable"] and chair["cost"] == 3, "chair must be passable with cost 3")
@@ -45,8 +45,8 @@ func _check_objects() -> void:
 
 func _check_dig_rejects_blocked_object() -> void:
 	var world := WorldStateType.new(180, 10)
-	world._tile_grid.tiles[world._tile_grid.tile_index(10, 10)] = WorldStateType.TILE_SOIL
-	world._object_table.set_object(10, 10, "wall")
+	TestAccess.set_tile(world, 10, 10, WorldStateType.TILE_SOIL)
+	TestAccess.object_table(world).set_object(10, 10, "wall")
 	var result := world.apply({
 		"command_id": "blocked-dig",
 		"actor": "player",
@@ -63,9 +63,9 @@ func _check_dig_rejects_blocked_object() -> void:
 ## footprint tile for.
 func _check_footprint_object_blocks_every_tile() -> void:
 	var world := WorldStateType.new(181, 10)
-	world._tile_grid.tiles[world._tile_grid.tile_index(6, 6)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(7, 6)] = WorldStateType.TILE_FLOOR
-	world._object_table.set_object(6, 6, "test_footprint_crate", "colony", "horizontal")
+	TestAccess.set_tile(world, 6, 6, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 7, 6, WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).set_object(6, 6, "test_footprint_crate", "colony", "horizontal")
 	_expect(not bool(world.passability(6, 6)["passable"]), "the origin footprint tile must be impassable")
 	_expect(not bool(world.passability(7, 6)["passable"]), "the second footprint tile must be impassable")
 

@@ -51,9 +51,9 @@ func _apply(world: WorldStateType, command_id: String, type: String, payload: Di
 ## test. from_save_state() reloads _need_definitions fresh from content, so
 ## every check re-applies this after a restore, same as that existing check.
 func _zero_other_need_rates(world: WorldStateType) -> void:
-	for kind in world._need_definitions.keys():
+	for kind in TestAccess.need_definitions(world).keys():
 		if kind != "food":
-			world._need_definitions[kind]["rate_per_day"] = 0
+			TestAccess.need_definitions(world)[kind]["rate_per_day"] = 0
 
 func _total_wood_units(world: WorldStateType) -> int:
 	var total := 0
@@ -91,7 +91,7 @@ func _first_event_tick(world: WorldStateType, event_type: String, job_id: String
 ## 3.4); reused here rather than re-implemented so this test observes the
 ## exact same ledger the scheduler enforces.
 func _reservation_owner(world: WorldStateType, key: String) -> String:
-	return world._scheduler.queue.get_reservation_table().owner(key)
+	return TestAccess.scheduler(world).queue.get_reservation_table().owner(key)
 
 ## --- (a) combined round trip: active need job + paused work job (kept tile
 ## progress) + in-flight haul, all at once, must save/restore identically to
@@ -105,16 +105,16 @@ func _reservation_owner(world: WorldStateType, key: String) -> String:
 ## many the haul (~45 ticks uninterrupted) finishes first.
 func _build_combined_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	world._colonists.append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
-	world._item_table.ground_berries["4_1"] = 1
+	TestAccess.item_table(world).ground_berries["4_1"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	_apply(world, "zone_setup", "zone_add", {"x": 30, "y": 0, "width": 1, "height": 1})
 	return world
 
@@ -142,14 +142,14 @@ func _prime_combined_scenario(world: WorldStateType, seed_value: int) -> void:
 	for _i in 5:
 		world.tick()
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_0":
-			world._colonists[i]["needs"]["food"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
+			TestAccess.colonists(world)[i]["needs"]["food"] = 5
 	world.tick()
 
 	var committed := false
 	for _i in 40:
-		if not world._need_giver.get_pending_assignments().is_empty():
+		if not TestAccess.need_giver(world).get_pending_assignments().is_empty():
 			committed = true
 			break
 		world.tick()
@@ -219,7 +219,7 @@ func _check_combined_round_trip_matches_uninterrupted_run(seed_value: int) -> vo
 	# different job that later works the same tile can never inherit it.
 	var suspended_work_progress: Array = saved["suspendedWorkProgress"]
 	var dig_progress := int(suspended_work_progress[0]["ticksRemaining"]) if suspended_work_progress.size() > 0 else -1
-	_expect(dig_progress > 0 and dig_progress < int(source._work_ticks["dig"]),
+	_expect(dig_progress > 0 and dig_progress < int(TestAccess.work_ticks(source)["dig"]),
 		"a save taken mid-scenario must persist the dig job's own partial progress (seed %d, got %d)" % [seed_value, dig_progress])
 	var haul_in_flight := false
 	for entity in (saved["entities"] as Array):
@@ -244,13 +244,13 @@ func _check_combined_round_trip_matches_uninterrupted_run(seed_value: int) -> vo
 
 func _build_haul_only_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
-	world._item_table.ground_berries["4_1"] = 1
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).ground_berries["4_1"] = 1
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	_apply(world, "zone_setup", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1})
 	return world
 
@@ -286,9 +286,9 @@ func _check_haul_interrupted_by_need_preserves_wood(seed_value: int) -> void:
 	if not boundary_reached or haul_job_id.is_empty():
 		return
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_0":
-			world._colonists[i]["needs"]["food"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
+			TestAccess.colonists(world)[i]["needs"]["food"] = 5
 
 	# Watches the haul job's own status rather than NeedGiver.get_pending_assignments():
 	# once the scheduler actually gives the committed need job priority (the
@@ -427,9 +427,9 @@ func _check_rest_interrupt_completes_sleep_while_carrying_wood(seed_value: int) 
 	if not boundary_reached or haul_job_id.is_empty():
 		return
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_0":
-			world._colonists[i]["needs"]["rest"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
+			TestAccess.colonists(world)[i]["needs"]["rest"] = 5
 
 	var interrupted := false
 	for _i in 60:

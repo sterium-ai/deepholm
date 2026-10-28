@@ -64,20 +64,20 @@ func _run(actor_count: int) -> void:
 	# JSON.stringify of the state (write_atomic stringifies three times and
 	# parses once, then read-back-verifies the file).
 	t = Time.get_ticks_usec()
-	SaveIOType._validate_state(state)
+	TestAccess.save_validate_state(state)
 	var validate_usec := Time.get_ticks_usec() - t
 	t = Time.get_ticks_usec()
 	JSON.stringify(state)
 	var stringify_usec := Time.get_ticks_usec() - t
 	print("bench_save_load: actors=%d write_atomic parts: _validate_state=%.1fms one JSON.stringify=%.1fms" % [
-		world._colonists.size(), validate_usec / 1000.0, stringify_usec / 1000.0])
+		TestAccess.colonists(world).size(), validate_usec / 1000.0, stringify_usec / 1000.0])
 	var sections := _section_sizes(state)
 	print("bench_save_load: actors=%d ticks=%d file=%.1fKB encode=%.1fms write_atomic=%.1fms read+integrity=%.1fms decode=%.1fms total_save=%.1fms total_load=%.1fms read_ok=%s hash_match=%s write=%s" % [
-		world._colonists.size(), TICKS, file_bytes / 1024.0, encode_usec / 1000.0, write_usec / 1000.0,
+		TestAccess.colonists(world).size(), TICKS, file_bytes / 1024.0, encode_usec / 1000.0, write_usec / 1000.0,
 		read_usec / 1000.0, decode_usec / 1000.0, (encode_usec + write_usec) / 1000.0,
 		(read_usec + decode_usec) / 1000.0, read_result.get("ok", false), hash_match, _short(write_result)])
-	print("bench_save_load: actors=%d largest sections (JSON chars): %s" % [world._colonists.size(), sections])
-	BenchCommon.row("bench_save_load", "round trip", "actors=%d" % world._colonists.size(), {
+	print("bench_save_load: actors=%d largest sections (JSON chars): %s" % [TestAccess.colonists(world).size(), sections])
+	BenchCommon.row("bench_save_load", "round trip", "actors=%d" % TestAccess.colonists(world).size(), {
 		"ticks": TICKS, "file KB": "%.1f" % (file_bytes / 1024.0), "encode ms": "%.1f" % (encode_usec / 1000.0),
 		"write_atomic ms": "%.1f" % (write_usec / 1000.0), "_validate_state ms": "%.1f" % (validate_usec / 1000.0),
 		"one JSON.stringify ms": "%.1f" % (stringify_usec / 1000.0), "read+integrity ms": "%.1f" % (read_usec / 1000.0),

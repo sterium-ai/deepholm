@@ -36,18 +36,18 @@ func _expect(condition: bool, message: String) -> void:
 ## mechanics are loaded. The surrounding 48x48 world is impassable rock.
 func _world() -> WorldType:
 	var world := WorldType.new(47)
-	world._tile_grid.tiles.fill(WorldType.TILE_ROCK)
+	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	# Clear any generator-placed berry_bush (ADR 020)
 	# before overwriting tiles, so it can never sit inside this fixture's own
 	# 20x10 soil pocket.
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for y in 10:
 		for x in 20:
-			world._tile_grid.tiles[y * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
-	world._colonists.clear()
+			TestAccess.tile_grid(world).tiles[y * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
+	TestAccess.colonists(world).clear()
 	for i in 8:
-		world._colonists.append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5})
+		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5})
 	# Already held: this is ADR 004's own fairness/service-bound proof, wholly
 	# unrelated to tools, and the fixture completes every active job by
 	# explicit command before the next tick() -- with no pick, dig's own
@@ -142,7 +142,7 @@ func _run_load() -> Dictionary:
 func _check_labour_mix_still_meets_bound() -> void:
 	var world := _world()
 	var levels := [0, 1, 2, 4, 3, 4, 2, 3]
-	for i in world._colonists.size():
+	for i in TestAccess.colonists(world).size():
 		# _world()'s hand-built colonists skip _spawn_colonists(), so they carry
 		# no labourTable yet (WorldState only backfills one via _ensure_needs()
 		# from state_hash()/to_save_state()/_decay_needs(), none of which have
@@ -150,7 +150,7 @@ func _check_labour_mix_still_meets_bound() -> void:
 		# "mine", rather than mutating a key that does not exist yet.
 		var table := {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 		table["mine"] = levels[i % levels.size()]
-		world._colonists[i]["labourTable"] = table
+		TestAccess.colonists(world)[i]["labourTable"] = table
 	var submitted: Dictionary = {}
 	var started: Dictionary = {}
 	var max_wait := 0
@@ -186,7 +186,7 @@ func _check_labour_mix_still_meets_bound() -> void:
 
 func _check_aging() -> void:
 	var world := _world()
-	world._colonists.resize(1)
+	TestAccess.colonists(world).resize(1)
 	var submitted: Dictionary = {}
 	_submit(world, Vector2i(19, 9), 0, submitted)
 	var low_id: String = submitted.keys()[0]
@@ -213,17 +213,17 @@ func _check_partial_routes_and_cancel() -> void:
 	var passable := func(tile: Vector2i) -> bool: return tile.y == 0
 	var job_id: String = scheduler.submit(Vector2i(130, 0), 1, 0)["job_id"]
 	scheduler.tick(1, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
-	_expect(scheduler._pending.has("worker"), "first route slice must leave a pending request")
-	if not scheduler._pending.has("worker"):
+	_expect(TestAccess.assignment_pending(scheduler).has("worker"), "first route slice must leave a pending request")
+	if not TestAccess.assignment_pending(scheduler).has("worker"):
 		return
-	var route: RefCounted = scheduler._pending["worker"]["route"]
+	var route: RefCounted = TestAccess.assignment_pending(scheduler)["worker"]["route"]
 	_expect(scheduler.queue.get_job(job_id)["status"] == "queued", "partial route must not activate work")
 	_expect(scheduler.get_metrics()["worker"]["route_steps"] == 64, "first slice must expand 64 tiles")
 	scheduler.tick(2, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
-	_expect(scheduler._pending.has("worker"), "second route slice must remain pending")
-	if not scheduler._pending.has("worker"):
+	_expect(TestAccess.assignment_pending(scheduler).has("worker"), "second route slice must remain pending")
+	if not TestAccess.assignment_pending(scheduler).has("worker"):
 		return
-	_expect(scheduler._pending["worker"]["route"] == route, "route identity must persist between ticks")
+	_expect(TestAccess.assignment_pending(scheduler)["worker"]["route"] == route, "route identity must persist between ticks")
 	_expect(scheduler.get_metrics()["worker"]["job_evaluations"] == 0, "pending evaluation must not restart")
 	scheduler.tick(3, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
 	_expect(scheduler.queue.get_job(job_id)["status"] == "active", "third slice must finish retained search")
@@ -233,7 +233,7 @@ func _check_partial_routes_and_cancel() -> void:
 	var second: String = scheduler.submit(Vector2i(130, 0), 1, 3)["job_id"]
 	scheduler.tick(4, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
 	scheduler.finish(second, "cancel_job")
-	_expect(scheduler._pending.is_empty(), "cancel must discard pending route")
+	_expect(TestAccess.assignment_pending(scheduler).is_empty(), "cancel must discard pending route")
 	scheduler.tick(5, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
 	_expect(scheduler.get_assignments().is_empty(), "cancelled search must never activate")
 
@@ -253,7 +253,7 @@ func _check_global_matching() -> void:
 
 func _check_blocked_prefix() -> void:
 	var world := _world()
-	world._colonists.resize(2)
+	TestAccess.colonists(world).resize(2)
 	var submitted: Dictionary = {}
 	_submit(world, Vector2i(0, 5), 2, submitted)
 	world.tick() # Keep this assignment active to reserve the shared target.
@@ -276,7 +276,7 @@ func _check_blocked_prefix() -> void:
 ## zero route expansions/resumes across every tick, and the job never activates.
 func _check_enclosed_unreachable_zero_expansions() -> void:
 	var world := _world()
-	world._tile_grid.tiles[30 * WorldType.MAP_WIDTH + 30] = WorldType.TILE_SOIL
+	TestAccess.tile_grid(world).tiles[30 * WorldType.MAP_WIDTH + 30] = WorldType.TILE_SOIL
 	var target := Vector2i(30, 30)
 	var submitted: Dictionary = {}
 	_submit(world, target, 2, submitted)

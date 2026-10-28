@@ -11,6 +11,7 @@ extends SceneTree
 ## reason (test_labour_priority_scheduling.gd) apply unchanged.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
@@ -67,15 +68,11 @@ func _labour_table_with_two(kind_a: String, level_a: int, kind_b: String, level_
 ## _single_colonist_world()).
 func _single_colonist_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	return world
-
-func _command(world: WorldStateType, command_id: String, kind: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": payload})
 
 func _set_labour(world: WorldStateType, command_id: String, colonist: String, kind: String, level: int) -> Dictionary:
 	return world.apply({"actor": "player", "command_id": command_id, "tick": world.get_tick(),
@@ -91,8 +88,8 @@ func _find_job(world: WorldStateType, job_id: String) -> Dictionary:
 ## tile mutation in the test) and leave the target tile plowed_soil.
 func _check_till_completes_and_plows_tile() -> void:
 	var world := _single_colonist_world(268001)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	var result := _command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	var result := Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "till submission on a soil tile must be accepted")
 
 	var completed := false
@@ -107,10 +104,10 @@ func _check_till_completes_and_plows_tile() -> void:
 ## consume that seed item, and leave the target tile planted.
 func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 	var world := _single_colonist_world(268002)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
-	var result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
+	var result := Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "sow submission on a plowed_soil tile with a seed available must be accepted")
 
 	var completed := false
@@ -120,7 +117,7 @@ func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 			completed = true
 			break
 	_expect(completed, "sow job must complete and turn the target tile to planted within the tick budget")
-	_expect(not world._item_table.items.has("item_seed_1"), "sow's on_work_complete effect must consume the seed item")
+	_expect(not TestAccess.item_table(world).items.has("item_seed_1"), "sow's on_work_complete effect must consume the seed item")
 
 ## sow targeting a plowed_soil tile with zero seed items anywhere must be
 ## rejected at submission (like dig/chop's own invalid_target rejection) with
@@ -128,11 +125,11 @@ func _check_sow_completes_consumes_seed_and_plants_tile() -> void:
 ## item state.
 func _check_sow_rejected_when_no_seed_anywhere() -> void:
 	var world := _single_colonist_world(268003)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
 	var tile_before := world.get_tile(1, 0)
 	var items_before := world.get_items()
 
-	var result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
+	var result := Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(not result.get("ok", true), "sow with zero seed items anywhere must be rejected")
 	_expect(String(result.get("rejection", {}).get("reason", "")) == "blocked_missing_input",
 		"a sow order with no seed anywhere must be rejected blocked_missing_input, got %s" % result)
@@ -146,20 +143,20 @@ func _check_sow_rejected_when_no_seed_anywhere() -> void:
 ## rather than let it plant without ever consuming an input.
 func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -> void:
 	var world := WorldStateType.new(268006, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(11, 10)] = WorldStateType.TILE_PLOWED_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.set_tile(world, 11, 10, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._colonists.append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 
-	var sow_a := _command(world, "sow_a", "sow", {"x": 1, "y": 0, "priority": 1})
+	var sow_a := Scenarios.command(world, "sow_a", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_a.get("ok", false), "first sow submission must be accepted while a seed exists")
-	var sow_b := _command(world, "sow_b", "sow", {"x": 11, "y": 10, "priority": 1})
+	var sow_b := Scenarios.command(world, "sow_b", "sow", {"x": 11, "y": 10, "priority": 1})
 	_expect(sow_b.get("ok", false), "second sow submission racing for the same single seed must also be accepted at submission time")
 
 	var job_ids := [String(sow_a["job_id"]), String(sow_b["job_id"])]
@@ -183,7 +180,7 @@ func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -
 		if String(job.get("status", "")) == "failed":
 			_expect(String(job.get("reason", "")) == "blocked_missing_input",
 				"the sow order that loses the race for the only seed must fail blocked_missing_input, got %s" % job)
-	_expect(not world._item_table.items.has("item_seed_1"), "the single seed must be consumed exactly once, by the winner only")
+	_expect(not TestAccess.item_table(world).items.has("item_seed_1"), "the single seed must be consumed exactly once, by the winner only")
 	var planted_count := 0
 	if world.get_tile(1, 0) == WorldStateType.TILE_PLANTED:
 		planted_count += 1
@@ -202,16 +199,16 @@ func _check_sow_completion_fails_blocked_missing_input_when_seed_taken_first() -
 ## blocked_missing_input instead of later placing an emptied stack.
 func _check_sow_counts_a_seed_mid_haul() -> void:
 	var world := WorldStateType.new(268007, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "hauler", "kind": "colonist", "x": 20, "y": 20,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "hauler", "kind": "colonist", "x": 20, "y": 20,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._colonists.append({"id": "farmer", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "farmer", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 21, "y": 20, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
-	_expect(_command(world, "zone_1", "zone_add", {"x": 47, "y": 47, "width": 1, "height": 1}).get("ok", false),
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 21, "y": 20, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
+	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 47, "y": 47, "width": 1, "height": 1}).get("ok", false),
 		"a stockpile zone far from the pickup must be accepted")
 
 	var hauler_carrying := false
@@ -223,9 +220,9 @@ func _check_sow_counts_a_seed_mid_haul() -> void:
 		if hauler_carrying:
 			break
 	_expect(hauler_carrying, "setup: the hauler must pick up the only seed before this test submits sow")
-	_expect(not world._item_table.items.has("item_seed_1"), "setup: the picked-up seed must have left the ground map")
+	_expect(not TestAccess.item_table(world).items.has("item_seed_1"), "setup: the picked-up seed must have left the ground map")
 
-	var sow_result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
+	var sow_result := Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_result.get("ok", false), "sow submission must be accepted while the only seed is mid-haul")
 
 	var haul_job_id := ""
@@ -256,12 +253,12 @@ func _check_sow_counts_a_seed_mid_haul() -> void:
 ## against haul independently, rather than accepting either for colonist A.
 func _mixed_labour_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._calendar = CalendarServiceType.new("", {"day_length_ticks": 1000, "windows": []})
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_calendar(world, CalendarServiceType.new("", {"day_length_ticks": 1000, "windows": []}))
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _labour_table_with_two("farm", 1, "haul", 4)})
-	world._colonists.append({"id": "colonist_b", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _labour_table_with_two("farm", 4, "haul", 1)})
 	return world
 
@@ -292,13 +289,13 @@ func _first_activated_kinds(world: WorldStateType) -> Dictionary:
 ## till specifically.
 func _check_labour_priority_till_before_haul() -> void:
 	var world := _mixed_labour_world(268004)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 3
-	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.item_table(world).items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 3
+	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")
-	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"till submission must be accepted")
 
 	var kinds := _first_activated_kinds(world)
@@ -312,14 +309,14 @@ func _check_labour_priority_till_before_haul() -> void:
 ## rather than piggy-backing on till's result.
 func _check_labour_priority_sow_before_haul() -> void:
 	var world := _mixed_labour_world(268009)
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 4
-	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
+	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_2"] = {"id": "item_wood_2", "x": 4, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 4
+	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")
-	_expect(_command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
 		"sow submission must be accepted")
 
 	var kinds := _first_activated_kinds(world)
@@ -347,30 +344,30 @@ func _check_labour_priority_sow_before_haul() -> void:
 func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	var world := _single_colonist_world(268005)
 	var colonist_id: String = world.get_colonists()[0]["id"]
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(9, 9)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 1)] = WorldStateType.TILE_TREE
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.set_tile(world, 9, 9, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_wood_1"] = {"id": "item_wood_1", "x": 3, "y": 3, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	# dig/chop's needs_tool fetch_tool toil requires a matching
 	# tool to exist somewhere; both sit right under the colonist so this
 	# test's dig/chop completion checks are unaffected by travel time.
 	world.spawn_ground_tool_item("pick", 0, 0)
 	world.spawn_ground_tool_item("axe", 0, 0)
-	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")
 	_expect(_set_labour(world, "off_farm", colonist_id, "farm", 0).get("ok", false),
 		"set_labour farm=0 must be accepted")
 
-	var till_result := _command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
+	var till_result := Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
 	_expect(till_result.get("ok", false), "till submission must be accepted even though farm is disabled")
-	var sow_result := _command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1})
+	var sow_result := Scenarios.command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1})
 	_expect(sow_result.get("ok", false), "sow submission must be accepted even though farm is disabled")
-	var dig_result := _command(world, "dig_1", "dig", {"x": 9, "y": 9, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 9, "y": 9, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
-	var chop_result := _command(world, "chop_1", "chop", {"x": 0, "y": 1, "priority": 1})
+	var chop_result := Scenarios.command(world, "chop_1", "chop", {"x": 0, "y": 1, "priority": 1})
 	_expect(chop_result.get("ok", false), "chop submission must be accepted")
 
 	var till_ever_wrong := false
@@ -413,18 +410,18 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 ## the same schemaVersion (till/sow add no persisted field or version bump).
 func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 	var world := WorldStateType.new(268010, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(2, 0)] = WorldStateType.TILE_SOIL
-	world._tile_grid.tiles[world._tile_grid.tile_index(3, 0)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
+	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 3
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 3
 
-	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"first till submission must be accepted")
 	for _i in TICK_BUDGET:
 		world.tick()
@@ -432,7 +429,7 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 			break
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_PLOWED_SOIL, "setup: the first tile must be tilled")
 
-	_expect(_command(world, "till_2", "till", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "till_2", "till", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
 		"second till submission must be accepted")
 	for _i in TICK_BUDGET:
 		world.tick()
@@ -440,7 +437,7 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 			break
 	_expect(world.get_tile(2, 0) == WorldStateType.TILE_PLOWED_SOIL, "setup: the second tile must be tilled")
 
-	_expect(_command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "sow_1", "sow", {"x": 2, "y": 0, "priority": 1}).get("ok", false),
 		"sow submission must be accepted")
 	for _i in TICK_BUDGET:
 		world.tick()
@@ -450,9 +447,9 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 
 	# A5 (ADR 053): a v2 save lists live jobs only and the jobs above are complete, so
 	# one more till and sow are queued, never ticked, for the save to carry both kinds.
-	_expect(_command(world, "till_3", "till", {"x": 3, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "till_3", "till", {"x": 3, "y": 0, "priority": 1}).get("ok", false),
 		"third till submission must be accepted")
-	_expect(_command(world, "sow_2", "sow", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "sow_2", "sow", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"second sow submission must be accepted")
 	var state := world.to_save_state()
 	_expect(int(state.get("schemaVersion", -1)) == StateCodecType.SCHEMA_VERSION,
@@ -474,15 +471,15 @@ func _check_save_state_includes_new_tile_and_job_kinds() -> void:
 ## _check_save_state_includes_new_tile_and_job_kinds() above.
 func _check_save_state_passes_runtime_validator() -> void:
 	var world := WorldStateType.new(268011, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 
-	_expect(_command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"till submission must be accepted")
 	for _i in TICK_BUDGET:
 		world.tick()
@@ -490,7 +487,7 @@ func _check_save_state_passes_runtime_validator() -> void:
 			break
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_PLOWED_SOIL, "setup: the tile must be tilled")
 
-	_expect(_command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1}).get("ok", false),
 		"sow submission must be accepted")
 	for _i in TICK_BUDGET:
 		world.tick()
@@ -499,7 +496,7 @@ func _check_save_state_passes_runtime_validator() -> void:
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_PLANTED, "setup: the tile must be sown")
 
 	var state := world.to_save_state()
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation.get("ok", false),
 		"a save state holding plowed_soil/planted tiles and till/sow jobs must pass SaveIO._validate_state(), got %s" % validation.get("message", ""))
 
@@ -515,20 +512,20 @@ func _check_save_state_passes_runtime_validator() -> void:
 ## _cancel_haul_job_carrying_consumed_item() must also cover.
 func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	var world := WorldStateType.new(268012, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(41, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "hauler", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 41, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "hauler", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": [], "labourTable": _default_labour_table()})
-	world._colonists.append({"id": "farmer", "kind": "colonist", "x": 40, "y": 0,
+	TestAccess.colonists(world).append({"id": "farmer", "kind": "colonist", "x": 40, "y": 0,
 		"route": null, "work": null, "hands": [], "labourTable": _default_labour_table()})
-	for kind in world._need_definitions.keys():
+	for kind in TestAccess.need_definitions(world).keys():
 		if kind != "food":
-			world._need_definitions[kind]["rate_per_day"] = 0
-	world._item_table.ground_berries["1_1"] = 1
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 0, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
-	_expect(_command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1}).get("ok", false),
+			TestAccess.need_definitions(world)[kind]["rate_per_day"] = 0
+	TestAccess.item_table(world).ground_berries["1_1"] = 1
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
+	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1}).get("ok", false),
 		"a stockpile zone for the seed haul must be accepted")
 
 	var boundary_reached := false
@@ -548,9 +545,9 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	_expect(boundary_reached, "setup: the hauler must reach the post-pick_up toil boundary carrying the only seed within budget")
 	_expect(not haul_job_id.is_empty(), "setup: a haul job must exist for the seed pickup")
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "hauler":
-			world._colonists[i]["needs"]["food"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "hauler":
+			TestAccess.colonists(world)[i]["needs"]["food"] = 5
 
 	var interrupted := false
 	for _i in 60:
@@ -566,10 +563,10 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 			hauler_colonist = colonist
 	_expect(InventoryType.has_kind(hauler_colonist, "seed"),
 		"setup: the hauler must still be carrying the seed the instant the need job interrupts it")
-	_expect(world._needs_system.paused_jobs.get("hauler", "") == haul_job_id,
+	_expect(TestAccess.needs_system(world).paused_jobs.get("hauler", "") == haul_job_id,
 		"setup: the interrupted haul must be recorded in _paused_jobs, not the colonist's current assignment")
 
-	var sow_result := _command(world, "sow_1", "sow", {"x": 41, "y": 0, "priority": 1})
+	var sow_result := Scenarios.command(world, "sow_1", "sow", {"x": 41, "y": 0, "priority": 1})
 	_expect(sow_result.get("ok", false), "sow submission must be accepted while the only seed is carried by an interrupted haul")
 
 	var sown := false
@@ -583,7 +580,7 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 	var haul_job := _find_job(world, haul_job_id)
 	_expect(String(haul_job.get("status", "")) == "failed" and String(haul_job.get("reason", "")) == "blocked_missing_input",
 		"the haul job paused for a need, carrying the now-consumed seed, must fail blocked_missing_input, got %s" % haul_job)
-	_expect(not world._needs_system.paused_jobs.has("hauler"),
+	_expect(not TestAccess.needs_system(world).paused_jobs.has("hauler"),
 		"the cancelled haul's _paused_jobs entry must be cleared so the hauler is never resumed toward a delivery that no longer exists")
 
 	var eat_completed := false
@@ -606,8 +603,8 @@ func _check_sow_consumes_carried_seed_while_haul_paused_for_need() -> void:
 ## of overwriting the tile changed by whatever else set it.
 func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() -> void:
 	var world := _single_colonist_world(268013)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	var result := _command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	var result := Scenarios.command(world, "till_1", "till", {"x": 1, "y": 0, "priority": 1})
 	_expect(result.get("ok", false), "till submission on a soil tile must be accepted")
 	var job_id := String(result["job_id"])
 
@@ -619,7 +616,7 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 			break
 	_expect(became_active, "setup: the till job must become active before this test changes its target underneath it")
 
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_FLOOR
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_FLOOR)
 
 	var terminal := false
 	for _i in TICK_BUDGET:
@@ -643,14 +640,14 @@ func _check_till_completion_fails_invalid_target_when_tile_changed_underneath() 
 ## re-planting an already-planted tile for a wasted second seed.
 func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> void:
 	var world := _single_colonist_world(268014)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 3
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_seed_2"] = {"id": "item_seed_2", "x": 6, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 3
 
-	var sow_1 := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
+	var sow_1 := Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_1.get("ok", false), "first sow submission on a plowed_soil tile with seeds available must be accepted")
-	var sow_2 := _command(world, "sow_2", "sow", {"x": 1, "y": 0, "priority": 1})
+	var sow_2 := Scenarios.command(world, "sow_2", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_2.get("ok", false), "second sow submission for the same tile, with a second seed still available, must also be accepted")
 
 	var job_ids := [String(sow_1["job_id"]), String(sow_2["job_id"])]
@@ -676,7 +673,7 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 				"the second sow order to reach an already-planted tile must fail invalid_target (a second seed exists, so it is not blocked_missing_input), got %s" % job)
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_PLANTED, "the tile must end up planted exactly once")
 	var remaining_seeds := 0
-	for item in world._item_table.items.values():
+	for item in TestAccess.item_table(world).items.values():
 		if String(item["kind"]) == "seed":
 			remaining_seeds += int(item.get("count", 1))
 	_expect(remaining_seeds == 1, "only one of the two available seeds may be consumed; the stale second sow must not consume the other, got %d" % remaining_seeds)
@@ -689,9 +686,9 @@ func _check_sow_completion_fails_invalid_target_for_stale_duplicate_order() -> v
 ## for an item that no longer exists.
 func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void:
 	var world := _single_colonist_world(268015)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 
 	var haul_job_id := ""
 	for _i in TICK_BUDGET:
@@ -709,7 +706,7 @@ func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void
 	_expect(String(haul_before.get("status", "")) == "queued" and String(haul_before.get("reason", "")) == "blocked_destination_full",
 		"setup: the haul job must be queued, backed off with no free destination, before this test submits sow, got %s" % haul_before)
 
-	var sow_result := _command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
+	var sow_result := Scenarios.command(world, "sow_1", "sow", {"x": 1, "y": 0, "priority": 1})
 	_expect(sow_result.get("ok", false), "sow submission must be accepted while the seed still sits on the ground")
 
 	var sown := false
@@ -728,10 +725,10 @@ func _check_sow_consumption_fails_queued_haul_with_no_free_destination() -> void
 ## reused by _check_replay_determinism().
 func _deterministic_farm_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	return world
 
@@ -745,8 +742,8 @@ func _check_replay_determinism() -> void:
 	var second := _deterministic_farm_world(seed_value)
 	var colonist_id: String = first.get_colonists()[0]["id"]
 	for world in [first, second]:
-		world._item_table.items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
-		world._item_table.next_item_id = 2
+		TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+		TestAccess.item_table(world).next_item_id = 2
 
 	var setup_commands := [
 		{"actor": "player", "command_id": "labour_1", "tick": 0, "type": "set_labour",

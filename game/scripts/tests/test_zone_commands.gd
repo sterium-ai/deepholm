@@ -157,11 +157,11 @@ func _check_free_cell_query() -> void:
 	_expect(world.is_cell_free(20, 20), "an unreserved zone cell must report free")
 	_expect(world.is_cell_free(21, 20), "an unreserved zone cell must report free")
 
-	var reservations := world._scheduler.queue.get_reservation_table()
-	var acquired := reservations.acquire(world._cell_key(20, 20), "synthetic_job")
+	var reservations := TestAccess.scheduler(world).queue.get_reservation_table()
+	var acquired := reservations.acquire(TestAccess.cell_key(world, 20, 20), "synthetic_job")
 	_expect(acquired, "a synthetic reservation must be acquired on a free cell key")
 	_expect(not world.is_cell_free(20, 20), "a reserved cell must no longer report free")
 	_expect(world.is_cell_free(21, 20), "the sibling, unreserved cell must still report free")
 
-	reservations.release(world._cell_key(20, 20), "synthetic_job")
+	reservations.release(TestAccess.cell_key(world, 20, 20), "synthetic_job")
 	_expect(world.is_cell_free(20, 20), "a released cell must report free again")

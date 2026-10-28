@@ -7,6 +7,7 @@ extends SceneTree
 ## needs.json's bedroom_rest_multiplier only when the bed sits inside one.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const RoomMapType = preload("res://scripts/core/map/rooms.gd")
 
 const MAX_TICKS := 400
@@ -162,7 +163,7 @@ func _check_wall_removal_breaches_enclosure_resealing_restores_it() -> void:
 ## overlapping it also sets has_stockpile without clearing has_bed -- a room
 ## with both flags reports both.
 func _check_worldstate_recognises_bedroom_and_storeroom_both() -> void:
-	var world := _build_world(300001)
+	var world := Scenarios.floor_world(300001)
 	var room_coords := _place_room(world, 1, 1)
 	_place(world, room_coords["interior"].x, room_coords["interior"].y, "bed")
 
@@ -171,7 +172,7 @@ func _check_worldstate_recognises_bedroom_and_storeroom_both() -> void:
 	_expect(bool(room.get("has_bed", false)), "the placed bed must set has_bed true")
 	_expect(not bool(room.get("has_stockpile", false)), "no zone yet must report has_stockpile false")
 
-	var zone_result := _command(world, "zone_add", "zone_add", {
+	var zone_result := Scenarios.command(world, "zone_add", "zone_add", {
 		"x": room_coords["interior"].x - 1, "y": room_coords["interior"].y - 1, "width": 2, "height": 2})
 	_expect(zone_result["ok"], "adding a zone overlapping the room must be accepted (got %s)" % zone_result)
 
@@ -183,13 +184,13 @@ func _check_worldstate_recognises_bedroom_and_storeroom_both() -> void:
 ## not a direct RoomMapType call) must make an interior tile stop resolving
 ## to a room through WorldState.get_room_at() too.
 func _check_worldstate_removing_door_command_stops_being_a_room() -> void:
-	var world := _build_world(300002)
+	var world := Scenarios.floor_world(300002)
 	var room_coords := _place_room(world, 1, 1)
 	_expect(not world.get_room_at(room_coords["interior"].x, room_coords["interior"].y).is_empty(),
 		"the freshly built room must be recognised before the door is removed")
 
 	var door: Vector2i = room_coords["door"]
-	var remove_result := _command(world, "remove_door", "remove_object", {"x": door.x, "y": door.y})
+	var remove_result := Scenarios.command(world, "remove_door", "remove_object", {"x": door.x, "y": door.y})
 	_expect(remove_result["ok"], "removing the door object must be accepted (got %s)" % remove_result)
 
 	_expect(world.get_room_at(room_coords["interior"].x, room_coords["interior"].y).is_empty(),
@@ -206,20 +207,20 @@ func _check_worldstate_removing_door_command_stops_being_a_room() -> void:
 ## restore stays 100 (an ordinary bed must keep its existing restoration;
 ## see _check_multiplier_is_clamped_at_full() for the clamp path).
 func _check_bedroom_bed_gets_rest_multiplier_ordinary_bed_does_not() -> void:
-	var bedroom_world := _build_world(300003)
-	_isolate_need(bedroom_world, "rest")
+	var bedroom_world := Scenarios.floor_world(300003)
+	Scenarios.isolate_need(bedroom_world, "rest")
 	_set_rest_config(bedroom_world, 60, 1.5)
-	bedroom_world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"rest": 20})))
+	TestAccess.colonists(bedroom_world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
 	var room_coords := _place_room(bedroom_world, 3, 3)
 	_place(bedroom_world, room_coords["interior"].x, room_coords["interior"].y, "bed")
 	var bedroom_rest := _run_sleep_to_completion(bedroom_world)
 	_expect(bedroom_rest == 90, "sleeping in a bedroom bed must apply the test config's bedroom_rest_multiplier (got %s)" % bedroom_rest)
 
-	var ordinary_world := _build_world(300004)
-	_isolate_need(ordinary_world, "rest")
+	var ordinary_world := Scenarios.floor_world(300004)
+	Scenarios.isolate_need(ordinary_world, "rest")
 	_set_rest_config(ordinary_world, 60, 1.5)
-	ordinary_world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"rest": 20})))
-	var place_result := _command(ordinary_world, "place_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
+	TestAccess.colonists(ordinary_world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
+	var place_result := Scenarios.command(ordinary_world, "place_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
 	_expect(place_result["ok"], "placing the ordinary bed fixture must be accepted")
 	var ordinary_rest := _run_sleep_to_completion(ordinary_world)
 	_expect(ordinary_rest == 60, "sleeping in an ordinary (non-bedroom) bed must restore only the plain test config restore value (got %s)" % ordinary_rest)
@@ -230,13 +231,13 @@ func _check_bedroom_bed_gets_rest_multiplier_ordinary_bed_does_not() -> void:
 ## unenclosed open map as one giant "room" just because some door somewhere
 ## touches it.
 func _check_outdoor_bed_gets_no_multiplier() -> void:
-	var world := _build_world(300005)
-	_isolate_need(world, "rest")
+	var world := Scenarios.floor_world(300005)
+	Scenarios.isolate_need(world, "rest")
 	_set_rest_config(world, 60, 1.5)
-	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"rest": 20})))
-	var stray_door := _command(world, "place_stray_door", "place_object", {"x": 10, "y": 10, "kind": "door"})
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
+	var stray_door := Scenarios.command(world, "place_stray_door", "place_object", {"x": 10, "y": 10, "kind": "door"})
 	_expect(stray_door["ok"], "placing a standalone door on open, unwalled ground must be accepted")
-	var place_result := _command(world, "place_outdoor_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
+	var place_result := Scenarios.command(world, "place_outdoor_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
 	_expect(place_result["ok"], "placing the outdoor bed fixture must be accepted")
 	var rest := _run_sleep_to_completion(world)
 	_expect(rest == 60, "a bed on open ground sharing a map with an unrelated stray door must not receive the bedroom multiplier (got %s)" % rest)
@@ -247,18 +248,18 @@ func _check_outdoor_bed_gets_no_multiplier() -> void:
 ## large enough to prove it actually fires (90 * 2.0 = 180, clamped to the
 ## production full value of 100).
 func _check_multiplier_is_clamped_at_full() -> void:
-	var world := _build_world(300006)
-	_isolate_need(world, "rest")
+	var world := Scenarios.floor_world(300006)
+	Scenarios.isolate_need(world, "rest")
 	_set_rest_config(world, 90, 2.0)
-	world._colonists.append(_colonist("colonist_0", 0, 0, _full_needs({"rest": 20})))
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
 	var room_coords := _place_room(world, 1, 1)
 	_place(world, room_coords["interior"].x, room_coords["interior"].y, "bed")
 	var rest := _run_sleep_to_completion(world)
 	_expect(rest == 100, "restore * bedroom_rest_multiplier exceeding full must clamp at full (got %s)" % rest)
 
 func _set_rest_config(world: WorldStateType, restore: int, multiplier: float) -> void:
-	world._need_definitions["rest"]["restore"] = restore
-	world._need_definitions["rest"]["bedroom_rest_multiplier"] = multiplier
+	TestAccess.need_definitions(world)["rest"]["restore"] = restore
+	TestAccess.need_definitions(world)["rest"]["bedroom_rest_multiplier"] = multiplier
 
 func _run_sleep_to_completion(world: WorldStateType) -> int:
 	var completed := false
@@ -270,7 +271,7 @@ func _run_sleep_to_completion(world: WorldStateType) -> int:
 		if completed:
 			break
 	_expect(completed, "the sleep job must complete within the tick budget")
-	return int(_colonist_by_id(world, "colonist_0")["needs"]["rest"])
+	return int(Scenarios.colonist_by_id(world, "colonist_0")["needs"]["rest"])
 
 ## Places a 5x5 walled box (15 walls + 1 door on its east side) with origin
 ## (ox, oy), leaving a 3x3 interior open for a bed. Returns the interior
@@ -289,39 +290,9 @@ func _place_room(world: WorldStateType, ox: int, oy: int) -> Dictionary:
 	return {"interior": Vector2i(ox + 2, oy + 2), "door": door}
 
 func _place(world: WorldStateType, x: int, y: int, kind: String) -> void:
-	var result := _command(world, "place_%s_%d_%d" % [kind, x, y], "place_object", {"x": x, "y": y, "kind": kind})
+	var result := Scenarios.command(world, "place_%s_%d_%d" % [kind, x, y], "place_object", {"x": x, "y": y, "kind": kind})
 	_expect(result["ok"], "placing %s at (%d, %d) must be accepted (got %s)" % [kind, x, y, result])
-
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	return world
-
-## Mirrors test_need_jobs.gd's own helper: zeroes every need kind's decay
-## rate except `kind`, so a scenario built around rest is never disturbed by
-## food/water crossing their own "urgent" threshold first.
-func _isolate_need(world: WorldStateType, kind: String) -> void:
-	for other in world._need_definitions.keys():
-		if other != kind:
-			world._need_definitions[other]["rate_per_day"] = 0
 
 func _colonist(id: String, x: int, y: int, needs: Dictionary) -> Dictionary:
 	return {"id": id, "kind": "colonist", "x": x, "y": y, "needs": needs.duplicate(),
 		"route": null, "work": null, "carrying": null}
-
-func _full_needs(overrides: Dictionary = {}) -> Dictionary:
-	var needs := {"food": 100, "water": 100, "rest": 100}
-	for kind in overrides:
-		needs[kind] = overrides[kind]
-	return needs
-
-func _command(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:
-	return world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": type, "payload": payload})
-
-func _colonist_by_id(world: WorldStateType, id: String) -> Dictionary:
-	for colonist in world.get_colonists():
-		if String(colonist["id"]) == id:
-			return colonist
-	return {}

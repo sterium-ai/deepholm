@@ -31,7 +31,7 @@ var _open_grid := PackedByteArray()
 func _init() -> void:
 	print(BenchCommon.header("bench_route_search"))
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
-	var start := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var start := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	_bench_generated_routes(world, start)
 	_open_grid.resize(SIZE * SIZE)
 	_open_grid.fill(1)
@@ -48,7 +48,7 @@ func _bench_generated_routes(world: WorldStateType, start: Vector2i) -> void:
 		if not by_distance.has(distance):
 			continue
 		var target: Vector2i = by_distance[distance]
-		_time_search("generated/passability()", start, target, distance, world._passability.is_passable)
+		_time_search("generated/passability()", start, target, distance, TestAccess.passability(world).is_passable)
 
 func _bench_open_routes() -> void:
 	var start := Vector2i(0, 0)
@@ -110,7 +110,7 @@ func _tiles_at_distances(passable: Callable, start: Vector2i) -> Dictionary:
 
 func _bench_regions(world: WorldStateType) -> void:
 	var t := Time.get_ticks_usec()
-	world._tile_grid.get_regions()
+	TestAccess.tile_grid(world).get_regions()
 	_print_map_time("regions full build (generated map, TileGrid.get_regions())", t)
 	t = Time.get_ticks_usec()
 	var regions := RegionMapType.new(SIZE, SIZE, func(x: int, y: int) -> bool: return _open_grid[y * SIZE + x] == 1)
@@ -128,9 +128,9 @@ func _bench_regions(world: WorldStateType) -> void:
 	# completed work job (_toil_on_work_complete), even when passability did
 	# not change (soil -> plowed_soil). Timed on the generated map at
 	# colonist_0's own tile, whose passability does not change.
-	var tile := Vector2i(int(world._colonists[0]["x"]), int(world._colonists[0]["y"]))
+	var tile := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
 	t = Time.get_ticks_usec()
-	var rooms = world._tile_grid.get_rooms()
+	var rooms = TestAccess.tile_grid(world).get_rooms()
 	_print_map_time("rooms full build (generated map, TileGrid.get_rooms())", t)
 	t = Time.get_ticks_usec()
 	rooms.on_passability_changed(tile.x, tile.y)

@@ -20,7 +20,7 @@ extends SceneTree
 ## has_labour_enabled/has_plowed_plot/has_seed_stock from real colony state,
 ## calls CalendarService.alert_state(), and emits a one-shot "calendar_alert"
 ## event through the same _insert_event()/get_events() mechanism every other
-## WorldState event uses. These checks override world._calendar with the
+## WorldState event uses. These checks override TestAccess.calendar(world) with the
 ## same kind of synthetic window content the pure alert-timing checks above
 ## use, for the same reason (content/calendar.json's real "sow" window opens
 ## too early to ever be due).
@@ -193,10 +193,10 @@ func _check_alert_state_not_due_once_already_fired() -> void:
 ## synthetic window above.
 func _synthetic_alert_world(window_id: String) -> WorldStateType:
 	var world := WorldStateType.new()
-	world._calendar = CalendarServiceType.new("", {
+	TestAccess.set_calendar(world, CalendarServiceType.new("", {
 		"day_length_ticks": 10,
 		"windows": [{"id": window_id, "labour": "farm", "from": 10, "to": 15, "boost": 2, "label": "test window"}],
-	})
+	}))
 	for colonist in world.get_colonists():
 		world.apply({
 			"actor": "test", "command_id": "zero_farm_%s" % colonist["id"], "tick": world.get_tick(),
@@ -238,9 +238,9 @@ func _check_world_state_alert_fires_once_when_conditions_met() -> void:
 		return
 	var window_id := "fires_once_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	for _i in 80:
 		world.tick()
 	var events := _calendar_alert_events(world, window_id)
@@ -266,9 +266,9 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 		return
 	var window_id := "labour_suppresses_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	for _i in 10:
 		world.tick()
 	var colonists := world.get_colonists()
@@ -291,7 +291,7 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 ## ground+carrying query world_state.gd's _has_item_of_kind docstring
 ## promises and sow's own blocked_missing_input precondition already relies
 ## on. Places the colony's only seed in colonist 0's carrying slot (never in
-## world._item_table.items) with a plowed plot present and every colonist's farm labour
+## TestAccess.item_table(world).items) with a plowed plot present and every colonist's farm labour
 ## at 0, then checks: the alert still fires exactly once at the due tick and
 ## never repeats, and the seed is still in the carrying slot afterwards (this
 ## check never consumes it). A ground-only _has_seed_stock query would see no
@@ -301,17 +301,17 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 		return
 	var window_id := "carried_seed_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
+	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
 	var colonists := world.get_colonists()
 	_expect(not colonists.is_empty(), "expected at least one colonist")
 	if colonists.is_empty():
 		return
 	var carrier_id := String(colonists[0]["id"])
-	for colonist in world._colonists:
+	for colonist in TestAccess.colonists(world):
 		if String(colonist["id"]) == carrier_id:
 			InventoryType.add_to_hands(colonist, "seed", 1)
-	_expect(world._item_table.items.is_empty(),
-		"setup must place the colony's only seed in a carrying slot, none on the ground, got %s" % [world._item_table.items])
+	_expect(TestAccess.item_table(world).items.is_empty(),
+		"setup must place the colony's only seed in a carrying slot, none on the ground, got %s" % [TestAccess.item_table(world).items])
 	for _i in 80:
 		world.tick()
 	var events := _calendar_alert_events(world, window_id)
@@ -319,13 +319,13 @@ func _check_world_state_alert_fires_with_carried_seed() -> void:
 		"WorldState must emit exactly one calendar_alert event for a seed carried (not on the ground), got %d: %s"
 			% [events.size(), events])
 	var still_carrying_seed := false
-	for colonist in world._colonists:
+	for colonist in TestAccess.colonists(world):
 		if String(colonist["id"]) == carrier_id:
 			still_carrying_seed = InventoryType.has_kind(colonist, "seed")
 	_expect(still_carrying_seed,
 		"the carried seed must still be in the carrying slot (this check never consumes it)")
-	_expect(world._item_table.items.is_empty(),
-		"the carried seed must never have been placed on the ground by this check, got %s" % [world._item_table.items])
+	_expect(TestAccess.item_table(world).items.is_empty(),
+		"the carried seed must never have been placed on the ground by this check, got %s" % [TestAccess.item_table(world).items])
 
 ## Regression: already_fired is real persisted state
 ## (calendarAlerts.fired, ADR 008 consequence 6), not an in-memory flag a
@@ -343,9 +343,9 @@ func _check_fired_alert_survives_save_restore() -> void:
 		return
 	var window_id := "save_restore_test"
 	var world := _synthetic_alert_world(window_id)
-	world._tile_grid.tiles[world._tile_grid.tile_index(0, 0)] = WorldStateType.TILE_PLOWED_SOIL
-	world._item_table.items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
-	world._item_table.next_item_id = 2
+	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
 	for _i in 60:
 		world.tick()
 	var pre_save_events := _calendar_alert_events(world, window_id)
@@ -358,10 +358,10 @@ func _check_fired_alert_survives_save_restore() -> void:
 		"saved state must persist the fired window id '%s', got %s" % [window_id, fired_ids])
 
 	var restored := WorldStateType.from_save_state(saved)
-	restored._calendar = CalendarServiceType.new("", {
+	TestAccess.set_calendar(restored, CalendarServiceType.new("", {
 		"day_length_ticks": 10,
 		"windows": [{"id": window_id, "labour": "farm", "from": 10, "to": 15, "boost": 2, "label": "test window"}],
-	})
+	}))
 	_expect(restored.state_hash() == world.state_hash(),
 		"restoring a fired alert must keep state_hash matching the source, since calendar_alerts_fired is part of the hash")
 

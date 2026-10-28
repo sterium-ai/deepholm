@@ -55,7 +55,7 @@ func _check_whole_map_matches_per_tile_path() -> void:
 	_expect(int(result.get("remaining", -1)) == SIZE * SIZE - AreaOrders.TILES_PER_STEP,
 		"release must expand exactly TILES_PER_STEP tiles, remaining %s" % result.get("remaining"))
 	var ticks := 0
-	while world._area_orders.remaining_tiles(int(result["area_order_id"])) > 0 and ticks < 1000:
+	while TestAccess.area_orders(world).remaining_tiles(int(result["area_order_id"])) > 0 and ticks < 1000:
 		world.tick()
 		ticks += 1
 	_expect(ticks == ceili(float(SIZE * SIZE) / AreaOrders.TILES_PER_STEP) - 1,
@@ -87,7 +87,7 @@ func _check_save_mid_expansion() -> void:
 	var restored = WorldStateType.from_save_state(read["state"])
 	_expect(restored.state_hash() == straight.state_hash(), "a mid-expansion save must restore the same state_hash()")
 	var t := 0
-	while not (straight._area_orders.encode()["list"] as Array).is_empty() and t < 1000:
+	while not (TestAccess.area_orders(straight).encode()["list"] as Array).is_empty() and t < 1000:
 		straight.tick()
 		restored.tick()
 		t += 1
@@ -101,7 +101,7 @@ func _check_save_mid_expansion() -> void:
 	_expect(restored.get_jobs() == straight.get_jobs(), "the restored run must end with the same jobs")
 	# The saved queue is validated like every other field.
 	var good: Dictionary = saved["areaOrders"]
-	_expect(SaveIOType._validate_state(saved)["ok"], "the mid-expansion save must validate")
+	_expect(TestAccess.save_validate_state(saved)["ok"], "the mid-expansion save must validate")
 	for corrupt in [
 		{"order": "build"}, {"next": SIZE * SIZE}, {"width": SIZE + 1}, {"commandId": ""}, {"id": 99}, {"extra": 1},
 		{"done": [0]}, {"done": [SIZE * SIZE]}, {"done": "none"},
@@ -110,11 +110,11 @@ func _check_save_mid_expansion() -> void:
 		var entry: Dictionary = (bad["areaOrders"]["list"] as Array)[0]
 		for key in corrupt:
 			entry[key] = corrupt[key]
-		_expect(not SaveIOType._validate_state(bad)["ok"], "an areaOrders entry with %s must be rejected" % [corrupt])
+		_expect(not TestAccess.save_validate_state(bad)["ok"], "an areaOrders entry with %s must be rejected" % [corrupt])
 	for corrupt_created in [[[5, 5, 1]], [[1, 2, 99]], [[4, 6, 1], [5, 7, 1]], [[1, 2]], "none"]:
 		var bad := saved.duplicate(true)
 		bad["areaOrders"]["created"] = corrupt_created
-		_expect(not SaveIOType._validate_state(bad)["ok"], "areaOrders created %s must be rejected" % [corrupt_created])
+		_expect(not TestAccess.save_validate_state(bad)["ok"], "areaOrders created %s must be rejected" % [corrupt_created])
 	_expect(good == saved["areaOrders"], "sanity: corrupting copies must leave the save untouched")
 
 func _check_step_budget_and_small_rectangles() -> void:
@@ -181,7 +181,7 @@ func _check_cancel_covers_earlier_pending_orders() -> void:
 	_expect(inside == 0, "the Cancel must cover the earlier Dig's whole overlap, %d dig jobs left inside it" % inside)
 	_expect(outside > SIZE * 16, "the Cancel must leave the Dig outside its rectangle alone, %d left" % outside)
 	_expect(redug_pending > SIZE * 2, "a Dig accepted after the Cancel must not be cancelled by it, %d pending" % redug_pending)
-	_expect((world._area_orders.encode()["created"] as Array).is_empty(), "the created ranges must be dropped once no cancel is pending")
+	_expect((TestAccess.area_orders(world).encode()["created"] as Array).is_empty(), "the created ranges must be dropped once no cancel is pending")
 
 func _check_queued_orders_get_their_own_results() -> void:
 	var world = WorldStateType.new(SEED, 10, SIZE, SIZE)
@@ -219,15 +219,15 @@ func _check_queued_orders_get_their_own_results() -> void:
 	var undo := _area(world, "cancel", Rect2i(dig_tile, Vector2i.ONE))
 	_expect(int(undo.get("remaining", -1)) == 0, "a single-tile Cancel behind a backlog must complete at acceptance")
 	_expect(not _pending_kinds_at(world, dig_tile).has("dig"), "the Cancel must act after the backlog's Dig on its tile")
-	_expect(world._area_orders.remaining_tiles(backlog_id) == backlog_left - 3,
+	_expect(TestAccess.area_orders(world).remaining_tiles(backlog_id) == backlog_left - 3,
 		"the backlog must count the tiles pulled forward as expanded")
 	var middle := _area(world, "mine", Rect2i(0, SIZE - 4, SIZE, 2))
 	_expect(int(middle["remaining"]) == SIZE * 2 - AreaOrders.TILES_PER_STEP, "a large queued order must expand its own first step at acceptance")
 	var t := 0
-	while not world._area_orders.is_idle() and t < 1000:
+	while not TestAccess.area_orders(world).is_idle() and t < 1000:
 		world.tick()
 		t += 1
-	_expect(world._area_orders.is_idle(), "every queued order must finish")
+	_expect(TestAccess.area_orders(world).is_idle(), "every queued order must finish")
 
 ## The first tile of `row` where `type` previews as `valid`.
 func _find_tile(world, type: String, valid: bool, row: int) -> Vector2i:
@@ -248,7 +248,7 @@ func _pending_kinds_at(world, tile: Vector2i) -> Array:
 
 func _drain(world) -> void:
 	var t := 0
-	while not world._area_orders.is_idle() and t < 2000:
+	while not TestAccess.area_orders(world).is_idle() and t < 2000:
 		world.tick()
 		t += 1
 

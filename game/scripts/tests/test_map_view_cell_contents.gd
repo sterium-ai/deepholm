@@ -112,7 +112,7 @@ func _run_job_to_completion(world: WorldStateType, job_type: String, target: Vec
 		# time servicing recurring eat/drink/sleep jobs that an ordinary
 		# order can sit queued for thousands of ticks (see test_save_dimensions.gd's
 		# far-edge check for the same fixture behavior spelled out in full).
-		for colonist in world._colonists:
+		for colonist in TestAccess.colonists(world):
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100
@@ -208,12 +208,12 @@ func _finish() -> void:
 ## lives on the colonist and is excluded from the ground-item snapshot.
 func _check_ground_item_counts() -> void:
 	var world := WorldStateType.new(SEED_A, 10)
-	world._item_table.items.clear()
-	world._item_table.items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "kind": "wood", "count": 2}
-	world._item_table.items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "kind": "wood", "count": 3}
-	world._item_table.items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "kind": "stone", "count": 4}
-	world._item_table.items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "kind": "stone", "count": 7}
-	world._colonists[0]["carrying"] = {"id": "cargo", "kind": "stone", "count": 9}
+	TestAccess.item_table(world).items.clear()
+	TestAccess.item_table(world).items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "kind": "wood", "count": 2}
+	TestAccess.item_table(world).items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "kind": "wood", "count": 3}
+	TestAccess.item_table(world).items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "kind": "stone", "count": 4}
+	TestAccess.item_table(world).items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "kind": "stone", "count": 7}
+	TestAccess.colonists(world)[0]["carrying"] = {"id": "cargo", "kind": "stone", "count": 9}
 	var view := MapViewType.new()
 	view.set_world(world)
 	var before := world.state_hash()

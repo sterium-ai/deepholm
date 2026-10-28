@@ -83,95 +83,95 @@ func _check_actor_index_unit() -> void:
 
 ## Every actor and every ground item, answered both ways.
 func _verify(world: WorldStateType, where: String) -> void:
-	if not world._actor_index.is_trusted() or not world._item_table._ids_at_trusted:
+	if not TestAccess.actor_index(world).is_trusted() or not TestAccess.item_ids_at_trusted(world):
 		_fail("%s: both indexes must be trusted inside tick()" % where)
 		return
 	var tiles: Dictionary = {}
-	for actor in world._colonists:
+	for actor in TestAccess.colonists(world):
 		var tile := Vector2i(int(actor["x"]), int(actor["y"]))
 		tiles[tile] = true
-		if not is_same(world._find_colonist(String(actor["id"])), actor):
+		if not is_same(TestAccess.find_colonist(world, String(actor["id"])), actor):
 			_fail("%s: _find_colonist(%s) disagrees with the roster" % [where, actor["id"]])
-	for item in world._item_table.items.values():
+	for item in TestAccess.item_table(world).items.values():
 		tiles[Vector2i(int(item["x"]), int(item["y"]))] = true
 	for tile in tiles.keys():
 		for probe in [tile, tile + Vector2i(1, 0)]:
 			var linear_actor := false
-			for actor in world._colonists:
+			for actor in TestAccess.colonists(world):
 				if int(actor["x"]) == probe.x and int(actor["y"]) == probe.y:
 					linear_actor = true
 			var linear_item := false
 			var linear_wood := 0
-			for item in world._item_table.items.values():
+			for item in TestAccess.item_table(world).items.values():
 				if int(item["x"]) == probe.x and int(item["y"]) == probe.y:
 					linear_item = true
 					if String(item["kind"]) == "wood":
 						linear_wood += int(item["count"])
-			if world._colonist_at(probe.x, probe.y) != linear_actor:
+			if TestAccess.colonist_at(world, probe.x, probe.y) != linear_actor:
 				_fail("%s: _colonist_at%s disagrees with the roster" % [where, probe])
-			if world._item_table.has_item_at(probe.x, probe.y) != linear_item:
+			if TestAccess.item_table(world).has_item_at(probe.x, probe.y) != linear_item:
 				_fail("%s: has_item_at%s disagrees with the item map" % [where, probe])
-			if world._item_table.get_ground_wood(probe.x, probe.y) != linear_wood:
+			if TestAccess.item_table(world).get_ground_wood(probe.x, probe.y) != linear_wood:
 				_fail("%s: get_ground_wood%s disagrees with the item map" % [where, probe])
-			if world._is_cell_occupied(probe.x, probe.y, "") != (linear_actor or linear_item):
+			if TestAccess.is_cell_occupied(world, probe.x, probe.y, "") != (linear_actor or linear_item):
 				_fail("%s: _is_cell_occupied%s disagrees" % [where, probe])
 
 func _check_indexes_match_linear_pass_inside_tick() -> void:
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	var corners := [Vector2i(1, 1), Vector2i(SIZE - 2, 1), Vector2i(1, SIZE - 2), Vector2i(SIZE - 2, SIZE - 2)]
-	for i in world._colonists.size():
+	for i in TestAccess.colonists(world).size():
 		var corner: Vector2i = corners[i % corners.size()]
-		world._colonists[i]["x"] = corner.x
-		world._colonists[i]["y"] = corner.y
-	world._colonists.append({"id": "colonist_partial", "kind": "colonist", "x": 2, "y": SIZE / 2, "route": null, "work": null})
-	var partial: Dictionary = world._colonists.back()
+		TestAccess.colonists(world)[i]["x"] = corner.x
+		TestAccess.colonists(world)[i]["y"] = corner.y
+	TestAccess.colonists(world).append({"id": "colonist_partial", "kind": "colonist", "x": 2, "y": SIZE / 2, "route": null, "work": null})
+	var partial: Dictionary = TestAccess.colonists(world).back()
 	for i in 12:
-		world._item_table.place_new_ground_item("wood", 1 + i % 3, 3 + (i * 5) % (SIZE - 6), 2 + (i * 7) % (SIZE - 4))
+		TestAccess.item_table(world).place_new_ground_item("wood", 1 + i % 3, 3 + (i * 5) % (SIZE - 6), 2 + (i * 7) % (SIZE - 4))
 	var zone := world.apply({"actor": "test", "command_id": "zone", "tick": world.get_tick(), "type": "zone_add",
 		"payload": {"x": SIZE / 2 - 1, "y": SIZE / 2 - 1, "width": 3, "height": 3}})
 	_expect(bool(zone.get("ok", false)), "zone_add must be accepted")
 	var checks := [0]
-	world._toils.on_actor_moved = func(actor: Dictionary) -> void:
-		world._actor_index.moved(actor)
+	TestAccess.toils(world).on_actor_moved = func(actor: Dictionary) -> void:
+		TestAccess.actor_index(world).moved(actor)
 		_verify(world, "tick %d after %s moved" % [world.get_tick(), actor["id"]])
 		checks[0] += 1
 	var replacements := [0]
-	world._needs_system.on_actor_replaced = func(old: Dictionary, new: Dictionary) -> void:
-		world._actor_index.replaced(old, new)
-		_expect(world._actor_index.is_trusted(), "ensure_needs() rebuilds inside tick(), where the index is trusted")
-		_expect(is_same(world._find_colonist(String(new["id"])), new), "_find_colonist() must return the rebuilt Dictionary")
+	TestAccess.needs_system(world).on_actor_replaced = func(old: Dictionary, new: Dictionary) -> void:
+		TestAccess.actor_index(world).replaced(old, new)
+		_expect(TestAccess.actor_index(world).is_trusted(), "ensure_needs() rebuilds inside tick(), where the index is trusted")
+		_expect(is_same(TestAccess.find_colonist(world, String(new["id"])), new), "_find_colonist() must return the rebuilt Dictionary")
 		replacements[0] += 1
-	var start_ids := world._item_table.items.keys()
+	var start_ids := TestAccess.item_table(world).items.keys()
 	for _i in TICKS:
 		world.tick()
 		if _i == 0:
-			_expect(not is_same(world._colonists.back(), partial), "ensure_needs() must have rebuilt the incomplete colonist in tick 1")
+			_expect(not is_same(TestAccess.colonists(world).back(), partial), "ensure_needs() must have rebuilt the incomplete colonist in tick 1")
 			_expect(replacements[0] == 1, "the rebuild must have gone through on_actor_replaced inside tick 1, got %d" % replacements[0])
-		_expect(not world._actor_index.is_trusted() and not world._item_table._ids_at_trusted,
+		_expect(not TestAccess.actor_index(world).is_trusted() and not TestAccess.item_ids_at_trusted(world),
 			"both indexes must be untrusted between ticks")
 		if _failed:
 			return
 	_expect(checks[0] >= 50, "the colony must have walked enough to make this meaningful, got %d steps" % checks[0])
 	var moved_items := 0
 	for item_id in start_ids:
-		if not world._item_table.items.has(item_id):
+		if not TestAccess.item_table(world).items.has(item_id):
 			moved_items += 1
 	_expect(moved_items >= 3, "hauls must have picked up and placed items mid-tick, got %d" % moved_items)
 
 func _check_out_of_band_writes_between_ticks() -> void:
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
 	world.tick()
-	var colonist: Dictionary = world._colonists[0]
+	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var target := Vector2i((int(colonist["x"]) + 3) % SIZE, (int(colonist["y"]) + 2) % SIZE)
 	colonist["x"] = target.x
 	colonist["y"] = target.y
-	_expect(world._colonist_at(target.x, target.y), "_colonist_at() must see an x/y written between ticks")
+	_expect(TestAccess.colonist_at(world, target.x, target.y), "_colonist_at() must see an x/y written between ticks")
 	var stranger := {"id": "stranger", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null}
-	world._colonists.append(stranger)
-	_expect(is_same(world._find_colonist("stranger"), stranger), "_find_colonist() must see a roster append between ticks")
-	world._item_table.items["item_oob"] = {"id": "item_oob", "x": 2, "y": 3, "kind": "wood", "count": 2}
-	_expect(world._item_table.has_item_at(2, 3), "has_item_at() must see an item written into the map between ticks")
-	_expect(world._item_table.get_ground_wood(2, 3) >= 2, "get_ground_wood() must see an item written into the map between ticks")
+	TestAccess.colonists(world).append(stranger)
+	_expect(is_same(TestAccess.find_colonist(world, "stranger"), stranger), "_find_colonist() must see a roster append between ticks")
+	TestAccess.item_table(world).items["item_oob"] = {"id": "item_oob", "x": 2, "y": 3, "kind": "wood", "count": 2}
+	_expect(TestAccess.item_table(world).has_item_at(2, 3), "has_item_at() must see an item written into the map between ticks")
+	_expect(TestAccess.item_table(world).get_ground_wood(2, 3) >= 2, "get_ground_wood() must see an item written into the map between ticks")

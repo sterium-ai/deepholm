@@ -11,7 +11,6 @@ extends SceneTree
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
 const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
-const SchedulingCodecType = preload("res://scripts/core/persistence/scheduling_codec.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
@@ -132,7 +131,7 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		world.tick()
 	var v1_state := StateCodecType.encode(world)
 	var live_jobs: Array = v1_state["jobs"]
-	v1_state["jobs"] = SchedulingCodecType._encode_jobs(world._scheduler.queue.get_jobs())
+	v1_state["jobs"] = TestAccess.scheduling_encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
 	v1_state["schemaVersion"] = 1
 	_expect(v1_state["jobs"].size() > live_jobs.size(), "the v1 state must really list terminal jobs for this to prove anything")
 	var path := _write_state_fixture(V1_TERMINAL_JOBS_DIR, v1_state)
@@ -261,10 +260,10 @@ func _remove(path: String) -> void:
 func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 	var world := WorldStateType.new(20260925, 10)
 	var hash_before_draw := world.state_hash()
-	world._item_table.dig_find_random.seed = 777
-	world._item_table.dig_find_random.randi() # advances .state away from its fresh-seed default
-	var expected_rng_seed: int = world._item_table.dig_find_random.seed
-	var expected_rng_state: int = world._item_table.dig_find_random.state
+	TestAccess.item_table(world).dig_find_random.seed = 777
+	TestAccess.item_table(world).dig_find_random.randi() # advances .state away from its fresh-seed default
+	var expected_rng_seed: int = TestAccess.item_table(world).dig_find_random.seed
+	var expected_rng_state: int = TestAccess.item_table(world).dig_find_random.state
 	_expect(world.state_hash() != hash_before_draw,
 		"advancing the dig-find RNG stream must change state_hash(), or a diverged find sequence could hide behind an unchanged hash")
 
@@ -272,7 +271,7 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 	_expect(int(saved["digFindRng"]["seed"]) == expected_rng_seed and int(saved["digFindRng"]["state"]) == expected_rng_state,
 		"to_save_state() must encode the live dig-find RNG stream exactly")
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(restored._item_table.dig_find_random.seed == expected_rng_seed and restored._item_table.dig_find_random.state == expected_rng_state,
+	_expect(TestAccess.item_table(restored).dig_find_random.seed == expected_rng_seed and TestAccess.item_table(restored).dig_find_random.state == expected_rng_state,
 		"a save/load round trip must preserve the dig-find RNG's own stream exactly")
 	_expect(restored.state_hash() == world.state_hash(),
 		"a save/load round trip must reproduce the exact same state_hash() once the dig-find RNG is restored")
@@ -287,9 +286,9 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 func _check_multi_tile_object_round_trips_through_save_load() -> void:
 	var world := WorldStateType.new(20260926, 10)
 	var origin := Vector2i(5, 5)
-	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x, origin.y)] = WorldStateType.TILE_FLOOR
-	world._tile_grid.tiles[world._tile_grid.tile_index(origin.x, origin.y + 1)] = WorldStateType.TILE_FLOOR
-	world._object_table.set_object(origin.x, origin.y, "test_footprint_crate", "colony", "vertical")
+	TestAccess.set_tile(world, origin.x, origin.y, WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, origin.x, origin.y + 1, WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).set_object(origin.x, origin.y, "test_footprint_crate", "colony", "vertical")
 	_expect(world.get_object(origin.x, origin.y) == "test_footprint_crate" and world.get_object(origin.x, origin.y + 1) == "test_footprint_crate",
 		"setup must occupy both footprint tiles before the round trip")
 	var before_hash := world.state_hash()
@@ -318,7 +317,7 @@ func _check_multi_tile_object_round_trips_through_save_load() -> void:
 func _check_object_without_orientation_field_loads_unchanged() -> void:
 	var state := _minimal_current_schema_state("test-content", "wood")
 	state["objects"] = [{"target": {"x": 0, "y": 0}, "kind": "wall", "factionId": "colony"}]
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a current-schema object entry with no orientation field must validate: %s" % validation.get("message", ""))
 	if not validation["ok"]:
 		return
@@ -334,7 +333,7 @@ func _check_object_without_orientation_field_loads_unchanged() -> void:
 func _check_object_with_empty_orientation_field_loads_unchanged() -> void:
 	var state := _minimal_current_schema_state("test-content", "wood")
 	state["objects"] = [{"target": {"x": 0, "y": 0}, "kind": "wall", "factionId": "colony", "orientation": ""}]
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a current-schema object entry with orientation '' must validate: %s" % validation.get("message", ""))
 	if not validation["ok"]:
 		return
@@ -350,7 +349,7 @@ func _check_object_with_empty_orientation_field_loads_unchanged() -> void:
 func _check_state_without_construction_sites_field_loads_unchanged() -> void:
 	var state := _minimal_current_schema_state("test-content", "wood")
 	_expect(not state.has("constructionSites"), "the minimal fixture must genuinely omit constructionSites for this to be a real proof")
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a current-schema state with no constructionSites field must validate: %s" % validation.get("message", ""))
 	if not validation["ok"]:
 		return
@@ -365,10 +364,10 @@ func _check_state_without_construction_sites_field_loads_unchanged() -> void:
 ## validator, not only StateCodec's internal round trip.
 func _check_construction_site_round_trips_through_save_load() -> void:
 	var world := WorldStateType.new(20260927, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	world._object_table.objects.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	var apply_result := world.apply({"actor": "test", "command_id": "wb", "tick": world.get_tick(), "type": "build",
 		"payload": {"kind": "workbench", "x": 5, "y": 5}})
@@ -378,7 +377,7 @@ func _check_construction_site_round_trips_through_save_load() -> void:
 	var saved := world.to_save_state()
 	var sites: Array = saved.get("constructionSites", [])
 	_expect(sites.size() == 1, "a single active site must persist as exactly one constructionSites record")
-	var validation := SaveIOType._validate_state(saved)
+	var validation := TestAccess.save_validate_state(saved)
 	_expect(validation["ok"], "a state with an in-progress construction site must validate: %s" % validation.get("message", ""))
 	var restored := WorldStateType.from_save_state(saved)
 	_expect(restored.state_hash() == before_hash, "a construction-site save/load round trip must preserve state_hash() exactly")
@@ -395,22 +394,22 @@ func _check_construction_site_round_trips_through_save_load() -> void:
 ## for the labour table.
 func _check_incident_scheduler_continuation_survives_save_load_round_trip() -> void:
 	var world := WorldStateType.new(20260924, 10)
-	world._incidents._cooldown_until_day = {"wildlife_wander": 12, "trader_visit": 19}
-	world._incidents._last_processed_day = 7
-	world._incidents._random.seed = 555
-	world._incidents._random.randi() # advances .state away from its fresh-seed default
-	var expected_cooldowns: Dictionary = world._incidents._cooldown_until_day.duplicate()
-	var expected_day: int = world._incidents._last_processed_day
-	var expected_rng_seed: int = world._incidents._random.seed
-	var expected_rng_state: int = world._incidents._random.state
+	TestAccess.set_incident_cooldown_until_day(world, {"wildlife_wander": 12, "trader_visit": 19})
+	TestAccess.set_incident_last_processed_day(world, 7)
+	TestAccess.incident_random(world).seed = 555
+	TestAccess.incident_random(world).randi() # advances .state away from its fresh-seed default
+	var expected_cooldowns: Dictionary = TestAccess.incident_cooldown_until_day(world).duplicate()
+	var expected_day: int = TestAccess.incident_last_processed_day(world)
+	var expected_rng_seed: int = TestAccess.incident_random(world).seed
+	var expected_rng_state: int = TestAccess.incident_random(world).state
 
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(restored._incidents._cooldown_until_day == expected_cooldowns,
+	_expect(TestAccess.incident_cooldown_until_day(restored) == expected_cooldowns,
 		"a save/load round trip must preserve the incident scheduler's cooldownUntilDay exactly")
-	_expect(restored._incidents._last_processed_day == expected_day,
+	_expect(TestAccess.incident_last_processed_day(restored) == expected_day,
 		"a save/load round trip must preserve the incident scheduler's lastProcessedDay exactly")
-	_expect(restored._incidents._random.seed == expected_rng_seed and restored._incidents._random.state == expected_rng_state,
+	_expect(TestAccess.incident_random(restored).seed == expected_rng_seed and TestAccess.incident_random(restored).state == expected_rng_state,
 		"a save/load round trip must preserve the incident scheduler's own RNG stream exactly")
 
 ## SaveIO.read() must reject a save whose stored contentVersion does not
@@ -461,7 +460,7 @@ func _check_calendar_alerts_fired_accepts_valid_non_lowercase_id() -> void:
 	var window_id := "SpringSow"
 	var state := _minimal_current_schema_state(StateCodecType.content_version(), "wood")
 	state["calendarAlerts"] = {"fired": [window_id]}
-	var validation := SaveIOType._validate_state(state)
+	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a valid non-lowercase calendar id must pass _validate_state: %s" % validation.get("message", ""))
 
 	var path := _write_state_fixture(CALENDAR_ID_FIXTURE_DIR, state)
@@ -514,7 +513,7 @@ func _check_non_default_labour_table_survives_save_load_round_trip() -> void:
 			_expect(colonist["labourTable"] == expected_target_table,
 				"a save/load round trip must preserve the targeted colonist's complete labourTable exactly")
 		elif colonist["id"] == other_id:
-			_expect(colonist["labourTable"] == world._default_labour_table(),
+			_expect(colonist["labourTable"] == TestAccess.default_labour_table(world),
 				"a save/load round trip must not disturb a different colonist's untouched labourTable")
 
 ## The "mine" job kind and "stone" item kind are new content (rock
@@ -528,11 +527,11 @@ func _check_non_default_labour_table_survives_save_load_round_trip() -> void:
 ## tick on the fetch_tool toil (jobs.json's "mine" entry needs_tool: "pick").
 func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	var world := WorldStateType.new(353001, 10)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._tile_grid.tiles[world._tile_grid.tile_index(1, 0)] = WorldStateType.TILE_ROCK
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
-		"route": null, "work": null, "hands": [], "labourTable": world._default_labour_table()})
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+		"route": null, "work": null, "hands": [], "labourTable": TestAccess.default_labour_table(world)})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
 
 	var submit := world.apply({
@@ -553,7 +552,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	_expect(active, "setup: the mine job must reach active status before saving")
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_ROCK, "setup: the target tile must still be rock, not yet mined")
 
-	world._item_table.spawn_item("stone", 5, 5)
+	TestAccess.item_table(world).spawn_item("stone", 5, 5)
 	var stone_item_id := ""
 	for item in world.get_items():
 		if String(item["kind"]) == "stone":
@@ -561,7 +560,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	_expect(not stone_item_id.is_empty(), "setup: a ground stone item must exist before saving")
 
 	var saved := world.to_save_state()
-	var validation := SaveIOType._validate_state(saved)
+	var validation := TestAccess.save_validate_state(saved)
 	_expect(validation.get("ok", false),
 		"a save state holding an active mine job and a ground stone item must pass SaveIO._validate_state(), got %s" % validation.get("message", ""))
 
@@ -605,14 +604,14 @@ func _check_non_default_faction_and_health_survive_save_load_round_trip() -> voi
 	var expected_faction := "raiders"
 	var expected_injured_health := {"hp": 40, "maxHp": 150, "dead": false}
 	var expected_dead_health := {"hp": 0, "maxHp": 80, "dead": true}
-	for i in world._colonists.size():
-		var id := String(world._colonists[i]["id"])
+	for i in TestAccess.colonists(world).size():
+		var id := String(TestAccess.colonists(world)[i]["id"])
 		if id == faction_id:
-			world._colonists[i]["factionId"] = expected_faction
+			TestAccess.colonists(world)[i]["factionId"] = expected_faction
 		elif id == injured_id:
-			world._colonists[i]["health"] = expected_injured_health.duplicate()
+			TestAccess.colonists(world)[i]["health"] = expected_injured_health.duplicate()
 		elif id == dead_id:
-			world._colonists[i]["health"] = expected_dead_health.duplicate()
+			TestAccess.colonists(world)[i]["health"] = expected_dead_health.duplicate()
 
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
@@ -637,22 +636,22 @@ func _check_non_default_faction_and_health_survive_save_load_round_trip() -> voi
 ## its tile progress kept, not lost or restarted, after loading.
 func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	var world := WorldStateType.new(130001, 10)
-	for other in world._need_definitions.keys():
+	for other in TestAccess.need_definitions(world).keys():
 		if other != "food":
-			world._need_definitions[other]["rate_per_day"] = 0
-	world._colonists.clear()
-	world._colonists.append({
+			TestAccess.need_definitions(world)[other]["rate_per_day"] = 0
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({
 		"id": "colonist_0", "kind": "colonist", "x": 9, "y": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
-		"labourTable": world._default_labour_table(),
+		"labourTable": TestAccess.default_labour_table(world),
 		"route": null, "work": null, "hands": [],
 	})
-	world._tile_grid.tiles[world._tile_grid.tile_index(10, 0)] = WorldStateType.TILE_SOIL
+	TestAccess.set_tile(world, 10, 0, WorldStateType.TILE_SOIL)
 	# Far enough that the eat_food search/walk spans several ticks, so the
 	# save captures a genuinely still-pending need job rather than one that
 	# already committed, walked, ate, and resumed the dig job all within the
 	# same tick the critical interrupt fired.
-	world._item_table.ground_berries["9_20"] = 1
+	TestAccess.item_table(world).ground_berries["9_20"] = 1
 	world.spawn_ground_tool_item("pick", 9, 0)
 
 	var dig_result := world.apply({
@@ -676,9 +675,9 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	for _i in 5:
 		world.tick()
 
-	for i in world._colonists.size():
-		if String(world._colonists[i]["id"]) == "colonist_0":
-			world._colonists[i]["needs"]["food"] = 5
+	for i in TestAccess.colonists(world).size():
+		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
+			TestAccess.colonists(world)[i]["needs"]["food"] = 5
 	world.tick()
 
 	# Tick until the eat_food job is actually committed (not just searching),
@@ -686,7 +685,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	# just an in-flight search, which is deliberately not persisted.
 	var committed := false
 	for _i in 60:
-		if not world._need_giver.get_pending_assignments().is_empty():
+		if not TestAccess.need_giver(world).get_pending_assignments().is_empty():
 			committed = true
 			break
 		world.tick()
@@ -705,7 +704,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	# moves it out the instant the interrupt clears colonist.work.
 	var suspended_work_progress: Array = saved["suspendedWorkProgress"]
 	var dig_target_progress := int(suspended_work_progress[0]["ticksRemaining"]) if suspended_work_progress.size() > 0 else -1
-	_expect(dig_target_progress > 0 and dig_target_progress < int(world._work_ticks["dig"]),
+	_expect(dig_target_progress > 0 and dig_target_progress < int(TestAccess.work_ticks(world)["dig"]),
 		"a save taken mid-interrupt must persist the dig job's own partial progress")
 
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
@@ -715,10 +714,10 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	# state), so it must be re-applied here too, or water/rest resume normal
 	# decay post-load and trigger their own unrelated interrupts, diverging
 	# this check from what it actually means to test.
-	for other in restored._need_definitions.keys():
+	for other in TestAccess.need_definitions(restored).keys():
 		if other != "food":
-			restored._need_definitions[other]["rate_per_day"] = 0
-	_expect(restored._need_giver.get_pending_assignments() == world._need_giver.get_pending_assignments(),
+			TestAccess.need_definitions(restored)[other]["rate_per_day"] = 0
+	_expect(TestAccess.need_giver(restored).get_pending_assignments() == TestAccess.need_giver(world).get_pending_assignments(),
 		"loading must restore NeedGiver's own colonist->job association exactly")
 
 	var eat_completed := false
@@ -762,7 +761,7 @@ func _write_state_fixture(dir_path: String, state: Dictionary) -> String:
 	var path := dir_path + "/fixture.json"
 	var body := JSON.stringify(state)
 	var round_tripped = JSON.parse_string(body)
-	var hash := SaveIOType._sha256(JSON.stringify(round_tripped).to_utf8_buffer())
+	var hash := TestAccess.save_sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var envelope := {"format": SaveIOType.FORMAT, "integrity": hash, "state": state}
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	file.store_string(JSON.stringify(envelope))

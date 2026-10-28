@@ -94,13 +94,13 @@ func _check_generator_provenance_preserved_through_resave() -> void:
 ## precondition never blocks it.
 func _build_dig_test_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, 16, 16)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_ROCK)
-	world._object_table.objects.clear()
-	world._object_table.object_factions.clear()
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_ROCK)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.object_table(world).object_factions.clear()
 	for x in range(0, 8):
-		world._tile_grid.tiles[world._tile_grid.tile_index(x, 0)] = WorldStateType.TILE_SOIL
-	world._colonists.clear()
-	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -148,7 +148,7 @@ func _check_completed_dig_saves_and_reloads_through_save_io() -> void:
 			"a reloaded world must keep its dug tile as trench")
 	_remove(path)
 
-## world._item_table.dig_find_random's own continuation must
+## TestAccess.item_table(world).dig_find_random's own continuation must
 ## survive a real SaveIO.write_atomic()/read() round trip (not just an
 ## in-memory StateCodec.encode()/decode(), already covered by
 ## test_save_migration.gd's own _check_dig_find_rng_continuation_survives_save_load_round_trip()),
@@ -172,7 +172,7 @@ func _check_dig_find_rng_continuation_survives_save_io_round_trip() -> void:
 	if not read_result.get("ok", false):
 		return
 	var restored: WorldStateType = StateCodecType.decode(read_result["state"])
-	_expect(restored._item_table.dig_find_random.seed == live._item_table.dig_find_random.seed and restored._item_table.dig_find_random.state == live._item_table.dig_find_random.state,
+	_expect(TestAccess.item_table(restored).dig_find_random.seed == TestAccess.item_table(live).dig_find_random.seed and TestAccess.item_table(restored).dig_find_random.state == TestAccess.item_table(live).dig_find_random.state,
 		"a real SaveIO round trip must preserve the dig-find RNG's own stream exactly")
 
 	# Continue both the live run and its SaveIO-restored counterpart through one

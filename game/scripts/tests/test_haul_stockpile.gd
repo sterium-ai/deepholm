@@ -7,6 +7,7 @@ extends SceneTree
 ## dig/chop -- no side queue, no change to aging/budgets.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 
@@ -32,17 +33,11 @@ func _expect(condition: bool, message: String) -> void:
 	if not condition:
 		_fail(message)
 
-func _build_world(seed_value: int) -> WorldStateType:
-	var world := WorldStateType.new(seed_value)
-	world._tile_grid.tiles.fill(WorldStateType.TILE_FLOOR)
-	world._colonists.clear()
-	return world
-
 func _colonist(id: String, x: int, y: int) -> Dictionary:
 	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "hands": []}
 
 func _place_wood_item(world: WorldStateType, item_id: String, x: int, y: int) -> void:
-	world._item_table.items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
 
 func _apply(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:
 	var result := world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
@@ -60,7 +55,7 @@ func _haul_job_key(job: Dictionary) -> String:
 ## tick so a mid-run leak (not just an end-state one) would be caught.
 func _assert_no_orphaned_reservations(world: WorldStateType, context: String) -> void:
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(
-		world._scheduler.queue.get_reservation_table(), world.get_jobs())
+		TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect(orphans.is_empty(), "no reservation may outlive its job (%s): orphans=%s" % [context, orphans])
 
 func _haul_jobs(world: WorldStateType) -> Array[Dictionary]:
@@ -80,14 +75,14 @@ func _haul_jobs(world: WorldStateType) -> Array[Dictionary]:
 func _check_two_of_three_items_reach_a_two_cell_zone() -> void:
 	if _failed:
 		return
-	var world := _build_world(19001)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
-	world._colonists.append(_colonist("colonist_1", 0, 3))
-	world._colonists.append(_colonist("colonist_2", 0, 6))
+	var world := Scenarios.floor_world(19001)
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(_colonist("colonist_1", 0, 3))
+	TestAccess.colonists(world).append(_colonist("colonist_2", 0, 6))
 	_place_wood_item(world, "item_1", 10, 0)
 	_place_wood_item(world, "item_2", 10, 3)
 	_place_wood_item(world, "item_3", 10, 6)
-	world._item_table.next_item_id = 4
+	TestAccess.item_table(world).next_item_id = 4
 	_add_zone(world, "zone_setup", 20, 0, 1, 2)
 
 	for _i in 400:
@@ -113,8 +108,8 @@ func _check_two_of_three_items_reach_a_two_cell_zone() -> void:
 	_expect(blocked_full == 1, "the third item's haul job must report blocked_destination_full (got %d such jobs)" % blocked_full)
 
 	var invariant := ReservationInvariantsType.check(
-		world._scheduler.queue.get_reservation_table(), world.get_jobs(), world.get_colonists(), _haul_job_key,
-		Callable(), Callable(), world._content)
+		TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs(), world.get_colonists(), _haul_job_key,
+		Callable(), Callable(), TestAccess.content(world))
 	_expect(invariant["orphaned_reservations"].is_empty(), "no orphaned reservations at settle: %s" % [invariant["orphaned_reservations"]])
 	_expect(invariant["idle_with_available_work"].is_empty(),
 		"no colonist may idle while eligible reachable unreserved work exists: %s" % [invariant["idle_with_available_work"]])
@@ -128,10 +123,10 @@ func _check_two_of_three_items_reach_a_two_cell_zone() -> void:
 func _check_cancel_mid_carry_drops_item_and_rehauls_later() -> void:
 	if _failed:
 		return
-	var world := _build_world(19002)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.floor_world(19002)
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).next_item_id = 2
 	_add_zone(world, "zone_setup", 0, 10, 1, 1)
 
 	var job_id := ""
@@ -161,13 +156,13 @@ func _check_cancel_mid_carry_drops_item_and_rehauls_later() -> void:
 
 	_apply(world, "cancel_haul", "cancel_job", {"job_id": job_id})
 
-	var cancelled := world._scheduler.queue.get_job(job_id)
+	var cancelled := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(cancelled["status"] == "cancelled", "the haul job must be cancelled")
 	var after_cancel := world.get_colonists()[0]
 	_expect(not InventoryType.is_carrying(after_cancel), "the colonist must no longer be carrying after cancel")
 	_expect(world.get_ground_wood(drop_tile.x, drop_tile.y) == 1,
 		"the item must land on the colonist's exact tile at the moment of cancellation")
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	_expect(not table.is_reserved("item:item_1"), "cancel must release the item reservation")
 	_expect(not table.is_reserved("cell:0,10"), "cancel must release the cell reservation")
 
@@ -188,10 +183,10 @@ func _check_cancel_mid_carry_drops_item_and_rehauls_later() -> void:
 func _check_zone_removed_mid_walk_fails_blocked_destination_gone() -> void:
 	if _failed:
 		return
-	var world := _build_world(19003)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
+	var world := Scenarios.floor_world(19003)
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._item_table.next_item_id = 2
+	TestAccess.item_table(world).next_item_id = 2
 	var zone_id := _add_zone(world, "zone_setup", 0, 10, 1, 1)
 
 	var job_id := ""
@@ -212,11 +207,11 @@ func _check_zone_removed_mid_walk_fails_blocked_destination_gone() -> void:
 
 	_apply(world, "remove_zone_mid_walk", "zone_remove", {"id": zone_id})
 
-	var failed_job := world._scheduler.queue.get_job(job_id)
+	var failed_job := TestAccess.scheduler(world).queue.get_job(job_id)
 	_expect(failed_job["status"] == "failed" and failed_job["reason"] == "blocked_destination_gone",
 		"removing the zone mid-walk must fail the job blocked_destination_gone (got status=%s reason=%s)"
 			% [failed_job["status"], failed_job["reason"]])
-	var table := world._scheduler.queue.get_reservation_table()
+	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	_expect(not table.is_reserved("item:item_1"), "no leaked item reservation after blocked_destination_gone")
 	_expect(not table.is_reserved("cell:0,10"), "no leaked cell reservation after blocked_destination_gone")
 	_assert_no_orphaned_reservations(world, "after blocked_destination_gone")
@@ -232,12 +227,12 @@ func _check_zone_removed_mid_walk_fails_blocked_destination_gone() -> void:
 func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	if _failed:
 		return
-	var world := _build_world(19004)
-	world._colonists.append(_colonist("colonist_0", 0, 0))
-	world._colonists.append(_colonist("colonist_1", 5, 5))
+	var world := Scenarios.floor_world(19004)
+	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0))
+	TestAccess.colonists(world).append(_colonist("colonist_1", 5, 5))
 	_place_wood_item(world, "item_1", 0, 0)
-	world._item_table.next_item_id = 2
-	world._tile_grid.tiles[world._tile_grid.tile_index(7, 5)] = WorldStateType.TILE_SOIL
+	TestAccess.item_table(world).next_item_id = 2
+	TestAccess.set_tile(world, 7, 5, WorldStateType.TILE_SOIL)
 	world.spawn_ground_tool_item("pick", 5, 5)
 
 	var dig_result := _apply(world, "dig_other", "dig", {"x": 7, "y": 5, "priority": 1})
@@ -253,11 +248,11 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 			for job in _haul_jobs(world):
 				haul_job_id = String(job["id"])
 		if dig_activated_tick < 0:
-			var dig_job := world._scheduler.queue.get_job(dig_job_id)
+			var dig_job := TestAccess.scheduler(world).queue.get_job(dig_job_id)
 			if dig_job["status"] == "active":
 				dig_activated_tick = world.get_tick()
 		if not dig_completed:
-			var dig_job := world._scheduler.queue.get_job(dig_job_id)
+			var dig_job := TestAccess.scheduler(world).queue.get_job(dig_job_id)
 			if dig_job["status"] == "completed":
 				dig_completed = true
 
@@ -268,7 +263,7 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	if haul_job_id.is_empty():
 		return
 
-	var final_job := world._scheduler.queue.get_job(haul_job_id)
+	var final_job := TestAccess.scheduler(world).queue.get_job(haul_job_id)
 	_expect(final_job["status"] == "queued" and final_job["reason"] == "blocked_destination_full",
 		"a haul job with no reachable zone must stay queued blocked_destination_full (got status=%s reason=%s)"
 			% [final_job["status"], final_job["reason"]])
@@ -283,8 +278,8 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 		return
 	var first_gap := attempt_ticks[1] - attempt_ticks[0]
 	var second_gap := attempt_ticks[2] - attempt_ticks[1]
-	var haul_retry_base_ticks := int(world._scheduler.queue._haul_retry_base_ticks)
-	var haul_retry_cap_ticks := int(world._scheduler.queue._haul_retry_cap_ticks)
+	var haul_retry_base_ticks := int(TestAccess.queue_haul_retry_base_ticks(world))
+	var haul_retry_cap_ticks := int(TestAccess.queue_haul_retry_cap_ticks(world))
 	_expect(first_gap >= haul_retry_base_ticks,
 		"the first retry gap must be at least the base backoff (got %d, base %d)" % [first_gap, haul_retry_base_ticks])
 	_expect(second_gap >= first_gap,
