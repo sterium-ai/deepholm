@@ -788,7 +788,7 @@ one.
   device are in the appendix; the ADR records the decision.
 - **Non-goals:** store release; iOS.
 
-#### A19 — One-time `RegionMap` build cost · `todo` · *parallel-safe (map/regions.gd only)*
+#### A19 — One-time `RegionMap` build cost · `done-by-A2 (#28, a1c447b)` · *parallel-safe (map/regions.gd only)* · no code change (`handoffs/A19.md`)
 
 - **Goal:** the first `TileGrid.get_regions()` on a 256×256 map, the full-map flood fill in
   `RegionMap._init()`/`_flood_assign()`, stops dominating tick 1. A4 measured it at about
@@ -803,6 +803,12 @@ one.
   dumps (R8/R9) identical; full suite green.
 - **Non-goals:** changing what counts as passable or as one region; rooms (`rooms.gd` reuses
   `RegionMap`, but only to keep its ids identical).
+- **Outcome (2026-10-28):** A4's 258 ms was measured on `7abae43`, before A2's row-run build
+  (#28) landed. On `691c25e` (after R15): `bench_tick_scaling` needs, 10 colonists,
+  `first=26.16ms hash_match=true` (target ≤ 100 ms); `A4-first_tick_split.gd` `regions=4.2ms`;
+  `A19-region_build_probe.gd`: build 3.9 ms, still paid in tick 1, seed-42 ids = an independent
+  row-major BFS (37 regions, 0 mismatches, `ids_hash=2627088496`). Nothing under `game/` changed,
+  so ids and the R8/R9 dumps equal `main`. Evidence: `docs/orca/handoffs/A19.md`.
 
 ---
 
