@@ -273,9 +273,12 @@ func _update_banner() -> void:
 		_set_banner_visible(false)
 		return
 	var data: Dictionary = event.get("data", {})
-	_banner_label.text = _text_table.format(
-		"work_table.banner_text", [String(data.get("label", "")), int(data.get("days_until", 0))]
-	)
+	# The window's label is a calendar.json text key; a label that is not one
+	# (a test calendar's) is shown as written.
+	var label := String(data.get("label", ""))
+	if _text_table.has_string(label):
+		label = _text_table.get_string(label)
+	_banner_label.text = _text_table.format("work_table.banner_text", [label, int(data.get("days_until", 0))])
 	_set_banner_visible(true)
 
 func _set_banner_visible(is_visible: bool) -> void:

@@ -68,17 +68,17 @@ func _init(apply: Callable, get_construction_site: Callable, get_job_index: Call
 static func check(payload: Dictionary, map_width: int, map_height: int) -> Dictionary:
 	for key in payload.keys():
 		if key not in ["order", "x", "y", "width", "height", "priority"]:
-			return {"reason": "invalid_payload", "message": "area_order accepts only order, x, y, width, height and priority."}
+			return {"reason": "invalid_payload", "params": {"detail": "area_order_extra_field", "field": str(key)}}
 	if typeof(payload.get("order")) != TYPE_STRING or String(payload["order"]) not in ORDERS:
-		return {"reason": "invalid_payload", "message": "area_order requires an order among %s." % [ORDERS]}
+		return {"reason": "invalid_payload", "params": {"detail": "area_order_unknown_order", "orders": str(ORDERS)}}
 	for key in ["x", "y", "width", "height"]:
 		if typeof(payload.get(key)) != TYPE_INT:
-			return {"reason": "invalid_payload", "message": "area_order requires integer x, y, width and height."}
+			return {"reason": "invalid_payload", "params": {"detail": "area_order_payload"}}
 	if typeof(payload.get("priority", 1)) != TYPE_INT:
-		return {"reason": "invalid_payload", "message": "area_order priority must be an integer."}
+		return {"reason": "invalid_payload", "params": {"detail": "area_order_priority"}}
 	var rect := Rect2i(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]))
 	if not rect.has_area() or not Rect2i(0, 0, map_width, map_height).encloses(rect):
-		return {"reason": "invalid_target", "message": "Choose a rectangle of at least one tile within the map."}
+		return {"reason": "invalid_target", "params": {"detail": "area_rect_invalid"}}
 	return {}
 
 ## WorldState.apply()'s area_order handler (the envelope is already valid):
@@ -90,7 +90,7 @@ func apply_command(command: Dictionary, map_width: int, map_height: int) -> Dict
 	var payload: Dictionary = command["payload"]
 	var rejection := check(payload, map_width, map_height)
 	if not rejection.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], rejection["reason"], rejection["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], rejection["reason"], rejection["params"])
 	var order := {
 		"id": _next_id, "order": String(payload["order"]), "actor": String(command["actor"]),
 		"commandId": String(command["command_id"]), "x": int(payload["x"]), "y": int(payload["y"]),

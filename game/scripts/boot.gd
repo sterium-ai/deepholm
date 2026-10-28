@@ -26,7 +26,6 @@ const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
 
 const Tool = OrderInputType.Tool
 const DEFAULT_BOOT_SEED := 20260915
-const TEXT_TABLE_PATH := "res://data/text/en.json"
 ## Content pack roots applied, in this order, on top of res://content/ (A13,
 ## ADR 010 amendment); none ship yet, so the session runs the base bundle.
 const CONTENT_PACK_ROOTS: Array[String] = []
@@ -81,7 +80,7 @@ var _work_table_panel: Control:
 ## and read _rejected_tiles_label.text before the tree has run a frame.
 func _init() -> void:
 	world = build_default_world()
-	_text_table = TextTableType.new(TEXT_TABLE_PATH)
+	_text_table = TextTableType.new(TextTableType.requested_locale())
 	_rejected_tiles_label = Label.new()
 	_need_alerts_label = Label.new()
 	_room_label = Label.new()
@@ -161,7 +160,7 @@ func _build_ui() -> void:
 	_map_view.set_tick_driver(tick_driver)
 	_map_view.rectangle_committed.connect(_commit_rectangle)
 	_map_view.zone_add_committed.connect(func(result: Dictionary): _show_map_result(StatusTextType.zone_result_text(_text_table, result)))
-	_map_view.build_committed.connect(func(result: Dictionary): _show_map_result(StatusTextType.build_result_text(result)))
+	_map_view.build_committed.connect(func(result: Dictionary): _show_map_result(StatusTextType.build_result_text(_text_table, result)))
 	_map_view.tool_left.connect(func(): _select_tool(-1))
 	_map_view.preview_validity = _preview_validity
 	_map_viewport.attach(_map_view)
@@ -174,7 +173,7 @@ func _build_ui() -> void:
 		_status_label.text = SaveWiringType.last_saved_text(_text_table, save_manager)
 	_update_need_alerts_label()
 	_update_active_seed_label()
-	_new_game_confirm = NewGameDialogType.new()
+	_new_game_confirm = NewGameDialogType.new(_text_table)
 	_new_game_confirm.confirmed.connect(_on_new_game_confirmed)
 	add_child(_new_game_confirm)
 	_map_viewport.call_deferred("center_colonists")
@@ -228,12 +227,12 @@ func _update_need_alerts_label() -> void:
 
 func _refresh_room_label() -> void:
 	if _room_label != null:
-		_room_label.text = StatusTextType.room_text(world, _orders.has_inspected_tile, _orders.inspected_tile)
+		_room_label.text = StatusTextType.room_text(world, _text_table, _orders.has_inspected_tile, _orders.inspected_tile)
 
 ## One debug Spawn button per content incident (ControlBar.make_incident_buttons()).
 func _make_incident_buttons() -> Array[Button]:
 	if _text_table == null:
-		_text_table = TextTableType.new(TEXT_TABLE_PATH)
+		_text_table = TextTableType.new(TextTableType.requested_locale())
 	return ControlBarType.make_incident_buttons(world, _text_table, spawn_incident)
 
 ## Returns WorldState.apply()'s own result so a caller can inspect it.
@@ -242,7 +241,7 @@ func spawn_incident(incident_id: String) -> Dictionary:
 		"actor": "player", "command_id": "viewer_spawn_incident_%s_%d" % [incident_id, world.get_tick()],
 		"tick": world.get_tick(), "type": "spawn_incident", "payload": {"id": incident_id},
 	})
-	_set_status(StatusTextType.spawn_incident_text(StatusTextType.incident_display_name(_text_table, incident_id), result))
+	_set_status(StatusTextType.spawn_incident_text(_text_table, StatusTextType.incident_display_name(_text_table, incident_id), result))
 	return result
 
 func _on_save_pressed() -> void:
@@ -279,11 +278,11 @@ func _on_new_game_confirmed() -> void:
 ## Explicit opt-in to DebugScenario's seeded diagnostic world; never the default.
 func _on_debug_scenario_pressed() -> void:
 	_swap_in_unsaved_world(DebugScenarioType.build(DebugScenarioType.SCENARIO_SEED, DebugScenarioType.TICK_RATE, true),
-		"Debug scenario: seed %d." % DebugScenarioType.SCENARIO_SEED)
+		_text_table.format("status.debug_scenario_started", [DebugScenarioType.SCENARIO_SEED]))
 
 func _start_new_game(seed_value: int) -> void:
 	var new_world := build_default_world(seed_value, 10)
-	_swap_in_unsaved_world(new_world, "New game: seed %d (%dx%d)." % [seed_value, new_world.get_map_width(), new_world.get_map_height()])
+	_swap_in_unsaved_world(new_world, _text_table.format("status.new_game_started", [seed_value, new_world.get_map_width(), new_world.get_map_height()]))
 
 ## Swaps in a fresh colony like Load does, never touching the previous save.
 ## Mints a strictly new epoch, suspends autosave until an explicit Save (an
@@ -312,7 +311,7 @@ func _toggle_recording() -> void:
 		_stop_recording()
 		return
 	command_recorder.start(world)
-	_set_status("Recording from tick %d; F9 stops and saves." % world.get_tick())
+	_set_status(_text_table.format("status.recording_started", [world.get_tick()]))
 
 ## A recording never spans two worlds: _replace_world() stops and saves it first.
 func _stop_recording() -> void:
@@ -323,9 +322,9 @@ func _stop_recording() -> void:
 	var text: String
 	if written.get("ok", false):
 		last_recording_path = written["path"]
-		text = "Recording saved (ticks %d..%d): %s" % [recording.start_tick, recording.end_tick, ProjectSettings.globalize_path(last_recording_path)]
+		text = _text_table.format("status.recording_saved", [recording.start_tick, recording.end_tick, ProjectSettings.globalize_path(last_recording_path)])
 	else:
-		text = "Recording not saved: %s" % written.get("message", "")
+		text = _text_table.format("status.recording_not_saved", [_text_table.format_named("recording.error.%s" % written["code"], written)])
 	print(text)
 	_set_status(text)
 
@@ -348,4 +347,4 @@ func _replace_world(new_world: WorldStateType) -> void:
 
 func _update_active_seed_label() -> void:
 	if _active_seed_label != null:
-		_active_seed_label.text = "Active seed: %d" % world.get_seed()
+		_active_seed_label.text = _text_table.format("controls.active_seed_label", [world.get_seed()])

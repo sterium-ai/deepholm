@@ -133,7 +133,7 @@ func apply_construction_submission(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var check := check_construction_command(payload)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var kind: String = payload["kind"]
 	var orientation := String(payload.get("orientation", ""))
 	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
@@ -160,24 +160,24 @@ func apply_construction_submission(command: Dictionary) -> Dictionary:
 func check_construction_command(payload: Dictionary) -> Dictionary:
 	for key in payload.keys():
 		if not (key == "kind" or key == "x" or key == "y" or key == "orientation"):
-			return {"reason": "invalid_payload", "message": "build accepts only kind, x, y and orientation."}
+			return {"reason": "invalid_payload", "params": {"detail": "build_extra_field", "field": str(key)}}
 	if (typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty()
 			or typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
 			or typeof(payload.get("orientation", "")) != TYPE_STRING):
-		return {"reason": "invalid_payload", "message": "build requires a non-empty string kind, integer x, y and an optional string orientation."}
+		return {"reason": "invalid_payload", "params": {"detail": "build_payload"}}
 	var kind: String = payload["kind"]
 	if not _object_definitions.has(kind) or (_object_definitions[kind].get("build_cost", []) as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "Unknown or non-buildable object kind '%s'." % kind}
+		return {"reason": "invalid_payload", "params": {"detail": "unknown_buildable_kind", "kind": kind}}
 	var orientation := String(payload.get("orientation", ""))
 	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
+		return {"reason": "invalid_payload", "params": {"detail": "invalid_orientation"}}
 	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
 	var footprint_tiles := _object_table.object_footprint_tiles(kind, origin, orientation)
 	var occupancy_check := _construction_footprint_check(footprint_tiles)
 	if not occupancy_check.is_empty():
 		return occupancy_check
 	if not bool(_object_definitions[kind].get("passable", true)) and _would_enclose_tiles(footprint_tiles):
-		return {"reason": "blocked_target_unreachable", "message": "Building here would seal off part of the colony."}
+		return {"reason": "blocked_target_unreachable", "params": {"detail": "build_seals_colony"}}
 	return {}
 
 ## Per-tile occupancy rule shared by build and build_line (same tiles, same
@@ -188,34 +188,34 @@ func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictiona
 	for tile in footprint_tiles:
 		if (_colonist_at.call(tile.x, tile.y) or not _object_table.get_object(tile.x, tile.y).is_empty()
 				or not _build_site_terrain_valid(tile)):
-			return {"reason": "invalid_target", "message": "Choose an empty, passable, in-bounds tile with no colonist or tree."}
+			return {"reason": "invalid_target", "params": {"detail": "build_tile_blocked"}}
 		if not table.owner(_build_site_key(tile)).is_empty():
-			return {"reason": "invalid_target", "message": "Another order already claims this tile."}
+			return {"reason": "invalid_target", "params": {"detail": "build_tile_claimed"}}
 	return {}
 
 ## build_line's read-only classification (ADR 042), shared by apply() and
-## preview(): {"reason", "message"} rejects the whole command, otherwise
+## preview(): {"reason", "params"} rejects the whole command, otherwise
 ## {"kind", "orientation", "surviving", "skipped"}. Tiles are canonicalized
 ## (row-major, de-duplicated); a footprint overlapping an earlier survivor's is
 ## skipped invalid_target; the enclosure check runs once over all survivors.
 func classify_build_line_command(payload: Dictionary) -> Dictionary:
 	if typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty():
-		return {"reason": "invalid_payload", "message": "build_line requires a non-empty string kind."}
+		return {"reason": "invalid_payload", "params": {"detail": "build_line_kind"}}
 	var kind: String = payload["kind"]
 	if not _object_definitions.has(kind) or (_object_definitions[kind].get("build_cost", []) as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "Unknown or non-buildable object kind '%s'." % kind}
+		return {"reason": "invalid_payload", "params": {"detail": "unknown_buildable_kind", "kind": kind}}
 	if typeof(payload.get("orientation", "")) != TYPE_STRING:
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
+		return {"reason": "invalid_payload", "params": {"detail": "invalid_orientation"}}
 	var orientation := String(payload.get("orientation", ""))
 	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
-		return {"reason": "invalid_payload", "message": "orientation must be 'horizontal' or 'vertical'."}
+		return {"reason": "invalid_payload", "params": {"detail": "invalid_orientation"}}
 	if typeof(payload.get("tiles")) != TYPE_ARRAY or (payload["tiles"] as Array).is_empty():
-		return {"reason": "invalid_payload", "message": "build_line requires a non-empty array of tiles."}
+		return {"reason": "invalid_payload", "params": {"detail": "build_line_tiles"}}
 	var seen := {}
 	var canonical: Array[Vector2i] = []
 	for entry in (payload["tiles"] as Array):
 		if typeof(entry) != TYPE_DICTIONARY or typeof(entry.get("x")) != TYPE_INT or typeof(entry.get("y")) != TYPE_INT:
-			return {"reason": "invalid_payload", "message": "Every build_line tile requires integer x and y."}
+			return {"reason": "invalid_payload", "params": {"detail": "build_line_tile_payload"}}
 		var tile := Vector2i(int(entry["x"]), int(entry["y"]))
 		if not seen.has(tile):
 			seen[tile] = true
@@ -247,7 +247,7 @@ func classify_build_line_command(payload: Dictionary) -> Dictionary:
 		for tile in surviving:
 			combined_footprint.append_array(_object_table.object_footprint_tiles(kind, tile, orientation))
 		if _would_enclose_tiles(combined_footprint):
-			return {"reason": "blocked_target_unreachable", "message": "Building this line would seal off part of the colony."}
+			return {"reason": "blocked_target_unreachable", "params": {"detail": "build_line_seals_colony"}}
 	return {"kind": kind, "orientation": orientation, "surviving": surviving, "skipped": skipped}
 
 ## build_line: one site per surviving tile, in row-major order, created exactly
@@ -255,7 +255,7 @@ func classify_build_line_command(payload: Dictionary) -> Dictionary:
 func apply_build_line_command(command: Dictionary) -> Dictionary:
 	var classification := classify_build_line_command(command["payload"])
 	if classification.has("reason"):
-		return _event_log.rejection(command["command_id"], command["actor"], classification["reason"], classification["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], classification["reason"], classification["params"])
 	var kind: String = classification["kind"]
 	var orientation: String = classification["orientation"]
 	var definition: Dictionary = _object_definitions[kind]

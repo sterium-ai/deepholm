@@ -58,7 +58,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 ## game/content/calendar.json must declare day_length_ticks 2200 (ADR 024)
-## and exactly one window: sow/farm/1-20/+1/"sowing window".
+## and exactly one window: sow/farm/1-20/+1/"calendar.window.sow".
 ## from/to are day numbers per ADR 008, not ticks, so day_length_ticks
 ## changing from 100 to 2200 does not rescale them.
 func _check_calendar_content_file() -> void:
@@ -89,7 +89,7 @@ func _check_calendar_content_file() -> void:
 	_expect(int(window.get("to")) == 20,
 		"the seed window must end at day 20, independent of the day length, since from/to are day numbers (ADR 008), not ticks")
 	_expect(int(window.get("boost")) == 1, "the seed window's boost must be +1")
-	_expect(String(window.get("label")) == "sowing window", "the seed window's label must be 'sowing window'")
+	_expect(String(window.get("label")) == "calendar.window.sow", "the seed window's label must be the text key 'calendar.window.sow' (ADR 052)")
 
 ## active_boost('farm', tick) must be 1 for every tick inside spring days
 ## 1-20 and 0 for every tick on day 21 or any other labour. Exhaustively

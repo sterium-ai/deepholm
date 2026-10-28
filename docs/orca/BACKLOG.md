@@ -685,7 +685,7 @@ one.
   `main`); a test adds a new work kind via content only.
 - **Non-goals:** recipes and workbenches (F2).
 
-#### A15 — Localisation-ready text · `todo` · *parallel-safe after A9*
+#### A15 — Localisation-ready text · `review (antonelmejor50-hub/a15-localisation-ready-text)` · *parallel-safe after A9*
 
 - **Goal:** the core returns reason codes and parameters only (the English `message`
   strings move to `data/text/en.json`). Every visible viewer string is a `TextTable` key, and
@@ -697,6 +697,17 @@ one.
 - **Acceptance:** a lint finds no user-facing literal in the viewer; a pseudo-locale test shows
   every key resolves; rejection reason codes are unchanged (grep the tests).
 - **Non-goals:** translations themselves; font and RTL work.
+- **Approved scope extension (owner, 2026-10-28):** after R1–R12 the core's English rejection
+  messages no longer live in `world_state.gd` but in `commands/area_orders.gd`,
+  `commands/handlers/*.gd`, `objects/construction_system.gd`, `world/command_router.gd` and
+  `economy/trade_system.gd`, and the rejection envelope is built by `world/event_log.gd`;
+  `boot.gd` holds viewer text outside `viewer/*.gd`. The owner widened the owned paths to those
+  files, plus the tests that read the old `message`, so the goal can be met in full. The owner
+  also chose to start A15 before A9: the viewer changes are limited to text lookups.
+- **Done in this branch:** rejections carry `params` (codes and values) instead of `message`;
+  `TextTable` loads `data/text/<locale>.json` over `en.json`; tile and calendar labels are keys;
+  `test_viewer_text_lint.gd` and `test_text_pseudo_locale.gd`; [ADR 052](../decisions/052-localisation-ready-text.md).
+  See `docs/orca/handoffs/A15.md`.
 
 #### A16 — Scenarios as content · `todo` · after R12
 

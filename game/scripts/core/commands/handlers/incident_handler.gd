@@ -34,7 +34,7 @@ func _init(clock: SeededClockType, event_log: EventLogType, trade: TradeSystemTy
 func apply_spawn_incident_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_spawn_incident_command, command)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var applied := _event_log.applied(command)
 	applied["actor_ids"] = _force_spawn.call(String(payload["id"]), _clock.tick)

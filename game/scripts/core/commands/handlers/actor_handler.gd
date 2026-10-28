@@ -26,7 +26,7 @@ func _init(event_log: EventLogType, check: Callable, find_colonist: Callable) ->
 func apply_set_labour_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_set_labour_command, command)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var colonist: Dictionary = _find_colonist.call(String(payload["colonist"]))
 	WorkerType.set_labour_level(colonist, String(payload["kind"]), int(payload["level"]))
@@ -36,7 +36,7 @@ func apply_set_labour_command(command: Dictionary) -> Dictionary:
 func apply_set_faction_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_set_faction_command, command)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var actor: Dictionary = _find_colonist.call(String(payload["target"]))
 	actor["factionId"] = String(payload["faction_id"])

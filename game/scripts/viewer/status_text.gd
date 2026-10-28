@@ -63,7 +63,7 @@ static func need_alerts_text(world: WorldStateType, text_table: TextTableType) -
 		_incident_events.insert(_incident_events.bsearch_custom(event, event_log_less, false), event)
 	_incident_cursor = int(stream["next"])
 	for event in _incident_events:
-		lines.append(_incident_started_alert_line(event))
+		lines.append(_incident_started_alert_line(text_table, event))
 	return "\n".join(lines)
 
 ## WorldState's event-log order: (tick, system_priority, entity_id, sequence).
@@ -76,11 +76,9 @@ static func event_log_less(a: Dictionary, b: Dictionary) -> bool:
 		return a["entity_id"] < b["entity_id"]
 	return a["sequence"] < b["sequence"]
 
-## Hard-coded English text; not yet routed through the text table (like the
-## New Game controls in boot.gd).
-static func _incident_started_alert_line(event: Dictionary) -> String:
+static func _incident_started_alert_line(text_table: TextTableType, event: Dictionary) -> String:
 	var data: Dictionary = event.get("data", {})
-	return "Incident: %s (%s)" % [String(data.get("incident_id", "")), String(data.get("faction", ""))]
+	return text_table.format("status.incident_alert_label", [String(data.get("incident_id", "")), String(data.get("faction", ""))])
 
 ## Rooms: presentation-only readout of the last selected tile's room
 ## (docs/architecture/extension-points.md "Presentation") -- reads
@@ -93,18 +91,18 @@ static func _incident_started_alert_line(event: Dictionary) -> String:
 ## replaces on a fresh command outcome, room membership can change out from
 ## under an inspected tile with no new command aimed at it at all (an
 ## overlapping zone_add, a wall breached or resealed elsewhere).
-static func room_text(world: WorldStateType, has_inspected_tile: bool, inspected_tile: Vector2i) -> String:
+static func room_text(world: WorldStateType, text_table: TextTableType, has_inspected_tile: bool, inspected_tile: Vector2i) -> String:
 	if not has_inspected_tile:
 		return ""
 	var room := world.get_room_at(inspected_tile.x, inspected_tile.y)
 	if room.is_empty():
 		return ""
-	var room_name := "Room"
+	var room_key := "status.room.room"
 	if bool(room.get("has_bed", false)):
-		room_name = "Bedroom"
+		room_key = "status.room.bedroom"
 	elif bool(room.get("has_stockpile", false)):
-		room_name = "Storeroom"
-	return "%s (%d tiles, %d doors)" % [room_name, int(room["size"]), int(room["door_count"])]
+		room_key = "status.room.storeroom"
+	return text_table.format("status.room_label", [text_table.get_string(room_key), int(room["size"]), int(room["door_count"])])
 
 ## Replaces (never appends to) the rejected-tiles block on every commit, so a
 ## later successful drag clears an earlier rejection instead of accumulating.
@@ -129,12 +127,22 @@ static func zone_result_text(text_table: TextTableType, result: Dictionary) -> S
 
 ## The build tool's own click-to-place path (map_view.gd's build_committed
 ## signal), mirroring zone_result_text()'s ok/rejected handling.
-## Hard-coded English text; not yet routed through the text table (like
-## boot.gd's other literal strings).
-static func build_result_text(result: Dictionary) -> String:
+static func build_result_text(text_table: TextTableType, result: Dictionary) -> String:
 	if result.get("ok", false):
 		return ""
-	return "Build rejected: %s" % String(result["rejection"]["reason"])
+	return text_table.format("status.build_rejected_label", [rejection_text(text_table, result["rejection"])])
+
+## Player text for a command rejection (ADR 052): the core sends codes and
+## values only. "params".detail names the failed rule ("rejection.<detail>",
+## filled from the params' named values), "params".remedy a JobQueue remedy
+## ("status.remedy.<remedy>"); otherwise the reason alone ("status.reason.<reason>").
+static func rejection_text(text_table: TextTableType, rejection: Dictionary) -> String:
+	var params: Dictionary = rejection.get("params", {})
+	if params.has("detail"):
+		return text_table.format_named("rejection.%s" % params["detail"], params)
+	if params.has("remedy"):
+		return text_table.get_string("status.remedy.%s" % params["remedy"])
+	return text_table.get_string("status.reason.%s" % rejection.get("reason", ""))
 
 ## Player-facing name of an incident: its "incident.<id>" text-table entry,
 ## or the id with underscores replaced and the first letter capitalised when
@@ -146,7 +154,7 @@ static func incident_display_name(text_table: TextTableType, incident_id: String
 	var words := incident_id.replace("_", " ")
 	return words.substr(0, 1).to_upper() + words.substr(1)
 
-static func spawn_incident_text(display_name: String, result: Dictionary) -> String:
+static func spawn_incident_text(text_table: TextTableType, display_name: String, result: Dictionary) -> String:
 	if result.get("ok", false):
-		return "%s: started." % display_name
-	return "%s: not started (%s)." % [display_name, String(result.get("rejection", {}).get("reason", ""))]
+		return text_table.format("status.incident_started", [display_name])
+	return text_table.format("status.incident_not_started", [display_name, rejection_text(text_table, result.get("rejection", {}))])

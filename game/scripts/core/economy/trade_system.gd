@@ -120,23 +120,23 @@ func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if not (payload.get("trader_id") is String) or String(payload.get("trader_id", "")).is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], "invalid_payload",
-			"accept_trade requires a non-empty string trader_id.")
+			{"detail": "accept_trade_payload"})
 	var trader_id: String = String(payload["trader_id"])
 	if not pending_offers.has(trader_id):
 		return _event_log.rejection(command["command_id"], command["actor"], "invalid_target",
-			"No pending trade offer for trader_id '%s' (unknown or already departed)." % trader_id)
+			{"detail": "no_pending_offer", "trader_id": trader_id})
 	var trader: Dictionary = _find_colonist.call(trader_id)
 	if trader.is_empty():
 		pending_offers.erase(trader_id)
 		return _event_log.rejection(command["command_id"], command["actor"], "invalid_target",
-			"Trader '%s' has already departed." % trader_id)
+			{"detail": "trader_departed", "trader_id": trader_id})
 	var offer: Dictionary = pending_offers[trader_id]
 	var want_item := String(offer["want_item"])
 	var give_item := String(offer["give_item"])
 	var stock_item_id := _item_table.find_available_stockpiled_item(want_item, 1)
 	if stock_item_id.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], "blocked_missing_input",
-			"stockpile_the_required_item")
+			{"remedy": "stockpile_the_required_item", "item": want_item})
 	var stock_tile := _item_table.remove_stockpiled_item_unit(stock_item_id)
 	_append_trader_inventory_item(trader, want_item)
 	_remove_trader_offered_item(trader, give_item)

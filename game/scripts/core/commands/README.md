@@ -41,8 +41,18 @@ Success (`"ok": true`):
 Rejection (`"ok": false`):
 
 ```gdscript
-{"ok": false, "rejection": {"command_id": ..., "actor": ..., "reason": ..., "message": ..., "tick": ...}}
+{"ok": false, "rejection": {"command_id": ..., "actor": ..., "reason": ..., "params": {...}, "tick": ...}}
 ```
+
+`reason` is the stable rejection code. `params` holds codes and values only, never
+player text (ADR 052): `"detail"` names the rule that failed (for example
+`"target_not_tree"`, `"unknown_object_kind"` with `"kind"`), and a rejection
+`JobQueue` produced carries its `"remedy"` code instead. Any other entry is a named
+value the text uses (`"type"`, `"kind"`, `"trader_id"`, `"command_tick"`, ...). The
+viewer words it: `StatusText.rejection_text()` looks up `rejection.<detail>` in
+`data/text/<locale>.json` and fills its `{name}` placeholders from `params`, or shows
+`status.remedy.<remedy>`, or else `status.reason.<reason>`. A new detail code ships
+with its `en.json` entry; `test_text_pseudo_locale.gd` fails otherwise.
 
 `command_id` and/or `actor` in a rejection may be `null` when the envelope
 was malformed before that field could be read (e.g. the command was not a
@@ -70,7 +80,7 @@ envelope validation and pre-mutation rule `apply()` would, without mutating
 state: `state_hash()` is identical before and after a call. Returns the same
 shape as `apply()` (`{"ok": true}` on success -- no `"applied"` block, since
 nothing was applied; `{"ok": false, "rejection": {...}}` otherwise, with the
-same `reason`/`message` `apply()` would produce for the same command). Backed
+same `reason`/`params` `apply()` would produce for the same command). Backed
 by `game/scripts/core/commands/command_checks.gd`'s `CommandChecks.check()`,
 the rule set both `preview()` and (for every type but `complete_job`/
 `cancel_job`/`fail_job`/`invalidate_job`) `apply()`'s own handlers consult, so

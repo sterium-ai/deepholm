@@ -118,10 +118,10 @@ func get_events_since(sequence: int, types: Array = []) -> Dictionary:
 func size() -> int:
 	return _events.size()
 
-func reject(command_id, actor, reason: String, message: String, record: bool) -> Dictionary:
+func reject(command_id, actor, reason: String, params: Dictionary, record: bool) -> Dictionary:
 	if record:
-		return rejection(command_id, actor, reason, message)
-	return pure_rejection(command_id, actor, reason, message)
+		return rejection(command_id, actor, reason, params)
+	return pure_rejection(command_id, actor, reason, params)
 
 func apply_noop(command: Dictionary) -> Dictionary:
 	var actor: String = command["actor"]
@@ -145,8 +145,8 @@ func applied(command: Dictionary) -> Dictionary:
 	result["applied"]["type"] = command["type"]
 	return result
 
-func rejection(command_id, actor, reason: String, message: String) -> Dictionary:
-	var result := pure_rejection(command_id, actor, reason, message)
+func rejection(command_id, actor, reason: String, params: Dictionary) -> Dictionary:
+	var result := pure_rejection(command_id, actor, reason, params)
 	if typeof(actor) == TYPE_STRING and actor != "":
 		insert_event({
 			"type": "command_rejected",
@@ -160,12 +160,14 @@ func rejection(command_id, actor, reason: String, message: String) -> Dictionary
 	return result
 
 ## Same Dictionary as rejection(), without the command_rejected event or a sequence draw.
-func pure_rejection(command_id, actor, reason: String, message: String) -> Dictionary:
+## `params` carries codes and values only, never player text (ADR 052): "detail" names the
+## failed rule, "remedy" a JobQueue remedy code; the viewer turns them into text.
+func pure_rejection(command_id, actor, reason: String, params: Dictionary) -> Dictionary:
 	return {"ok": false, "rejection": {
 		"command_id": command_id,
 		"actor": actor,
 		"reason": reason,
-		"message": message,
+		"params": params,
 		"tick": _clock.tick
 	}}
 

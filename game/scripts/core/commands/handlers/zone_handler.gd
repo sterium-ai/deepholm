@@ -32,7 +32,7 @@ func _init(event_log: EventLogType, scheduler: AssignmentType, zone_table: ZoneT
 func apply_zone_add_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_zone_add_command, command)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]))
 	var applied := _event_log.applied(command)
@@ -43,7 +43,7 @@ func apply_zone_add_command(command: Dictionary) -> Dictionary:
 func apply_zone_remove_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_zone_remove_command, command)
 	if not check.is_empty():
-		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var zone_id: String = payload["id"]
 	var removed := _zone_table.remove(zone_id)

@@ -61,7 +61,7 @@ func preview(command) -> Dictionary:
 	if command["type"] == "build_line":
 		var classification := _construction_system.classify_build_line_command(command["payload"])
 		if classification.has("reason"):
-			return _event_log.pure_rejection(command["command_id"], command["actor"], classification["reason"], classification["message"])
+			return _event_log.pure_rejection(command["command_id"], command["actor"], classification["reason"], classification["params"])
 		return {"ok": true, "skipped": classification["skipped"]}
 	var check: Dictionary
 	if command["type"] == "build":
@@ -73,7 +73,7 @@ func preview(command) -> Dictionary:
 	else:
 		check = _check.call(CommandChecks.check, command)
 	if not check.is_empty():
-		return _event_log.pure_rejection(command["command_id"], command["actor"], check["reason"], check["message"])
+		return _event_log.pure_rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	return {"ok": true}
 
 ## Validates a command envelope and applies it through its family's handler.
@@ -115,29 +115,29 @@ func apply(command) -> Dictionary:
 		_:
 			return _event_log.rejection(
 				command["command_id"], command["actor"], "unknown_command_type",
-				"No handler for command type '%s'." % command["type"]
+				{"detail": "unknown_command_type", "type": command["type"]}
 			)
 
 ## record=false (preview() only) builds every rejection through
 ## EventLog.pure_rejection(): no command_rejected event, no sequence draw.
 func validate_command(command, record: bool = true) -> Dictionary:
 	if typeof(command) != TYPE_DICTIONARY:
-		return _event_log.reject(null, null, "invalid_envelope", "Command must be a Dictionary.", record)
+		return _event_log.reject(null, null, "invalid_envelope", {"detail": "command_not_dictionary"}, record)
 	if not (command.has("actor") and typeof(command["actor"]) == TYPE_STRING and command["actor"] != ""):
 		return _event_log.reject(command.get("command_id"), command.get("actor"), "invalid_envelope",
-			"Command must include a non-empty string actor.", record)
+			{"detail": "missing_actor"}, record)
 	if not (command.has("command_id") and typeof(command["command_id"]) == TYPE_STRING and command["command_id"] != ""):
 		return _event_log.reject(null, command["actor"], "invalid_envelope",
-			"Command must include a non-empty string command_id.", record)
+			{"detail": "missing_command_id"}, record)
 	if not (command.has("tick") and typeof(command["tick"]) == TYPE_INT):
 		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include an integer tick.", record)
+			{"detail": "missing_tick"}, record)
 	if not (command.has("type") and typeof(command["type"]) == TYPE_STRING and command["type"] != ""):
 		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include a non-empty string type.", record)
+			{"detail": "missing_type"}, record)
 	if not (command.has("payload") and typeof(command["payload"]) == TYPE_DICTIONARY):
 		return _event_log.reject(command["command_id"], command["actor"], "invalid_envelope",
-			"Command must include a Dictionary payload.", record)
+			{"detail": "missing_payload"}, record)
 	# build_line's "tiles" (an Array of {x, y} Dictionaries) is the one exception
 	# to the flat String/int payload shape, scoped by both type and key.
 	for key in command["payload"].keys():
@@ -146,8 +146,8 @@ func validate_command(command, record: bool = true) -> Dictionary:
 		var value: Variant = command["payload"][key]
 		if typeof(value) != TYPE_STRING and typeof(value) != TYPE_INT:
 			return _event_log.reject(command["command_id"], command["actor"], "invalid_payload",
-				"Payload values must be String or int.", record)
+				{"detail": "payload_value_type"}, record)
 	if command["tick"] != _clock.tick:
 		return _event_log.reject(command["command_id"], command["actor"], "tick_mismatch",
-			"Command tick %d does not match current tick %d." % [command["tick"], _clock.tick], record)
+			{"detail": "tick_mismatch", "command_tick": command["tick"], "current_tick": _clock.tick}, record)
 	return {"ok": true}

@@ -139,7 +139,7 @@ func _check_calendar_boost_reflected_in_column_header() -> void:
 ## this file lives under scripts/tests/. The panel must reflect it without
 ## any special wiring beyond world.get_events_since(). It draws a real sequence
 ## (next_sequence()), like every core emitter, so a cursor reader sees it.
-func _fire_synthetic_alert(world: WorldStateType, tick: int, days_until: int, id: String = "sow", label: String = "sowing window") -> void:
+func _fire_synthetic_alert(world: WorldStateType, tick: int, days_until: int, id: String = "sow", label: String = "calendar.window.sow") -> void:
 	world._event_log.insert_event({
 		"type": "calendar_alert", "tick": tick, "system_priority": 0,
 		"entity_id": "world", "sequence": world._event_log.next_sequence(),
@@ -189,7 +189,7 @@ func _check_banner_persists_across_ticks_without_day_based_expiry() -> void:
 ## again, even though the original alert was never dismissed.
 func _check_banner_replaced_by_different_alert_before_ack() -> void:
 	var world := WorldStateType.new(70001)
-	_fire_synthetic_alert(world, 0, 3, "sow", "sowing window")
+	_fire_synthetic_alert(world, 0, 3, "sow", "calendar.window.sow")
 	var panel := _panel_for(world)
 	_expect(panel._banner_label.text.find("sowing window") >= 0, "setup: banner shows the first alert")
 
@@ -205,7 +205,7 @@ func _check_banner_replaced_by_different_alert_before_ack() -> void:
 ## an earlier dismissal.
 func _check_banner_replaced_by_different_alert_after_ack() -> void:
 	var world := WorldStateType.new(80001)
-	_fire_synthetic_alert(world, 0, 3, "sow", "sowing window")
+	_fire_synthetic_alert(world, 0, 3, "sow", "calendar.window.sow")
 	var panel := _panel_for(world)
 	panel._dismiss_banner()
 	_expect(not panel._banner_label.visible, "setup: banner is dismissed")

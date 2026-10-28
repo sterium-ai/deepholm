@@ -33,18 +33,17 @@ func build(text_table: TextTableType, orders: OrderInputType, incident_buttons: 
 	# New game controls: a visible, editable numeric seed --
 	# left blank, boot.gd's _on_new_game_pressed() picks one and writes it back
 	# here so it stays documented/visible, never silently chosen (see
-	# docs/decisions/019-world-dimensions-and-generation.md). Hard-coded
-	# English labels; not yet routed through the text table.
+	# docs/decisions/019-world-dimensions-and-generation.md).
 	seed_input = LineEdit.new()
-	seed_input.placeholder_text = "Seed (blank = random)"
+	seed_input.placeholder_text = text_table.get_string("controls.seed_placeholder")
 	seed_input.custom_minimum_size.x = 160
 	add_child(seed_input)
-	add_child(make_button("New Game", on["new_game"]))
+	add_child(make_button(text_table.get_string("controls.new_game"), on["new_game"]))
 	# Explicit opt-in to the seeded diagnostic scenario, which is kept as an
 	# option and for fixtures but is never the default -- the random dig-order queue
 	# and forced furniture DebugScenario.build() places are reachable from
 	# the running viewer only by pressing this button, never at startup.
-	add_child(make_button("Debug Scenario", on["debug_scenario"]))
+	add_child(make_button(text_table.get_string("controls.debug_scenario"), on["debug_scenario"]))
 	# The active world's own seed, distinct from
 	# seed_input above: that field is an editable draft for the next New
 	# Game, overwritten by _on_new_game_pressed() and never touched by Load,
@@ -64,10 +63,10 @@ func build(text_table: TextTableType, orders: OrderInputType, incident_buttons: 
 		button.set_pressed_no_signal(kind == orders.wall_kind)
 		orders.wall_kind_buttons[kind] = button
 		add_child(button)
-	for entry in [["Build Door", OrderInputType.Tool.BUILD_DOOR], ["Build Bed", OrderInputType.Tool.BUILD_BED],
-			["Build Workbench", OrderInputType.Tool.BUILD_WORKBENCH]]:
-		_add_tool_button(orders, int(entry[1]), String(entry[0]), on["select_tool"])
-	orders.rotate_build_button = make_button("Rotate (R)", on["rotate_build"])
+	for entry in [["controls.build_door", OrderInputType.Tool.BUILD_DOOR], ["controls.build_bed", OrderInputType.Tool.BUILD_BED],
+			["controls.build_workbench", OrderInputType.Tool.BUILD_WORKBENCH]]:
+		_add_tool_button(orders, int(entry[1]), text_table.get_string(String(entry[0])), on["select_tool"])
+	orders.rotate_build_button = make_button(text_table.get_string("controls.rotate_build"), on["rotate_build"])
 	orders.rotate_build_button.toggle_mode = true
 	orders.rotate_build_button.disabled = true
 	add_child(orders.rotate_build_button)
@@ -96,7 +95,7 @@ static func make_incident_buttons(world: WorldStateType, text_table: TextTableTy
 		var incident_id := String(entry["id"])
 		var button := Button.new()
 		button.text = StatusTextType.incident_display_name(text_table, incident_id)
-		button.tooltip_text = "Debug: trigger this incident now"
+		button.tooltip_text = text_table.get_string("controls.incident_tooltip")
 		button.set_meta("incident_id", incident_id)
 		button.pressed.connect(spawn_incident.bind(incident_id))
 		buttons.append(button)
