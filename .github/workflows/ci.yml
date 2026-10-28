@@ -1,9 +1,27 @@
 name: Godot headless checks
 
 "on":
+  # Docs-only changes skip the 18-minute suite (audit 2026-10-28). docs/architecture is NOT
+  # ignored: core-budgets.json, warnings-baseline.txt and the contracts are checked by CI.
   pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/orca/**"
+      - "docs/decisions/**"
+      - "docs/design/**"
+      - "docs/art/**"
+      - "CREDITS*"
+      - "LICENSE*"
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/orca/**"
+      - "docs/decisions/**"
+      - "docs/design/**"
+      - "docs/art/**"
+      - "CREDITS*"
+      - "LICENSE*"
 
 permissions:
   contents: read
@@ -54,6 +72,14 @@ jobs:
       - name: Lint content literals in the simulation core
         shell: pwsh
         run: ./game/scripts/tests/lint_content_literals.ps1
+
+      # Godot's import cache (game/.godot) is keyed on the engine version and every tracked
+      # asset/import file, so a hit is an exact match and a miss rebuilds from scratch.
+      - name: Restore Godot import cache
+        uses: actions/cache@v4
+        with:
+          path: game/.godot
+          key: godot-import-4.7.2-${{ hashFiles('game/project.godot', 'game/**/*.import', 'game/assets/**', 'game/data/**', 'game/content/**') }}
 
       # Import first to build the class_name cache the scripts depend on.
       - name: Import Godot project

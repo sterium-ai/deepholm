@@ -130,6 +130,30 @@ orden estricto, de una en una, porque cada una toca `world_state.gd`. Las tareas
   está mal o el test necesita adaptarse a una API nueva, y eso se explica en el informe.
 - **Una tarea = una rama = un PR.** Nada de mezclar refactor con funcionalidad.
 
+## Reglas de operación (auditoría del 28-10-2026)
+
+Salen de medir la primera semana con Orca (33 PR, 49 h de reloj, ~10.750 turnos de agente):
+
+- **Como mucho 4 agentes a la vez, y nunca 4 suites de Godot simultáneas.** Con 31 GB de RAM,
+  cuatro suites a la vez tiraron Orca (28-10, 00:30). Antes de abrir la cuarta tarea, mira que
+  al menos una de las tres no esté en la suite; si hay duda, tres.
+- **Revisar la entrada del backlog antes de abrir la tarea (10 minutos).** A2, A4, A5, A13 y
+  A16 descubrieron a mitad que sus *owned paths* o su aceptación eran anteriores a R8–R12 y
+  tuvieron que parar a preguntar. Quien abre la tarea comprueba que los ficheros nombrados
+  existen donde dice, que la aceptación sigue siendo medible en el `main` actual y que no choca
+  con lo que está en vuelo; si no, corrige la entrada en `BACKLOG.md` en el mismo commit que la
+  abre y lo escribe en la nota de coordinación del agente.
+- **Rebase y recuento antes de cada revisión: lo comprueba `review.ps1`.** Un tercio de las
+  rondas de Codex de la primera semana fueron "rebasa sobre `main` y actualiza el número de
+  tests". El script ya no lanza al revisor si la rama va por detrás de `origin/main` o si el
+  informe no cita la línea final de la suite con el recuento actual; avisa al agente y sale.
+- **Playtest del propietario cada 2–3 merges que toquen el visor.** Es la única validación que
+  no se automatiza. El acceso directo "Deepholm (ultima version)" baja `main`, importa y lanza;
+  lo que se vea raro va a `BACKLOG.md` como tarea `B*` con pasos para reproducirlo. Si hay una
+  grabación (F9 en la partida), adjunta el fichero de replay: `tools\replay.ps1` lo reproduce.
+- **Los cambios sólo de docs no pasan por la suite de CI** (`paths-ignore` en el workflow);
+  `docs/architecture/` sí, porque ahí viven los presupuestos y la línea base de avisos.
+
 ## Cuando algo va mal
 
 - *Claude dice que no puede correr Godot:* comprueba que `$env:GODOT` existe en esa terminal
