@@ -1,34 +1,15 @@
 class_name TileGrid
 extends RefCounted
 
-## WorldState's terrain: the map dimensions, the row-major tile kinds, the
-## lazily built water-tile cache, the append-only dirty-cell log, and the
-## lazily built region/room maps (regions.gd/rooms.gd). Plain data, no
-## scene/node/wall-clock dependency; the passability and object rules the
-## region/room maps read arrive as Callables, the per-tile ones from
-## Passability's packed arrays (bind_passability()).
-##
+## Terrain: map size, row-major tile kinds, the water-tile cache, the dirty-cell log and the
+## region/room maps (regions.gd/rooms.gd).
 ## Invariants:
-## - tiles[y * width + x] is (x, y)'s tile kind; width/height never change
-##   after construction except through StateCodec.decode() (a saved map's
-##   exact size), always before tiles is replaced.
-## - regions, rooms and the water cache are built on first use, never in
-##   _init(), so StateCodec.decode()'s direct tiles/objects overwrite never
-##   leaves them stale. Every later tile/object change keeps them in sync
-##   (on_passability_changed(), update_water_tile_cache()).
-## - dirty_cells is append-only, never cleared on read and never persisted: a
-##   viewer keeps a cursor into it (get_dirty_cells_since(), A6). Retention is
-##   bounded: past MAX_DIRTY_CELLS the oldest entries are dropped down to
-##   RETAINED_DIRTY_CELLS and dirty_base, the absolute cursor of
-##   dirty_cells[0], moves past them. Colonist/item movement never appends here.
-## - mark_dirty() is called after every tile-kind or object change (ToilBindings'
-##   work effects, ObjectTable.set_object()), so it is also where Passability
-##   refreshes that tile's packed cost/flags. A wholesale tiles/objects
-##   replacement (decode(), ObjectTable.decode()/place_generated()) calls
-##   reset_cells() instead, and Passability rebuilds its arrays on the next
-##   query; WorldState writes the generated map before the first query.
-## - state_hash() covers width, height and tiles (hash_into()); the caches
-##   and the dirty-cell log are derived and deliberately left out.
+## - tiles[y * width + x] is (x, y)'s kind; width/height change only in StateCodec.decode().
+## - regions, rooms and the water cache are built on first use, never in _init().
+## - dirty_cells is append-only and never persisted; past MAX_DIRTY_CELLS it is trimmed to
+##   RETAINED_DIRTY_CELLS and dirty_base (absolute cursor of dirty_cells[0]) moves on (A6).
+## - mark_dirty() follows every tile-kind/object change; wholesale replacement calls reset_cells().
+## - Hashed: width, height, tiles. Caches and the dirty-cell log are derived, not hashed.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const RegionMapType = preload("res://scripts/core/map/regions.gd")
@@ -50,10 +31,8 @@ var dirty_base: int = 0
 var regions: RegionMapType
 var rooms: RoomMapType
 
-## Passability's hooks (bind_passability()): (x, y) -> void refreshes one tile;
-## () -> void drops the arrays; (x, y) -> bool passable/door under the
-## colony rules; () -> PackedByteArray every tile's passable (1) or not (0),
-## and every tile's passable (bit 1) / door (bit 2) for rooms.
+## Passability's hooks (bind_passability()): per-tile refresh, reset, passable/door
+## queries and the packed masks regions/rooms build from.
 var _refresh_cell: Callable
 var _reset_cells: Callable
 var _passable_at: Callable
@@ -75,9 +54,7 @@ func _init(p_width: int, p_height: int, get_object: Callable, is_in_any_zone: Ca
 func encode() -> Dictionary:
 	return {"tiles": tiles.duplicate()}
 
-## Wired by Passability._init(), before any query. A grid built on its own (a
-## test of the dirty-cell log) stays unbound: mark_dirty()/reset_cells() then
-## only do their own bookkeeping.
+## Wired by Passability._init() before any query; an unbound grid only keeps its own bookkeeping.
 func bind_passability(refresh_cell: Callable, reset: Callable, passable_at: Callable, door_at: Callable,
 		passable_mask: Callable, room_cell_flags: Callable) -> void:
 	_refresh_cell = refresh_cell
@@ -119,8 +96,7 @@ func tile_at(index: int) -> Vector2i:
 func in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and x < width and y >= 0 and y < height
 
-## Appends to the dirty-cell log and refreshes (x, y)'s passability arrays.
-## Duplicates are left in (a tile dug then built on is two real changes).
+## Appends to the dirty-cell log (duplicates kept) and refreshes (x, y)'s passability.
 func mark_dirty(x: int, y: int) -> void:
 	dirty_cells.append(Vector2i(x, y))
 	if dirty_cells.size() > MAX_DIRTY_CELLS:
@@ -130,16 +106,12 @@ func mark_dirty(x: int, y: int) -> void:
 	if _refresh_cell.is_valid():
 		_refresh_cell.call(x, y)
 
-## The retained cells whose tile kind or object changed, in order: append-only,
-## never cleared (the viewer-purity rule allows only get_*/apply/tick/get_events,
-## so this cannot be a clear-on-read drain).
+## The retained changed cells, in order; never cleared on read (viewers may only read).
 func get_dirty_cells() -> Array[Vector2i]:
 	return dirty_cells.duplicate()
 
-## The dirty-cell log as a cursor stream (A6): {"cells", "next", "truncated"}.
-## "cells" are the retained entries from absolute position `cursor` on, in
-## order; "next" is the cursor for the following call; "truncated" is true when
-## retention already dropped entries at or after `cursor`.
+## The dirty-cell log as a cursor stream (A6): {"cells", "next", "truncated"}; truncated
+## when retention already dropped entries at or after `cursor`.
 func get_dirty_cells_since(cursor: int) -> Dictionary:
 	var start := clampi(cursor - dirty_base, 0, dirty_cells.size())
 	return {"cells": dirty_cells.slice(start), "next": dirty_base + dirty_cells.size(), "truncated": cursor < dirty_base}
@@ -158,9 +130,7 @@ func get_water_tiles() -> Array[Vector2i]:
 		water_tile_cache_built = true
 	return water_tile_cache
 
-## Keeps the water cache in sync at the "tile actually changed kind" boundary
-## (e.g. forage turning a water tile under a berry bush into floor), so a
-## former water tile is never offered as a water source. A no-op until built.
+## Keeps the water cache in sync when a tile changes kind; a no-op until built.
 func update_water_tile_cache(x: int, y: int, was_water: bool, is_water: bool) -> void:
 	if not water_tile_cache_built or was_water == is_water:
 		return

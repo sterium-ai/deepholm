@@ -1,41 +1,18 @@
 class_name IncidentScheduler
 extends RefCounted
 
-## F5 incidents (docs/architecture/foundation-for-breadth.md section F5, ADR
-## 017): day-gated, budgeted spawns of passive non-colony actors
-## (content/incidents.json). A spawned actor's walk-then-wait is a real job
-## (content/jobs.json's "incident" kind: labour "", toils
-## [reserve, go_to, work, release_all]) driven through the same
-## WorldState._advance_colonists()/_toils.advance() dispatch every other job
-## uses -- this module only decides when an incident draws and where an actor
-## spawns/targets, exactly like NeedGiver/HaulGiver decide when their own
-## jobs exist, then hands the job to WorldState._submit_incident_job()
-## (GlobalAssignment.submit_autonomous(), ADR 014 Amendment). No per-actor
-## walk/wait state machine and no synchronous full-path search live here.
-##
-## Lifecycle (see docs/architecture/orders-and-movement.md, "Incident jobs"):
-##   propose()  -> job submitted; the actor is staged (_staged), offered to
-##                 GlobalAssignment.tick() as a worker but not yet in the world
-##   activate_pending() (once per WorldState tick, after _scheduler.tick())
-##              -> job "active": actor appended to the world, wait stamped
-##              -> job blocked unreachable: retired (never spawned)
-##              -> job terminal/unknown: forgotten (never spawned)
-##   on_job_finished() (from WorldState._finish_job(), every terminal
-##                 transition) -> staged entry dropped, or spawned actor
-##                 removed -- unless content's own spawn.lingers
-##                 marked it to stay in the world instead, e.g. a hostile
-##                 actor left for ApproachGiver/CombatGiver to keep driving
-##                 once its own arrival routine ends.
-##
-## Owns its own RandomNumberGenerator, seeded from the world seed combined
-## with SEED_SALT, so it never shares a single randi() call with WorldState's
-## own _random (constructed once in WorldState._init() alongside it).
+## Incidents (foundation-for-breadth.md F5, ADR 017): day-gated, budgeted spawns of non-colony
+## actors (content/incidents.json). The walk-then-wait is an ordinary "incident" job run by the
+## toil executor; this module only decides when a draw happens and where an actor spawns/targets,
+## then submits through WorldState._submit_incident_job() (submit_autonomous(), ADR 014).
+## Lifecycle: propose() stages the actor (offered to the scheduler, not in the world);
+## activate_pending() appends it once its job is active, or retires/forgets it; on_job_finished()
+## removes it unless content's spawn.lingers keeps it (ADR 034).
+## Owns its own RNG (world seed + SEED_SALT): never shares a draw with any other stream.
 
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 
-## Distinct from any other WorldState RNG stream (debug_scenario.gd's own
-## DIG_ORDER_SEED_OFFSET/OBJECT_SEED_OFFSET constants are the same idea, one
-## fixed offset per independent stream).
+## One fixed offset per independent RNG stream.
 const SEED_SALT := 914_827
 const DAILY_BUDGET_POINTS := 3
 const EDGE_NORTH := "north"
@@ -45,8 +22,7 @@ const EDGE_WEST := "west"
 const JOB_KIND := "incident"
 const NO_TILE := Vector2i(-1, -1)
 const ACTOR_ID_PREFIX := "incident_actor_"
-## JobQueue.BLOCKED_TARGET_UNREACHABLE: a staged job the shared bounded search
-## (run under the actor's own faction) could not route is retired, never spawned.
+## A staged job its faction-aware bounded search could not route is retired, never spawned.
 const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
 
 var _content
@@ -55,23 +31,18 @@ var _append_colonist: Callable
 var _remove_colonist: Callable
 var _map_width: int
 var _map_height: int
-## (tile: Vector2i, faction_id: String) -> float; WorldState's faction-aware
-## passability() wrapper, never the colony-only _is_passable().
+## (tile, faction_id) -> float; faction-aware passability, never the colony-only one.
 var _passable_for_faction: Callable
-## (tile: Vector2i) -> bool; WorldState._is_bare_tile(): no object, item or
-## zone cell -- the same predicate its autonomous reservation gate applies,
-## so a proposed target is one the gate will accept.
+## (tile) -> bool; WorldState._is_bare_tile(), the same predicate the autonomous reservation gate uses.
 var _is_bare_tile: Callable
 var _get_regions: Callable
-## (actor_id: String, target: Vector2i) -> String job_id ("" on rejection);
-## WorldState._submit_incident_job().
+## (actor_id, target) -> job_id ("" on rejection); WorldState._submit_incident_job().
 var _submit_job: Callable
-## (job_id: String) -> Dictionary; WorldState._get_job() (the live queue record).
+## (job_id) -> Dictionary; the live queue record.
 var _get_job: Callable
-## (job_id: String) -> void; WorldState._finish_job(job_id, "cancel_job") --
-## the shared finish boundary, which calls back into on_job_finished().
+## (job_id) -> void; the shared finish boundary, which calls back into on_job_finished().
 var _retire_job: Callable
-## (target: Vector2i, ticks: int) -> void; WorldState._set_work_progress().
+## (target, ticks) -> void; WorkProgress, through WorldState._set_work_progress().
 var _set_work_progress: Callable
 var _day_of_tick: Callable
 var _insert_event: Callable
@@ -83,28 +54,16 @@ var _last_processed_day: int = 0
 var _next_actor_ordinal: int = 1
 ## incident id -> the day index a fresh draw may next consider it eligible.
 var _cooldown_until_day: Dictionary = {}
-## job_id -> {"actor": Dictionary, "wait_ticks": int}: proposed actors whose
-## job has not activated yet. Not in the world; not persisted.
+## job_id -> {"actor", "wait_ticks"}: proposed actors not yet in the world. Not persisted.
 var _staged: Dictionary = {}
-## job_id -> actor_id for every actor actually in the world: an identity
-## lookup, not execution state (the job itself lives in the shared queue).
+## job_id -> actor_id for every spawned actor (identity lookup only).
 var _actor_by_job: Dictionary = {}
-## actor_id -> true for every spawned actor whose own incident row declared
-## spawn.lingers (content extension point): its arrival job's own
-## normal completion (travel + wait) must not despawn it -- it stays in the
-## world exactly like any other actor, left for whatever other generic
-## per-tick system applies to it (ApproachGiver's own hostile search,
-## CombatGiver's flee, CombatResolver's adjacent-attack) to keep driving.
-## Populated in activate_pending() when the actor is appended; not persisted
-## (this module persists nothing) -- adopt() cannot recover it after a
-## load, so a reloaded lingering actor's job despawns on finish like a
-## non-lingering one (see docs/decisions/034-incident-lingering-actors.md).
+## actor_id -> true for spawned actors whose row declared spawn.lingers. Not persisted (this module
+## persists nothing), so after a load a lingering actor despawns on finish (ADR 034).
 var _lingering_actors: Dictionary = {}
 
-## append_colonist/remove_colonist are method-bound callables onto
-## WorldState's own _colonists array, never a raw Array reference captured
-## once: StateCodec.decode() reassigns world._colonists wholesale after
-## WorldState._init() already ran, which would strand a captured reference.
+## append/remove_colonist are callables, never a captured Array: StateCodec.decode() reassigns
+## world._colonists after construction.
 func _init(world_seed: int, content_registry, append_colonist: Callable, remove_colonist: Callable,
 		map_width: int, map_height: int, passable_for_faction: Callable, is_bare_tile: Callable,
 		get_regions: Callable, submit_job: Callable, get_job: Callable, retire_job: Callable,
@@ -133,17 +92,11 @@ func _init(world_seed: int, content_registry, append_colonist: Callable, remove_
 func is_enabled() -> bool:
 	return _enabled
 
-## WorldState.enable_incidents(): a
-## restored world's own decode() always constructs this scheduler disabled
-## (no save data names the flag), so the boot layer flips it on the same way
-## for a restored world as for a fresh one.
+## A decoded world always builds this scheduler disabled; the boot layer enables it either way.
 func set_enabled(enabled: bool) -> void:
 	_enabled = enabled
 
-## Prevents a freshly spawned actor's id from colliding with one already in
-## a restored roster: scans for the highest
-## "incident_actor_<N>" id among existing_actors and continues numbering
-## past it, never behind.
+## Continues "incident_actor_<N>" numbering past the highest id in a restored roster.
 func reserve_actor_ordinal_above(existing_actors: Array) -> void:
 	for actor in existing_actors:
 		var actor_id := String((actor as Dictionary).get("id", ""))
@@ -156,8 +109,7 @@ func reserve_actor_ordinal_above(existing_actors: Array) -> void:
 		if ordinal >= _next_actor_ordinal:
 			_next_actor_ordinal = ordinal + 1
 
-## Called once per WorldState.tick(), once per in-game calendar day: runs the
-## budgeted draw. A disabled scheduler is a true no-op.
+## Once per tick; runs the budgeted draw once per calendar day. No-op when disabled.
 func advance(tick: int) -> void:
 	if not _enabled:
 		return
@@ -166,10 +118,8 @@ func advance(tick: int) -> void:
 		_last_processed_day = day
 		_run_daily_draw(day, tick)
 
-## Debug command entry point (spawn_incident {id}, WorldState.apply()):
-## bypasses min_day/cooldown/budget gating entirely, but still records the
-## same cooldown a natural draw would. Returns the proposed actor ids: each
-## enters the world only once its job activates (activate_pending()).
+## Debug spawn_incident: bypasses min_day/cooldown/budget but records the cooldown. Returns the
+## proposed actor ids (each enters the world when its job activates).
 func force_spawn(incident_id: String, tick: int) -> Array:
 	if not _enabled:
 		return []
@@ -178,31 +128,22 @@ func force_spawn(incident_id: String, tick: int) -> Array:
 		return []
 	return _spawn(entry, int(_day_of_tick.call(tick)), tick)
 
-## The staged (proposed, unspawned) actors, in job-id order, for
-## GlobalAssignment.tick()'s worker list: the scheduler must be able to
-## propose/route them before they exist in the world.
+## Staged actors in job-id order, offered to GlobalAssignment.tick() before they exist in the world.
 func staged_actors() -> Array[Dictionary]:
 	var actors: Array[Dictionary] = []
 	for job_id in _staged_job_ids():
 		actors.append(_staged[job_id]["actor"])
 	return actors
 
-## The staged actor with this id, or {} -- WorldState's faction lookups
-## (reservation gate, autonomous passability) consult it alongside the roster.
+## The staged actor with this id, or {}; faction lookups consult it alongside the roster.
 func staged_actor(actor_id: String) -> Dictionary:
 	for job_id in _staged:
 		if String(_staged[job_id]["actor"]["id"]) == actor_id:
 			return _staged[job_id]["actor"]
 	return {}
 
-## Submits actor's own walk/wait job for target and stages the actor. The
-## actor enters the world only once activate_pending() sees the job active.
-## Returns the job id, or "" when the queue rejected the submission (nothing
-## staged). Public so a test can drive the real staging path with a chosen
-## target; _spawn_one() is the only production caller. `lingers` (default
-## false, preserving every existing 3-arg caller's behaviour unchanged)
-## carries content's own spawn.lingers through to activate_pending(), which
-## records it against the actor id for on_job_finished() to consult.
+## Submits the actor's walk/wait job and stages it; "" when the queue rejected it. Public so tests
+## can drive staging with a chosen target. `lingers` carries spawn.lingers to activate_pending().
 func propose(actor: Dictionary, target: Vector2i, wait_ticks: int, lingers: bool = false) -> String:
 	var job_id: String = String(_submit_job.call(String(actor["id"]), target))
 	if job_id.is_empty():
@@ -210,15 +151,9 @@ func propose(actor: Dictionary, target: Vector2i, wait_ticks: int, lingers: bool
 	_staged[job_id] = {"actor": actor, "wait_ticks": wait_ticks, "lingers": lingers}
 	return job_id
 
-## Once per WorldState tick, right after _scheduler.tick() and before
-## _advance_colonists(): commits every staged job the shared scheduler has
-## actually activated (actor appended to the world, its content-declared wait
-## stamped onto the target's work-progress key so ToilExecutor.start_work()
-## reads it), retires one the actor's own faction-aware bounded search proved
-## unreachable (through the shared finish boundary, never spawned), and
-## forgets one already terminal (refused by the reservation gate, cancelled
-## by a command). A job still queued for any other reason (its target held by
-## another job) simply stays staged, exactly like a colonist's queued job.
+## Once per tick, after the scheduler and before advance_colonists (TickPipeline): spawns actors
+## whose job activated (stamping the wait as work progress), retires unreachable ones through the
+## finish boundary, forgets terminal ones. Still-queued jobs stay staged.
 func activate_pending() -> void:
 	for job_id in _staged_job_ids():
 		var job: Dictionary = _get_job.call(job_id)
@@ -228,12 +163,7 @@ func activate_pending() -> void:
 			var actor: Dictionary = staged["actor"]
 			_staged.erase(job_id)
 			if not _spawn_tile_still_valid(actor):
-				# The spawn tile's own multi-tick route search began before a
-				# door or wall landed on it: that
-				# already-checked start is now forbidden under the actor's
-				# faction, so the proposal is retired, never appended to the
-				# world, through the same finish boundary an unreachable
-				# target uses.
+				# A door or wall landed on the spawn tile during the route search: retire, never spawn.
 				_retire_job.call(job_id)
 				continue
 			_append_colonist.call(actor)
@@ -247,15 +177,8 @@ func activate_pending() -> void:
 		else:
 			_staged.erase(job_id)
 
-## The shared finish boundary's hook (WorldState._finish_job(), every
-## successful terminal transition of an "incident" job: work completion,
-## unreachable travel, gate refusal, complete/cancel/fail/invalidate_job
-## commands): drops a staged actor that never spawned, or removes a spawned
-## one from the world -- unless content's own spawn.lingers marked it to stay
-## (_lingering_actors), in which case the actor remains, left for whatever
-## other generic system (ApproachGiver, CombatGiver) already has a job
-## association pending against this same worker. A no-op for a job this
-## scheduler never staged.
+## Finish-boundary hook for every terminal "incident" job: drops a staged actor, or removes a spawned
+## one unless it lingers. No-op for jobs this scheduler never staged.
 func on_job_finished(job_id: String) -> void:
 	_staged.erase(job_id)
 	var actor_id: String = String(_actor_by_job.get(job_id, ""))
@@ -267,15 +190,11 @@ func on_job_finished(job_id: String) -> void:
 		return
 	_remove_colonist.call(actor_id)
 
-## Re-associates an active incident job with its actor after a save/load
-## (this module persists nothing), so on_job_finished() still despawns it.
+## Re-associates an active incident job with its actor after a load (nothing is persisted here).
 func adopt(job_id: String, actor_id: String) -> void:
 	_actor_by_job[job_id] = actor_id
 
-## True while actor's own spawn tile is still bare and passable for its own
-## faction (the same test _pick_edge_tile() applied when it was chosen):
-## revalidated immediately before activate_pending() appends the actor, since
-## a door or wall may have landed on it while the job's route search ran.
+## The spawn tile is still bare and passable for the actor's faction (rechecked before spawning).
 func _spawn_tile_still_valid(actor: Dictionary) -> bool:
 	var tile := Vector2i(int(actor["x"]), int(actor["y"]))
 	return _cost_of(tile, String(actor.get("factionId", ""))) > 0.0 and bool(_is_bare_tile.call(tile))
@@ -321,9 +240,8 @@ func _spawn(entry: Dictionary, day: int, tick: int) -> Array:
 	})
 	return proposed_ids
 
-## Builds the actor at a bare, passable edge tile and proposes its job for a
-## random bare tile in the same region; "" (nothing staged) when no spawn
-## tile or no candidate target exists.
+## Spawns at a bare passable edge tile and proposes a job to a random bare tile in its region; ""
+## when none exists.
 func _spawn_one(actor_def: String, faction_id: String, edge: String, wait_ticks: int, lingers: bool) -> String:
 	var spawn_tile := _pick_edge_tile(edge, faction_id)
 	if spawn_tile == NO_TILE:
@@ -340,14 +258,8 @@ func _spawn_one(actor_def: String, faction_id: String, edge: String, wait_ticks:
 	_next_actor_ordinal += 1
 	return actor_id
 
-## One uniformly random candidate among every bare tile (other than the
-## spawn tile) passable for this faction and in the spawn tile's region --
-## same_region() (physical, colony-oriented connectivity) filters before any
-## route search, per F5 "Regions". It is a pre-filter, not the authority: a
-## door that blocks this faction may still leave a tile "same region", and
-## the job's own bounded search, run under the actor's faction
-## (GlobalAssignment's autonomous passability), then reports it unreachable
-## and activate_pending() retires the job before the actor ever spawns.
+## One uniformly random bare tile in the spawn tile's region, passable for the faction. Region is
+## only a pre-filter: the job's faction-aware search may still prove it unreachable (then retired).
 func _pick_reachable_target(from: Vector2i, faction_id: String) -> Vector2i:
 	var regions: Variant = _get_regions.call()
 	var candidates: Array[Vector2i] = []

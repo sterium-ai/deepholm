@@ -1,26 +1,14 @@
 class_name ActorIndex
 extends RefCounted
 
-## A4: actor id -> actor and tile -> actors over WorldState's live roster
-## (`_colonists`), so `_find_colonist()`, `_colonist_at()` and
-## `_is_cell_occupied()` are lookups instead of a pass over every actor.
-## Plain data, no scene/node/wall-clock dependency.
-##
+## actor id -> actor and tile -> actors over WorldState's live roster, so find/at/occupied
+## lookups are not a pass over every actor (A4).
 ## Invariants:
-## - Trusted only inside WorldState.tick(): begin_tick() rebuilds it from the
-##   roster and end_tick() drops it. Outside a tick (commands, viewer reads,
-##   tests that write an actor's x/y or the roster directly) every query runs
-##   the same linear pass over the roster as before A4, so an out-of-band
-##   write is never answered from a stale index.
-## - Inside a tick, every roster or position change goes through added(),
-##   removed(), moved() or replaced(): WorldState._append_colonist()/_remove_colonist_by_id(),
-##   ToilExecutor.advance_route_step(), TrenchSystem's rescue/escape moves and
-##   NeedsSystem.ensure_needs(), which rebuilds an incomplete actor as a new Dictionary.
-## - Actor ids are unique in the roster. begin_tick() leaves the index
-##   untrusted (linear queries) for a tick whose roster repeats an id.
-## - Order inside a tile is not meaningful: every caller asks "any actor here"
-##   or picks by id, never by position in the list.
-## - Never persisted and never hashed: it is derived from the roster.
+## - Trusted only inside a tick (begin_tick() .. end_tick()); outside it every query is the linear
+##   pass, so an out-of-band x/y or roster write is never answered from a stale index.
+## - Inside a tick every roster or position change goes through added/removed/moved/replaced.
+## - Ids are unique; a tick whose roster repeats an id leaves the index untrusted.
+## - Order inside a tile is not meaningful. Never persisted or hashed.
 
 var _trusted := false
 ## id -> live actor Dictionary (the roster's own reference).

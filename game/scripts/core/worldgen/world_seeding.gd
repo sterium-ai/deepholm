@@ -1,12 +1,9 @@
 class_name WorldSeeding
 extends RefCounted
 
-## A new world's starting state from WorldGenerator's pure output: the terrain,
-## berry-bush objects (written into the ObjectTable, which WorldGenerator has no
-## access to) and the spawned colonists. Each step draws from its own seeded
-## local RNG, never the simulation stream, in a fixed order, so the same
-## size/seed/mapgen always reproduces the same start. A decoded world never
-## calls this.
+## A new world's start from WorldGenerator's pure output: terrain, berry-bush objects and
+## colonists. Each step draws from its own seeded local RNG (never the simulation stream) in a
+## fixed order, so size/seed/mapgen reproduce the start. A decoded world never calls this.
 
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -30,8 +27,7 @@ static func _generate_map(geography_seed: int, width: int, height: int, mapgen: 
 	geography_random.seed = geography_seed
 	return WorldGeneratorType.generate_with_decorations(geography_random, width, height, mapgen)
 
-## WorldGenerator.place_spawn()'s river-aware, resource-validated clearing (ADR 020):
-## surviving bush tiles become objects, the chosen positions spawned colonists.
+## place_spawn()'s clearing (ADR 020): surviving bushes become objects, positions colonists.
 static func _spawn_colonists(placement_seed: int, map: Array[String], width: int, height: int, mapgen: Dictionary,
 		content: ContentRegistry, object_table: ObjectTableType, water_tiles: Array[Vector2i], berry_bush_tiles: Array[Vector2i]) -> Dictionary:
 	var placement_random := RandomNumberGenerator.new()
@@ -45,8 +41,7 @@ static func _spawn_colonists(placement_seed: int, map: Array[String], width: int
 	for i in positions.size():
 		var position: Vector2i = positions[i]
 		var colonist := ActorTableType.spawn("colonist", position.x, position.y, content, "colonist_%d" % i)
-		# ActorTable.spawn() still builds the legacy "carrying" slot (ADR 012); ADR 037's
-		# empty "hands" replaces it (key order does not affect state_hash()).
+		# ADR 037's "hands" replaces spawn()'s legacy "carrying" slot.
 		colonist.erase("carrying")
 		colonist["hands"] = []
 		colonist["trapped"] = null # unconditional like health/route

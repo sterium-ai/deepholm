@@ -3,23 +3,11 @@ extends RefCounted
 
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 
-## Reusable invariant checks for any ReservationTable (colonist-ai.md 3.4 /
-## §4 "Invariant"), callable by any test in game/scripts/tests/, for
-## item/cell keys as well as tile keys. A plain
-## function, not a test file: it returns violations instead of asserting, so
-## callers can push()/_expect() them with their own failure messages.
+## Reusable ReservationTable invariant checks for tests (colonist-ai.md 3.4 "Invariant");
+## they return violations instead of asserting.
 
-## Every reservation key must belong to a job that is still active. jobs must
-## be an Array of Dictionaries with at least "id" and "status"; the table's
-## snapshot lists every currently reserved key and its owning job id.
-## Returns the reserved keys whose owner is not an active job (an orphan).
-## extra_active_owners: additional owner strings -- not job ids --
-## that are never flagged orphaned, even though they will never appear in
-## `jobs`. A construction site reserves its own footprint tiles directly
-## (owner "site:<id>"), the instant its `build` order is accepted, so no job
-## ever owns that key. Callers that pass nothing here (the default empty
-## array) get exactly the check that existed before this parameter was
-## added.
+## Every reservation key must belong to an active job; returns the orphaned keys.
+## extra_active_owners are non-job owners never flagged (a site's "site:<id>" footprint).
 static func find_orphaned_reservations(table: ReservationTable, jobs: Array[Dictionary],
 		extra_active_owners: Array[String] = []) -> Array[String]:
 	var active_ids: Dictionary = {}
@@ -35,29 +23,9 @@ static func find_orphaned_reservations(table: ReservationTable, jobs: Array[Dict
 			orphans.append(String(key))
 	return orphans
 
-## No colonist may be idle while an eligible reachable unreserved job exists.
-## colonists must be an Array of Dictionaries with at least "id", "kind" and
-## "work" (idle means the colonist's mover component's route, read via
-## ActorTable, and "work" are both null, the existing WorldState convention).
-## table and job_key together decide "unreserved": job_key(job: Dictionary)
-## -> String must return the ReservationTable key that job would hold once
-## active (e.g. a "tile:"-prefixed key, or an "item:"/"cell:" key on the
-## same table); a job whose key is already reserved
-## by another job is excluded, exactly like a job with a nonempty "reason"
-## already is. is_reachable, when valid, is called with each queued job
-## Dictionary and must return whether its target is currently reachable;
-## omitted, reachability is assumed already folded into "reason" (as
-## JobQueue's own blocked_target_unreachable/blocked_reachability_unavailable
-## reasons do). is_eligible, when valid, is called with each queued job
-## Dictionary and must return whether it counts as eligible for this check
-## beyond reservation/reachability (e.g. a colonist's labour table); omitted,
-## every remaining queued job counts. content_registry must be the
-## ContentRegistry ActorTable.get_component() (ADR 012) resolves a colonist's
-## "mover" component against -- required whenever colonists is non-empty,
-## unused otherwise; trailing so existing positional callers of job_key/
-## is_reachable/is_eligible are unaffected. Returns the idle colonist ids
-## found while at least one such job exists; empty when colonists is empty
-## (nothing to check without colonist state).
+## No colonist may be idle while an eligible, reachable, unreserved job exists; returns the
+## idle colonist ids. job_key(job) is the key the job would hold; is_reachable/is_eligible
+## are optional filters; content_registry resolves the "mover" component (ADR 012).
 static func find_idle_colonists_with_available_work(
 		table: ReservationTable, colonists: Array[Dictionary], jobs: Array[Dictionary],
 		job_key: Callable, is_reachable: Callable = Callable(),
@@ -88,12 +56,7 @@ static func find_idle_colonists_with_available_work(
 			idle.append(String(colonist.get("id", "")))
 	return idle
 
-## Convenience wrapper combining both checks; colonists may be left empty
-## when the caller (e.g. a JobQueue/ReservationTable-only test) has no
-## colonist state to check, in which case job_key/is_reachable/is_eligible go
-## unused. Any caller passing a non-empty colonists must pass job_key (see
-## find_idle_colonists_with_available_work) so the reserved-key exclusion
-## above is actually applied instead of silently skipped.
+## Both checks; colonists may be empty, otherwise job_key is required.
 static func check(table: ReservationTable, jobs: Array[Dictionary],
 		colonists: Array[Dictionary] = [], job_key: Callable = Callable(),
 		is_reachable: Callable = Callable(), is_eligible: Callable = Callable(),

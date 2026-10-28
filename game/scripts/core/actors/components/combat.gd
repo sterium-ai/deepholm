@@ -1,10 +1,8 @@
 class_name ActorCombat
 extends RefCounted
 
-## F2 combat component: attack, damage, cooldown. Data + validate() only;
-## it does not drive combat behaviour (docs/decisions/
-## 012-actors-and-components.md). Tunables (content/actors.json):
-## {"attack": int >= 0, "damage": int >= 0, "cooldown": int >= 1}.
+## Combat component (ADR 012): data + validate() only. Tunables: {"attack": int >= 0,
+## "damage": int >= 0, "cooldown": int >= 1}.
 
 static func validate(tunables: Dictionary) -> bool:
 	if not (tunables.get("attack") is int) or int(tunables["attack"]) < 0:

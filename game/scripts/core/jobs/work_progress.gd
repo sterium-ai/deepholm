@@ -1,34 +1,13 @@
 class_name WorkProgress
 extends RefCounted
 
-## WorldState's `work`-toil progress (colonist-ai.md 3.6): the live per-tile
-## timers, the job that last wrote each one, and the timers of jobs suspended
-## mid-work. Plain data, no scene/node/RNG/wall-clock dependency; the job queue
-## is injected, every WorldState rule it needs arrives as a Callable.
-##
-## Invariants:
-## - progress is keyed "%d_%d", or "<job_id>:%d_%d" for a "rescue" job (two
-##   rescues can share a target); every other kind keeps the plain tile key.
-##   key_of() builds a key and key_parts() is its inverse; nothing else
-##   formats or splits one (ADR 047: the save codec goes through them too).
-## - owners records the job_id that last wrote a progress key, so a job paused
-##   mid-work (status back to "queued") still owns its progress and only the
-##   owner's termination drops it. "incident" never has an owner: its wait is
-##   stamped job_id-less by IncidentScheduler and cleared by
-##   WorldState._finish_job() while the job is active.
-## - suspended holds job_id -> ticks for a job whose colonist.work was cleared
-##   without terminating it, so a different job working the same tile can never
-##   inherit, overwrite or erase them. resume() is its only reader (consumes the
-##   entry); release_owned() drops it when the job terminates while suspended.
-## - All three maps are persisted ("workProgress", "workProgressOwners",
-##   "suspendedWorkProgress"). Owners are restored from the save, cross-checked
-##   against the restored jobs, by restore_owners(); never guessed from which job
-##   targets a key (a dig can be queued on a tile a build owns mid-haul). Keys
-##   left without an owner are dropped, except an active incident's wait.
-## - state_hash() covers suspended only (hash_into()); progress and owners are
-##   deliberately left out.
-## - Owners persist as explicit {target, jobId, ownerJobId?} records naming the
-##   key's tile and scope (ADR 047), never a re-split of the key.
+## The `work`-toil progress (colonist-ai.md 3.6): live per-tile timers, the job that last
+## wrote each one, and the timers of jobs suspended mid-work. Invariants:
+## - keys are "%d_%d", or "<job_id>:%d_%d" for a rescue; only key_of()/key_parts() build or split them (ADR 047).
+## - owners maps a key to the job that last wrote it; only the owner's termination drops it. Incident waits have no owner.
+## - suspended (job_id -> ticks) is never inherited by another job on the tile; resume() consumes it.
+## - all three maps are persisted; owners are restored from the save by restore_owners(), never guessed from targets.
+## - state_hash() covers suspended only (hash_into()); progress and owners are deliberately left out.
 
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 
@@ -125,9 +104,8 @@ func get_progress(target: Vector2i):
 		return null
 	return int(progress[progress_key])
 
-## start_work()'s job-scoped lookup (site_work is handled by WorldState first):
-## the job's suspended snapshot (consumed), else the live value only when the
-## job owns it; null (use the kind's duration) when another job owns the key.
+## start_work()'s job-scoped lookup: the job's suspended snapshot (consumed), else the
+## live value only when the job owns it; null (use the kind's duration) otherwise.
 func resume(target: Vector2i, job_id: String):
 	if suspended.has(job_id):
 		var value := int(suspended[job_id])
@@ -149,7 +127,7 @@ func suspend(work) -> void:
 		return
 	var job_id := String(work.get("job_id", ""))
 	var job := _queue.get_job(job_id)
-	# "active" too: _pause_work_job() calls this before suspend_assignment() flips the status.
+	# "active" too: NeedsSystem.pause_work_job() calls this before the status flips to queued.
 	if job.is_empty() or String(job.get("status", "")) not in ["active", "queued"]:
 		return
 	var kind := String(job.get("kind", ""))
@@ -161,7 +139,7 @@ func suspend(work) -> void:
 	if String(owners.get(progress_key, "")) == job_id:
 		clear(target)
 
-## The tile-cache write of WorldState._set_work_progress(); a non-empty job_id
+## The tile-cache write behind WorldState._set_work_progress(); a non-empty job_id
 ## becomes the key's owner.
 func record(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
 	var progress_key := key(target.x, target.y)
@@ -185,12 +163,9 @@ func release_owned(job_id: String, job: Dictionary) -> void:
 	if String(owners.get(progress_key, "")) == job_id:
 		clear(target)
 
-## StateCodec.decode()'s post-load owner restore. Must run once jobs and
-## paused jobs are restored but before an incident reconcile can cancel a job
-## through _finish_job(). A persisted owner is kept only for a queued/active
-## job of a work-ticked, non-incident kind; a key the save does not name (a
-## save predating "workProgressOwners") is recovered from execution state; a
-## key still ownerless is dropped unless an active incident's wait.
+## StateCodec.decode()'s post-load owner restore; must run after jobs are restored and
+## before an incident reconcile can cancel one. Keeps persisted owners of live work-ticked
+## jobs, recovers the rest from execution state, drops ownerless keys except incident waits.
 func restore_owners(persisted: Dictionary, colonists: Array, paused_jobs: Dictionary) -> void:
 	owners.clear()
 	for progress_key in persisted:
@@ -214,6 +189,7 @@ func restore_owners(persisted: Dictionary, colonists: Array, paused_jobs: Dictio
 	for progress_key in progress.keys():
 		if not owners.has(progress_key) and not incident_keys.has(progress_key):
 			progress.erase(progress_key)
+	assert(owners.keys().all(func(k: String) -> bool: return progress.has(k)), "every owner names a live progress key")
 
 ## Fallback owners from execution state every save carries: each colonist's
 ## "work" job and each paused (queued) job. Two candidates for one key are

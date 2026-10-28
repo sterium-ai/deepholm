@@ -128,7 +128,7 @@ current tick, not the job's submission tick; `WorldState._calendar` is construct
 `_init()` from `_content.document("calendar")` — the same `ContentRegistry`-validated bundle
 every other service reads (ADR 010/`extension-points.md`), not a second independent
 `calendar.json` read — and both `ToilExecutor.get_labour` and `CalendarService.active_boost` are
-passed into `GlobalAssignment.tick()` as callables (`world_state.gd`'s own `tick()`), keeping the
+passed into `GlobalAssignment.tick()` as callables (`TickPipeline`, `world/tick_pipeline.gd`), keeping the
 scheduler itself free of a direct `WorldState`/`ToilExecutor` dependency. `WorldState.
 get_active_calendar_boost(labour: String) -> int` exposes the same query read-only for the
 presentation layer. The bracketed term `(order priority + calendar boost + 4 - labour level)` is
@@ -150,7 +150,7 @@ resume it later) use to mark an entry as proposable to one worker only — but t
 equivalent, and `GlobalAssignment.tick()` never equates them: a `restrict_to` entry is still just an
 entry, and if both a need and its own interrupted work happened to carry it for the same worker, a
 labour/calendar bonus on the interrupted work could outscore the need on `restrict_to` alone. Instead,
-`tick()` takes a `committed_needs: Dictionary` parameter (worker id → job id), `WorldState`'s own
+`tick()` takes a `committed_needs: Dictionary` parameter (worker id → job id), `TickPipeline`'s
 `_need_giver.get_pending_assignments()` — the ground truth of which job, if any, a worker is actually
 committed to. For a worker with an entry in `committed_needs`, `tick()` skips its ordinary
 `JOB_EVALUATION_BUDGET` scan entirely: `_propose_committed_need()` finds that one job by direct id
@@ -165,7 +165,7 @@ When every colonist that could ever perform a queued job's labour has it set to 
 marked with the non-terminal reason `labour_disabled` while it stays queued (not failed) —
 `GlobalAssignment` recomputes this once per tick from the **full colony roster** (a separate
 `all_colonists` parameter on `tick()`, defaulting to the scheduling pool for a caller that
-omits it), not the pool `tick()` itself schedules against: `world_state.gd`'s `tick()` already
+omits it), not the pool `tick()` itself schedules against: `TickPipeline` already
 filters that pool down to colonists not mid-search for a need (section 3.1), and a colonist
 mid-search still has a real labour table that must count toward "every colonist" regardless of
 whether it can take work this exact tick. `GlobalAssignment` calls the
@@ -280,10 +280,10 @@ another colonist rescues it.
 *Priority.* `rescue_giver.gd` decides when a `rescue` job exists. Rescue is a priority layer of
 its own, **above ordinary work (layer 5) and below both need layers (2 and 4)**. It reuses the
 committed-proposal pathway a need job uses (`get_pending_assignments()` feeding
-`GlobalAssignment.tick()`'s `committed_needs`, `world_state.gd`'s `_committed_jobs()`), so a
+`GlobalAssignment.tick()`'s `committed_needs`, `TickPipeline._committed_jobs()` in `world/tick_pipeline.gd`), so a
 pending rescue pre-empts ordinary labour exactly as a need job does. It never pre-empts a need:
-the candidate pool that `world_state.gd`'s `_rescue_candidates()` supplies each tick excludes any
-colonist mid need-search or committed to a need job (mirroring `_colonists_not_searching_need()`),
+the candidate pool that `TrenchSystem.rescue_candidates()` (`actors/trench_system.gd`) supplies each tick excludes any
+colonist mid need-search or committed to a need job (mirroring `TickPipeline._colonists_not_searching_need()`),
 any trapped colonist, any colonist `CombatGiver` owns, and any actor whose faction may not be
 ordered, so a hostile actor built on the colonist definition (a raider) is never offered a victim
 to rescue. `_committed_jobs()` always lets a need commitment overwrite a rescue one for the same
@@ -315,29 +315,29 @@ tick, and marks the ledger so a later toil re-route in the same tick defers like
 `get_route_telemetry()` reports the actual calls.
 
 *Staying safe after commit.* The giver validates the route at commit time only. Afterwards
-`world_state.gd` keeps a committed rescue trench-safe at its existing boundaries, never by a
+the core keeps a committed rescue trench-safe at its existing boundaries, never by a
 synchronous search run to completion:
 
-- The `go_to` toil's passability hook gives a rescue job `_rescue_routable_to()`, under which
-  every trench tile is impassable and the target gets none of `_routable_to()`'s
+- The `go_to` toil's passability hook gives a rescue job `TrenchSystem.rescue_routable_to()`, under which
+  every trench tile is impassable and the target gets none of `WorldState._routable_to()`'s
   impassable-target exception. A mid-travel re-route around a newly blocked corridor therefore
   never crosses a trench, and a target made impassable reads as unreachable instead of being
   trimmed so that rescue work starts one tile off.
-- A resume after a need interrupt (`_resume_paused_rescue()`) re-derives its route through the
+- A resume after a need interrupt (`NeedsSystem._resume_paused_rescue()`) re-derives its route through the
   toil executor's budgeted, multi-tick re-route under the same passability, and requires the
   colonist to stand exactly on the target (not merely Chebyshev-adjacent) before work may start.
-- The first drive of a fresh activation (`_rescue_activation_safe()`) scans the scheduler's
+- The first drive of a fresh activation (`TrenchSystem.rescue_activation_safe()`) scans the scheduler's
   already-computed path tile by tile (no trench, ends on the target, target still passable),
   since the map may have changed between commit and activation.
 
 Whenever one of these checks finds that the commitment can no longer be completed safely,
 including the scheduler's own `blocked_target_unreachable` verdict on a queued commitment (which
-the giver retires the same tick), `_retire_rescue_job()` cancels the job through the shared
+the giver retires the same tick), `TrenchSystem.retire_rescue_job()` cancels the job through the shared
 finish boundary and clears the giver's association. The job is never resubmitted under the same
 rescuer, so the victim's next search is free to choose any available rescuer.
 
 *Work progress.* Work progress is keyed by the job's explicit identity
-(`_work_progress_key_for_job()`), scoped by job id only for `rescue` jobs: two rescue jobs that
+(`WorkProgress.key_for_job()` in `jobs/work_progress.gd`), scoped by job id only for `rescue` jobs: two rescue jobs that
 share one target tile (one suspended mid-work, the other activating on the freed tile) can never
 read or clear each other's saved progress. Every other job kind keeps the plain tile key, since
 an ordinary job's target changes kind (or stops being a valid target) the moment the job
@@ -384,7 +384,7 @@ persisted verbatim with the giver's other continuation state and restored on loa
 
 The implemented file map is `game/scripts/core/jobs/givers/rescue_giver.gd` for job creation,
 `job_queue.gd` for the generic extra-reservation-keys mechanism, `state_codec.gd` for load-time
-continuation, and `world_state.gd`'s `_toil_on_work_complete()` `"rescue"` case for the
+continuation, and `ToilBindings._toil_on_work_complete()`'s (`jobs/toil_bindings.gd`) `"rescue"` case for the
 completion effect.
 
 ### 3.7 Calendar urgency
@@ -492,7 +492,7 @@ the design left room:
   nothing in the shipped core produces it today, and this page normalizes to
   the name that actually ships.
 - **Interrupts**: critical needs pause an interruptible `work` toil
-  immediately, keeping its tick count on `WorldState._work_progress` (keyed
+  immediately, keeping its tick count in `WorkProgress` (`jobs/work_progress.gd`, keyed
   by tile, not colonist) exactly as 3.6 specifies; urgent needs wait for the
   current toil to end. The paused job resumes rather than restarts.
 - **Presentation**: `colonist_panel.gd` reads three need
@@ -504,7 +504,7 @@ the design left room:
   so for the single tick between route arrival and the instant `consume` toil
   neither `route` nor `work` names the job any more; `WorldState.
   get_active_need_job_id(colonist_id)` (a thin getter over
-  `_need_job_by_colonist`) is the fallback the panel reads for exactly that
+  `NeedGiver.get_pending_job()`) is the fallback the panel reads for exactly that
   tick, so "Eating"/"Drinking" and the "Consuming" toil stay visible for the
   whole job, not just its travel phase. `boot.gd`'s status area lists every
   colonist currently `need_unmet:<kind>` or `need_source_missing:<kind>`,

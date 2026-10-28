@@ -1,37 +1,19 @@
 class_name CombatResolver
 extends RefCounted
 
-## F5 combat resolution (ADR 021). Plain, scene-independent GDScript
-## (AGENTS.md): every method is
-## static, driven by WorldState.tick()'s own explicit tick counter, with no
-## scene/node/rendering/wall-clock/global-RNG dependency. Resolves rule (1)
-## (an actor with a `combat` component deals its `damage` every `cooldown`
-## ticks to the nearest adjacent hostile target) and rule (4) (an actor
-## strictly below its own `flee_hp_fraction` stops fighting), and reports rule (2)/(3)'s
-## consequences (a dead actor, a damaged/destroyed object) for WorldState to
-## apply against its own owned state -- per ADR 011, WorldState calls this,
-## never implements it. `combat_giver.gd` is the separate job-giver module
-## that turns rule (4)'s "stops fighting" into the actual "paths away" -- this
-## module only ever decides whether an attack lands, never drives movement.
+## Combat resolution (ADR 021), all static, driven by the tick counter. Rule 1: an actor with
+## `combat` deals `damage` every `cooldown` ticks to the nearest adjacent hostile; rule 4: below
+## `flee_hp_fraction` it stops fighting. Reports deaths for CombatSystem to apply; never moves anyone.
 
 const TargetingType = preload("res://scripts/core/combat/combat_targeting.gd")
 const HealthType = preload("res://scripts/core/actors/components/health.gd")
 
-## docs/architecture/orders-and-movement.md's typed event/reason vocabulary,
-## extended here with two entries: `attacked_by` (an event,
-## recorded once per landed hit) and `fighting` (a per-tick reason exposed
-## through WorldState.get_actor_combat_reason(), mirroring
-## get_colonist_need_reason()'s "need_unmet:"/"rerouting" pattern).
+## Additions to orders-and-movement.md's vocabulary: `attacked_by` event (once per hit) and the
+## per-tick `fighting` reason.
 const EVENT_ATTACKED_BY := "attacked_by"
 
-## flee_hp_fraction defaults to 0.0 (never flee) for any actor definition that
-## does not declare one -- content, not this module, opts an actor kind in
-## (via its "combat" tunables in content/actors.json). Read from the actor
-## *definition's* tunables, not the per-instance "combat" component dict:
-## ActorCombat.build() (docs/decisions/012-actors-and-components.md) only
-## carries attack/damage/cooldown/cooldown_remaining into runtime state, so
-## any other combat tunable has nowhere to round-trip on the instance
-## itself.
+## Defaults to 0.0 (never flee). Read from the definition's tunables: the runtime component only
+## carries attack/damage/cooldown/cooldown_remaining.
 static func _flee_hp_fraction(actor: Dictionary, content) -> float:
 	var definition: Dictionary = content.get_entry("actors", String(actor.get("kind", "")))
 	var combat_tunables: Dictionary = (definition.get("tunables", {}) as Dictionary).get("combat", {})
@@ -42,26 +24,10 @@ static func _hp_fraction(actor: Dictionary) -> float:
 	var max_hp := maxi(1, int(health.get("maxHp", 1)))
 	return float(int(health.get("hp", 0))) / float(max_hp)
 
-## Runs once per WorldState.tick(), before the fair scheduler sees any
-## colonist (the same "before layer 5's work" ordering need_giver/haul_giver
-## already use): decrements every combat actor's cooldown by one on every
-## applicable tick -- independent of whether it currently has an adjacent
-## target or is below its own flee threshold, since the rule is elapsed
-## ticks, not ticks spent engaged (an actor that attacks, disengages for
-## longer than its own cooldown, then re-engages must not still wait out
-## the stale remaining value) -- attacks once the cooldown
-## reaches zero, and reports every actor that reached 0 hp this call for the
-## caller to apply (rule 2: dead, removed from scheduling, drops inventory).
-## Object damage/destruction (rule 3) is applied immediately through
-## `damage_object`, since -- unlike an actor -- an object has no dict of its
-## own for this module to hand back to the caller; ObjectTable's own
-## `damage_object()` already owns clearing a destroyed object back to
-## no-object (a wall becomes floor).
-## `object_at`/`object_health_at`/`object_faction_at`/`damage_object` must be
-## WorldState's own get_object/get_object_faction_id and ObjectTable's
-## object_health_at/damage_object. `insert_event`/`next_sequence` must be WorldState's own
-## event log writers. Returns {"dead_actors": Array[Dictionary], "fighting":
-## Array[String]}.
+## Once per tick before the scheduler: decrements every cooldown each tick (elapsed ticks, not
+## ticks engaged), attacks at zero, and returns {"dead_actors", "fighting"} for the caller to apply.
+## Object damage (rule 3) is applied at once through `damage_object` (ObjectTable clears a
+## destroyed object).
 static func resolve_tick(actors: Array[Dictionary], content, relations, tick: int, priority: int,
 		object_at: Callable, object_health_at: Callable, object_faction_at: Callable, damage_object: Callable,
 		insert_event: Callable, next_sequence: Callable) -> Dictionary:

@@ -1,24 +1,13 @@
 class_name ToolMatching
 extends RefCounted
 
-## Pure nearest-free-tool search for the fetch_tool toil (colonist-ai.md 2/
-## 3.3): given every tool item WorldState tracks and the position
-## of every colonist (for a "held by another colonist" candidate), finds the
-## nearest one of `kind` that is either unreserved or already reserved by
-## `job_id` itself (so a retry after an interrupt reuses its own in-flight
-## reservation instead of leaking a second one). No side effects: the caller
-## (toil_executor.gd) reserves/picks up whatever this returns. Kept dependency-
-## free (plain data in, plain data out) so it needs no scene, node or WorldState
-## reference to test; extracted from toil_executor.gd to keep that
-## file within its line budget (docs/architecture/core-budgets.json).
+## Pure nearest-free-tool search and needs_tool gate helpers for the fetch_tool toil
+## (colonist-ai.md 2/3.3, ADR 013). Plain data in, plain data out; no side effects:
+## the caller (ToilExecutor, JobQueue, GlobalAssignment) reserves or mutates.
 
-## Manhattan-nearest match, ties broken by item id for determinism (no wall-
-## clock/global randomness, colonist-ai.md/AGENTS.md's simulation rules).
-## excluded_ids skips a candidate already proven unreachable earlier in the
-## same fetch attempt (a closer tool enclosed by walls
-## must not block a farther, reachable one forever), so ToilExecutor can
-## re-call this after each unreachable result until either a workable
-## candidate is found or every match has been tried.
+## Manhattan-nearest tool of `kind` that is unreserved or already reserved by job_id
+## (a retry reuses its own reservation); ties broken by item id for determinism.
+## excluded_ids skips candidates already proven unreachable in this fetch attempt.
 static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
 		tool_items: Array[Dictionary], reservation_of: Callable, colonist_positions: Dictionary,
 		excluded_ids: Array = []) -> Dictionary:
@@ -46,19 +35,15 @@ static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
 		return {"found": false}
 	return {"found": true, "item_id": best_id, "target": best_target}
 
-## colonist_id -> current tile, for item_target()'s "held"
-## candidates below. Shared by WorldState and ToilExecutor rather than each
-## keeping its own identical helper.
+## colonist_id -> current tile, for item_target()'s "held" candidates.
 static func colonist_position_map(colonists: Array) -> Dictionary:
 	var positions: Dictionary = {}
 	for c in colonists:
 		positions[String(c["id"])] = Vector2i(int(c["x"]), int(c["y"]))
 	return positions
 
-## The tile a tool item currently occupies: its own ground/stockpile location,
-## or the current position of whichever colonist holds it. Null when a held
-## item's holder is not in `colonist_positions` (should not happen for a live
-## colonist, but keeps this pure function total rather than indexing blindly).
+## The tile a tool item occupies: its ground/stockpile cell, or its holder's position;
+## null when the holder is not in `colonist_positions`.
 static func item_target(item: Dictionary, colonist_positions: Dictionary):
 	var location: Dictionary = item.get("location", {})
 	match String(location.get("type", "")):
@@ -72,12 +57,9 @@ static func item_target(item: Dictionary, colonist_positions: Dictionary):
 		_:
 			return null
 
-## JobQueue's needs_tool activation gate (ADR 013):
-## mirrors _tick_haul()'s own retry_at/backoff_ticks backoff. `block` is
-## job_queue.gd's own private _block(job, JobQueue.BLOCKED_NO_TOOL, remedy),
-## kept there so this stays a plain data helper. Quietly returns false while
-## still backed off, without calling `block` again, so a queued job's own
-## displayed reason is only refreshed once per backoff window.
+## JobQueue's needs_tool activation gate (ADR 013), with JobQueue._tick_haul()'s
+## retry_at/backoff. While still backed off it returns false without calling `block`
+## again, so the displayed reason refreshes once per backoff window.
 static func gate_check(job: Dictionary, tick: int, requirement_of: Callable,
 		tool_available: Callable, block: Callable) -> bool:
 	if not requirement_of.is_valid():
@@ -93,9 +75,8 @@ static func gate_check(job: Dictionary, tick: int, requirement_of: Callable,
 	block.call(job, "craft_or_find:%s" % String(requirement["kind"]))
 	return false
 
-## Applies job_id's own needs_tool backoff directly once fetch_tool itself
-## proves every known candidate unreachable (WorldState._toil_on_no_tool_found(),
-## distinct from gate_check()'s "does a match exist at all" question above).
+## Applies the needs_tool backoff once fetch_tool proves every candidate unreachable
+## (ToilBindings._toil_on_no_tool_found()).
 static func gate_force_backoff(job: Dictionary, tick: int, requirement_of: Callable, block: Callable) -> void:
 	if not requirement_of.is_valid():
 		return
@@ -113,20 +94,9 @@ static func _apply_backoff(job: Dictionary, tick: int, requirement: Dictionary) 
 	job["backoff_ticks"] = backoff
 	job["retry_at"] = tick + backoff
 
-## True while job_id's own needs_tool backoff (gate_check()'s retry_at) is
-## still active, checked before reachability/reservation-owner in
-## JobQueue.tick() (mirroring _tick_haul()'s early backoff return):
-## otherwise the scheduler's reservations-shortcut selection of a
-## backed-off job would feed a stale/no-search-this-tick _can_reach()
-## result into the same job and overwrite blocked_no_tool's reason with
-## blocked_target_unreachable for the entire backoff window, even though the
-## target itself is genuinely reachable. Uses `<=`, not gate_check()'s own
-## `<`: JobQueue.get_reservations() (consulted by GlobalAssignment.tick()
-## before this same cycle's tick() call increments `_tick`) still reports
-## this job "reserved" one tick later than tick()'s own loop would otherwise
-## stop treating it as backed off, so the boundary tick must stay gated here
-## too or that one tick falls through to a reachability result no real route
-## search this cycle ever produced.
+## True while the needs_tool backoff is active; JobQueue.tick() checks it before
+## reachability so a backed-off job keeps blocked_no_tool instead of a stale
+## blocked_target_unreachable. `<=` (not gate_check()'s `<`): get_reservations() lags tick() by one.
 static func gate_backed_off(job: Dictionary, tick: int, requirement_of: Callable) -> bool:
 	if not requirement_of.is_valid():
 		return false
@@ -135,18 +105,9 @@ static func gate_backed_off(job: Dictionary, tick: int, requirement_of: Callable
 		return false
 	return tick <= int(job["retry_at"])
 
-## Shared aging-preserved requeue for GlobalAssignment.suspend_assignment()
-## (ADR 009 critical-need interrupt) and .requeue_assignment() (an ordinary
-## fetch_tool failure), extracted to keep both
-## call sites' own files under their line budgets. Mutates `waiting`/
-## `cursors` in place (both are shared-by-reference Godot containers). A
-## no-op when job_id was never chosen or is already back in `waiting`.
-## restrict_to overrides the reinserted entry's own restriction only when
-## non-empty -- suspend_assignment() always pins to `worker` (the same
-## colonist resumes it later); requeue_assignment() passes "" to keep the
-## entry's original restrict_to (usually empty), since an ordinary failure
-## must return the job to the fair pool for any eligible colonist, not just
-## the one whose own attempt just failed.
+## Aging-preserved requeue shared by GlobalAssignment.suspend_assignment() (ADR 009) and
+## requeue_assignment(); mutates `waiting`/`cursors` in place, no-op if job_id was never
+## chosen or is already waiting. A non-empty restrict_to pins the entry to that colonist.
 static func reinsert_activated_entry(waiting: Array, cursors: Dictionary, activated_entries: Dictionary,
 		job_id: String, restrict_to: String, entry_before: Callable) -> void:
 	if not activated_entries.has(job_id):

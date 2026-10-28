@@ -4,28 +4,17 @@ extends RefCounted
 ## Exact 64-bit integers for SaveIO.read(): JSON.parse_string() returns every number as a
 ## float, so the seed and RNG fields are re-read from their raw tokens in the wire text.
 
-## Full JSON number grammar (RFC 8259), used to capture the complete numeric
-## token for the seed/rng fields rather than a bare `-?\d+` prefix -- a
-## prefix match on "1e3" or "1.5" would stop at the leading digit and silently
-## misread the value.
+## Full RFC 8259 number grammar, so "1e3" or "1.5" is never misread from a digit prefix.
 const _JSON_NUMBER_PATTERN := "-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?"
 
 const _INT64_MAX_DIGITS := "9223372036854775807"
 
 const _INT64_MIN_MAGNITUDE_DIGITS := "9223372036854775808"
 
-## JSON.parse_string always converts numbers to float, which cannot hold a
-## 64-bit RandomNumberGenerator seed/state exactly. Recover the precise value
-## by locating the structural position of "rng"."seed"/"state" inside the
-## already-located "state" object (`located_state`, built once by
-## _locate_state_object()) and reading the complete raw JSON number token at
-## that exact span -- not by text-searching the whole file, which cannot
-## distinguish an object boundary from a same-named key elsewhere in the
-## envelope, and cannot decode a key written with a JSON \uXXXX escape.
-## Returns {"ok": false} -- never a silent fall back to the
-## lossy float-derived value already sitting in `state` -- when a token is
-## fractional, exceeds the signed 64-bit range, or cannot be structurally
-## located at all despite the parsed Variant claiming the field exists.
+## Re-reads "rng"."seed"/"state" from their raw tokens inside the located "state" object
+## (structural, never a text search, so other same-named keys and \uXXXX-escaped keys are
+## handled). Fails closed with {"ok": false} -- never the lossy float -- for a fractional,
+## out-of-int64 or unlocatable token.
 static func _restore_exact_rng(state: Dictionary, located_state: Dictionary) -> Dictionary:
 	if not (state.get("rng") is Dictionary):
 		return {"ok": true}
@@ -55,14 +44,7 @@ static func _restore_exact_rng(state: Dictionary, located_state: Dictionary) -> 
 		rng[key] = parsed["value"]
 	return {"ok": true}
 
-## Mirrors _restore_exact_rng() for "incidentScheduler"."rng"."seed"/"state":
-## IncidentScheduler's own independent RandomNumberGenerator snapshot
-## is exactly as vulnerable to JSON's lossy float round trip as world's own
-## "rng" is -- its .state is an engine-internal 64-bit counter that can
-## easily exceed 2^53 regardless of how small the seed is. One extra
-## structural descent (state -> incidentScheduler -> rng) versus
-## _restore_exact_rng()'s state -> rng, since this field nests one level
-## deeper than the top-level "rng" object.
+## Same for "incidentScheduler"."rng" (its RNG state easily exceeds 2^53), one level deeper.
 static func _restore_exact_incident_rng(state: Dictionary, located_state: Dictionary) -> Dictionary:
 	if not (state.get("incidentScheduler") is Dictionary):
 		return {"ok": true}
@@ -102,12 +84,7 @@ static func _restore_exact_incident_rng(state: Dictionary, located_state: Dictio
 		rng[key] = parsed["value"]
 	return {"ok": true}
 
-## Mirrors _restore_exact_rng() for the top-level "digFindRng"."seed"/"state"
-## (ADR 026): world._dig_find_random's own continuation is
-## exactly as vulnerable to JSON's lossy float round trip as "rng" is. Same
-## nesting depth as _restore_exact_rng() (state -> digFindRng), just a
-## different top-level key; optional throughout since this field itself is
-## optional on the wire (SaveIO.OPTIONAL_TOP_LEVEL_FIELDS).
+## Same for the optional top-level "digFindRng" (ADR 026, ItemTable.dig_find_random).
 static func _restore_exact_dig_find_rng(state: Dictionary, located_state: Dictionary) -> Dictionary:
 	if not (state.get("digFindRng") is Dictionary):
 		return {"ok": true}
@@ -137,17 +114,7 @@ static func _restore_exact_dig_find_rng(state: Dictionary, located_state: Dictio
 		rng[key] = parsed["value"]
 	return {"ok": true}
 
-## Mirrors _restore_exact_rng() for the top-level "seed" field: a seed near or beyond 2^53 loses precision through the ordinary
-## float round trip JSON.parse_string() performs, same as rng.seed/state did.
-## Reads the *direct* "seed" member of the "state" object located by
-## _locate_state_object() -- `_scan_object_members()` only ever descends one
-## level per call, so this can never be confused by "rng"'s own nested
-## "seed" key (which lives one level deeper, inside "rng"'s own member scan,
-## never surfacing in `state`'s direct member list) or by a same-named field
-## on the envelope itself (outside "state" entirely, never scanned here).
-## Returns {"ok": false} -- never a silent fall back to the lossy
-## float-derived value -- for a fractional or out-of-64-bit-range token, or
-## when the field cannot be structurally located at all.
+## Same for the direct "seed" member of "state" (never "rng"'s nested seed or an envelope key).
 static func _restore_exact_seed(state: Dictionary, located_state: Dictionary) -> Dictionary:
 	if not state.has("seed"):
 		return {"ok": true}
@@ -162,16 +129,8 @@ static func _restore_exact_seed(state: Dictionary, located_state: Dictionary) ->
 	state["seed"] = parsed["value"]
 	return {"ok": true}
 
-## Structurally locates the envelope's top-level "state" object and returns
-## the *direct* (one level deep) members of that object -- each mapped to the
-## raw text span of its still-unparsed value -- so callers can read the exact
-## on-disk spelling of a specific field's number token without ever treating
-## a substring match anywhere else in the file as if it were that field.
-## Decodes JSON string escapes (including \uXXXX) while scanning key names,
-## so an escaped key spells the same field a plain one would. Returns {"ok": false} if the envelope or "state" is malformed --
-## this should never happen for text that already parsed successfully via
-## JSON.parse_string, but a caller must fail closed rather than silently
-## falling back to a lossy value if it somehow does.
+## The direct members of the envelope's "state" object, each mapped to its raw value span, with
+## key escapes decoded. {"ok": false} when malformed, so callers fail closed.
 static func _locate_state_object(text: String) -> Dictionary:
 	var pos := _skip_ws(text, 0)
 	if pos >= text.length() or text[pos] != "{":
@@ -188,18 +147,9 @@ static func _locate_state_object(text: String) -> Dictionary:
 		return {"ok": false}
 	return {"ok": true, "members": state_members, "text": text}
 
-## Parses a JSON object's *direct* members, starting at `pos` (the position
-## right after the object's opening `{`). Returns a Dictionary from each
-## decoded key to {"start": int, "end": int}: the raw text span of that
-## member's still-unparsed value (a number's span is exactly its complete
-## token text; an object/array/string's span covers its own delimiters).
-## Never recurses into a nested object/array's own members -- a caller that
-## needs those calls this again with that value's own span. A duplicate key
-## keeps the last occurrence, matching JSON.parse_string's own dictionary
-## build (repeated key overwrites). The returned Dictionary's "__end__" entry
-## (never a valid JSON key, so it cannot collide with a real member) holds
-## the position right after the object's closing `}`; its absence means the
-## text was not a well-formed object starting at `pos`.
+## The direct members of the object at `pos` (after its `{`): decoded key -> {start, end} raw
+## value span; never recurses. A duplicate key keeps the last occurrence, like
+## JSON.parse_string. "__end__" (not a valid key) is the position after `}`; absent = malformed.
 static func _scan_object_members(text: String, pos: int) -> Dictionary:
 	var members := {}
 	pos = _skip_ws(text, pos)
@@ -237,11 +187,7 @@ static func _scan_object_members(text: String, pos: int) -> Dictionary:
 		return {}
 	return {} # unreachable; satisfies the static analyzer's return-path check
 
-## Lazily-compiled, cached once per class load: a save's "state" object can
-## carry tens of thousands of number tokens (e.g. a 256x256 map's own
-## coordinate/id fields), and RegEx.compile() is not cheap -- compiling it
-## fresh on every single token turned every save read into an O(field count)
-## series of regex compiles, not just an O(text length) scan.
+## Compiled once per class load: compiling per token made a large save read quadratic.
 static var _number_regex: RegEx = null
 
 static func _get_number_regex() -> RegEx:
@@ -250,17 +196,8 @@ static func _get_number_regex() -> RegEx:
 		_number_regex.compile(_JSON_NUMBER_PATTERN)
 	return _number_regex
 
-## Returns the position right after the complete JSON value starting at
-## `pos` (string, number, object, array, true, false, or null), or -1 if
-## `pos` does not begin a well-formed value. Used only to skip past a
-## member's value while scanning for sibling keys -- the caller that actually
-## wants "state"'s or "rng"'s own direct members calls _scan_object_members()
-## directly with that object's own span, never through here. Skips string and
-## nested-object content without decoding or mapping it (`_skip_json_string()`/
-## `_skip_json_object()`) -- a value being skipped is never inspected, so
-## building its decoded text or member map, only to immediately discard it,
-## would be pure waste over a large save (a 256x256 map's 65536-entry
-## `tiles` array, its route-search `visited`/`frontier` tile lists, etc.).
+## The position after the JSON value at `pos`, or -1 if malformed. Skipped values are never
+## decoded, which matters on a 256x256 map's tile and route arrays.
 static func _skip_json_value(text: String, pos: int) -> int:
 	pos = _skip_ws(text, pos)
 	if pos >= text.length():
@@ -283,12 +220,7 @@ static func _skip_json_value(text: String, pos: int) -> int:
 		return -1
 	return num_match.get_end()
 
-## Returns the position right after the JSON object starting at `pos` (the
-## position right after the object's opening `{`), or -1 if malformed --
-## mirrors _scan_object_members() but never decodes a key or builds a member
-## map, since a sibling value being skipped is never inspected (only used by
-## _skip_json_value() for a nested object it is skipping over, never for
-## "state" or "rng" themselves).
+## The position after the object at `pos` (after its `{`), or -1; never decodes keys.
 static func _skip_json_object(text: String, pos: int) -> int:
 	pos = _skip_ws(text, pos)
 	if pos >= text.length():
@@ -320,11 +252,7 @@ static func _skip_json_object(text: String, pos: int) -> int:
 		return -1
 	return -1 # unreachable; satisfies the static analyzer's return-path check
 
-## Returns the position right after the JSON string literal starting at
-## `pos` (which must be `"`), or -1 if unterminated -- unlike
-## _parse_json_string(), never builds the decoded value, since a value being
-## skipped (as opposed to a key being matched against "seed"/"rng"/"state")
-## is never inspected.
+## The position after the string literal at `pos` (a `"`), or -1; never builds the value.
 static func _skip_json_string(text: String, pos: int) -> int:
 	if pos >= text.length() or text[pos] != "\"":
 		return -1
@@ -340,8 +268,7 @@ static func _skip_json_string(text: String, pos: int) -> int:
 		i += 1
 	return -1
 
-## Returns the position right after the JSON array starting at `pos` (the
-## position right after the array's opening `[`), or -1 if malformed.
+## The position after the array at `pos` (after its `[`), or -1 if malformed.
 static func _skip_json_array(text: String, pos: int) -> int:
 	pos = _skip_ws(text, pos)
 	if pos >= text.length():
@@ -363,12 +290,8 @@ static func _skip_json_array(text: String, pos: int) -> int:
 		return -1
 	return -1 # unreachable; satisfies the static analyzer's return-path check
 
-## Decodes one JSON string literal starting at `pos` (which must be `"`),
-## resolving backslash escapes -- including `\uXXXX` -- so an escaped key
-## (e.g. "seed") decodes to the identical string a plain one would
-## ("seed"), matching what JSON.parse_string() itself already does when it
-## builds the parsed Dictionary's keys. Returns
-## {"ok": false} for an unterminated or malformed literal.
+## Decodes the string literal at `pos`, \uXXXX included, so an escaped key equals the plain
+## one as in JSON.parse_string(). {"ok": false} when unterminated or malformed.
 static func _parse_json_string(text: String, pos: int) -> Dictionary:
 	if pos >= text.length() or text[pos] != "\"":
 		return {"ok": false}
@@ -421,14 +344,8 @@ static func _skip_ws(text: String, pos: int) -> int:
 		pos += 1
 	return pos
 
-## Decomposes one complete JSON number token (as matched by _JSON_NUMBER_PATTERN)
-## into its exact integer value when the token denotes a mathematically whole
-## number that fits in a signed 64-bit integer -- JSON gives "1000", "1e3" and
-## "1000.0" the identical meaning regardless of surface form, so all three
-## restore to the same exact int. Returns {"ok": false} for a token with a
-## genuine (non-zero) fractional remainder, or one whose magnitude exceeds
-## int64, rather than truncating or overflowing it into a plausible-looking
-## wrong value.
+## The exact int64 of a whole-number token ("1000", "1e3" and "1000.0" all give 1000), or
+## {"ok": false} for a real fraction or an out-of-range magnitude -- never a wrapped value.
 static func _parse_json_integer_token(token: String) -> Dictionary:
 	var pattern := RegEx.new()
 	pattern.compile("^(-)?(0|[1-9][0-9]*)(?:\\.([0-9]+))?(?:[eE]([+-]?[0-9]+))?$")
@@ -443,20 +360,11 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 	var digits := int_part + frac_digits
 	var mantissa_is_zero := digits.lstrip("0") == ""
 
-	# Zero times any power of ten is exactly zero, independent of the
-	# exponent's magnitude or sign -- "0", "-0", "0.0e21" and "0e999999999999"
-	# all denote the same integer 0. Deciding this before any exponent
-	# magnitude/padding logic keeps a zero mantissa from ever being rejected
-	# by the padding-length guard below.
+	# A zero mantissa is 0 for any exponent; decided before the padding guard below.
 	if mantissa_is_zero:
 		return {"ok": true, "value": 0}
 
-	# A short token can spell an arbitrarily long exponent (e.g.
-	# "1e999999999999999999999999"). Converting that many digits with
-	# to_int() can itself overflow/wrap before the value is ever used, and no
-	# legitimate in-range int64 needs an exponent whose significant digit
-	# count exceeds a handful of digits -- so a longer one is decided here,
-	# without ever computing its exact numeric value.
+	# A huge exponent (e.g. "1e9999...") is decided here, before to_int() could overflow.
 	var exponent := 0
 	if not exp_group.is_empty():
 		var exp_negative := exp_group.begins_with("-")
@@ -479,10 +387,7 @@ static func _parse_json_integer_token(token: String) -> Dictionary:
 		digits = digits.substr(0, point)
 	else:
 		var pad := point - digits.length()
-		# Any padded length beyond int64's own maximum digit count is
-		# unconditionally out of range; reject before ever allocating the
-		# padded string, so a short token can never request unbounded work
-		# here either.
+		# Longer than int64's digit count is out of range; reject before padding.
 		if pad > _INT64_MAX_DIGITS.length():
 			return {"ok": false}
 		digits += "0".repeat(pad)

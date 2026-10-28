@@ -26,16 +26,10 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		_remove_temporary(temporary)
 		return _error(validation["code"], validation["message"], path)
 
-	# The wire body keeps rng.seed/state as real JSON integers, matching the
-	# schema. JSON.parse_string returns every number as a float, so exact
-	# 64-bit fidelity for these two fields is recovered on read by rescanning
-	# the raw text instead of trusting the parsed Variant (_restore_exact_rng).
+	# rng.seed/state stay real JSON integers; read() recovers them exactly from the raw text.
 	var json_safe: Dictionary = state.duplicate(true)
 	var body := JSON.stringify(json_safe)
-	# JSON.parse_string always returns numbers as floats, so a hash taken over
-	# the pre-parse dict (real ints) can never match one taken over the
-	# parsed-back dict on read. Hash the round-tripped form here so both sides
-	# hash the same representation.
+	# Hash the parsed-back form: read() can only hash floats, so both sides must match.
 	var round_tripped: Variant = JSON.parse_string(body)
 	var hash := _sha256(JSON.stringify(round_tripped).to_utf8_buffer())
 	var envelope := {"format": FORMAT, "integrity": hash, "state": json_safe}
@@ -45,11 +39,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		_remove_temporary(temporary)
 		return _error("write_failed", "could not open temporary save", path)
 	file.store_string(encoded)
-	# Force the buffered write to disk (and surface any disk-full/IO error)
-	# while the handle is still open. Closing performs its own final flush,
-	# which can itself fail (e.g. disk fills between the explicit flush and
-	# close), so the error state is captured on both sides of close() rather
-	# than trusting the pre-close flush alone.
+	# Flush and capture errors on both sides of close(): the final flush can fail too.
 	file.flush()
 	var flush_error := file.get_error()
 	file.close()
@@ -59,14 +49,11 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		var failing_error := close_error if close_error != OK else flush_error
 		return _error("write_failed", "could not write temporary save (error %s)" % failing_error, path)
 
-	# Test-only seam: lets tests simulate a crash that leaves the
-	# candidate for this exact target truncated/corrupted on disk, right where
-	# the read-back verification below must catch it before target is touched.
+	# Test-only seam: corrupt the candidate so the read-back below must catch it.
 	if after_temp_write.is_valid():
 		after_temp_write.call(temporary)
 
-	# Re-open the bytes written to the candidate. This catches truncation and
-	# serialization/storage failures before the target is considered replaceable.
+	# Read the candidate back: catches truncation and storage failures before the target changes.
 	var verified := _read_and_verify(temporary)
 	if not verified["ok"]:
 		_remove_temporary(temporary)
@@ -106,17 +93,11 @@ static func _read_and_verify(path: String) -> Dictionary:
 	var state: Variant = envelope["state"]
 	if not (state is Dictionary):
 		return {"ok": false, "code": "schema_error", "message": "save state is not an object", "file": path}
-	# Inspect the version before checking the body hash. A newer producer must
-	# receive the distinct version error even when its hash uses fields this
-	# reader cannot interpret (the reader never returns that state).
+	# Version before hash: a newer producer gets the distinct version error.
 	var stored_state_hash := _sha256(JSON.stringify(state).to_utf8_buffer())
-	# JSON.parse_string returns all JSON numbers as floats. Normalize the
-	# schema's integer fields before type checks, while retaining the hash of the
-	# exact wire representation above for integrity verification.
+	# Normalise ints for the type checks; the hash above used the exact wire text.
 	_coerce_ints(state)
-	# Structurally locate the envelope's "state" object once (not per field --
-	# both restores below share this single scan of the raw wire text rather
-	# than each re-parsing it).
+	# Locate "state" once; every exact-int restore below shares the scan.
 	var located_state := SaveJsonInts._locate_state_object(text)
 	var rng_restore := SaveJsonInts._restore_exact_rng(state, located_state)
 	var seed_restore := SaveJsonInts._restore_exact_seed(state, located_state)
@@ -127,11 +108,8 @@ static func _read_and_verify(path: String) -> Dictionary:
 		return {"ok": false, "code": "save_from_newer_version", "message": "save schema is newer than this build", "file": path}
 	if str(envelope["integrity"]) != stored_state_hash:
 		return {"ok": false, "code": "integrity_mismatch", "message": "save integrity hash does not match", "file": path}
-	# Checked only once the save is confirmed to belong to this build and to
-	# match its own integrity hash: a fractional or out-of-int64-range
-	# seed/rng token is a schema violation, not a newer-version or
-	# tampered-file signal, and must never be silently truncated into a
-	# plausible-looking (but wrong) integer.
+	# After version and hash: a fractional or out-of-int64 seed/rng token is a schema
+	# violation, never truncated into a plausible integer.
 	if not rng_restore["ok"]:
 		return {"ok": false, "code": "schema_error", "message": rng_restore["message"], "file": path}
 	if not seed_restore["ok"]:
@@ -152,10 +130,8 @@ static func _read_and_verify(path: String) -> Dictionary:
 		if not migrated.get("ok", false):
 			return {"ok": false, "code": migrated.get("code", "no_migration_available"), "message": migrated.get("message", "migration failed"), "file": path}
 		state = migrated["state"]
-	# A save from another content bundle gets one chance through a registered content
-	# rename (SaveMigrations.resolve_content_version()) and is otherwise rejected, never
-	# loaded with stale ids. A missing or non-string contentVersion is left for
-	# _validate_state() to report as such.
+	# Another content bundle gets one chance through a registered rename
+	# (SaveMigrations.resolve_content_version()), otherwise it is rejected, never loaded stale.
 	var current_content_version := StateCodecType.content_version()
 	var content_version_value: Variant = state.get("contentVersion")
 	if content_version_value is String and String(content_version_value) != current_content_version:
@@ -171,11 +147,8 @@ static func _read_and_verify(path: String) -> Dictionary:
 	return {"ok": true, "state": state}
 
 static func _coerce_ints(state: Dictionary) -> void:
-	# The schema declares no floating-point fields anywhere in the tree, so any
-	# whole-number float produced by the JSON round trip is really an integer.
-	# Walk the full structure generically instead of enumerating every nested
-	# path by hand, which is easy to miss (e.g. scheduling.waiting entries).
-	# rng.seed/state get a precise fixup afterward via _restore_exact_rng.
+	# The schema has no float fields, so every whole float from JSON is an int; walk the whole
+	# tree rather than list paths. rng.seed/state are fixed exactly afterwards.
 	SaveJsonInts._coerce_floats_to_ints(state)
 
 ## Mirrors docs/architecture/contracts/game-state.schema.json field for field, after the
@@ -254,11 +227,7 @@ static func _remove_temporary(path: String) -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 static func _replace_target(temporary: String, target: String) -> Dictionary:
-	# DirAccess.rename overwrites an existing destination directly on every
-	# platform Godot supports, so this single rename call is both the
-	# replacement step and the only moment the target's directory entry
-	# changes. There is no intermediate step where target refers to neither
-	# the old nor the new save.
+	# One rename overwrites the target: there is never a moment with neither save in place.
 	var temporary_absolute := ProjectSettings.globalize_path(temporary)
 	var target_absolute := ProjectSettings.globalize_path(target)
 	var rename_error := DirAccess.rename_absolute(temporary_absolute, target_absolute)

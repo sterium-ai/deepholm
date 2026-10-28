@@ -26,10 +26,7 @@ static func _valid_items(value, map_width: int, map_height: int) -> Dictionary:
 		seen_ids[item_id] = true
 	return {"ok": true}
 
-## map_width/map_height bound every position field below, in addition
-## to the non-negative check -- an entity/item/object/zone at or
-## beyond the map's own declared width/height is rejected the same way a
-## negative one is.
+## Every position is bounded by the map's width/height as well as non-negative.
 static func _valid_item(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid item type")
@@ -49,10 +46,7 @@ static func _valid_item(value, map_width: int, map_height: int) -> Dictionary:
 		return _fail("invalid item factionId")
 	return {"ok": true}
 
-## Mirrors _valid_zones()/_valid_zone(): ItemTable.ground_berries's wire shape is
-## an array of {target, berries, factionId} entries (see StateCodec._encode_ground_berries()),
-## each a simple per-tile counter, not a first-class item with an id. factionId
-## is required (ADR 047).
+## ItemTable.ground_berries as [{target, berries, factionId}]; factionId required (ADR 047).
 static func _valid_ground_berries(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid groundBerries type")
@@ -78,9 +72,7 @@ static func _valid_ground_berries_entry(value, map_width: int, map_height: int) 
 		return _fail("invalid groundBerries entry factionId")
 	return {"ok": true}
 
-## world._dig_find_random's own continuation (ADR 026,
-## StateCodec._encode()'s "digFindRng"): the same {seed, state} shape as
-## top-level "rng"; optional at the top level (SaveIO.OPTIONAL_TOP_LEVEL_FIELDS).
+## ItemTable.dig_find_random (ADR 026): {seed, state} like "rng"; optional at the top level.
 static func _valid_dig_find_rng(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid digFindRng type")

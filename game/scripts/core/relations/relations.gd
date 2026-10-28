@@ -1,20 +1,9 @@
 class_name Relations
 extends RefCounted
 
-## F3 relations module (docs/architecture/foundation-for-breadth.md section F3,
-## docs/decisions/014-factions-and-relations.md): reads content/factions.json
-## through a frozen ContentRegistry to answer "how does faction A feel about
-## faction B" and "are these two actors hostile". Plain, scene-independent
-## GDScript (AGENTS.md): constructed from a ContentRegistry exactly like
-## ActorTable/ToilExecutor; registry is taken untyped (duck-typed) rather than
-## `registry: ContentRegistry` to avoid a preload cycle, since
-## content_registry.gd itself preloads this file to reuse RELATION_VALUES/
-## is_known_relation_value() for its own faction-relation validation, the same
-## way it already reuses ActorTable.is_known_component() and
-## ToilExecutor.is_known_toil().
-##
-## Not consulted by combat or job-giver code: it is the documented seam
-## for later passability, reservation, order and combat/incident work.
+## Relations (foundation-for-breadth.md F3, ADR 014): faction-to-faction opinion from
+## content/factions.json. Registry is untyped to avoid a preload cycle (content_registry.gd
+## preloads this file for RELATION_VALUES).
 
 const RELATION_VALUES: Array[String] = ["hostile", "neutral", "friendly"]
 const DEFAULT_RELATION := "neutral"
@@ -27,14 +16,8 @@ var _registry
 func _init(registry) -> void:
 	_registry = registry
 
-## Faction a_faction_id's own declared row for b_faction_id
-## (content/factions.json's "relations" field): a's opinion of b, which is
-## not required to be symmetric with b's opinion of a. A faction relating to
-## itself is always "friendly", regardless of what content declares. Falls
-## back to "neutral" only when a_faction_id names no declared faction at
-## all -- never the case for a valid registry's own declared factions, since
-## ContentRegistry._check_references() requires every faction to declare a
-## complete relation row naming every other declared faction id.
+## The declared opinion of a toward b (not necessarily symmetric); a faction is always "friendly"
+## to itself; "neutral" only for an undeclared a (the registry requires complete relation rows).
 func relation(a_faction_id: String, b_faction_id: String) -> String:
 	if a_faction_id == b_faction_id:
 		return "friendly"
@@ -42,9 +25,8 @@ func relation(a_faction_id: String, b_faction_id: String) -> String:
 	var relations: Dictionary = faction_entry.get("relations", {})
 	return String(relations.get(b_faction_id, DEFAULT_RELATION))
 
-## Whether actor_a's faction considers actor_b's faction hostile, reading
-## each actor Dictionary's own "faction_id" field. Not consulted by combat or
-## any job-giver yet; it is the seam for later F5 combat/incident work.
+## Reads each actor's content-style "faction_id" key, not the runtime "factionId": combat code
+## uses relation() with "factionId" instead (ADR 021).
 func is_hostile(actor_a: Dictionary, actor_b: Dictionary) -> bool:
 	var a_faction_id := String(actor_a.get("faction_id", ""))
 	var b_faction_id := String(actor_b.get("faction_id", ""))

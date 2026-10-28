@@ -1,7 +1,7 @@
 class_name ScenarioBuilder
 extends RefCounted
 
-## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 053): the map
+## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 054): the map
 ## size, seed, tick rate and incident switch, then the entry's setup steps in order. A
 ## caller-side factory, not a WorldState module: it constructs the world and drives it only
 ## through apply()/tick() and the public spawn_ground_tool_item(), except for the two

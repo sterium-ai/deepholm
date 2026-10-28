@@ -95,7 +95,7 @@ was accepted (`jobLimit`/`siteLimit`) or a job an earlier area order created
 since (`created` job-number ranges, recorded while a later cancel is pending),
 so an order never cancels other work created during its own expansion. A pending queue is part of `state_hash()` (an idle
 one is left out: its next order id is not observable), and of the save
-(`areaOrders`, schemaVersion 26, see `save-system.md`): a save taken
+(`areaOrders`, see `save-system.md`): a save taken
 mid-expansion resumes at the same tile.
 
 ### Faction-gated assignment and reservations
@@ -131,10 +131,10 @@ directly through `GlobalAssignment.submit()`'s `restrict_to`):
   even transiently held (covering a faction change made while the job was
   suspended, which must not let it reacquire on resume). Both gates share
   one refusal path: a refused `{job_id, worker}` pair is recorded via
-  `GlobalAssignment.take_refused_reservations()`; `WorldState` calls
-  `_resolve_refused_reservations()` at the end of `tick()` (after
-  `_advance_colonists()`, since a need resolving there can itself trigger
-  and refuse a resumption) and at the end of `_apply_job_command()` (a
+  `GlobalAssignment.take_refused_reservations()`;
+  `WorldState._resolve_refused_reservations()` runs as a `TickPipeline` phase at the end of
+  `tick()` (after `TickPipeline._advance_colonists()`, since a need resolving there can itself trigger
+  and refuse a resumption) and at the end of `OrderHandler.apply_job_command()` (a
   `cancel`/`fail`/`invalidate_job` command can resolve a need the same way
   outside `tick()` entirely) — always before the enclosing mutator returns,
   since `GlobalAssignment`'s refusal bookkeeping is transient and never
@@ -180,7 +180,7 @@ when its kind has a `work` phase:
 ```
 
 `WorldState._init()` reads `move_ticks_per_tile` off the first tile entry and
-every job's `work_ticks` into a `kind -> ticks` map (`_load_work_ticks()`),
+every job's `work_ticks` into a `kind -> ticks` map (`ContentTables.work_ticks()`),
 then injects both into `ToilExecutor`'s existing constructor parameters — the
 same values, now content instead of code. A job kind with no `work_ticks`
 field (`haul`, `eat_food`, `drink_water`) has no `work` phase at all — see
@@ -192,7 +192,7 @@ never this content constant.
 ## Route step semantics
 
 Once the scheduler assigns a colonist to a job with a resolved path,
-`WorldState._advance_colonists()` drives that colonist by exactly one tick at
+`TickPipeline._advance_colonists()` drives that colonist by exactly one tick at
 a time. A colonist's `route` field (`null` when not moving) holds:
 
 ```gdscript
@@ -318,16 +318,16 @@ codebase (see `game/scripts/core/routing/README.md`), so a save/load
 mid-reroute resumes rather than restarts. `state_hash()` hashes that same
 full `snapshot()`, not the summary:
 
-- `_begin_reroute()` starts a `MeasuredRoute` search from the colonist's
+- `ToilExecutor._begin_go_to_reroute()` starts a `MeasuredRoute` search from the colonist's
   current tile to the job's target and stores it (keyed by colonist id) in
   `WorldState._reroutes`; the colonist holds position with reason
   `rerouting` (`colonist-ai.md` 3.8) while `route.rerouting` is non-null.
-- `_resume_reroute()` advances that search by exactly one bounded `resume()`
+- `ToilExecutor._resume_go_to_reroute()` advances that search by exactly one bounded `resume()`
   call per tick — the same step budget as every other route search, never an
   unbounded recompute.
 - `STATUS_FOUND` replaces `route` with the newly found path (or starts
   `work` immediately when the colonist already stands on or adjacent to the
-  target, mirroring `_start_assignment()`'s own shortcut) and clears
+  target, mirroring `ToilExecutor.start_assignment()`'s own shortcut) and clears
   `route.rerouting`.
 - `STATUS_UNREACHABLE` cancels the job through the existing queue mechanism
   and resubmits the same target as a fresh job, so the global scheduler's
@@ -337,43 +337,49 @@ full `snapshot()`, not the summary:
 
 ## Tile transforms on work completion
 
-`WorldState._advance_work()` applies exactly these transforms when a job's
-work timer completes:
+`ToilBindings._toil_on_work_complete()` applies exactly these transforms when a job's
+work timer completes (each kind's `effects` block in `content/jobs.json`, applied by
+`ToilBindings.apply_work_effects()`, ADR 051):
 
 - `dig` — the target tile changes `soil -> trench` (ADR 026,
   `docs/decisions/026-trench-trapped-actor-and-rescue.md`; not `floor`).
   `trench` is passable with the same `move_cost`/`move_ticks_per_tile` as
   `soil`/`floor`, but not `diggable`. Dig always spawns one `sand` item
-  (`_spawn_item("sand", ...)`, `world_state.gd`'s generalized
-  `_spawn_wood_item()` shape), and separately draws exactly one roll from
+  (`ItemTable.spawn_item()`, the effect's `yields.always` list), and separately draws exactly one roll from
   `content/jobs.json`'s dig `find_table` (`gold_coin`/`flint`/`coal`/`seed`/no
   find, weights 5/20/10/10/55) against a dedicated `RandomNumberGenerator`
-  salted off the world seed (`WorldState._dig_find_random`, mirroring
+  salted off the world seed (`ItemTable.dig_find_random`, mirroring
   `IncidentScheduler._random`'s own salted-stream pattern) — spawning that
   item too when the roll finds one. Both the guaranteed sand and any find are
   placed on the nearest adjacent passable, non-`trench` tile to the dug tile
   (row-major tie-break: lowest `y`, then lowest `x`; falls back to the trench
   tile itself only when no adjacent tile qualifies), never inside the trench.
-  When more than one dig job completes on the same tick, `WorldState`
-  defers every completion's find roll to `_resolve_dig_finds()` (run once,
+  When more than one dig job completes on the same tick, `ItemTable.stage_dig_find()`
+  defers every completion's find roll to `ItemTable.resolve_dig_finds()` (a `TickPipeline` phase run once,
   right after that tick's colonist-advance pass) and consumes them in
   ascending job-id order, so the find sequence never depends on
-  `_advance_colonists()`'s own colonist-id iteration order.
+  `TickPipeline._advance_colonists()`'s own colonist-id iteration order.
 - `chop` — the target tile changes `tree -> soil` (trees only generate on
   `soil`, so the tile gets back the terrain it grew on; `floor` is built floor
   and draws as stone bricks), and one ground-wood item
   is added at that tile (`get_ground_wood(x, y)` increments by one, tracked
-  in `WorldState`'s internal ground-items map).
+  in `ItemTable`).
 - `mine` — the target tile changes `rock -> floor`, and one ground-stone item
-  is added at that tile (`_spawn_stone_item()`, mirroring `_spawn_wood_item()`'s
-  shape).
+  is added at that tile (`ItemTable.spawn_item()`, the same call as chop's wood).
 - `forage` — the target tile's kind changes to `floor` (unconditionally, not
   only from `soil`), the `berry_bush` object occupying it is removed, and
   one ground-berries unit is added at that tile (`get_ground_berries(x, y)`
   increments by one, a direct per-tile counter, not a first-class item —
-  see `_spawn_berries_item()`).
+  see `ItemTable.spawn_berries_item()`).
 
-No other tile kinds or item types are produced by order completion.
+- `till` — the target tile changes `soil -> plowed_soil`; no item is produced.
+- `sow` — the target tile changes `plowed_soil -> planted` and one `seed` unit
+  is removed from the ground items (`ItemTable.remove_one_item_of_kind()`, lowest
+  item id first); with no seed left the job fails `blocked_missing_input`.
+
+These effects are data: each job's `effects` block in `game/content/jobs.json`
+(ADR 051), applied by `ToilBindings`. No other tile kinds or item types are
+produced by order completion.
 
 ## Trenches and trapped actors
 
@@ -433,7 +439,7 @@ exactly eight toils, `ToilExecutor.VOCABULARY`:
 | `work` | Hold position for a duration (`content/jobs.json`'s `work_ticks` for that job's kind, or -- `site_work` only, see "Construction" -- the site's own remaining need); a kind with no `work_ticks` field (haul, `site_fetch`, eat_food, drink_water) has no work phase at all. |
 | `place` | Return the carried item to the ground at a destination cell and clear `hands`. Requires the cell still free of any colonist or ground item; fails typed (`destination_blocked`) otherwise. |
 | `deposit` | Transfer carried hands into a construction site's own `held_materials`, clamped to what it still needs, instead of minting a ground item — see "Construction" below. |
-| `consume` | Instantly restore a need and remove its source unit (food only); requires the source still valid (`_consume_source_valid()`), fails typed (`source_gone`) otherwise. Used only by `eat_food`/`drink_water` — see "Need jobs". |
+| `consume` | Instantly restore a need and remove its source unit (food only); requires the source still valid (`NeedsSystem.consume_source_valid()`), fails typed (`source_gone`) otherwise. Used only by `eat_food`/`drink_water` — see "Need jobs". |
 | `release_all` | Release every `ReservationTable` key this job owns; runs on every terminal job transition (`complete`/`cancel`/`fail`/`invalidate`), not only success. |
 
 `dig`/`chop`/`forage`/`sleep`/`site_work` only ever drive `go_to` and `work`
@@ -444,8 +450,8 @@ drives `go_to` (twice), `pick_up`, and `place`, with no `work` phase;
 `drink_water` drive `go_to` then the instant `consume` toil, also with no
 `work` phase. `reserve` and `release_all` are never a colonist's *current*
 toil — they are instantaneous bookkeeping around activation and completion,
-driven by the scheduler (or, for a need job, `WorldState._commit_need_job()`/
-`_finish_need_job()`) rather than a per-tick step.
+driven by the scheduler (a need job included: `NeedGiver._commit()` submits it through
+`GlobalAssignment.submit()` like any other job) rather than a per-tick step.
 `game/scripts/viewer/colonist_panel.gd` infers a colonist's current toil
 name for display from exactly this same route/work/hands state, per job
 kind — it is presentation-only and adds no new persisted field. Because
@@ -500,7 +506,7 @@ or cells itself — only the namespace prefix a caller chooses does:
 
 | Key prefix | Meaning | Acquired by |
 | --- | --- | --- |
-| `tile:x,y` | A dig/chop/forage job's target tile, a need job's source tile (a ground-berries tile, a water tile, or a bed object's tile), or a construction site's own footprint tile. | The scheduler, on activation, for dig/chop/forage (unchanged); `WorldState._commit_need_job()`, for a need job, the instant its search finds a still-unreserved candidate; `WorldState._apply_construction_submission()`, for every footprint tile of a newly-created site, the instant its `build` command is accepted (owner `"site:<id>"`, not a job id — see "Construction" below). |
+| `tile:x,y` | A dig/chop/forage job's target tile, a need job's source tile (a ground-berries tile, a water tile, or a bed object's tile), or a construction site's own footprint tile. | The scheduler, on activation, for dig/chop/forage (unchanged); the scheduler, on activation, for a need job (submitted by `NeedGiver._commit()` the instant its search finds a still-unreserved candidate); `ConstructionSystem.apply_construction_submission()`, for every footprint tile of a newly-created site, the instant its `build` command is accepted (owner `"site:<id>"`, not a job id — see "Construction" below). |
 | `item:<item_id>` | A haul or `site_fetch` job's source ground item. | `JobQueue._tick_haul()`/`_tick_site_fetch()`, before the job ever goes active. |
 | `cell:x,y` | A haul job's reserved stockpile destination cell. | Same as above; namespaced separately from `tile:` so a stockpile cell and a dig/chop/forage/need-job target never collide even at the same coordinates. |
 | `trapped:<victim_id>` | A rescue job's own claim on the trapped colonist it is freeing; guarantees a second rescue job can never be proposed for the same victim. | `JobQueue`'s own activation (`tick()`) and reactivation (`reactivate()`), via the generic `set_extra_reservation_keys()`/`_extra_keys_for_job` callback described below — never acquired directly by `rescue_giver.gd`. |
@@ -564,7 +570,7 @@ immediately with no job queue involved (mirroring `place_object`/
   walking toward a cell that no longer belongs to any zone.
 
 `WorldState.get_zones()`/`get_zone(id)` return detached, id-sorted copies;
-`WorldState._find_free_haul_cell()` scans every zone's cells in zone-id then
+`HaulGiver.find_free_haul_cell()` scans every zone's cells in zone-id then
 row-major order for haul destination selection, so cell assignment is
 deterministic for a given zone/reservation state.
 
@@ -620,8 +626,8 @@ own footprint reservation. Rejected `blocked_target_unreachable` (the
 existing typed reason, not a new one) when the declared kind is itself
 impassable (`wall`, `workbench`; `door`/`bed` are declared passable and never
 trigger this) and placing it there would strand a currently-reachable tile
-(`WorldState._would_enclose_tiles()`, the footprint-aware generalization of
-the superseded single-tile `_would_enclose()`). Unlike the superseded job
+(`ConstructionSystem._would_enclose_tiles()`, the footprint-aware generalization of
+the superseded single-tile check). Unlike the superseded job
 model, there is **no stock check**: a site is created immediately,
 regardless of what materials are currently on hand.
 
@@ -652,7 +658,7 @@ click always agree.
   `ConstructionGiver` submits a fresh one whenever a slot frees up and
   material is still short, rather than one job visiting several sources
   itself. Once a second concurrent `site_fetch` job actually activates with
-  its own colonist, `_next_site_fetch_source()`'s committed-source exclusion (below)
+  its own colonist, `ConstructionSystem.next_site_fetch_source()`'s committed-source exclusion (below)
   routes it to the nearest source the *other* active fetch job has not
   already committed to, never the same one twice.
 - Once every required material is fully held (`ConstructionSiteTable.
@@ -677,24 +683,24 @@ A separate toil verb (not an extension of `place`): transfers every hands entry 
 `held_materials` (`ConstructionSiteTable.deposit()`), clamped to what the
 site still needs of each kind, instead of minting a fresh ground item.
 
-On success, `WorldState._toil_on_deposit_success()` checks
+On success, `ToilBindings._toil_on_deposit_success()` checks
 whether the colonist's hands still hold units of the job's own kind --
 possible only when the just-delivered site's own remaining need was smaller
 than what was held, so that site is now fully served for this kind. `kind` is
 read straight off `InventoryType.hands_snapshot(colonist)` -- the colonist's
-own persisted "hands" field -- never `_site_fetch_picked_kind`, the runtime
-cache `_toil_on_pick_up_success()` keeps for its own same-tick use: that cache
+own persisted "hands" field -- never `ConstructionSystem.site_fetch_picked_kind`, the runtime
+cache `ToilBindings._toil_on_pick_up_success()` keeps for its own same-tick use: that cache
 is never saved, so resolving it right after a load, or after
 its own source item was exhausted and deleted by the pick_up that filled
 hands, would silently read `""` and end the chain early with material still
-in hand. When leftover exists, `_next_site_fetch_site()` searches every *other*
+in hand. When leftover exists, `ConstructionSystem.next_site_fetch_site()` searches every *other*
 active construction site still short of the same kind and not already at its
 own `max_builders` fetch-plus-work capacity (`_site_fetch_work_busy()`, the
 identical queued-or-active count `ConstructionGiver.advance()` sums per site
 before topping it up -- a retarget never goes through that submission path,
 so without this explicit check here it could push an already-fully-staffed
 site over its own cap) by the identical deterministic route-cost search
-`_next_site_fetch_source()` uses for ground sources (`_route_cost()`, not
+`ConstructionSystem.next_site_fetch_source()` uses for ground sources (`_route_cost()`, not
 open-field Chebyshev), ties broken by lowest site id. When a reachable,
 eligible one exists, `JobQueue.retarget_site_fetch_site()` (a mutator
 alongside `retarget_site_fetch_source()`) stamps `job["site"]` and
@@ -707,7 +713,7 @@ retargeting. When leftover exists but no eligible sibling does (every
 remaining site cancelled, or already satisfied by a competing delivery, while
 the colonist still carried material toward it), the leftover is dropped
 through the same live-assignment terminal-drop path `cancel_job`/`cancel_site`
-already use (`_drop_carried_item_from()`) before the job completes -- nothing
+already use (`ToilBindings.drop_carried_item_from()`) before the job completes -- nothing
 else ever drains "hands" once a job is terminal, so without this the material
 would stay sealed in hands forever. Only once hands hold nothing of the job's
 own kind does the job complete outright, exactly like `place`'s own
@@ -718,7 +724,7 @@ mid-chain critical-need interrupt or `cancel_job`/`cancel_site` reads/drops
 against whatever site those fields currently name, with nothing chain-specific
 to restore. This sibling search has no separate item-level exclusion for a
 site already named by another pending `site_fetch` job (unlike
-`_next_site_fetch_source()`'s own item-level source exclusion), because
+`ConstructionSystem.next_site_fetch_source()`'s own item-level source exclusion), because
 eligibility here is already gated by capacity
 (`_site_fetch_work_busy() >= max_builders`, above), not by physical item
 conflict, and the capacity gate is the one that actually matters in
@@ -747,11 +753,11 @@ reaching the same site safe regardless (a site accepts nothing further once
 fully served, and whichever job arrives second then chains onward in turn,
 or completes) (see ADR 043).
 
-`WorldState._toil_pick_up_count_for()`'s own clamp is widened to match
+`ToilBindings._toil_pick_up_count_for()`'s own clamp is widened to match
 (ADR 043): a pick_up now sizes to the current target site's own
 remaining need plus every other reachable, still-short, not-already-at-
 capacity sibling site's own remaining need of the same kind
-(`_reachable_short_sibling_sites()`, the query `_next_site_fetch_site()`
+(`ConstructionSystem.reachable_short_sibling_sites()`, the query `ConstructionSystem.next_site_fetch_site()`
 also uses -- a sibling already holding its own `max_builders` worth of
 queued-or-active fetch-plus-work jobs never inflates this sum, since it
 could never actually accept a chained delivery), minus whatever of that kind
@@ -800,8 +806,8 @@ nothing to cache.
 The instant accumulated `progress` meets `build_ticks` — checked on every
 tick any active builder's `site_work` job contributes, not only when a
 job's own local countdown happens to reach zero (see above) —
-`WorldState._finalize_construction_site()` places the declared object via
-`_set_object()` (the ordinary footprint/orientation-aware placement),
+`ConstructionSystem._finalize_construction_site()` places the declared object via
+`ObjectTable.set_object()` (the ordinary footprint/orientation-aware placement),
 releases the site's own footprint reservation, completes every other
 still-active builder job on the site (an empty `completing_job_id` completes
 all of them, including the one whose own contribution just crossed the
@@ -820,7 +826,7 @@ hands drop through the existing `_drop_carried_haul_item()` terminal
 path); every held material is placed on the nearest free
 tile adjacent to the site's footprint (one distinct tile per kind where
 possible, the same north/west/east/south adjacency order
-`_dig_item_placement()` already uses for a single tile); the site's own
+`ItemTable.dig_item_placement()` already uses for a single tile); the site's own
 footprint reservation is released; and the record is removed. There is no
 separate "ghost" to erase — a presentation layer draws one from
 `get_construction_sites()`, which this call already empties.
@@ -831,7 +837,7 @@ separate "ghost" to erase — a presentation layer draws one from
 `orientation` optional, identical meaning to `build`'s. Submits a whole drag
 (a wall line, a rectangle of floor tiles) as one command instead of one
 `build` per tile, so the enclosure check below can see the whole shape at
-once. `WorldState._classify_build_line_command()` is the single read-only
+once. `ConstructionSystem.classify_build_line_command()` is the single read-only
 rule shared by `apply()` and `preview()`:
 
 1. Rejected `invalid_payload` for a non-string kind, a `kind` absent from
@@ -891,15 +897,15 @@ driving each job.
 
 ### Persistence
 
-One optional top-level `constructionSites` field (`state_codec.gd`'s
-`_encode_construction_sites()`/`_decode_construction_sites()`), absent for
-any save written before construction sites existed — `WorldState` then loads with no active
+One top-level `constructionSites` field (`ConstructionSystem.encode()`/`decode()`, through
+`state_codec.gd`'s `_encode_construction_sites()`/`_decode_construction_sites()`). It is
+optional on read (`save-system.md`, "Optional fields"): an absent one loads with no active
 sites, exactly a fresh world's own starting state. A `site_fetch`/`site_work`
 job's own `site` field round-trips like `itemId`/`cell` and is part of
 `state_hash()`'s existing `"jobs"` entry; `state_hash()` also hashes
-`_sites.list()` directly, so two states differing only in held materials,
-progress, or builder assignment never hash equal. No `schemaVersion` bump:
-every change is additive/optional.
+the site table's `list()` directly (`ConstructionSystem.hash_into()`), so two states differing
+only in held materials, progress, or builder assignment never hash equal. The field has been
+part of the save since the schema reset to v1 (ADR 049).
 
 ## Need jobs: `eat_food`, `drink_water`, `sleep`
 
@@ -910,7 +916,7 @@ through a need job — submitted through the exact same scheduler entry point
 (`GlobalAssignment.submit()`, `restrict_to` pinned to the colonist) any
 order-driven dig/chop/haul job uses (`content/jobs.json`'s `labour: ""`
 opts it out of the fair labour pool, not a separate submission path), then
-driven every tick by the same `WorldState._advance_colonists()` ->
+driven every tick by the same `TickPipeline._advance_colonists()` ->
 `ToilExecutor.advance()` dispatch every other job uses. `WorldState.tick()`
 passes each committed need's `colonist_id -> job_id` into
 `GlobalAssignment.tick()`'s own `committed_needs` parameter
@@ -926,7 +932,7 @@ competes with work for the scheduler's own aging/fairness accounting.
 ### Source selection
 
 Each need kind has exactly one notion of "a source", read from live world
-state, never a stored list (`WorldState._need_source_candidates()`):
+state, never a stored list (`NeedsSystem.need_source_candidates()`):
 
 | Need | Source | Passable? |
 | --- | --- | --- |
@@ -934,11 +940,11 @@ state, never a stored list (`WorldState._need_source_candidates()`):
 | `water` | Any `water` tile. | No — the colonist stands adjacent, like a `chop`/`forage` target. |
 | `rest` | Any tile holding a `bed` object. | Yes (`content/objects.json`: `bed` is passable, cost 3) — the colonist stands on it. |
 
-`_start_need_search()` candidate-sorts every source of the needed kind by
+`NeedGiver._start_search()` candidate-sorts every source of the needed kind by
 Manhattan distance (`abs(dx) + abs(dy)`) from the colonist, nearest first,
 drops any already-`tile:`-reserved candidate up front, then advances
 one bounded route-search `resume()` per tick per candidate
-(`_advance_need_search()`) — the same per-tick step budget every other route
+(`NeedGiver._advance_search()`) — the same per-tick step budget every other route
 search in this codebase uses (`game/scripts/core/routing/README.md`), so a
 need search never spends an unbounded amount of a single tick. Losing a
 last-instant race for a candidate's `tile:` reservation (another colonist
@@ -951,14 +957,15 @@ kind) pair searches again, bounded by `retry_base_ticks`/`retry_cap_ticks`
 (10/40 today) read off `content/needs.json` — every entry repeats the same
 `full`/`job_priority`/`retry_base_ticks`/`retry_cap_ticks` values, since
 `content_registry.gd` has no root-field accessor for a collection kind (see
-`WorldState._load_need_config()`), the same shape as the haul entry's
+`ContentTables.need_config()`), the same shape as the haul entry's
 `retry_base_ticks`/`retry_cap_ticks` above, injected into `NeedGiver`'s
 constructor rather than hard-coded as `WorldState` constants.
 The `need_unmet` alert (an event, `type: "need_unmet"`) fires exactly once
 per onset, not once per backed-off retry; a fresh search that later commits
 to a source clears the "already alerted" flag, so a later relapse alerts
 again. Failing to find any source at all does not stop the colonist from
-working — it is simply never added to `_need_job_by_colonist`, so the fair
+working — it is simply never added to `NeedGiver`'s pending map
+(`get_pending_assignments()`), so the fair
 scheduler's own pool still includes it (colonist-ai.md 3.1: "the colonist
 keeps working").
 
@@ -979,10 +986,10 @@ search trims the final tile from the path the same way it does for a
 `chop`/`forage` target, so the colonist ends up adjacent, not on, the water
 tile.
 
-On completion (`_apply_need_effect()`), the kind's `restore` value
+On completion (`NeedsSystem.apply_need_effect()`), the kind's `restore` value
 (`content/needs.json`) is written to `colonist.needs[kind]`, capped at
 `content/needs.json`'s `full` (100 today, read once via
-`WorldState._load_need_config()` since every need entry repeats the same
+`ContentTables.need_config()` since every need entry repeats the same
 value); `eat_food` additionally decrements the source tile's
 ground-berries count (removing the tile's entry once it reaches zero).
 `sleep` is the one exception to "the kind's `restore` value is written
@@ -995,26 +1002,25 @@ unmodified `restore` value, as does any need kind whose content entry
 omits `bedroom_rest_multiplier` altogether (`need_def.get(...)` defaults to
 `1.0`, a no-op multiplier) — a need kind with no meaningful "bedroom"
 concept never has to declare the field at all.
-`_finish_need_job()` releases the source's `tile:` reservation on every
-terminal transition (`completed`/`failed`), mirroring `release_all`'s
-"failure releases every reservation" contract for work jobs. A route that
-proves unreachable mid-walk (`_advance_need_route()`'s own re-route, mirror
-of "Rerouting" above) fails the job `blocked_source_unreachable` rather than
-resubmitting to a fair queue, since a need job has no queue entry to
-resubmit to — the colonist simply searches again on its next need-decision
-pass.
+The `release_all` toil releases the source's `tile:` reservation on every
+terminal transition (`completed`/`failed`), the same "failure releases every
+reservation" contract as for work jobs. A route that proves unreachable mid-walk
+("Rerouting" above) takes `ToilBindings.toil_on_unreachable()`'s ordinary first-leg path:
+`WorldState._resubmit_unreachable_job()` cancels it and resubmits the same target restricted
+to the same colonist, and `NeedGiver.reassign_job()` moves the pending association to the new
+job (or `NeedGiver.resolve_job()` drops it when the resubmission is refused).
 
 ### Interrupt behaviour
 
 Colonist-ai.md 3.6's interrupt contract is implemented exactly as designed:
 a **critical** need (crossed the `critical` threshold) pauses an
 in-progress, interruptible `work` toil immediately
-(`WorldState._pause_work_job()`), keeping the toil's elapsed tick count on
-`WorldState._work_progress` — keyed by the *tile*, not the colonist, so a
+(`NeedsSystem.pause_work_job()`), keeping the toil's elapsed tick count in
+`WorkProgress` — keyed by the *tile*, not the colonist, so a
 different colonist resuming the same job later (or the same colonist,
 later) reads the same partial progress back rather than restarting the
 job's `content/jobs.json` `work_ticks` from zero. A `rescue` job's key is
-further scoped by that job's own id (`_work_progress_key_for_job()`):
+further scoped by that job's own id (`WorkProgress.key_for_job()`):
 two rescue jobs can legitimately share one target tile (two trapped victims
 with overlapping adjacency), and a bare tile key would let one job read or
 clear the other's progress across a suspend/resume. Every other job kind
@@ -1023,7 +1029,7 @@ is otherwise no longer valid) the moment it completes. Mid-work, the toil
 executor's tile-addressed get/set hooks resolve the job through the tile's
 current reservation owner (the job being worked always holds it); every
 terminal boundary instead clears by the terminating job's explicit identity
-(`_clear_terminated_job_progress()`), since `_finish_job()` has already
+(`WorkProgress.clear_terminated_job()`), since `_finish_job()` has already
 released that reservation by then — a rescue's own key on every terminal
 transition, active or suspended; an ordinary job's plain key only when it was
 the active owner, so a paused job's progress on the same tile is never erased
@@ -1031,8 +1037,8 @@ by another job's cancellation. An **urgent** (but not yet critical) need
 never interrupts mid-toil; it is only picked up once the current toil ends
 naturally, at the next toil boundary. Once the need job that preempted a
 paused work job finishes — success, failure, or an onset that found no
-source at all — `_resume_paused_job()` hands the colonist back to exactly
-the job `_pause_work_job()` set aside, never a fresh assignment; the paused
+source at all — `NeedsSystem.resume_paused_job()` hands the colonist back to exactly
+the job `NeedsSystem.pause_work_job()` set aside, never a fresh assignment; the paused
 job's own scheduler entry (`GlobalAssignment._assignments`) is untouched the
 entire time, since the colonist is simply absent from
 `_colonists_not_searching_need()`'s pool while the need job runs.
@@ -1043,7 +1049,7 @@ A spawned incident actor (`content/incidents.json`, `IncidentScheduler`) walks
 to a random reachable tile and waits a content-declared tick count before
 despawning — expressed as an ordinary `content/jobs.json` job
 (`{"kind": "incident", "labour": "", "toils": ["reserve", "go_to", "work",
-"release_all"]}`), driven through the exact same `WorldState._advance_colonists()`
+"release_all"]}`), driven through the exact same `TickPipeline._advance_colonists()`
 -> `ToilExecutor.advance()` dispatch every other job uses, never a bespoke
 per-actor walk/wait state machine.
 
@@ -1059,7 +1065,7 @@ job through `WorldState._submit_incident_job()` ->
 the same `submit()` pipeline any order/need job uses, `restrict_to` pinned to
 the actor and flagged `autonomous`. The actor is then **staged**
 (`IncidentScheduler.propose()`): offered to `GlobalAssignment.tick()` as a
-worker (`WorldState._scheduler_workers()` = the roster not mid-need-search
+worker (`TickPipeline._scheduler_workers()` = the roster not mid-need-search
 plus the staged actors) so the shared scheduler can propose, route and
 activate its job, but not yet in `_colonists`. The `incident_started` event
 lists the *proposed* actor ids.
@@ -1099,7 +1105,7 @@ fails; the staged proposal is dropped).
 An incident actor's own faction, not the colony's, gates its spawn-tile
 eligibility, target selection, initial routing, rerouting, and movement
 revalidation. `GlobalAssignment`'s autonomous passability
-(`WorldState._passable_for_worker()`) runs the initial bounded search under
+(`Passability.passable_for_worker()`) runs the initial bounded search under
 the actor's faction, so a wildlife actor's first route never crosses a colony
 door and takes an alternate route when one exists; `ToilExecutor`'s own
 `_passability` callable and its `go_to_passable` hook thread the acting
@@ -1109,7 +1115,7 @@ actor's `factionId` through to `WorldState.passability()` at every call site
 beyond a door is still "same region", and it is the actor's own bounded
 search that then proves it unreachable — before activation, the job is
 retired unspawned (table above); mid-travel (a door placed on the way), the
-reroute search fails and `_toil_on_unreachable()` cancels the job.
+reroute search fails and `ToilBindings.toil_on_unreachable()` cancels the job.
 
 ### Lifecycle cleanup at the shared finish boundary
 
@@ -1132,10 +1138,10 @@ schema requires, per `kind`, exactly the component fields that kind's
 `content/actors.json` definition produces (`colonist`:
 `needs`/`labourTable`/`work`/`carrying`; `wolf`: `needs`/`combat`/`wild`;
 `trader`: `inventory`/`visitor`), and `SaveIO._validate_state()` /
-`StateCodec._encode_entities()`/`_decode_entities()` mirror that — every
+`EntityCodec._encode_entities()`/`_decode_entities()` mirror that — every
 component field is validated/emitted only when the live actor dict carries
-it, never backfilled as a colonist-shaped default (`_ensure_needs()`/
-`_ensure_held_tool()` skip actors without a `worker` component). The
+it, never backfilled as a colonist-shaped default (`NeedsSystem.ensure_needs()`/
+`WorldState._ensure_held_tool()` skip actors without a `worker` component). The
 `autonomous` queue-entry flag is on the wire only when true. On load,
 `WorldState._reconcile_incident_jobs_after_load()` re-associates each active
 incident job with its restored actor (so it still despawns on completion) and
@@ -1169,19 +1175,19 @@ and `CombatGiver` submits a `flee` job for it — an ordinary `content/jobs.json
 (`{"kind": "flee", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"],
 "work_ticks": 1}`, the same walk-then-finish shape `"incident"` already uses), through
 `GlobalAssignment.submit_autonomous()` so a non-colony actor can flee without the `may_be_ordered`
-gate refusing it. Submission goes through `WorldState._interrupt_current_job()`/
-`_resume_interrupted_job()` (ADR 009), the same boundary `NeedGiver` uses, so a fleeing actor's
+gate refusing it. Submission goes through `NeedsSystem.interrupt_current_job()`/
+`resume_interrupted_job()` (ADR 009), the same boundary `NeedGiver` uses, so a fleeing actor's
 prior work/haul/travel job is paused rather than left to run to completion. While a `flee` job is
 queued or active for an actor, `CombatGiver` leaves it alone; a still-threatened actor gets a
 fresh leg the tick after the previous one completes rather than a bespoke continuous-chase loop.
 A `flee` job whose route becomes unreachable mid-walk is cancelled only at
-`WorldState._toil_on_unreachable()`, exactly like `"incident"`, never resubmitted through the
+`ToilBindings.toil_on_unreachable()`, exactly like `"incident"`, never resubmitted through the
 ordinary gated `submit()` path.
 
 ### `approach`: closing the distance on a hostile target (ADR 033)
 
 `ApproachGiver` (`game/scripts/core/combat/approach_giver.gd`) runs once per tick, after
-`CombatResolver.resolve_tick()`/`CombatGiver.advance()` and after `WorldState._advance_colonists()`,
+`CombatResolver.resolve_tick()`/`CombatGiver.advance()` and after `TickPipeline._advance_colonists()`,
 so its "already adjacent" check sees this tick's post-movement positions (and a `trapped` actor
 already reads that way before this giver's search runs -- see ADR 033). For every actor with a
 `combat` component whose faction's relation to `colony` is `hostile`, it applies these steps in
@@ -1221,7 +1227,7 @@ boundary (`WorldState._cancel_autonomous_job`, mirroring `combat_giver.gd`'s `_c
 `combat_giver.gd` watches for its flee legs, since JobQueue retries an unreachable queued target
 indefinitely -- is cancelled the same way. Either trigger drops the association and falls through
 to a fresh nearest-target search **in the same tick**. An `approach` job whose route becomes
-unreachable mid-walk after activation is cancelled only at `WorldState._toil_on_unreachable()`,
+unreachable mid-walk after activation is cancelled only at `ToilBindings.toil_on_unreachable()`,
 exactly like `"flee"`/`"incident"`; that cancellation is detected the same way (status no longer
 `"active"`/`"queued"`) and also falls through to a fresh search. If the fresh search finds no
 reachable target, the actor is left with no approach job that tick, free for
@@ -1234,7 +1240,7 @@ replaced by the per-tick retry above.)
 stands adjacent to a different hostile) and isolates the two fallback mechanisms from each other:
 one check seals a tracked job's route (never its destination tile) and proves cancellation
 happens without the job ever reaching `"active"`, isolating the
-queued+`BLOCKED_TARGET_UNREACHABLE` branch from `_toil_on_unreachable()`'s separate active-route
+queued+`BLOCKED_TARGET_UNREACHABLE` branch from `ToilBindings.toil_on_unreachable()`'s separate active-route
 cancellation; another proposes a genuine `IncidentScheduler` actor/job and proves its
 walk-then-wait lifecycle runs to natural completion, untouched by a sealed-off `approach` job
 alongside it.
@@ -1259,7 +1265,7 @@ an unwalled component open to the edge of the map is never a room, however
 many doors happen to sit on its frontier) **and** its boundary includes at
 least one door (`door_count >= 1`; a sealed box with no door is not a
 room). `RoomMap.on_passability_changed(x, y)` is called from the same
-mutation sites `RegionMap` already hooks (`_set_object()` — wall/door/bed
+mutation sites `RegionMap` already hooks (`ObjectTable.set_object()` — wall/door/bed
 add and remove — and the dig/chop/forage/till/sow/sleep tile transforms),
 and reruns the bounded flood for every room touching `(x, y)`'s
 neighbourhood.

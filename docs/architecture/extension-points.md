@@ -96,7 +96,7 @@ boundaries and are not a separate extension point.
   `haul_giver.gd` creates haul jobs from eligible items and destinations;
   `test_haul_need_interrupt.gd` covers their interaction. `construction_giver.gd`
   decides when a construction site's next fetch or work job
-  should exist, reading `ConstructionSiteTable` state `world_state.gd` owns
+  should exist, reading `ConstructionSiteTable` state `ConstructionSystem` owns
   rather than tracking its own parallel notion of site progress;
   `test_construction_site.gd` covers its fetch/work scheduling and blocked
   cases.
@@ -144,12 +144,12 @@ boundaries and are not a separate extension point.
   `faction_id` naming an undeclared faction is `ERROR_DANGLING_REFERENCE`). Read relations
   through `game/scripts/core/relations/relations.gd` (`relation(a, b)`,
   `is_hostile(actor_a, actor_b)`) rather than a hand-rolled lookup. A faction's rules are
-  consulted at runtime in several places, not only in `game/scripts/core/world_state.gd`:
-  `passability(x, y, faction_id)`'s `_faction_may_pass_doors()` gate on door objects; the
-  reservation gate `GlobalAssignment.set_reservation_gate()` wires to
-  `_colonist_may_reserve_colony_items()`/`_faction_may_reserve_colony_items()`; the
-  order/job-giver gate `GlobalAssignment.set_order_eligibility()` wires to
-  `_colonist_may_be_ordered()`/`_faction_may_be_ordered()`, consulted by `GlobalAssignment`
+  consulted at runtime in several places: `Passability` (`game/scripts/core/map/passability.gd`)
+  owns `passability(x, y, faction_id)`'s `_faction_may_pass_doors()` gate on door objects; the
+  reservation gate `GlobalAssignment.set_reservation_gate()` wires to its
+  `colonist_may_reserve_colony_items()`/`faction_may_reserve_colony_items()`; the
+  order/job-giver gate `GlobalAssignment.set_order_eligibility()` wires to its
+  `colonist_may_be_ordered()`/`faction_may_be_ordered()`, consulted by `GlobalAssignment`
   before a worker may be proposed for or resume any job; and
   `game/scripts/core/jobs/givers/need_giver.gd`'s own `_may_be_ordered()` reads
   `rules.may_be_ordered` directly to filter an actor out of `advance()` before its needs are
@@ -228,7 +228,7 @@ boundaries and are not a separate extension point.
 - Example: `workbench` is exactly one `content/objects.json` row
   (`footprint: [2, 1]`, `rotatable: true`, `build_cost: [{wood, 3}, {stone, 4}]`,
   `build_ticks: 120`, `max_builders: 2`) — no new simulation code, since
-  `_apply_construction_submission()`/`ConstructionGiver`/`ConstructionSiteTable` already
+  `ConstructionSystem.apply_construction_submission()`/`ConstructionGiver`/`ConstructionSiteTable` already
   generalize over every `build_cost`-bearing kind.
 
 ## Scenario
@@ -260,7 +260,7 @@ boundaries and are not a separate extension point.
   `ScenarioBuilder._run_step()`, its fields in `ContentRegistry.SCENARIO_STEP_FIELDS`, and a
   value in the schema's `step` enum. It is not code in the viewer. A step drives the world
   through commands and ticks, never by writing state, except for the two bootstrap writes that
-  [ADR 053](../decisions/053-scenarios-as-content.md) records.
+  [ADR 054](../decisions/054-scenarios-as-content.md) records.
 
   Not yet scenario fields, because they need a construction parameter first (backlog A16b):
   - a per-scenario starting roster (the colonist count is `mapgen.json`'s `colonist_count`);

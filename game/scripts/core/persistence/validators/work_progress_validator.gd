@@ -4,10 +4,7 @@ extends SaveCheck
 ## Save validation for what WorkProgress persists: "workProgress", "workProgressOwners",
 ## "suspendedWorkProgress".
 
-## Mirrors _valid_ground_berries()/_valid_ground_berries_entry():
-## world._work_progress's wire shape is an array of {target, ticksRemaining}
-## entries (see StateCodec._encode_work_progress()), colonist-ai.md 3.6's
-## tile-keyed remaining-ticks store for an interruptible `work` toil.
+## WorkProgress.progress as [{target, ticksRemaining, ownerJobId?}] (colonist-ai.md 3.6).
 static func _valid_work_progress(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid workProgress type")
@@ -17,9 +14,7 @@ static func _valid_work_progress(value, map_width: int, map_height: int) -> Dict
 			return entry_check
 	return {"ok": true}
 
-## "ownerJobId" is optional on the wire, like "autonomous" on a queue entry: present only when the tile's
-## reservation was owned by a job when the entry was encoded, absent for the
-## plain tile-keyed case.
+## "ownerJobId" is present only for a job-scoped key.
 static func _valid_work_progress_entry(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid workProgress entry type")
@@ -39,14 +34,9 @@ static func _valid_work_progress_entry(value, map_width: int, map_height: int) -
 		return _fail("invalid workProgress entry ownerJobId")
 	return {"ok": true}
 
-## WorkProgress.owners's wire shape is an array of {target, jobId, ownerJobId?}
-## entries (StateCodec._encode_work_progress_owners()): the exact job that
-## owns a workProgress key, so decode() never
-## has to guess it from whichever job happens to target that key. target +
-## ownerJobId name the key like a workProgress entry (ADR 047). At most one
-## job owns a given key, so a duplicate (ownerJobId, target) pair is rejected
-## the same way duplicate colonistId/actorId are for pausedJobs/combatBlockedTargets;
-## two rescues' scoped keys on one tile are distinct keys and both allowed.
+## WorkProgress.owners as [{target, jobId, ownerJobId?}] (ADR 047). At most one owner per
+## key, so a duplicate (ownerJobId, target) is rejected; two rescues' scoped keys on one tile
+## are distinct keys.
 static func _valid_work_progress_owners(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid workProgressOwners type")
@@ -81,12 +71,8 @@ static func _valid_work_progress_owner_entry(value, map_width: int, map_height: 
 		return _fail("invalid workProgressOwners entry ownerJobId")
 	return {"ok": true}
 
-## world._suspended_work_progress's wire shape is an array of {jobId,
-## ticksRemaining} entries (StateCodec._encode_suspended_work_progress()):
-## a suspended job's own work-toil ticks, keyed by job_id alone (no tile coordinate -- unlike workProgress/
-## workProgressOwners, at most one entry per job_id, never per tile, since a
-## suspended job's snapshot has already left the shared tile cache). Optional
-## on the wire like workProgressOwners.
+## WorkProgress.suspended as [{jobId, ticksRemaining}], at most one per job (no tile);
+## optional on the wire.
 static func _valid_suspended_work_progress(value) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid suspendedWorkProgress type")

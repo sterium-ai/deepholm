@@ -1,27 +1,16 @@
 class_name ToolHandover
 extends RefCounted
 
-## Presentation-only overlay (ADR 013): while a job's own
-## fetch_tool toil is waiting on a foreign colonist to physically drop a tool
-## it already reserved (ToolDropToil.waiting_for_handover()), surfaces that
-## wait through the job record's own existing generic reason/remedy/itemId/blockingJobId fields -- reused, not new
-## persisted state (docs/architecture/extension-points.md's "Toil" recipe: a
-## scheduler/executor reason, not a new decision layer) -- the same way
-## JobQueue's own _block()/blocking_job_id already surfaces every other block
-## reason. Called from WorldState.get_jobs() only, on the already-detached
-## duplicate JobQueue.get_jobs() itself returns: never mutates JobQueue's own
-## state, never persisted (to_save_state() reads _scheduler.queue.get_jobs()
-## directly, not this overlay), and never consulted by any simulation
-## decision (ToilExecutor's own wait behaviour is driven by
-## ToolDropToil.waiting_for_handover() directly).
+## Presentation-only overlay (ADR 013): while a job's fetch_tool toil waits for another
+## colonist to drop a tool it reserved, surfaces that wait through the job record's existing
+## reason/remedy/item_id/blocking_job_id fields. Applied by WorldState.get_jobs() to the
+## detached copy only: never mutates JobQueue, never persisted, never read by the simulation.
 
 const REASON := "waiting_for_tool_handover"
 const REMEDY := "wait_for_tool_handover"
 
-## Mutates `job` in place when it is active and its own colonist's fetch_tool
-## toil is currently waiting; a no-op otherwise. assignments is
-## GlobalAssignment.get_assignments() (worker -> {"job_id", ...}); toils is
-## WorldState's own ToilExecutor instance.
+## Mutates `job` in place when it is active and its colonist's fetch_tool toil is waiting;
+## a no-op otherwise. assignments is GlobalAssignment.get_assignments(); toils the ToilExecutor.
 static func apply(job: Dictionary, assignments: Dictionary, toils) -> void:
 	if String(job.get("status", "")) != "active":
 		return

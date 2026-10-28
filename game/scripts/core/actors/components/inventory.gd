@@ -13,14 +13,8 @@ static func validate(tunables: Dictionary) -> bool:
 static func build(tunables: Dictionary) -> Dictionary:
 	return {"items": [], "tool": "", "capacity": int(tunables.get("capacity", 1))}
 
-## ADR 037: a colonist's single-slot "carrying" field
-## (ADR 006/012) is replaced by "hands", a list of {"kind","count"} entries --
-## at most one entry per distinct kind actually held, every entry's count
-## >= 1, the sum of every entry's count never exceeding HANDS_CAPACITY. This
-## is the single place a colonist's hands are read/written, so ToilExecutor
-## and WorldState call into this instead of indexing "hands" inline in more
-## than one place, mirroring the discipline ADR 012 already established for
-## the field it replaces.
+## ADR 037 "hands": a list of {"kind","count"}, at most one entry per kind, every count >= 1, the
+## total never above HANDS_CAPACITY. The single read/write point of a colonist's hands.
 const HANDS_CAPACITY := 4
 
 ## True while actor holds at least one unit of anything.
@@ -41,17 +35,14 @@ static func count_of_kind(actor: Dictionary, kind: String) -> int:
 			return int(entry["count"])
 	return 0
 
-## HANDS_CAPACITY minus the sum of every hands entry's count -- how many more
-## units actor's hands can still take, of any kind.
+## How many more units of any kind the hands can take.
 static func free_capacity(actor: Dictionary) -> int:
 	var used := 0
 	for entry in (actor.get("hands", []) as Array):
 		used += int(entry["count"])
 	return HANDS_CAPACITY - used
 
-## Adds count units of kind to actor's hands, merging into an existing
-## same-kind entry or creating a new one. Callers (ToilExecutor.pick_up()) are
-## responsible for never requesting more than free_capacity() allows.
+## Merges into a same-kind entry or appends one; callers never exceed free_capacity().
 static func add_to_hands(actor: Dictionary, kind: String, count: int) -> void:
 	var hands: Array = actor.get("hands", [])
 	for entry in hands:
@@ -62,9 +53,7 @@ static func add_to_hands(actor: Dictionary, kind: String, count: int) -> void:
 	hands.append({"kind": kind, "count": count})
 	actor["hands"] = hands
 
-## Removes count units of kind from actor's hands (assumed already present in
-## at least that amount -- callers check has_kind()/count_of_kind() first),
-## dropping the entry entirely once its count reaches zero.
+## Callers check the amount first; an entry reaching zero is dropped.
 static func remove_from_hands(actor: Dictionary, kind: String, count: int) -> void:
 	var hands: Array = actor.get("hands", [])
 	for i in hands.size():
@@ -79,9 +68,7 @@ static func remove_from_hands(actor: Dictionary, kind: String, count: int) -> vo
 		actor["hands"] = hands
 		return
 
-## A snapshot ({"kind","count"} per distinct kind held, in hands order) a
-## caller may iterate safely while this actor's own hands are mutated (e.g.
-## ToilExecutor.place() draining every entry in one call).
+## A copy safe to iterate while the hands are mutated (ToilExecutor.place()).
 static func hands_snapshot(actor: Dictionary) -> Array:
 	var snapshot: Array = []
 	for entry in (actor.get("hands", []) as Array):

@@ -1,4 +1,4 @@
-# ADR 053: Scenarios as content
+# ADR 054: Scenarios as content
 
 > **In short:** How a new world is set up now lives in `content/scenarios.json` instead of
 > two viewer scripts. Each scenario entry gives the map size, the seed, the tick rate,

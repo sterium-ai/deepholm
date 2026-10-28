@@ -1,10 +1,8 @@
 class_name ReservationTable
 extends RefCounted
 
-## Generic String-keyed reservation ledger (colonist-ai.md 3.4): key -> job id.
-## Callers build namespaced keys ("tile:x,y" today; "item:"/"cell:" keys can
-## share the same table without ever colliding with a tile key). This
-## module knows nothing about tiles, items or jobs; it only tracks ownership.
+## Generic String-keyed reservation ledger (colonist-ai.md 3.4): key -> job id. Callers
+## namespace keys ("tile:", "item:", "cell:"); this module only tracks ownership.
 
 var _owners: Dictionary = {}
 
@@ -17,18 +15,14 @@ func acquire(key: String, job_id: String) -> bool:
 	_owners[key] = job_id
 	return true
 
-## Refuses to release a key owned by a different job_id (a blocked/finished
-## job must never release another job's reservation).
+## Refuses to release a key owned by a different job_id.
 func release(key: String, job_id: String) -> bool:
 	if String(_owners.get(key, "")) != job_id:
 		return false
 	_owners.erase(key)
 	return true
 
-## Releases every key currently owned by job_id, for the release_all toil and
-## every terminal job transition. Returns the released keys (sorted, for
-## deterministic event emission) so a caller can report exactly what was
-## freed, e.g. one reservation_released event per key.
+## Releases every key job_id owns; returns them sorted for deterministic event emission.
 func release_all(job_id: String) -> Array[String]:
 	var released: Array[String] = []
 	for key in _owners.keys():
@@ -46,8 +40,7 @@ func owner(key: String) -> String:
 func is_reserved(key: String) -> bool:
 	return _owners.has(key)
 
-## Detached deep copy, matching the read-model convention the rest of
-## game/scripts/core/jobs/ already uses (see job_queue.gd getters).
+## Detached deep copy.
 func snapshot() -> Dictionary:
 	return _owners.duplicate(true)
 

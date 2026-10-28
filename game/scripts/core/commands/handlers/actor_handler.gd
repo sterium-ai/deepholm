@@ -1,10 +1,7 @@
 class_name ActorHandler
 extends RefCounted
 
-## Actor commands: set_labour (colonist-ai.md 3.2) and the set_faction debug
-## command (F3). Plain data, no scene/node/RNG/wall-clock dependency; every
-## WorldState rule it needs arrives as a Callable.
-##
+## Actor commands: set_labour (colonist-ai.md 3.2) and the set_faction debug command (F3).
 ## Invariant: set_faction only rewrites an actor's own "factionId" (any actor in
 ## the roster, ADR 012), never an object's or item's faction_id.
 

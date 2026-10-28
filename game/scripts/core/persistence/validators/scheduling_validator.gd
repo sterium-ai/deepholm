@@ -4,16 +4,13 @@ extends SaveCheck
 ## Save validation for what JobQueue, GlobalAssignment and EventLog persist: "jobs",
 ## "scheduling" (queue entries, pending route searches, assignments) and the world "rng".
 
-## "autonomous" (ADR 014 Amendment) is optional on the wire, like
-## "heldTool" on an entity: absent means false on decode (StateCodec._decode_entry()).
+## "autonomous" (ADR 014 amendment) is optional; absent decodes as false.
 static func _valid_queue_entry(value, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid queue entry type")
 	var entry: Dictionary = value
 	var required := ["id", "target", "base", "submittedTick", "ordinal", "restrictTo"]
-	# _require_fields() would apply its own keys_allowed(dict, required) using
-	# `required` alone, rejecting the optional "autonomous" field -- so its
-	# two checks are inlined separately here instead of calling it directly.
+	# Inlined: _require_fields() would reject the optional "autonomous" key.
 	if not _keys_allowed(entry, required + ["autonomous"]):
 		return _fail("unexpected queue entry field")
 	for key in required:

@@ -1,11 +1,7 @@
 class_name OrderHandler
 extends RefCounted
 
-## Job order commands: dig/chop/forage/till/sow/mine submissions, the
-## complete/cancel/fail/invalidate_job terminal transitions, and area_order.
-## Plain data, no scene/node/RNG/wall-clock dependency; sibling modules are
-## injected, every WorldState rule it needs arrives as a Callable.
-##
+## Job order commands: work submissions, the terminal transitions, and area_order.
 ## Invariants:
 ## - A target-valid job command always calls through to the scheduler's own
 ##   submit(), so an unsupported priority still produces JobQueue's job_rejected
@@ -94,9 +90,7 @@ func apply_job_command(command: Dictionary) -> Dictionary:
 	applied["job_id"] = result["job_id"]
 	return applied
 
-## A site has no job at order time (ADR 040), so apply_construction_submission()
-## hands its site id back as job_id too: cancel_job on a live site id tears the
-## site down exactly as cancel_site {x,y} does; any other id is an ordinary job.
+## A site id doubles as job_id (ADR 040): cancel_job on one tears the site down like cancel_site.
 func apply_cancel_job_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command.get("payload", {})
 	var site_id := String(payload.get("job_id", ""))

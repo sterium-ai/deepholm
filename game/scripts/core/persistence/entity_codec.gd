@@ -4,14 +4,9 @@ extends RefCounted
 ## StateCodec's "entities" encoding: each actor record and its components (needs, labour
 ## table, route, work, hands, trapped, combat, health, inventory), JSON-safe both ways.
 
-## Every component field is emitted only when the live dict
-## actually carries it -- exactly the per-kind shape ActorTable.spawn()
-## produces (colonist: needs/labourTable/hands/heldTool; wolf: needs/
-## combat/wild; trader: inventory/visitor) -- never as a colonist-shaped
-## {}/""/null default, so a non-colonist entity's wire shape matches
-## game-state.schema.json's per-kind required set. "work"/"route" ride along
-## for every kind (a spawned actor's own walk/wait uses the same fields a
-## colonist's job does), present once spawn()/start_work() actually add them.
+## Invariant: a component field is emitted only when the live dict carries it (the per-kind
+## shape ActorTable.spawn() produces), never a colonist-shaped default; "work"/"route" ride
+## along for every kind once present.
 static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
 	var entities: Array = []
 	for colonist in colonists:
@@ -46,17 +41,9 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 		entities.append(entity)
 	return entities
 
-## Mirrors _encode_entities()'s presence-based rule: a wire entity missing
-## "needs"/"labourTable"/"hands"/"heldTool" (any non-colonist kind) decodes
-## with that key absent entirely, matching the exact shape
-## ActorTable.spawn()'s own generic-actor branch produces, rather than
-## backfilling a colonist-shaped default that code elsewhere (_ensure_needs(),
-## colonist-ai.md's own accessors) would then treat as "this actor has a
-## worker/needs component after all". "factionId"/"health" are
-## required on the wire (every save reaching this decoder has already
-## migrated through SaveMigrations, which backfills both), but still read
-## with a defensive default here, matching every other required-field decoder
-## in this file.
+## Same presence rule on the way in: a non-colonist decodes without needs/labourTable/hands/
+## heldTool, so NeedsSystem.ensure_needs() never mistakes it for a worker. factionId/health
+## are required (migrations backfill them) but read with a default.
 static func _decode_entities(entities: Array) -> Array[Dictionary]:
 	var colonists: Array[Dictionary] = []
 	for entity in entities:
@@ -91,8 +78,7 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 		colonists.append(colonist)
 	return colonists
 
-## The combat component (ActorCombat.build()): attack/damage/cooldown
-## tunables plus the per-instance cooldown_remaining (camelCase on the wire).
+## The combat component (ActorCombat.build()); cooldown_remaining is camelCase on the wire.
 static func _encode_combat(combat: Dictionary) -> Dictionary:
 	return {
 		"attack": int(combat.get("attack", 0)),
@@ -109,8 +95,7 @@ static func _decode_combat(combat: Dictionary) -> Dictionary:
 		"cooldown_remaining": int(combat.get("cooldownRemaining", 0)),
 	}
 
-## The inventory component (ActorInventory.build()): {items, tool,
-## capacity}; items is copied as-is (empty today: no toil fills it yet).
+## The inventory component (ActorInventory.build()); items copied as-is.
 static func _encode_inventory(inventory: Dictionary) -> Dictionary:
 	return {
 		"items": (inventory.get("items", []) as Array).duplicate(true),
@@ -118,10 +103,7 @@ static func _encode_inventory(inventory: Dictionary) -> Dictionary:
 		"capacity": int(inventory.get("capacity", 1)),
 	}
 
-## world._colonists' "health" is the health component (ActorHealth.build*(),
-## docs/decisions/012-actors-and-components.md): hp/maxHp/dead, already
-## camelCase-compatible with the wire shape, so no key renaming is needed
-## (unlike needs/labourTable, which only need sorted-key determinism).
+## The health component (ActorHealth, ADR 012): hp/maxHp/dead, already wire-shaped.
 static func _encode_health(health: Dictionary) -> Dictionary:
 	return {
 		"hp": int(health.get("hp", 0)),
@@ -136,9 +118,7 @@ static func _decode_health(health: Dictionary) -> Dictionary:
 		"dead": bool(health.get("dead", false)),
 	}
 
-## world._colonists' "needs" is a plain kind->value Dictionary (colonist-ai.md
-## 3.1); sorted keys give a deterministic encoding order, matching every
-## other keyed-map encoder in this file.
+## kind -> value (colonist-ai.md 3.1), sorted.
 static func _encode_needs(needs: Dictionary) -> Dictionary:
 	var encoded: Dictionary = {}
 	var keys := needs.keys()
@@ -153,9 +133,7 @@ static func _decode_needs(needs: Dictionary) -> Dictionary:
 		decoded[key] = int(needs[key])
 	return decoded
 
-## world._colonists' "labourTable" is a plain kind->level Dictionary
-## (colonist-ai.md 3.2); sorted keys give a deterministic encoding order,
-## mirroring _encode_needs()/_decode_needs().
+## kind -> level (colonist-ai.md 3.2), sorted.
 static func _encode_labour_table(labour_table: Dictionary) -> Dictionary:
 	var encoded: Dictionary = {}
 	var keys := labour_table.keys()
@@ -170,10 +148,8 @@ static func _decode_labour_table(labour_table: Dictionary) -> Dictionary:
 		decoded[key] = int(labour_table[key])
 	return decoded
 
-## "rerouting" is emitted only while a re-route search is actually in
-## flight (route.get("rerouting") != null); otherwise the route keeps its 4 keys.
-## The live route only carries the search's summary() (ToilExecutor), so the
-## persisted value is the live search's full snapshot(), taken here.
+## "rerouting" only while a re-route is in flight; the live route holds its summary(), the
+## save the search's full snapshot().
 static func _encode_route_field(route, live_search):
 	if route == null:
 		return null
@@ -188,11 +164,8 @@ static func _encode_route_field(route, live_search):
 		encoded["rerouting"] = SchedulingCodec._encode_route(live_search.snapshot() if live_search != null else rerouting)
 	return encoded
 
-## state_hash()'s view of the colonists: a colonist whose route.rerouting is
-## the live search's summary() is hashed with that search's full snapshot()
-## instead, so two in-flight re-routes that differ only in their frontier,
-## visited set or parent map never hash equal (the same value a save
-## persists). Returns the array itself, uncopied, when nothing is rerouting.
+## state_hash()'s view: a rerouting colonist is hashed with the search's full snapshot (what
+## a save persists), so two re-routes differing in frontier never hash equal.
 static func _hash_colonists(colonists: Array[Dictionary], reroutes: Dictionary) -> Array:
 	if reroutes.is_empty():
 		return colonists
@@ -230,10 +203,7 @@ static func _decode_work_field(work):
 		return null
 	return {"job_id": work["jobId"], "ticks_remaining": int(work["ticksRemaining"])}
 
-## A colonist's "hands" list -- {"kind","count"} per distinct kind
-## held, no item id (a pick_up may merge several ground items' units into one
-## entry, and place() always mints a fresh id on the way back out) and no x/y
-## (a carried item has no ground position, see ToilExecutor.pick_up()/place()).
+## One {"kind","count"} per kind held; no item id (place() mints a fresh one) and no x/y.
 static func _encode_hands_field(hands: Array) -> Array:
 	var encoded: Array = []
 	for entry in hands:
@@ -246,13 +216,8 @@ static func _decode_hands_field(hands: Array) -> Array:
 		decoded.append({"kind": entry["kind"], "count": int(entry["count"])})
 	return decoded
 
-## "trapped": unlike carrying/work (present only for the kinds
-## whose own ActorTable.spawn() shape adds them), any actor kind may fall into
-## a trench, so this is encoded/decoded unconditionally for every entity,
-## mirroring health/route rather than carrying's per-kind presence.
-## fromTile is present only alongside
-## ticksRemaining -- a trapped hostile's own escape_trench climb-out target --
-## since a trapped colonist has no auto-exit to prefer a fallen-from tile for.
+## "trapped" for any actor kind (anyone can fall into a trench); fromTile only alongside
+## ticksRemaining, a trapped hostile's climb-out.
 static func _encode_trapped_field(trapped):
 	if trapped == null:
 		return null

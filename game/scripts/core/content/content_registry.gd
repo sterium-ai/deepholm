@@ -1,34 +1,21 @@
 class_name ContentRegistry
 extends RefCounted
 
-## F1 content registry (docs/architecture/foundation-for-breadth.md section F1):
-## at construction, reads every required game/content/*.json file, validates
-## it against its schema under game/content/schemas/, cross-checks
-## references between files, and freezes the loaded bundle. Scene-independent
-## (AGENTS.md): plain FileAccess + JSON parsing only, no scene/node/rendering/
-## wall-clock/global-randomness dependency, so it is constructible from a
-## headless test exactly like WorldState itself.
-##
-## Never applies a silent default: a missing file, a schema violation or a
-## dangling cross-file reference leaves the registry invalid (is_valid() ==
-## false) with a typed, structured error (get_error(): {code, message, file})
-## instead of a partially-populated bundle. This class never crashes the
-## process on a bad bundle -- that lets a test construct one against a
-## deliberately broken fixture and assert on the resulting error. A caller
-## that requires valid content before it may proceed (WorldState._init()) is
-## responsible for treating an invalid registry as fatal itself.
+## Content registry (foundation-for-breadth.md F1): loads every game/content/*.json, validates
+## it against game/content/schemas/, cross-checks references between files and freezes the
+## bundle. Scene-free, so tests construct it headless.
+## Invariant: never a silent default and never a crash -- a missing file, schema violation or
+## dangling reference leaves is_valid() false with a typed get_error() {code, message, file};
+## the caller (WorldState._init()) decides that is fatal.
 
 const DEFAULT_CONTENT_DIR := "res://content/"
 const DEFAULT_SCHEMA_DIR := "res://content/schemas/"
 
-## Collection kinds are id-indexed arrays (jobs/needs/objects each keyed by
-## their "kind" field, items keyed by its "id" field -- content shapes are not
-## uniform, so the id field is looked up per kind); calendar/manifest are
-## singleton documents with no per-id entries, so they are validated and
-## frozen but not exposed through get()/list().
+## Collection kinds are id-indexed (the id field differs per kind); document kinds are
+## singletons, validated and frozen but read through document(), not get_entry()/list().
 const COLLECTION_KINDS: Array[String] = ["jobs", "needs", "objects", "items", "tiles", "actors", "factions", "incidents"]
 const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
-## A16 (ADR 053): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
+## A16 (ADR 054): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
 const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios"]
 const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id"}
 ## The fields each scenario setup step (world/scenario_builder.gd) reads besides step/when.
@@ -38,15 +25,8 @@ const SCENARIO_STEP_FIELDS := {
 	"ground_items": ["kind", "count", "search_radius"],
 }
 
-## Compile-time mirror of content/tiles.json ids and content/mapgen.json's
-## colonist_count field: the only literal source for values many tests and
-## the viewer read as WorldState.<NAME> class constants, something
-## GDScript's const-folding cannot source from a runtime-loaded JSON file.
-## world_state.gd's own TILE_*/COLONIST_COUNT consts alias these rather than
-## redeclaring the literals. There is no compile-time SPAWN_AREA_* mirror:
-## the colonist spawn clearing is chosen dynamically per world
-## by WorldGenerator.place_spawn(), not a single fixed rectangle -- see
-## WorldState.get_spawn_clearing() and ADR 020.
+## Compile-time mirror of tiles.json ids and mapgen.json's colonist_count, so WorldState can
+## expose them as consts (GDScript cannot const-fold a runtime JSON value).
 const TILE_ROCK := "rock"
 const TILE_SOIL := "soil"
 const TILE_FLOOR := "floor"
@@ -69,29 +49,16 @@ const PACK_MANIFEST_FILE := "pack.json"
 const PACK_SCHEMA_FILE := "pack.schema.json"
 const PACK_OVERRIDES_FIELD := "overrides"
 
-## Reads and parses content and schema files, keeping JSON's int/float split.
 const ContentJsonType = preload("res://scripts/core/content/content_json.gd")
 
-## Only used for its static, dependency-free is_known_toil() vocabulary check
-## (jobs.json declaring a toil ToilExecutor does not implement is exactly the
-## kind of dangling reference this registry exists to catch); this registry
-## never constructs or drives a ToilExecutor instance.
+## For the static is_known_toil() check only; never drives a ToilExecutor.
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 
-## Only used for its static, dependency-free is_known_component() vocabulary
-## check (actors.json declaring a component ActorTable does not implement is
-## exactly the kind of dangling reference this registry exists to catch,
-## mirroring is_known_toil() above); this registry never spawns an actor.
+## For the static is_known_component() check only; never spawns an actor.
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 
-## Only used for its static, dependency-free RELATION_VALUES/
-## is_known_relation_value() vocabulary check (factions.json declaring a
-## relation value outside "hostile"/"neutral"/"friendly" is exactly the kind
-## of dangling reference this registry exists to catch, mirroring
-## is_known_toil()/is_known_component() above); this registry never
-## constructs a Relations instance. Relations itself takes its registry
-## parameter untyped rather than preloading this file, so there is no
-## preload cycle.
+## For the static is_known_relation_value() check only (Relations takes the registry
+## untyped, so there is no preload cycle).
 const RelationsType = preload("res://scripts/core/relations/relations.gd")
 
 ## {} when valid; otherwise {"code": String, "message": String, "file": String}.
@@ -109,8 +76,7 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 	var raw_by_kind := _load_base_root(content_dir, schema_dir, schemas_by_kind)
 	if not is_valid():
 		return
-	## Packs apply in the order given, each on top of everything before it
-	## (A13): a later pack may override an entry an earlier pack appended.
+	## Packs apply in order, each on top of the ones before (A13).
 	var applied_packs: Array[Dictionary] = []
 	for pack_dir in pack_dirs:
 		var pack := _apply_pack_root(pack_dir, schema_dir, raw_by_kind, schemas_by_kind, applied_packs)
@@ -147,15 +113,9 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 	_packs = Array(applied_packs)
 	_deep_freeze(_packs)
 
-## Loads the base root: every discovered content_dir/*.json file is loaded and
-## validated when it has a matching schema_dir/*.schema.json file -- not just
-## the fixed COLLECTION_KINDS/DOCUMENT_KINDS list, so a future content kind
-## added with its schema is never silently skipped. A required kind missing
-## its file or schema is a fatal ERROR_MISSING_FILE; a non-required file with
-## no matching schema is simply not this registry's concern and is left
-## unread. A collection kind naming one id twice is a schema_violation (it
-## used to overwrite the earlier entry silently in _freeze_collection()).
-## Each loaded schema is kept in schemas_by_kind for the pack roots.
+## Loads every content_dir/*.json that has a matching schema, so a new kind is never skipped.
+## A required kind without file or schema is missing_file; a duplicate id is a
+## schema_violation, never a silent overwrite.
 func _load_base_root(content_dir: String, schema_dir: String, schemas_by_kind: Dictionary) -> Dictionary:
 	var required_kinds := COLLECTION_KINDS + DOCUMENT_KINDS
 	var discovered_kinds := _discover_content_kinds(content_dir)
@@ -195,12 +155,9 @@ func _load_base_root(content_dir: String, schema_dir: String, schemas_by_kind: D
 		schemas_by_kind[kind] = schema_result["value"]
 	return raw_by_kind
 
-## Applies one pack root (A13, ADR 010 amendment) to raw_by_kind and returns
-## its {id, version}. A pack root holds PACK_MANIFEST_FILE ({id, version},
-## validated by PACK_SCHEMA_FILE) and any subset of the collection kinds, each
-## file shaped {"<kind>": [new entries], "overrides": [replacement entries]}
-## with both lists optional. A pack file for a document kind or for a kind
-## the base has no schema for is a schema_violation, never silently skipped.
+## Applies one pack root (A13, ADR 010): pack.json {id, version} plus collection files
+## {"<kind>": [new], "overrides": [replacements]}. A document kind or a kind the base has no
+## schema for is a schema_violation, never skipped.
 func _apply_pack_root(pack_dir: String, schema_dir: String, raw_by_kind: Dictionary,
 		schemas_by_kind: Dictionary, packs_so_far: Array[Dictionary]) -> Dictionary:
 	var manifest_path := _join_path(pack_dir, PACK_MANIFEST_FILE)
@@ -254,12 +211,8 @@ func _apply_pack_root(pack_dir: String, schema_dir: String, raw_by_kind: Diction
 			return {}
 	return {"id": pack_id, "version": pack_version}
 
-## Validates one pack kind file and merges it into base_document[kind] in
-## place. Every entry is checked against the base schema's entry schema. A new
-## entry's id must not exist yet and lands after the existing entries; an
-## override replaces the whole entry with its id, which must exist (else a
-## dangling_reference). An id twice in one pack root (two new entries, two
-## overrides, or one of each) is a schema_violation, like a base duplicate.
+## Merges one pack kind into base_document[kind]: new ids must not exist and append; overrides
+## must exist (else dangling_reference); an id twice in one pack root is a schema_violation.
 func _merge_pack_kind(pack_document: Dictionary, kind: String, schema: Dictionary, base_document: Dictionary) -> Dictionary:
 	for key: String in pack_document.keys():
 		if key != kind and key != PACK_OVERRIDES_FIELD:
@@ -312,8 +265,7 @@ func _entry_id(entry: Dictionary, id_field: String) -> String:
 	var id: String = entry[id_field]
 	return id
 
-## The first id that appears twice in a collection's entry list, or "" when
-## every id is unique.
+## The first id that appears twice, or "" when all are unique.
 func _first_duplicate_id(entries: Array, kind: String) -> String:
 	var id_field: String = ID_FIELD_BY_KIND[kind]
 	var seen: Dictionary = {}
@@ -330,23 +282,15 @@ func is_valid() -> bool:
 func get_error() -> Dictionary:
 	return _error.duplicate(true)
 
-## The frozen entry named id within kind's collection, or a frozen empty
-## Dictionary when kind is not a collection kind or names no such id (a
-## caller must never be able to mutate a "not found" result any more than a
-## found one). Named get_entry() rather than get(): Object already declares
-## get(property: StringName) -> Variant, and GDScript refuses to override it
-## with a different signature ("The function signature doesn't match the
-## parent", verified against this exact method).
+## The frozen entry, or a frozen empty Dictionary when absent (a "not found" result is no
+## more mutable than a found one). Not named get(): Object.get() cannot be overridden.
 func get_entry(kind: String, id: String) -> Dictionary:
 	var collection: Dictionary = _collections.get(kind, {})
 	if collection.has(id):
 		return collection[id]
 	return _frozen_empty_dict()
 
-## Every frozen entry in kind's collection, id-sorted for determinism; the
-## returned Array is itself read-only, on top of each frozen entry inside it.
-## A frozen empty Array when kind is not a collection kind, for the same
-## reason get_entry() freezes its "not found" result.
+## Every frozen entry of kind, id-sorted for determinism, in a read-only Array.
 func list(kind: String) -> Array:
 	if not _collections.has(kind):
 		return _frozen_empty_array()
@@ -364,18 +308,13 @@ func version() -> String:
 	var manifest: Dictionary = _documents.get("manifest", {})
 	return String(manifest.get("version", ""))
 
-## The pack roots applied on top of the base bundle, in load order, as a
-## frozen Array of frozen {id, version} Dictionaries; empty for the base only.
+## The applied pack roots in load order, frozen; empty for the base only.
 func packs() -> Array:
 	if _packs.is_read_only():
 		return _packs
 	return _frozen_empty_array()
 
-## The frozen whole-document Dictionary for a DOCUMENT_KINDS kind (e.g.
-## "mapgen": rock-vein/hazard/tree/water counts and placement attempts, the
-## spawn area and colonist count -- singleton content with no per-id
-## collection shape), or a frozen empty Dictionary when kind is unknown, for
-## the same reason get_entry()/list() freeze their "not found" result.
+## The frozen document of a DOCUMENT_KINDS kind (e.g. "mapgen"), or a frozen empty one.
 func document(kind: String) -> Dictionary:
 	if _documents.has(kind):
 		return _documents[kind]
@@ -400,12 +339,8 @@ func _join_path(dir: String, file_name: String) -> String:
 		return dir + file_name
 	return dir + "/" + file_name
 
-## Every *.json file found directly inside content_dir (not recursing into
-## schema_dir or any other subdirectory), as kind names (file name minus the
-## ".json" suffix), sorted for deterministic iteration order. An empty array
-## when content_dir cannot be opened at all -- required-kind membership
-## checking in _init() turns that into a typed ERROR_MISSING_FILE per kind
-## rather than a distinct "directory missing" error.
+## Kind names of the *.json files directly in content_dir, sorted; [] when it cannot be opened
+## (each required kind then fails as missing_file).
 func _discover_content_kinds(content_dir: String) -> Array[String]:
 	var kinds: Array[String] = []
 	var dir := DirAccess.open(content_dir)
@@ -421,19 +356,10 @@ func _discover_content_kinds(content_dir: String) -> Array[String]:
 	kinds.sort()
 	return kinds
 
-## Minimal JSON Schema subset sufficient for game/content/schemas/*: type,
-## required, properties, additionalProperties, items, minItems, minLength,
-## minimum, enum (A13: a value must equal one of the listed values, same JSON
-## type). Not a general-purpose validator -- no $ref, oneOf, pattern, etc.
-## additionalProperties is only ever enforced as a plain boolean false (an
-## "unexpected field" rejection); a schema-valued additionalProperties (the
-## standard JSON Schema way to constrain a dynamic-keyed object's values,
-## used by factions.schema.json's "relations") is accepted but not applied
-## (so the "enum" inside it stays inert), never a crash: the
-## string-type and enum constraint it would have expressed for
-## factions.json's "relations" values is instead enforced explicitly in
-## _check_references(), which is reached for every relations value
-## regardless of this validator's schema-valued additionalProperties support.
+## Minimal JSON Schema subset for game/content/schemas/*: type, required, properties,
+## additionalProperties (only  is enforced), items, minItems, minLength, minimum, enum.
+## No $ref/oneOf/pattern; factions' schema-valued additionalProperties is enforced in
+## _check_references() instead.
 func _validate_node(value, schema: Dictionary, path: String) -> Dictionary:
 	var type_field: Variant = schema.get("type", "")
 	if typeof(type_field) == TYPE_ARRAY:
@@ -512,17 +438,8 @@ func _enum_has(options: Array, value: Variant) -> bool:
 			return true
 	return false
 
-## A schema's "type" may be an array of type names (e.g. ["string", "null"]),
-## standard JSON Schema for "this field is one of several primitive shapes" --
-## used by jobs.schema.json's effects.yields.find_table[].item, which is either an
-## item id string or null (a bare "item": {} schema would silently accept
-## any JSON value, so a wrong-typed item would only be caught later, by
-## _check_job_effects(), and misreported as a dangling reference instead of a
-## structural violation). value passes when it matches
-## at least one option; sibling constraints (minLength, minimum, ...) are
-## re-checked per option against a duplicated schema, so they only apply to
-## the option they belong to -- minLength never rejects a null value just
-## because the string option also lists it.
+## A "type" list (e.g. ["string", "null"]): value passes when it matches one option, and
+## sibling constraints are checked per option so minLength never rejects the null option.
 func _validate_node_against_type_options(value, schema: Dictionary, type_options: Array, path: String) -> Dictionary:
 	for option in type_options:
 		var option_schema := schema.duplicate()
@@ -532,32 +449,11 @@ func _validate_node_against_type_options(value, schema: Dictionary, type_options
 			return result
 	return {"ok": false, "message": "%s: value does not match any of type %s" % [path, type_options]}
 
-## Cross-file reference checks (docs/architecture/foundation-for-breadth.md F1
-## "a test... fails on any dangling reference"): a job's needs_tool must name
-## a declared item of kind "tool"; a job's toils must all be toils
-## ToilExecutor implements; a need's source_kind must either be the reserved
-## literal "tile" (a generated-terrain source, not content-declared -- see
-## world_state.gd's TILE_* constants, which are not content-driven) or
-## name a declared object kind; every faction's relations row
-## (docs/decisions/014-factions-and-relations.md) must name only other
-## declared faction ids, one row per other faction, no self-row, and each
-## value must be a JSON string that is a known relation value -- checked in
-## that order (own type before RelationsType.is_known_relation_value()) so a
-## non-string JSON value (number, boolean, null, array, object) never reaches
-## a GDScript String() conversion, which throws "Nonexistent 'String'
-## constructor" for those types instead of returning gracefully (verified
-## directly in this engine version); and an actor definition's optional
-## faction_id (not yet declared by any real content/actors.json entry; see
-## the ADR) must name a declared faction id when present. An object's
-## optional build_cost is a list of {item, quantity}, one entry per required
-## kind, naming the wood/stone/etc a construction site needs delivered
-## before the object is placed (ADR 040) -- exactly the same shape of
-## cross-file reference as a
-## job's needs_tool above, checked the same way for every list position: an
-## undeclared item id at any index fails construction typed
-## dangling_reference naming objects.json, never loading as valid content
-## that would otherwise only surface at play time as a runtime
-## blocked_missing_input.
+## Cross-file references (F1: any dangling reference fails): a job's needs_tool names a tool
+## item and its toils are known to ToilExecutor; a need's source_kind is "tile" or an object
+## kind; faction relations name every other faction once, no self-row, with a known string
+## value (type checked before String(), which throws on non-strings); an actor's faction_id
+## and every build_cost item (ADR 040) are declared. All fail as dangling_reference.
 func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 	var item_kind_by_id: Dictionary = {}
 	for entry in (raw_by_kind["items"]["items"] as Array):
@@ -640,10 +536,7 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 				return {"ok": false, "file": "actors.json",
 					"message": "actor '%s' faction_id '%s' names an unknown faction id" % [actor_id, faction_id]}
 
-	## F5 incidents (foundation-for-breadth.md F5): an incident's
-	## faction must name a declared faction id, and its spawn.actor_def must
-	## name a declared actor id -- the same dangling_reference typed error as
-	## every other cross-file check above, never a silent skip.
+	## F5 incidents: faction and spawn.actor_def must be declared, like the checks above.
 	for incident in (raw_by_kind["incidents"]["incidents"] as Array):
 		var incident_id := String(incident.get("id", "?"))
 		var incident_faction := String(incident.get("faction", ""))
@@ -693,14 +586,8 @@ func _check_job_effects(raw_by_kind: Dictionary) -> Array[String]:
 			return [ERROR_SCHEMA_VIOLATION, bad + ".yields.find_table weights must sum to 100, got %d" % total]
 	return []
 
-## Per-component tunable validation (docs/decisions/012-actors-and-components.md):
-## for every actor definition, every declared component's own validate(tunables)
-## must pass. Runs only after _check_references() has confirmed every declared
-## component name is known, so a missing "actors" tunables key for a declared
-## component (an empty Dictionary, per Dictionary.get()'s default) and a
-## cross-field rule a single-field schema check cannot express (health.hp <=
-## maxHp, worker.labour_min <= labour_default <= labour_max) are both caught
-## here rather than silently defaulting during ActorTable.spawn().
+## ADR 012: every actor's declared components validate their tunables, including cross-field
+## rules (hp <= maxHp, labour min <= default <= max). Runs after component names are known.
 func _check_actor_component_tunables(raw_by_kind: Dictionary) -> Dictionary:
 	for actor in (raw_by_kind["actors"]["actors"] as Array):
 		var actor_id := String(actor.get("id", "?"))
@@ -714,7 +601,7 @@ func _check_actor_component_tunables(raw_by_kind: Dictionary) -> Dictionary:
 						% [actor_id, component_name, component_tunables]}
 	return {"ok": true}
 
-## A16 (ADR 053): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
+## A16 (ADR 054): each setup step carries exactly its SCENARIO_STEP_FIELDS (the schema subset has
 ## no per-variant lists), "when" needs the scenario's seed, every named object/item exists, and
 ## ground_items never names a tool (tools live in ToolItemStore, not the stackable item table).
 func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
@@ -770,18 +657,13 @@ func _freeze_collection(document: Dictionary, kind: String) -> Dictionary:
 	frozen.make_read_only()
 	return frozen
 
-## Freezes a whole parsed document (top-level Dictionary or Array, per
-## _read_json's accepted shapes) for storage in _documents, used for both
-## DOCUMENT_KINDS and any extra discovered kind that is not a COLLECTION_KIND.
+## Freezes a whole document (Dictionary or Array) for _documents.
 func _freeze_document(value):
 	if typeof(value) == TYPE_DICTIONARY:
 		return _deep_freeze((value as Dictionary).duplicate(true))
 	return _deep_freeze((value as Array).duplicate(true))
 
-## Recursively freezes a fresh (duplicated) Dictionary/Array tree so no nested
-## structure remains mutable, bottom-up: children are frozen before the
-## parent that holds them is frozen, since a read-only Dictionary/Array
-## refuses further key/index assignment.
+## Deep-freezes a duplicate bottom-up (a read-only container refuses child assignment).
 func _deep_freeze(value):
 	if typeof(value) == TYPE_DICTIONARY:
 		var dict: Dictionary = value

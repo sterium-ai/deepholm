@@ -189,7 +189,7 @@ Orca helper scripts, this backlog.
 - **Acceptance:** `git grep "_world\._\|world\._" game/scripts/tests` returns 0; assertion
   count unchanged (quote before/after); suite time not worse than before by more than 5 %.
 
-### R16 — Comment and doc pass on the composed core (after R12) · `todo`
+### R16 — Comment and doc pass on the composed core (after R12) · `review (antonelmejor50-hub/r16-comment-and-doc-pass)`
 
 - **Goal:** every core file's comments are the *why* in ≤3 lines per function; invariants that
   were prose become `assert`s or tests; `docs/architecture/*.md` and the ADR index updated to

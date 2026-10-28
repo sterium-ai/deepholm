@@ -1,14 +1,9 @@
 class_name ActorWild
 extends RefCounted
 
-## F2 wild component: marks an actor as untamed wildlife (the "wild" half of
-## foundation-for-breadth.md F2's "tame/wild" pair; "tame" is not implemented
-## yet). Data + validate() only; it adds no behaviour of its own
-## (docs/decisions/012-actors-and-components.md). Presence of the component
-## on an actor definition is itself the flag; the one optional tunable
-## (ADR 026) is trench_climb_ticks, an integer >= 1
-## read by WorldState._trench_climb_ticks() -- absent tunables are still valid
-## (WorldState falls back to DEFAULT_TRENCH_CLIMB_TICKS).
+## Wild component (ADR 012): untamed wildlife flag ("tame" not implemented). Data + validate()
+## only. Optional tunable trench_climb_ticks >= 1 (ADR 026), read by TrenchSystem
+## (DEFAULT_TRENCH_CLIMB_TICKS when absent).
 
 static func validate(tunables: Dictionary) -> bool:
 	if tunables.is_empty():

@@ -120,9 +120,10 @@ mirroring it, so the rule stays in exactly one place:
 
 ## Reads (non-mutating)
 
-`WorldState` keeps all authoritative storage private (`_tiles`,
-`_colonists`, `_jobs`, `_reservations`, `_events`, `_clock`, `_random`,
-`_seed`) and exposes only detached copies:
+`WorldState` keeps all authoritative storage private, in the modules it
+composes (`TileGrid`, `ObjectTable`, `ItemTable`, `EventLog`, the
+scheduler's `JobQueue`, ...) and its own roster, clock and RNG, and exposes
+only detached copies:
 
 - `get_seed() -> int`
 - `get_tick() -> int`
@@ -144,8 +145,8 @@ remain the only two ways to change what a later `get_*()` call returns.
 {"id": "colonist_0", "kind": "colonist", "x": 2, "y": 3}
 ```
 
-Colonists are placed once at construction, only on `floor` tiles inside the
-spawn rectangle (`WorldState.SPAWN_AREA_*`). `jobs` (`Array[Dictionary]`)
+Colonists are placed once at construction, inside the spawn clearing
+`WorldGenerator.place_spawn()` picks (`get_spawn_clearing()`). `jobs` (`Array[Dictionary]`)
 and `reservations` (`Dictionary`) start empty and are filled only through
 `apply()` and `tick()`; their entry shapes are documented with the job queue
 ([`../jobs/README.md`](../jobs/README.md)).
@@ -164,8 +165,9 @@ and `reservations` (`Dictionary`) start empty and are filled only through
 }
 ```
 
-`_events` is kept sorted by `(tick, system_priority, entity_id, sequence)`
-at all times (insertion sort on append), per
+`EventLog` (`world/event_log.gd`) keeps the log sorted by
+`(tick, system_priority, entity_id, sequence)` at all times (binary-search
+insert), per
 [`docs/architecture/simulation-boundaries.md`](../../../../docs/architecture/simulation-boundaries.md#determinism-and-time).
 `system_priority` is lower for commands (`WorldState.PRIORITY_COMMAND`,
 `0`) than for tick-level events (`WorldState.PRIORITY_TICK`, `100`), so
@@ -174,8 +176,9 @@ closes it out.
 
 ## Hashing and persistence
 
-`state_hash()` hashes `JSON.stringify({seed, tick, tiles, colonists,
-jobs})` — integer/string data only, no floats, no object identity. It is a
+`state_hash()` hashes `JSON.stringify()` of the seed, tick, colonists, jobs,
+scheduling state and every module's `hash_into()` fields — integer/string
+data only, no floats, no object identity. It is a
 diagnostic/test fixture for detecting divergence between two replays, not a
 save format. Persistence (`schemaVersion`, `contentVersion`, and the shapes
 in

@@ -1,18 +1,9 @@
 extends RefCounted
 
-## GlobalAssignment's job_id -> position lookup into its sorted waiting queue
-## (B1). A whole-map order puts ~58k entries in that queue, and finding one by
-## scanning it -- on every removal, activation and committed-need lookup --
-## made cancelling an area order O(N^2).
-##
-## Invariants:
-## - The waiting queue is always sorted by GlobalAssignment._entry_before()
-##   on (base, ordinal): every insert is a sorted insert.
-## - An entry's base and ordinal never change once submitted: a suspend or
-##   requeue reinserts the snapshot captured at activation, with the same
-##   pair. Ordinals are unique, so (base, ordinal) names one entry.
-## - So index_of() finds a known job by binary search, or proves it absent;
-##   a job never record()ed here falls back to the scan it always used.
+## GlobalAssignment's job_id -> position lookup into its sorted waiting queue (B1).
+## Invariants: the queue is always sorted by _entry_before() on (base, ordinal); an entry's
+## (base, ordinal) never changes and is unique, so index_of() can binary-search; a job never
+## record()ed falls back to a scan.
 
 var _keys: Dictionary = {}
 
@@ -40,12 +31,8 @@ func index_of(waiting: Array[Dictionary], job_id: String, entry_before: Callable
 		return index
 	return -1
 
-## GlobalAssignment._refresh_labour_disabled_reasons()'s last step: calls
-## queue.set_labour_disabled(id, labour disabled?) for the waiting entries, in
-## waiting order. With no labour disabled, only a job still blocked
-## labour_disabled can change, so only those are called (the rest are no-ops);
-## otherwise every entry is, asking get_job_labour (a pure kind -> labour
-## lookup) once per kind.
+## Calls queue.set_labour_disabled() for waiting entries in waiting order; with no labour
+## disabled, only jobs still blocked labour_disabled can change, so only those are called.
 func apply_labour_disabled(queue, waiting: Array[Dictionary], disabled_labours: Dictionary,
 		job_kinds: Dictionary, get_job_labour: Callable, entry_before: Callable) -> void:
 	if not disabled_labours.values().has(true):

@@ -1,23 +1,15 @@
 class_name CombatSystem
 extends RefCounted
 
-## F5 combat (ADR 021): runs CombatResolver once per tick (rule 1), applies its deaths
-## (rule 2: inventory drop, then removal through WorldState's one roster-removal path) and
-## lets CombatGiver decide flee jobs (rule 4); also owns the death/despawn scheduling
-## cleanup, the exposed combat reason and the health/combat component backfills.
-## CombatResolver/CombatGiver/ApproachGiver decide; this module is what applies them.
-##
+## Combat (ADR 021): runs CombatResolver once per tick (rule 1), applies its deaths (rule 2:
+## inventory drop, then the one roster-removal path) and lets CombatGiver decide flee jobs
+## (rule 4); owns death/despawn scheduling cleanup, the combat reason and component backfills.
 ## Invariants:
-## - combat_status is runtime only: rebuilt every tick by apply_combat(), never saved or
-##   hashed; a loaded world starts empty.
-## - This module persists nothing: the combat/health components live on the entity records
-##   and the flee/approach associations in CombatGiver/ApproachGiver.
-## - cleanup_actor_scheduling() detaches the actor's paused job before cancelling its
-##   active one, so a cancelled need job's resume never reactivates work for a removed actor.
-## - ensure_combat() appends "combat" last on every colonist missing it (never a rebuild), so
-##   state_hash()'s JSON.stringify(colonists) key order is the same on every run.
-## - The backfills are static: WorldState._init() needs ensure_combat() right after
-##   spawning, before the services this module depends on exist.
+## - combat_status is runtime only (rebuilt every tick, never saved or hashed); nothing persisted here.
+## - cleanup_actor_scheduling() detaches the paused job before cancelling the active one, so a
+##   cancelled need job's resume never reactivates work for a removed actor.
+## - ensure_combat() appends "combat" last (never a rebuild): state_hash() key order is stable.
+## - The backfills are static: WorldState._init() needs them before this module's services exist.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const RelationsType = preload("res://scripts/core/relations/relations.gd")
@@ -36,8 +28,7 @@ const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
 const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
 
-## F5 combat (orders-and-movement.md's typed reason vocabulary): exposed while an actor
-## has an adjacent hostile target this tick.
+## Exposed while an actor has an adjacent hostile target this tick.
 const REASON_FIGHTING := "fighting"
 
 ## actor_id -> REASON_FIGHTING while it has an adjacent hostile target this tick.
@@ -63,8 +54,8 @@ var _remove_colonist_by_id: Callable
 var _is_tool_kind: Callable
 var _spawn_ground_tool_item: Callable
 
-## event_priority is WorldState.PRIORITY_TICK. get_colonists and approach_forget are
-## lambdas: StateCodec.decode() reassigns WorldState._colonists and rebuilds ApproachGiver.
+## get_colonists and approach_forget are lambdas: StateCodec.decode() reassigns
+## WorldState._colonists and rebuilds ApproachGiver.
 func _init(content: ContentRegistryType, relations: RelationsType, event_priority: int, scheduler: AssignmentType,
 		progress_table: WorkProgressType, tool_store: ToolItemStoreType, item_table: ItemTableType,
 		object_table: ObjectTableType, event_log: EventLogType, needs_system: NeedsSystemType,
@@ -91,9 +82,8 @@ func _init(content: ContentRegistryType, relations: RelationsType, event_priorit
 	_is_tool_kind = is_tool_kind
 	_spawn_ground_tool_item = spawn_ground_tool_item
 
-## Backfills a missing "health" (ActorTable.spawn()'s default) and "factionId" (only one
-## faction exists) with "colony", plus "trapped" to null (no component builds it), so
-## state_hash() never diverges from a freshly decoded StateCodec entity.
+## Backfills "health", "factionId" ("colony") and "trapped" (null) so state_hash() matches a
+## freshly decoded entity.
 static func ensure_health(colonists: Array[Dictionary], content: ContentRegistryType) -> void:
 	for colonist in colonists:
 		if not colonist.has("factionId"): colonist["factionId"] = "colony"
@@ -103,9 +93,8 @@ static func ensure_health(colonists: Array[Dictionary], content: ContentRegistry
 		var definition: Dictionary = content.get_entry("actors", String(colonist.get("kind", "colonist")))
 		colonist["health"] = HealthType.build_full(definition.get("tunables", {}).get("health", {}))
 
-## Backfills "combat" onto a colonist whose definition declares one: ActorTable's colonist
-## spawn path (ADR 012) never builds it. Appended last (class doc). A generic actor
-## (wolf/trader) already gets its "combat" key from ActorTable._spawn_generic_actor().
+## Backfills "combat" (appended last) onto a colonist whose definition declares it; the colonist
+## spawn path never builds it, generic actors already have it.
 static func ensure_combat(colonists: Array[Dictionary], content: ContentRegistryType) -> void:
 	for colonist in colonists:
 		if not ActorTableType.has_component(colonist, "worker", content):
@@ -131,25 +120,18 @@ func apply_combat(tick: int) -> void:
 func get_actor_combat_reason(actor_id: String) -> String:
 	return String(combat_status.get(actor_id, ""))
 
-## Rule 2: drops the dead actor's inventory on its tile (death-specific, so not part of the
-## shared cleanup an ordinary incident despawn also runs), then removes it through
+## Rule 2: drops the dead actor's inventory (death only, not despawn), then removes it through
 ## WorldState._remove_colonist_by_id(), which runs cleanup_actor_scheduling().
 func apply_actor_death(actor: Dictionary) -> void:
 	var colonist_id: String = String(actor["id"])
 	_drop_inventory_contents(actor)
 	_remove_colonist_by_id.call(colonist_id, true)
 
-## Cancels every nonterminal job restricted to colonist_id (active, paused, queued or
-## routing) through the shared finish boundary, and tells NeedGiver/CombatGiver/
-## ApproachGiver so none keeps an association pointing at a removed actor. Shared by death
-## and incident despawn: a flee episode's job would otherwise be orphaned.
-##
-## The paused job is detached first (class doc). Re-cancelling the incident job this runs
-## inside of is a no-op: finish() rejects a terminal job and the loop skips it.
+## Cancels every nonterminal job restricted to colonist_id through the shared finish boundary and
+## tells NeedGiver/CombatGiver/ApproachGiver (death and incident despawn). Paused job detached first
+## (class doc); re-cancelling the incident job this runs inside of is a no-op.
 func cleanup_actor_scheduling(colonist_id: String) -> void:
-	# Retires the actor's own in-flight scheduler route-search batch, if any,
-	# so an unrestricted candidate job it was still mid-searching does not
-	# stay marked claimed forever, starving every other worker of it.
+	# Retire the actor's in-flight route-search batch, or a candidate it was searching stays claimed.
 	_scheduler.retire_worker(colonist_id)
 	var paused_job_id := ""
 	if _needs_system.paused_jobs.has(colonist_id):
@@ -170,19 +152,16 @@ func cleanup_actor_scheduling(colonist_id: String) -> void:
 	_combat_giver.forget(colonist_id)
 	_approach_forget.call(colonist_id)
 
-## Cancels job_id and tells its giver (the _resolve_refused_reservations() pairing), so a
-## dead actor's need job never leaves NeedGiver's _pending pointing at a removed actor.
+## Cancels job_id and tells its giver, so NeedGiver's _pending never points at a removed actor.
 func _cancel_job_for_death(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
-	# Only a rescue's own job-scoped key is dropped here; an ordinary job's tile progress outlives its actor's death
-	# exactly as before, so a successor order on that tile inherits it.
+	# Only a rescue's job-scoped key is dropped; tile progress outlives the actor for a successor order.
 	if _finish_job.call(job_id, "cancel_job").get("ok", false):
 		_progress_table.clear_terminated_job(job_id, job, false)
 	_resolve_giver_association.call(job_id, String(job.get("kind", "")))
 
-## Drops what `actor` holds as loose items on its tile: hands contents (one item per kind),
-## the held tool (moved in ToolItemStore, not duplicated, so its identity and reservation
-## survive and it stays reachable), and a generic actor's "inventory" items and tool slot.
+## Drops hands contents, the held tool (moved, keeping identity and reservation) and a generic
+## actor's inventory and tool slot as loose items on its tile.
 func _drop_inventory_contents(actor: Dictionary) -> void:
 	var x := int(actor["x"])
 	var y := int(actor["y"])
@@ -200,9 +179,8 @@ func _drop_inventory_contents(actor: Dictionary) -> void:
 		if not carried_tool_kind.is_empty():
 			_drop_inventory_item(carried_tool_kind, 1, x, y)
 
-## A declared tool kind goes to ToolItemStore (the only store a worker's fetch_tool search
-## reads), one ground tool per unit since tools carry identity, never a count; any other
-## kind is an ordinary ItemTable stack.
+## A tool kind goes to ToolItemStore (one ground tool per unit: tools carry identity); any other
+## kind is an ItemTable stack.
 func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
 	if _is_tool_kind.call(kind):
 		for _unit in count:
@@ -210,8 +188,7 @@ func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
 		return
 	_item_table.place_new_ground_item(kind, count, x, y)
 
-## Every actor with a `health` component, worker or not (unlike get_colonists()), so the
-## viewer can draw a health bar for a wolf or trader. Deep copies.
+## Every actor with health (not just workers), deep copies, for viewer health bars.
 func get_actors_with_health() -> Array[Dictionary]:
 	var copy: Array[Dictionary] = []
 	for actor in _get_colonists.call():

@@ -1,17 +1,9 @@
 extends RefCounted
 
-## JobQueue's retired jobs (A5, ADR 053): a job leaves the live list on its
-## terminal transition (completed, cancelled, failed) and is kept here, last
-## LIMIT retirements only, so get_job()/get_jobs() still show a recently
-## finished job and check_terminal() still tells "already terminal" from
-## "unknown". Never persisted and never hashed: a loaded world starts with an
-## empty history, so no simulation decision may depend on what it holds beyond
-## the call that retired the job.
-##
-## Invariants:
-## - Entries are in retirement order; each keeps the job's position in the
-##   live list (JobIndex.remove()), so merged() lists jobs in submission order.
-## - _by_id holds exactly the retained entries' jobs.
+## JobQueue's last LIMIT retired jobs (A5, ADR 053), so get_job() and check_terminal() still
+## see recently finished jobs. Never persisted nor hashed: no simulation decision may read it.
+## Invariants: entries are in retirement order and keep their list position (merged() is in
+## submission order); _by_id holds exactly the retained jobs.
 
 const LIMIT := 256
 
@@ -38,11 +30,8 @@ func find(job_id: String) -> Dictionary:
 func size() -> int:
 	return _entries.size()
 
-## Deep copies of `live` (ascending positions; position_of(job_id) is -1 for a
-## job retired since the list was last compacted, which is skipped) and of
-## every retained job (none when with_retired is false), in position order. A
-## non-empty `kinds` keeps only the retained jobs of those kinds (`live` is
-## already filtered by the caller).
+## Deep copies of `live` (skipping position -1) and of the retained jobs (filtered by `kinds`
+## when non-empty; none when with_retired is false), in position order.
 func merged(live: Array[Dictionary], position_of: Callable, kinds: Array = [], with_retired: bool = true) -> Array[Dictionary]:
 	var retired: Array[Dictionary] = []
 	for entry in _entries if with_retired else []:

@@ -1,34 +1,15 @@
 class_name Passability
 extends RefCounted
 
-## The movement and faction rules (ADR 014, F3/F5): whether a tile and its
-## object can be crossed, at what cost, and by which faction (doors), plus the
-## faction rules for ordering and reserving colony items. Reads the sibling
-## TileGrid/ObjectTable; actor factions arrive as Callables. Its only state is
-## a per-tile cache derived from them, so it is neither persisted nor hashed.
-##
-## Per-tile cache (A2): every tile's move cost and passable/door flags live in
-## packed arrays indexed by TileGrid.tile_index(), so passability() and the
-## route cost callables never format a key or allocate. The arrays are built on
-## the first query, refreshed per tile by TileGrid.mark_dirty() (every tile-kind
-## or object change calls it) and dropped by TileGrid.reset_cells() after a
-## wholesale objects replacement. Each tile also keeps the tile kind it was
-## computed from (_kind): a query recomputes a tile whose TileGrid.tiles entry
-## no longer matches, so a direct tiles[] write (a test fixture) can never leave
-## the cache stale. A direct write to ObjectTable's maps after a query must be
-## followed by TileGrid.reset_cells().
-##
+## Movement and faction rules (ADR 014): whether a tile and its object can be crossed, at what
+## cost and by which faction (doors), plus who may be ordered or reserve colony items.
+## Its only state is a per-tile packed cache (A2), neither persisted nor hashed: built on first
+## query, refreshed by TileGrid.mark_dirty(), dropped by reset_cells(); a tile whose kind no
+## longer matches _kind is recomputed. Direct ObjectTable writes must call reset_cells().
 ## Invariants:
-## - passability() is the one authoritative movement rule: out of bounds and
-##   an unknown object kind are impassable; an impassable object blocks its
-##   tile; a passable one supplies its own move cost instead of the tile's.
-## - faction_id only matters for a door; it defaults to "colony".
-## - Every faction rule fails open (true) for a faction id the registry does
-##   not declare, so a lookup miss never silently blocks doors or orders.
-## - The cache equals what the rule above computes from tiles and objects:
-##   _flags holds PASSABLE (tile or object passable) and DOOR, _cost the move
-##   cost (0 when not PASSABLE), _colony_cost/_colony_passable the same under
-##   "colony"'s door rule. A door's per-faction rule is applied at query time.
+## - passability() is the one movement rule: out of bounds and unknown objects are impassable;
+##   a passable object supplies its own move cost. faction_id only matters for a door.
+## - Faction rules fail open (true) for an undeclared faction id.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
@@ -73,8 +54,7 @@ func _init(content: ContentRegistryType, tile_grid: TileGridType, object_table: 
 	_find_colonist = find_colonist
 	tile_grid.bind_passability(refresh_cell, reset_cells, passable_at, door_at, passable_mask, room_cell_flags)
 
-## The public rule as a Dictionary, for callers outside the hot paths; the
-## route cost callables below read the arrays without building one.
+## The public rule as a Dictionary, for callers outside the hot paths.
 func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
 	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
 		return {"passable": false, "cost": 0, "is_door": false}
@@ -203,21 +183,18 @@ func faction_may_reserve_colony_items(faction_id: String) -> bool:
 		return true
 	return bool(faction.get("rules", {}).get("may_reserve_colony_items", true))
 
-## GlobalAssignment.set_order_eligibility() (F3): checked for every worker
-## before it may be proposed for any job (the gate that reaches haul). A
-## trapped actor may never be ordered; an unknown id fails open.
+## GlobalAssignment's order-eligibility gate (F3): a trapped actor is never ordered;
+## an unknown id fails open.
 func colonist_may_be_ordered(colonist_id: String) -> bool:
 	if _find_colonist.call(colonist_id).get("trapped") != null: return false
 	return faction_may_be_ordered(_actor_faction.call(colonist_id))
 
-## GlobalAssignment.set_reservation_gate() (F3): checked before a reserve
-## step or a resume's reactivate(), never after, so a refused actor never
-## transiently holds a reservation.
+## GlobalAssignment's reservation gate (F3), checked before reserving, never after, so a
+## refused actor never transiently holds a reservation.
 func colonist_may_reserve_colony_items(colonist_id: String) -> bool:
 	return faction_may_reserve_colony_items(_actor_faction.call(colonist_id))
 
-## RouteSearch's colony cost callable (also GlobalAssignment.restore_scheduling()'s):
-## passability(x, y)["cost"].
+## RouteSearch's colony cost callable: passability(x, y)["cost"].
 func is_passable(tile: Vector2i) -> float:
 	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
 		return 0.0
@@ -227,8 +204,7 @@ func is_passable(tile: Vector2i) -> float:
 		index = _fresh_index(tile.x, tile.y)
 	return float(_colony_cost[index])
 
-## Faction-aware cost callable (IncidentScheduler's spawn/target selection): the
-## colony-only is_passable() would let wildlife use a tile only reachable through a door.
+## Faction-aware cost callable: is_passable() would let wildlife through colony doors.
 func passable_for_faction(tile: Vector2i, faction_id: String) -> float:
 	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
 		return 0.0
@@ -245,7 +221,6 @@ func passable_for_worker(actor_id: String, tile: Vector2i) -> float:
 func passable_for_flee(actor_id: String, x: int, y: int) -> Dictionary:
 	return passability(x, y, _actor_faction.call(actor_id))
 
-## CombatGiver's region check for a flee candidate, so it never picks a
-## passable tile in a pocket disconnected from the actor.
+## CombatGiver's flee check: never a tile in a pocket disconnected from the actor.
 func region_reachable(from: Vector2i, target: Vector2i) -> bool:
 	return _tile_grid.get_regions().reachable(from, target)

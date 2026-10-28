@@ -1,29 +1,16 @@
 class_name ReplayLog
 extends RefCounted
 
-## A recorded session (A11): the starting state, every command the session
-## applied in apply() order, and state_hash() checkpoints taken while it ran,
-## plus the headless replay that checks them. No file I/O and no
-## scene/node/RNG/wall-clock dependency; it only reads the world it is handed
-## (state_hash(), to_save_state()) and replays through apply()/tick().
-## viewer/command_recorder.gd drives recording and owns the file;
-## tools/replay.ps1 replays a file.
-##
+## A recorded session (A11): the starting state, every applied command in order, state_hash()
+## checkpoints, and the headless replay that checks them. No file I/O
+## (viewer/command_recorder.gd owns the file; tools/replay.ps1 replays one).
 ## Invariants:
-## - Checkpoint T is state_hash() right after the tick() that brought the clock
-##   to T, before any command of tick T. The first one is start_tick itself,
-##   taken before the first command; then every checkpoint_interval ticks,
-##   with none missing, duplicated or off that grid (validate()). Replay
-##   compares every one of them or reports invalid_replay.
-## - commands stays in apply() order, so its "tick" fields never decrease.
-##   Rejected commands are kept too: some rejections still draw a JobQueue
-##   sequence, and replay checks each command's "ok" against the recording.
+## - Checkpoint T is state_hash() after the tick() reaching T, before tick T's commands: one at
+##   start_tick, then every checkpoint_interval ticks, none missing (validate()).
+## - commands keeps apply() order (ticks never decrease), rejected ones included.
 ## - final_hash is state_hash() at end_tick after that tick's commands.
-## - to_dict() is JSON-safe and lossless: initial_state travels as a base64
-##   Variant blob (64-bit RNG states survive), each command as
-##   JSON.from_native() (an int stays an int and a float a float, so a command
-##   rejected for a float value is still rejected on replay), the seed as a
-##   string, and every other number fits a double exactly.
+## - to_dict() is lossless JSON: initial_state as a base64 Variant blob, commands through
+##   JSON.from_native() (ints stay ints), the seed as a string.
 
 const FORMAT := "deepholm-replay"
 const FORMAT_VERSION := 1
@@ -87,13 +74,9 @@ func checkpoint_index() -> Dictionary[int, int]:
 		by_tick[tick] = state_hash
 	return by_tick
 
-## Replays this log headless. after_tick(world, tick) runs after every tick(),
-## before that tick's checkpoint is compared (tests plant nondeterminism there).
-## Returns {"ok": true, "ticks", "checkpoints", "commands"} or {"ok": false,
-## "code"} where code is content_version_mismatch, generator_version_mismatch
-## or diverged; a divergence names "tick" (the first checkpoint that differs),
-## "last_matching_tick", "kind" (checkpoint, command_result or final_hash),
-## and the expected/actual values.
+## Replays this log headless; after_tick(world, tick) runs before each checkpoint compare.
+## {"ok": false, "code"} is content_version_mismatch, generator_version_mismatch or diverged
+## (with "tick", "last_matching_tick", "kind" and expected/actual).
 func replay(after_tick: Callable = Callable()) -> Dictionary:
 	var invalid := validate()
 	if invalid != "":
@@ -148,11 +131,8 @@ static func _diverged(kind: String, tick: int, last_matching: int, expected: int
 	return {"ok": false, "code": "diverged", "kind": kind, "tick": tick, "last_matching_tick": last_matching,
 		"expected": expected, "actual": actual}
 
-## "" when the log is well formed, else what is wrong: initial_state is a save
-## state of this build's schema that passes SaveIO's full schema check (so
-## from_save_state() never sees a malformed snapshot), the checkpoints are
-## exactly start_tick, then every checkpoint_interval ticks up to end_tick,
-## and command ticks never decrease within [start_tick, end_tick].
+## "" when well formed (initial_state passes SaveIO's schema check, checkpoints on the grid,
+## command ticks non-decreasing in [start_tick, end_tick]), else what is wrong.
 func validate() -> String:
 	if checkpoint_interval < 1 or end_tick < start_tick:
 		return "checkpointInterval must be >= 1 and endTick >= startTick"

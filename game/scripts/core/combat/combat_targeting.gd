@@ -1,22 +1,11 @@
 class_name CombatTargeting
 extends RefCounted
 
-## F5 combat targeting: finds the nearest hostile target for the attack
-## rule (adjacent only) and the nearest hostile actor for the flee giver's own
-## away-direction pick (unbounded). Plain, scene-independent GDScript
-## (AGENTS.md): every method is static and stateless.
-##
-## Reads hostility via `relations.relation(a_faction, b_faction)` with each
-## side's own runtime "factionId" field (camelCase) threaded explicitly,
-## rather than `Relations.is_hostile(actor_a, actor_b)` -- that helper reads
-## content's "faction_id" key (docs/decisions/014-factions-and-relations.md),
-## never the runtime field every live actor/object actually carries, so
-## calling it here would silently resolve every pair to the "neutral"
-## fallback instead of the real relation.
+## Combat targeting, static and stateless: the nearest adjacent hostile for the attack rule and
+## the nearest hostile actor for the flee direction. Hostility is relations.relation() on each
+## side's runtime "factionId", never Relations.is_hostile() (it reads content's "faction_id").
 
-## Cardinal neighbours first (Euclidean distance 1), diagonals after
-## (distance sqrt(2)): a fixed scan order that resolves "nearest" among every
-## adjacent candidate without floating-point distance comparisons.
+## Cardinals first, then diagonals: resolves "nearest" adjacent without float distances.
 const NEIGHBOR_OFFSETS: Array[Vector2i] = [
 	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0),
 	Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1),
@@ -31,12 +20,8 @@ static func _is_hostile(relations, a_faction: String, b_faction: String) -> bool
 static func _is_dead(actor: Dictionary) -> bool:
 	return bool((actor.get("health", {}) as Dictionary).get("dead", false))
 
-## Every living actor with a health component, by tile (Vector2i -> Array, roster
-## order), built once per pass (A4) instead of once per attacker. An array per tile,
-## not a single overwritten entry: movement does not enforce exclusive actor
-## occupancy, so a friendly actor appended after an adjacent enemy must never hide
-## that enemy from targeting. Valid while no actor moves; an actor that dies after
-## the build is skipped at lookup (nearest_adjacent_hostile()).
+## Living actors with health by tile (arrays: tiles are not exclusive), built once per pass (A4).
+## Valid while no actor moves; one that dies afterwards is skipped at lookup.
 static func actors_by_tile(actors: Array) -> Dictionary:
 	var by_tile: Dictionary = {}
 	for other: Dictionary in actors:
@@ -50,12 +35,8 @@ static func actors_by_tile(actors: Array) -> Dictionary:
 		(by_tile[tile] as Array).append(other)
 	return by_tile
 
-## The nearest adjacent (Chebyshev distance 1) hostile target with a health
-## component -- an actor or a placed object -- for `actor`'s own attack rule.
-## {} when none. `by_tile` must be actors_by_tile() over the live roster, built
-## after the last move. `object_at(x,y)->String`, `object_health_at(x,y)->Dictionary`
-## ({} for no health) and `object_faction_at(x,y)->String` must be
-## WorldState's own get_object/_object_health_at/get_object_faction_id.
+## The nearest adjacent hostile actor or object with health, {} when none. `by_tile` must be
+## actors_by_tile() built after the last move; object callables are ObjectTable/WorldState lookups.
 static func nearest_adjacent_hostile(actor: Dictionary, by_tile: Dictionary, relations,
 		object_at: Callable, object_health_at: Callable, object_faction_at: Callable) -> Dictionary:
 	var ax := int(actor["x"])
@@ -75,10 +56,7 @@ static func nearest_adjacent_hostile(actor: Dictionary, by_tile: Dictionary, rel
 				return {"type": "object", "x": x, "y": y}
 	return {}
 
-## Among every actor occupying one tile, the hostile one with the
-## lexicographically smallest id -- a stable, deterministic tie-break
-## independent of insertion order, since two actors of any hostility mix can
-## legally share a tile today. {} when none of the occupants are hostile.
+## The hostile occupant with the smallest id (actors may share a tile); {} when none.
 static func _pick_hostile_occupant(occupants: Array, relations, own_faction: String) -> Dictionary:
 	var best: Dictionary = {}
 	for occupant: Dictionary in occupants:
@@ -90,9 +68,7 @@ static func _pick_hostile_occupant(occupants: Array, relations, own_faction: Str
 			best = occupant
 	return best
 
-## The nearest living hostile actor anywhere on the map (Manhattan distance,
-## ties broken by ascending id), for the flee giver's own away-direction pick
-## -- unbounded, unlike the adjacency-only attack target above. {} when none.
+## The nearest living hostile actor anywhere (Manhattan, ties by id); {} when none.
 static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -> Dictionary:
 	var own_faction := actor_faction(actor)
 	var ax := int(actor["x"])

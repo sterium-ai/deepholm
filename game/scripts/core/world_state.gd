@@ -51,8 +51,7 @@ const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_han
 const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
 const ActorIndexType = preload("res://scripts/core/actors/actor_index.gd")
 
-## Default/fixture map size (tests, debug scenario); a new game's size comes from
-## mapgen.json and boot.gd passes it explicitly.
+## Default/fixture map size; a new game's size comes from mapgen.json via boot.gd.
 const MAP_WIDTH := 48
 const MAP_HEIGHT := 48
 const TILE_ROCK := ContentRegistryType.TILE_ROCK
@@ -66,8 +65,7 @@ const TILE_WATER := ContentRegistryType.TILE_WATER
 const TILE_TRENCH := ContentRegistryType.TILE_TRENCH
 const COLONIST_COUNT := ContentRegistryType.COLONIST_COUNT
 const DEFAULT_TRENCH_CLIMB_TICKS := TrenchSystemType.DEFAULT_TRENCH_CLIMB_TICKS
-## Salts distinct from each other, IncidentScheduler's SEED_SALT (914_827) and
-## WorldGenerator's OUTCROP_SEED_SALT (100_003): no two streams share a draw sequence.
+## Distinct from each other and from IncidentScheduler/WorldGenerator salts: no two streams share draws.
 const GEOGRAPHY_SEED_SALT := 402_653
 const PLACEMENT_SEED_SALT := 219_961
 const DIG_FIND_SEED_SALT := 738_419 # ADR 026
@@ -162,8 +160,7 @@ var _construction_giver: ConstructionGiverType
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
 
-## incidents_enabled defaults false so every pre-existing caller ticks byte-identically.
-## content is the session's ContentRegistry (A13: one per session, built by the caller from its pack roots); null builds the base bundle.
+## content is the session's ContentRegistry (one per session); null builds the base bundle.
 func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_height: int = MAP_HEIGHT, incidents_enabled: bool = false,
 		content: ContentRegistryType = null) -> void:
 	_seed = p_seed
@@ -225,7 +222,6 @@ func _build_scheduling(dig_find_random: RandomNumberGenerator) -> void:
 	# F3: the faction gates read this world's actors, never a hardcoded "colony".
 	_scheduler.set_order_eligibility(_passability.colonist_may_be_ordered)
 	_scheduler.set_reservation_gate(_passability.colonist_may_reserve_colony_items)
-	# F5 (ADR 014 Amendment): an autonomous entry's target-aware gate and faction-aware passability.
 	_scheduler.set_autonomous_reservation_gate(_actor_may_reserve_target)
 	_scheduler.set_autonomous_passability(_passability.passable_for_worker)
 	# Flee jobs (rule 4) submit autonomously through NeedGiver's interrupt/resume boundary (ADR 009).
@@ -350,8 +346,7 @@ func apply(command) -> Dictionary:
 	return result
 func tick() -> void: _tick_pipeline.run() # one tick, phases in world/tick_pipeline.gd
 
-## The mover component's route through ActorTable (ADR 012): the live route object,
-## so a wholesale replacement still assigns colonist["route"] directly.
+## The live route object through ActorTable's mover component (ADR 012).
 func _route(colonist: Dictionary):
 	var mover_component: Variant = ActorTableType.get_component(colonist, "mover", _content)
 	return mover_component.get("route") if mover_component != null else null
@@ -483,8 +478,7 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 			_incidents.on_job_finished(job_id)
 			if not incident_actor.is_empty():
 				_trade.pending_offers.erase(String(incident_actor["id"]))
-			# An incident's wait is stamped with no job_id owner, so it keeps its
-			# "clear if active at finish" rule instead of ownership tracking.
+			# An incident's wait has no job_id owner: cleared if active at finish.
 			if String(job.get("status", "")) == "active":
 				_progress_table.clear(job["target"])
 		else:
@@ -538,9 +532,8 @@ func _actor_faction(actor_id: String) -> String:
 		actor = _incidents.staged_actor(actor_id)
 	return String(actor.get("factionId", "colony"))
 
-## GlobalAssignment's autonomous reservation gate (ADR 014 Amendment). A trapped actor is
-## checked first and exclusively: only its own tile (escape_trench), so a flee job never
-## reserves for it. Otherwise colony-item factions reserve anything, others their own tile or a bare one.
+## Autonomous reservation gate (ADR 014 Amendment). A trapped actor may reserve only its own
+## tile; colony-item factions reserve anything; others their own tile or a bare one.
 func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
 	var trapped_actor := _find_colonist(actor_id)
 	if not trapped_actor.is_empty() and trapped_actor.get("trapped") != null:
@@ -641,9 +634,8 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 		return _construction.site_work_ticks_remaining(job, target)
 	return _progress_table.resume(target, job_id)
 
-## Every work tick of every work-toil job; job_id, when set, owns the key. site_work skips the
-## tile cache (the site's progress is the one counter, so N builders may finalize early);
-## escape_trench's climb mirrors this timer; a trader posts its offer on its first work tick.
+## Every work tick of every work-toil job; job_id, when set, owns the key. site_work counts on
+## its site instead (one counter for N builders); a trader posts its offer on its first work tick.
 func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
 	if not job_id.is_empty() and String(_scheduler.queue.get_job(job_id).get("kind", "")) == "site_work":
 		var job := _get_job(job_id)
@@ -674,18 +666,16 @@ func _resolve_refused_reservations() -> void:
 			_resolve_giver_association(job_id, String(job.get("kind", "")))
 		refused = _scheduler.take_refused_reservations()
 
-## NeedsSystem.resume_paused_job()'s fresh first go_to leg. Unreachable goes through
-## ToilBindings.toil_on_unreachable(), never a plain resubmit (incident/flee jobs are only
-## cancelled); arrival starts work only when the next toil is work (ADR 028).
+## NeedsSystem.resume_paused_job()'s first go_to leg; unreachable goes through
+## ToilBindings.toil_on_unreachable(), never a plain resubmit.
 func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dictionary, target: Vector2i) -> void:
 	var on_arrive := Callable(_toils, "start_work") if _toils.leads_into_work(String(job["kind"]), true) else Callable(_toil_bindings, "toil_no_op_arrive")
 	if _toils.advance_go_to(colonist, job_id, target, _routable_to(target, String(colonist.get("factionId", "colony"))), "go_to", on_arrive) != "unreachable":
 		return
 	_toil_bindings.toil_on_unreachable(job_id, job, true)
 
-## Cancels and resubmits an unreachable first leg so the scheduler reports
-## blocked_target_unreachable. The replacement keeps the need colonist (ownership moves
-## with reassign_job()) or the player's assignee, read before _finish_job() erases it.
+## Resubmits an unreachable first leg (blocked_target_unreachable), keeping the need colonist
+## or the player's assignee, read before _finish_job() erases it.
 func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 	var priority: int = int(job["priority"])
 	var kind: String = String(job["kind"])
@@ -727,7 +717,7 @@ func _find_job_colonist(job_id: String) -> Dictionary:
 					return colonist
 	return {}
 
-## Callables handed to modules built before _toil_bindings: delegations to ToilBindings.
+## Delegations to ToilBindings for modules built before it.
 func _work_target_for(job: Dictionary) -> Vector2i: return _toil_bindings.work_target_for(job)
 func _drop_carried_haul_item(job_id: String) -> void: _toil_bindings.drop_carried_haul_item(job_id)
 func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void: _toil_bindings.terminate_haul_job_by_id(job_id, reason, remedy)

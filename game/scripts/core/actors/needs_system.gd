@@ -1,22 +1,16 @@
 class_name NeedsSystem
 extends RefCounted
 
-## Colonist needs (colonist-ai.md 3.1/3.6/3.8, ADR 009/012/024): decay and the needs/labour
-## backfill, pausing and resuming a colonist's current job around a need (or combat)
-## interrupt, the exposed need reason and need_unmet event, the kind-aware source lookups
-## and the effect of a completed need job. NeedGiver decides when a need job exists; this
-## module is what it depends on.
-##
+## Colonist needs (colonist-ai.md 3.1/3.6/3.8, ADR 009/012/024): decay and backfill, pausing and
+## resuming a job around a need or combat interrupt, need reasons and need_unmet events, source
+## lookups and need-job effects. NeedGiver decides when a need job exists.
 ## Invariants:
-## - paused_jobs (colonist_id -> job_id) is the only record of a job suspended by an
-##   interrupt. It is shared with CombatGiver's flee episode and is persisted
-##   ("pausedJobs", sorted by colonist id); it is not part of state_hash().
-## - need_status is runtime only: never saved or hashed; a loaded world starts empty.
-## - ensure_needs() rebuilds a colonist missing needs/labourTable/health/accumulator in
-##   _spawn_colonists()'s field order, never by appending: state_hash() hashes
-##   JSON.stringify(colonists), which is sensitive to key insertion order.
-## - Need definitions are WorldState's live Dictionary, shared by reference with NeedGiver
-##   (tests mutate a kind's rate_per_day in place).
+## - paused_jobs (colonist_id -> job_id) is the only record of an interrupt-suspended job; shared
+##   with CombatGiver, persisted as "pausedJobs" (sorted by colonist id), not hashed.
+## - need_status is runtime only: never saved or hashed.
+## - ensure_needs() rebuilds in WorldSeeding._spawn_colonists()'s field order, never by appending
+##   (state_hash() hashes JSON.stringify(colonists)).
+## - Need definitions are WorldState's live Dictionary, shared by reference with NeedGiver.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -72,9 +66,8 @@ var _ensure_combat: Callable
 ## WorldState's ActorIndex.replaced (A4).
 var on_actor_replaced: Callable = func(_old: Dictionary, _new: Dictionary) -> void: pass
 
-## need_definitions is WorldState's live Dictionary (by reference); event_priority is
-## WorldState.PRIORITY_TICK. get_colonists is a lambda: StateCodec.decode() reassigns
-## WorldState._colonists.
+## need_definitions is shared by reference; get_colonists is a lambda because StateCodec.decode()
+## reassigns WorldState._colonists.
 func _init(content: ContentRegistryType, need_definitions: Dictionary, need_full: int, event_priority: int,
 		clock: SeededClock, calendar: CalendarServiceType, scheduler: AssignmentType, toils: ToilExecutorType,
 		progress_table: WorkProgressType, tool_store: ToolItemStoreType, item_table: ItemTableType,
@@ -115,9 +108,8 @@ func encode() -> Dictionary:
 func decode(state: Dictionary) -> void:
 	paused_jobs = StateCodec._decode_paused_jobs(state["pausedJobs"])
 
-## "" when no exposed need reason (colonist-ai.md 3.8): need_unmet:<kind> once
-## a search exhausts every source, blocked_source_reserved/unreachable
-## transiently mid-search, "" again once committed or with no need at all.
+## "" when no exposed need reason (colonist-ai.md 3.8), else need_unmet:<kind> or a transient
+## blocked_source_* reason mid-search.
 func get_colonist_need_reason(colonist_id: String) -> String:
 	return String(need_status.get(colonist_id, ""))
 
@@ -126,10 +118,8 @@ func _needs(colonist: Dictionary) -> Dictionary:
 	var needs_component: Variant = ActorTableType.get_component(colonist, "needs", _content)
 	return needs_component if needs_component != null else {}
 
-## Backfills every declared need kind to full and every declared labour kind to its
-## default on a worker missing either (a hand-built fixture). Idempotent; rebuilds in
-## field order (class doc). has() is checked alongside the accessor because the "worker"
-## wrapper defaults an absent labourTable to {}.
+## Backfills declared needs (full) and labour kinds (default) on a worker missing either.
+## Idempotent; rebuilds in field order. has() is checked because "worker" defaults labourTable to {}.
 func ensure_needs() -> void:
 	var colonists: Array[Dictionary] = _get_colonists.call()
 	for i in colonists.size():
@@ -177,9 +167,8 @@ func ensure_needs() -> void:
 			if not labour_table.has(kind):
 				labour_table[kind] = defaults[kind]
 
-## Per-tick decay (NeedsType.apply_tick(), ADR 012/024) at content/needs.json's
-## rate_per_day (the mutable definitions, not actors.json's copy) through a per-need
-## integer accumulator against day_length_ticks; re-clamps health.
+## Per-tick decay at content/needs.json's rate_per_day through an integer accumulator against
+## day_length_ticks (ADR 024); re-clamps health.
 func decay_needs() -> void:
 	ensure_needs()
 	_ensure_health.call()
@@ -193,9 +182,8 @@ func decay_needs() -> void:
 		NeedsType.apply_tick(colonist, needs_tunables)
 		HealthType.apply_tick(colonist)
 
-## Pauses a colonist's current job (colonist-ai.md 3.6): clears colonist.work (its
-## progress suspended) or, at a toil boundary (work null), reads the job off the
-## scheduler assignment. A no-op when the colonist holds no assignment.
+## Pauses a colonist's current job (colonist-ai.md 3.6): suspends colonist.work, or reads the job
+## off the assignment at a toil boundary. No-op without an assignment.
 func pause_work_job(colonist: Dictionary) -> void:
 	var colonist_id: String = colonist["id"]
 	var work: Variant = colonist.get("work")
@@ -222,9 +210,8 @@ func resume_paused_job(colonist: Dictionary) -> String:
 		return ""
 	if String(job.get("kind", "")) == "rescue":
 		return _resume_paused_rescue(colonist, job_id, job)
-	# A needs_tool job whose tool is no longer satisfied defers entirely to
-	# ToilExecutor's fetch_tool -> go_to -> work: a route or work timer started here
-	# would be reused by _advance_fetch_tool() as its own travel leg.
+	# A job whose tool is no longer satisfied defers to fetch_tool -> go_to -> work: a route or
+	# timer started here would be reused as the fetch_tool travel leg.
 	if _toils.needs_fetch_tool(colonist, job, job_id):
 		colonist["route"] = null
 		return job_id
@@ -232,8 +219,7 @@ func resume_paused_job(colonist: Dictionary) -> String:
 		return job_id
 	var target: Vector2i = job["target"]
 	if _colonist_within_reach.call(colonist, target):
-		# Only start the timer when this leg leads into work (a haul/build leg's
-		# next toil is pick_up, left to the ordinary advance() dispatch).
+		# Start the timer only when this leg leads into work (a haul/build leg goes to pick_up).
 		if _toils.leads_into_work(String(job["kind"]), true):
 			_toils.start_work(colonist, job_id)
 		return job_id
@@ -243,11 +229,8 @@ func resume_paused_job(colonist: Dictionary) -> String:
 		return ""
 	return job_id
 
-## Rescue resume: a budgeted re-route (ToilExecutor.advance_go_to(), shared
-## _route_budget) under TrenchSystem.rescue_routable_to() (never through a trench, exact
-## target only). Never starts work here: the target's reservation may not be reacquired
-## yet (resume_interrupted_job() calls this before resume_assignment()). A proven
-## unreachable commitment is retired, not resubmitted.
+## Budgeted re-route under TrenchSystem.rescue_routable_to(). Never starts work: the target's
+## reservation is reacquired later by resume_assignment(). An unreachable commitment is retired.
 func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary) -> String:
 	var target: Vector2i = job["target"]
 	colonist["route"] = null
@@ -259,9 +242,8 @@ func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary
 		return ""
 	return job_id
 
-## interrupt_current_job callable (NeedGiver, RescueGiver, CombatGiver; ADR 009): pauses,
-## releases the paused job's tool reservations (suspend_assignment() only knows JobQueue's
-## table), then suspends the assignment. A no-op when nothing was paused.
+## Pauses, releases the paused job's tool reservations (suspend_assignment() only knows JobQueue's
+## table), then suspends the assignment (ADR 009). No-op when nothing was paused.
 func interrupt_current_job(colonist: Dictionary) -> void:
 	var colonist_id: String = colonist["id"]
 	pause_work_job(colonist)
@@ -271,11 +253,9 @@ func interrupt_current_job(colonist: Dictionary) -> void:
 	_tool_store.release_all(job_id)
 	_scheduler.suspend_assignment(colonist_id, job_id)
 
-## resume_interrupted_job callable: resumes, then restores the suspended assignment
-## (ADR 009). Deferred while CombatGiver owns the colonist (a flee episode): resuming
-## would overwrite the flee assignment; CombatGiver's recovery calls this again once
-## owns() is false. A haul/site_fetch job that failed to reactivate while its colonist
-## still carries the cargo stays in paused_jobs, so a later cancel finds the carrier.
+## Resumes, then restores the suspended assignment (ADR 009). Deferred while CombatGiver owns the
+## colonist (it calls again on recovery). A haul/site_fetch that failed to reactivate while its
+## colonist still carries the cargo stays in paused_jobs, so a later cancel finds the carrier.
 func resume_interrupted_job(colonist_id: String) -> void:
 	if _combat_owns.call(colonist_id):
 		return
@@ -304,15 +284,10 @@ func emit_need_unmet_event(colonist_id: String, kind: String) -> void:
 		"entity_id": colonist_id, "sequence": _event_log.next_sequence(), "data": {"kind": kind, "reason": reason},
 	})
 
-## Kind-aware sources (a ground-berries tile for food, water tiles, a bed for rest),
-## never in toil_executor.gd or NeedGiver, minus those no colonist can reach: NeedGiver's
-## search would flood-fill the whole component before giving up on one. Every colonist
-## gets this same list, including sources only another colonist reaches (a walled-in
-## colonist still searches them; test_combat's flee-during-need-search check relies on it).
-## A4: reachability goes through region ids, once per source (O(sources)), instead
-## of RegionMap.reachable() per source per colonist; NeedGiver calls this once per
-## kind per pass. A passable source belongs to its own region, an impassable one
-## (water) to each region among its orthogonal neighbours: reachable()'s own rule.
+## Kind-aware sources (berries, water, bed) minus those no colonist can reach, so NeedGiver never
+## floods a whole component for nothing. Every colonist gets the same list (test_combat relies on
+## it). Reachability is by region id once per source; an impassable source (water) belongs to each
+## region among its orthogonal neighbours, matching RegionMap.reachable().
 func need_source_candidates(kind: String) -> Array[Vector2i]:
 	var candidates := _raw_need_sources(kind)
 	if _get_colonists.call().is_empty():

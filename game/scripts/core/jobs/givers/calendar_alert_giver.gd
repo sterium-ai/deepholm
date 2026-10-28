@@ -1,19 +1,9 @@
 class_name CalendarAlertGiver
 extends RefCounted
 
-## Job-giver for the sowing-window calendar alert (ADR 008 consequence 6,
-## colonist-ai.md 3.7): decides when the soonest upcoming calendar window's
-## one-shot alert fires, from live colony facts -- has_labour_enabled (any
-## colonist's labourTable has that window's labour above 0), has_plowed_plot
-## (any tile is plowed_soil), has_seed_stock (any "seed" item exists anywhere,
-## ground/stockpile or mid-haul in a colonist's carrying slot) -- and
-## emits it through the same insert_event()/next_sequence() entry points
-## every WorldState event uses (AGENTS.md "one work engine": WorldState
-## stays state, validation and orchestration only). CalendarService.
-## alert_state() itself stays pure and stateless (colony facts passed in,
-## not read from WorldState); this module supplies them each tick and owns
-## the caller-persisted one-shot already_fired bookkeeping WorldState hands
-## it as fired_state.
+## Job-giver for the sowing-window calendar alert (ADR 008, colonist-ai.md 3.7): fires the
+## soonest window's one-shot alert from live colony facts (labour on, plowed plot, seed
+## stock). CalendarService.alert_state() stays pure; the fired set is owned by WorldState.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
@@ -27,13 +17,8 @@ var _insert_event: Callable
 var _next_sequence: Callable
 var _priority: int
 
-## get_colonists must be WorldState._worker_view (A5: the live worker actors,
-## read only); get_tiles the live tile array; has_item_of_kind must be WorldState._has_item_of_kind (the same
-## ground/stockpile/carrying-slot query sow's blocked_missing_input
-## precondition already uses, so a seed mid-haul in a colonist's carrying
-## slot counts here too); insert_event must be WorldState._insert_event,
-## next_sequence must be WorldState._next_sequence (the same entry points
-## every WorldState event uses); priority must be WorldState.PRIORITY_TICK.
+## Wired by WorldState: the live worker view (read only), has_item_of_kind (counts seed in
+## hands too) and EventLog.insert_event/next_sequence, so the alert orders like any event.
 func _init(get_colonists: Callable, get_tiles: Callable, has_item_of_kind: Callable,
 		insert_event: Callable, next_sequence: Callable, priority: int) -> void:
 	_get_colonists = get_colonists
@@ -43,16 +28,8 @@ func _init(get_colonists: Callable, get_tiles: Callable, has_item_of_kind: Calla
 	_next_sequence = next_sequence
 	_priority = priority
 
-## Runs once per tick (WorldState.tick()): computes the soonest upcoming
-## window's colony facts and calls calendar.alert_state() against
-## fired_state's persisted already_fired flag for that window. On a due
-## report, marks fired_state[window_id] = true (one-shot per occurrence,
-## never re-fired) and emits calendar_alert carrying the window's
-## id/label/days_until. calendar is WorldState._calendar and fired_state is
-## WorldState._calendar_alerts_fired, both passed in fresh each call (rather
-## than captured at construction) so a test's direct override of either
-## field is honoured the same tick it's set; fired_state is mutated in
-## place so WorldState keeps owning the persisted field itself.
+## Runs once per tick (TickPipeline). Marks fired_state[window_id] (one shot per occurrence)
+## in place and emits calendar_alert; calendar and fired_state are passed fresh each call.
 func advance(tick: int, calendar: CalendarServiceType, fired_state: Dictionary) -> void:
 	var window := _soonest_window(calendar, tick)
 	if window.is_empty():
@@ -71,12 +48,7 @@ func advance(tick: int, calendar: CalendarServiceType, fired_state: Dictionary) 
 		"data": {"id": window_id, "label": String(state["window_label"]), "days_until": int(state["days_until"])},
 	})
 
-## Mirrors CalendarService.alert_state()'s own "soonest not-yet-open window"
-## selection (day_of_tick + window_definitions()): alert_state() itself
-## reports only the chosen window's label/days_until, never its id, but the
-## id is exactly what this caller needs to key a one-shot already_fired flag
-## per window (ADR 008 consequence 6), so it is re-derived here from the same
-## pure content the calendar service already exposes for this purpose.
+## Re-derives alert_state()'s soonest window to get its id, the key of the one-shot flag.
 func _soonest_window(calendar: CalendarServiceType, tick: int) -> Dictionary:
 	var day := calendar.day_of_tick(tick)
 	var best_window: Dictionary = {}

@@ -1,35 +1,15 @@
 class_name CommandChecks
 extends RefCounted
 
-## Read-only pre-mutation rule set for the command handlers under commands/handlers/
-## (dispatched by world/command_router.gd), shared so WorldState.preview() can run the exact
-## same rules a hover/drag preview or Play-mode cursor needs without mutating state or
-## round-tripping the whole world through StateCodec.encode()/decode() (~390ms on a 256x256
-## map). Every check function below mirrors its handler's apply_*_command() counterpart's
-## own rejection order exactly and returns {} when the command may proceed, or
-## {"reason": ..., "params": ...} when apply() would reject it -- never touches `world`'s
-## state. Where the real rule lives in JobQueue (submission priority/target, terminal-transition
-## status), this module calls JobQueue's own pure predicates (check_submission(), check_terminal(),
-## game/scripts/core/jobs/job_queue.gd) rather than re-implementing them, so the rule stays in
-## exactly one place (AGENTS.md "one work engine" applies here too): check_job_submission() is
-## consulted by preview()'s check() dispatcher only -- OrderHandler.apply_job_command() always
-## calls through to JobQueue.submit_dig() itself for a target-valid job command, so an
-## unsupported priority still produces JobQueue's own job_rejected
-## event and advances its sequence counter instead of being silently absorbed by an early
-## WorldState-level rejection.
-##
-## Reaches into WorldState's own underscore-prefixed helpers/fields directly (_find_colonist,
-## _has_item_of_kind, _faction_may_be_ordered, _colonist_at, _object_definitions,
-## _object_table, _tile_grid, _construction, _zone_table, _content, _incidents, _scheduler), the same convention
-## game/scripts/core/persistence/state_codec.gd already uses for WorldState internals --
-## GDScript's underscore prefix is a naming convention, not enforced access control, and this
-## module is WorldState's own command-rule companion, not an external consumer.
+## Read-only pre-mutation rules shared by the command handlers (commands/handlers/) and
+## preview(), so a preview needs no state copy. Each check mirrors its handler's rejection
+## order and returns {} or {"reason", "params"}; it never mutates `world`. JobQueue rules are
+## called through its pure predicates (check_submission(), check_terminal()), never copied.
+## Like StateCodec, it reads WorldState's underscore members (_tile_grid, _object_table,
+## _zone_table, _passability, _construction, _scheduler, ...) as its command-rule companion.
 
-## Dispatches command["type"] to its own check function. Every type apply() actually mutates
-## through or rejects on dispatch has an entry: "noop" always previews ok (its own apply()
-## handler never rejects once the envelope validates); an unrecognized type returns the exact
-## "unknown_command_type" rejection apply()'s own dispatch fallback would produce, so a bogus
-## type never previews as accepted.
+## Dispatches command["type"] to its check; an unknown type gets apply()'s own
+## unknown_command_type rejection, so a bogus type never previews as accepted.
 static func check(world: WorldState, command: Dictionary) -> Dictionary:
 	match command["type"]:
 		"noop":
@@ -109,10 +89,8 @@ static func check_target_job_command(world: WorldState, command: Dictionary) -> 
 				return {"reason": WorldState.REASON_NOT_ORDERED_BY_PLAYER, "params": {"detail": "assignee_not_orderable", "assignee": assignee}}
 	return {}
 
-## Predicts JobQueue.submit_dig()'s own priority/target rejection, for preview()'s check()
-## dispatcher only -- see this file's module doc comment for why apply()
-## deliberately does not consult this. check_target_job_command() above already proved the
-## target/tile-kind/assignee rules pass by the time the dispatcher calls this.
+## Predicts JobQueue.submit_dig()'s rejection, for preview() only: apply() submits anyway so
+## JobQueue emits its own job_rejected event and sequence draw.
 static func check_job_submission(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var target := Vector2i(payload["x"], payload["y"])
@@ -122,15 +100,9 @@ static func check_job_submission(command: Dictionary) -> Dictionary:
 		return {}
 	return {"reason": submission_check["reason"], "params": {"remedy": submission_check["remedy"]}}
 
-## job_id lookup + status rule for complete_job/cancel_job/fail_job/invalidate_job, consulted by
-## preview() only -- calls JobQueue.check_terminal() (game/scripts/core/jobs/job_queue.gd), the
-## same pure predicate _finish() itself consults, so the rule lives in exactly one place. Never
-## JobQueue._reject() itself, which mutates (appends a job_rejected event and advances JobQueue's
-## own sequence counter) as a side effect preview() must never cause.
-## OrderHandler.apply_job_command()'s own terminal branch does not call this: it keeps its
-## original shape (payload check only, then _finish_job()) so a rejected terminal command still
-## produces the exact job_rejected + command_rejected event pair apply() has always emitted,
-## through JobQueue._finish()'s own check_terminal() + _reject() call, not this one.
+## The terminal-command rule through JobQueue.check_terminal(), for preview() only (never
+## _reject(), which mutates). apply() goes through _finish_job() so a rejection still emits
+## the job_rejected + command_rejected pair.
 static func check_terminal_job_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if typeof(payload.get("job_id")) != TYPE_STRING or String(payload["job_id"]).is_empty():
@@ -141,12 +113,8 @@ static func check_terminal_job_command(world: WorldState, command: Dictionary) -
 		return {}
 	return {"reason": terminal_check["reason"], "params": {"remedy": terminal_check["remedy"]}}
 
-## place_object's complete read-only rule, run by apply() (ConstructionHandler),
-## preview() and check() alike. orientation is optional ("horizontal" or
-## "vertical"); every tile of kind's footprint must be in bounds with no
-## colonist, no object, and neither TILE_TREE nor TILE_WATER. Deliberately
-## looser than build's ConstructionSystem._build_site_terrain_valid(): this is
-## the debug/map-gen path, and tests place objects on rock through it.
+## place_object's rule, for apply() and preview(). Deliberately looser than build's
+## terrain rule: this is the debug/map-gen path (tests place objects on rock).
 static func check_place_object_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if (typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT

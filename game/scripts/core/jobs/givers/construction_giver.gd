@@ -1,22 +1,10 @@
 class_name ConstructionGiver
 extends RefCounted
 
-## Job-giver for construction sites (ADR 040): decides
-## when a site's next fetch or work job should exist. A `build` command
-## creates the site record and reserves its footprint immediately
-## (ConstructionSystem); this module tops up `site_fetch` jobs while materials are
-## still short, and tops up `site_work` jobs once every required material is
-## fully held, both up to the site's own max_builders (a site
-## with max_builders 2 may hold up to two colonists fetching, working, or one
-## of each, at once -- never a third) -- both through the shared job_queue.gd
-## entry point any order-driven job uses
-## (AGENTS.md "one work engine"). Deliberately simpler than the superseded
-## `build` job's own per-job multi-source fetch plan (ADR 038): a
-## site_fetch job always carries exactly one kind, sized to what the site
-## still needs of it (up to hands capacity); the giver resubmits a fresh one
-## whenever the previous one terminates and material is still short, rather
-## than one job hopping between several sources itself. See
-## ADR 040's own "Alternatives considered" for why.
+## Job-giver for construction sites (ADR 040): tops up site_fetch jobs while materials are
+## short and site_work jobs once all are held, both capped together at max_builders, through
+## the shared job queue. Each site_fetch carries one kind; a fresh one is submitted after the
+## previous terminates (ADR 040, "Alternatives considered").
 
 var _get_sites: Callable
 var _get_jobs: Callable
@@ -28,15 +16,8 @@ var _submit_work: Callable
 var _materials_met: Callable
 var _remaining: Callable
 
-## Every dependency comes from ConstructionSystem or a sibling module, never
-## WorldState: get_sites is ConstructionSystem.site_table.list (the raw records, not
-## the colonist-id-translated public view); get_jobs is the read-only
-## JobQueue.view_jobs_of_kinds(["site_fetch", "site_work"]) (A5, never mutated);
-## get_items is ItemTable.get_items; is_in_any_zone is ZoneTable.is_in_any_zone.
-## reservation_owner(item_id: String) -> String, submit_fetch(origin, item_id,
-## item_tile, tick) -> Dictionary and submit_work(origin, tick) -> Dictionary are
-## ConstructionSystem's construction_item_reservation_owner()/submit_site_fetch()/
-## submit_site_work(). materials_met/remaining are ConstructionSiteTable's.
+## Dependencies come from ConstructionSystem and sibling modules, never WorldState;
+## get_jobs is the read-only JobQueue.view_jobs_of_kinds() (A5, never mutated).
 func _init(get_sites: Callable, get_jobs: Callable, get_items: Callable, is_in_any_zone: Callable,
 		reservation_owner: Callable, submit_fetch: Callable, submit_work: Callable,
 		materials_met: Callable, remaining: Callable) -> void:
@@ -56,27 +37,8 @@ func _site_key(origin) -> String:
 	var tile: Vector2i = origin
 	return "%d,%d" % [tile.x, tile.y]
 
-## Hands-filling rules: the source this giver submits
-## a site_fetch job against is only a position-agnostic seed for
-## GlobalAssignment to route/score an idle colonist toward -- no colonist is
-## chosen yet at submission time, so "nearest to the builder" cannot be
-## evaluated here (see _choose_source() below). The instant that job actually
-## (re)activates with a real colonist known, ConstructionSystem swaps the seed for
-## the true nearest-reachable source from the colonist's own position
-## (_resolve_freshly_activated_site_fetch_sources()), and re-runs the same
-## search after every pick_up to decide whether to keep filling hands from a
-## further source or deliver the (possibly partial) load already held,
-## whichever is nearer (WorldState._toil_on_pick_up_success()) -- both outside
-## this giver, which never sees a colonist's live position or a route search.
-##
-## Runs once per tick (WorldState.tick(), alongside HaulGiver's own advance()):
-## for every site still short of materials, tops its own fetch+work job count
-## up to max_builders with fresh site_fetch jobs (two builders on a
-## max_builders-2 site may fetch concurrently, each getting its own
-## nearest-unclaimed source via the per-builder rule, resolved once a real
-## colonist activates it -- see ConstructionSystem.next_site_fetch_source()); for every site
-## with every material fully held, tops its active/queued site_work count up
-## to the same max_builders cap.
+## Runs once per tick (TickPipeline). The submitted source is a position-agnostic seed:
+## ConstructionSystem swaps it for the nearest reachable one when a colonist activates the job.
 func advance(tick: int) -> void:
 	var fetch_counts: Dictionary = {}
 	var work_counts: Dictionary = {}
@@ -99,10 +61,7 @@ func advance(tick: int) -> void:
 	for site in (_get_sites.call() as Array):
 		var origin: Vector2i = site["origin"]
 		var key := _site_key(origin)
-		# Busy = every fetch or work job already holding one of this site's
-		# max_builders slots (queued or active): a third colonist must never
-		# be offered a slot while two already hold both of them, whichever
-		# mix of fetching and working they are in.
+			# Busy = fetch + work jobs holding this site's slots; never more than max_builders.
 		var busy: int = int(fetch_counts.get(key, 0)) + int(work_counts.get(key, 0))
 		if not bool(_materials_met.call(site)):
 			for i in range(maxi(0, int(site["max_builders"]) - busy)):
@@ -121,14 +80,8 @@ func advance(tick: int) -> void:
 			if result.get("ok", false):
 				work_counts[key] = int(work_counts.get(key, 0)) + 1
 
-## Lowest-id, position-agnostic seed (no colonist is chosen yet at
-## submission, ADR 038's own precedent for the superseded `build`
-## job's seed -- ConstructionSystem corrects it to the true nearest-reachable source
-## the instant a colonist actually activates the job, per the hands-filling
-## rules) ground item covering some still-needed required material,
-## stockpiled, unreserved, and not already committed to another in-flight
-## site_fetch job. Required materials are tried in the site's own declared
-## order; {} when nothing qualifies for any of them.
+## Seed source: the lowest-id stockpiled, unreserved, uncommitted item of a still-needed
+## material, in the site's declared order; {} when none qualifies.
 func _choose_source(site: Dictionary, committed_items: Dictionary) -> Dictionary:
 	for entry in (site["required_materials"] as Array):
 		var kind := String(entry["item"])

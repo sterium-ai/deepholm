@@ -1,22 +1,12 @@
 class_name CommandRouter
 extends RefCounted
 
-## WorldState's command boundary: validates the envelope, dispatches each
-## command type to its family's handler under commands/handlers/, and lets
-## EventLog build the applied/rejected envelopes. Plain data, no
-## scene/node/RNG/wall-clock dependency; sibling modules are injected, every
-## WorldState rule it needs arrives as a Callable.
-##
+## The command boundary: validates the envelope and dispatches each type to its handler
+## under commands/handlers/.
 ## Invariants:
-## - Validation runs in the order commands/README.md documents (envelope
-##   shape, payload value types, tick match, dispatch); the first failing
-##   check produces the rejection.
-## - preview() never mutates: validate_command(command, false) and
-##   EventLog.pure_rejection() build the rejection apply() would return without
-##   appending a command_rejected event or advancing the event sequence.
-## - preview() runs the exact pre-mutation check apply()'s handler consults
-##   (CommandChecks, ConstructionSystem.check_construction_command()/
-##   classify_build_line_command()), so a hover preview and apply() always agree.
+## - Validation follows commands/README.md's order; the first failing check rejects.
+## - preview() never mutates (no event, no sequence draw) and runs the same checks as
+##   apply()'s handlers, so a preview and apply() always agree.
 
 const SeededClockType = preload("res://scripts/core/seeded_clock.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
@@ -30,8 +20,7 @@ const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incide
 var _clock: SeededClockType
 var _event_log: EventLogType
 var _construction_system: ConstructionSystemType
-## (check: Callable, command: Dictionary) -> Dictionary: runs one CommandChecks
-## static check against the world, i.e. check.call(world, command).
+## (rule, command) -> Dictionary: runs one CommandChecks rule against the world.
 var _check: Callable
 var _orders: OrderHandlerType
 var _construction: ConstructionHandlerType
@@ -52,8 +41,7 @@ func _init(clock: SeededClockType, event_log: EventLogType, construction_system:
 	_actors = actors
 	_incidents = incidents
 
-## Read-only dry run of apply()'s own rules: state_hash() and the event log are
-## unchanged by a call, accepted or rejected.
+## Read-only dry run of apply(): state_hash() and the event log are unchanged.
 func preview(command) -> Dictionary:
 	var validation := validate_command(command, false)
 	if not validation["ok"]:
@@ -118,8 +106,7 @@ func apply(command) -> Dictionary:
 				{"detail": "unknown_command_type", "type": command["type"]}
 			)
 
-## record=false (preview() only) builds every rejection through
-## EventLog.pure_rejection(): no command_rejected event, no sequence draw.
+## record=false (preview() only) rejects through EventLog.pure_rejection().
 func validate_command(command, record: bool = true) -> Dictionary:
 	if typeof(command) != TYPE_DICTIONARY:
 		return _event_log.reject(null, null, "invalid_envelope", {"detail": "command_not_dictionary"}, record)

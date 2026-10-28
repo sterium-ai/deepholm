@@ -5,12 +5,7 @@ extends RefCounted
 ## flee exclusions, approach targets, excluded tool candidates) and of the calendar and
 ## incident continuation state, JSON-safe both ways with sorted keys.
 
-## RescueGiver.get_job_victims()'s own job_id -> victim_id association,
-## encoded as an array of {jobId, victimId} entries: unlike _encode_paused_jobs()'s colonist-keyed shape, this map is keyed
-## by job id (a colonist can be the victim of at most one live rescue job, but
-## nothing here depends on that -- job id is what's actually unique), so
-## sorting by job id gives the same deterministic encoding order every other
-## keyed-map encoder here uses.
+## RescueGiver's job_id -> victim_id map as [{jobId, victimId}], sorted by job id.
 static func _encode_rescue_victim_assignments(job_victims: Dictionary) -> Array:
 	var keys := job_victims.keys()
 	keys.sort()
@@ -25,11 +20,7 @@ static func _decode_rescue_victim_assignments(list: Array) -> Dictionary:
 		decoded[String(entry["jobId"])] = String(entry["victimId"])
 	return decoded
 
-## Every decoded job still queued or active (a terminal one is already
-## resolved and carries no live RescueGiver association) whose kind is
-## "rescue" -- decode()'s own shared input for both
-## RescueGiver.restore_victim_assignments() and _rescue_pending_from_scheduler()
-## below.
+## The decoded queued/active "rescue" jobs (a terminal one has no live association).
 static func _surviving_rescue_jobs(jobs: Array[Dictionary]) -> Array[Dictionary]:
 	var rescue_jobs: Array[Dictionary] = []
 	for job in jobs:
@@ -37,13 +28,8 @@ static func _surviving_rescue_jobs(jobs: Array[Dictionary]) -> Array[Dictionary]
 			rescue_jobs.append(job)
 	return rescue_jobs
 
-## rescuer_id -> job_id for every surviving rescue job, read straight off the
-## scheduler's own restrict_to instead of any persisted RescueGiver field
-## (see decode()'s own comment): GlobalAssignment.restrict_to_for() covers a
-## job that has activated at least once (active now, or queued again after a
-## need/combat suspension); a rescue job saved mid-search and never yet
-## activated has no such entry, so this falls back to scanning the
-## scheduler's own waiting list for the same job's restrict_to directly.
+## rescuer_id -> job_id from the scheduler's restrict_to, never a persisted field: a job that
+## has activated is in restrict_to_for(); one saved mid-search is found in the waiting list.
 static func _rescue_pending_from_scheduler(rescue_jobs: Array[Dictionary], scheduler) -> Dictionary:
 	var waiting: Array[Dictionary] = scheduler.get_waiting()
 	var pending: Dictionary = {}
@@ -59,18 +45,9 @@ static func _rescue_pending_from_scheduler(rescue_jobs: Array[Dictionary], sched
 			pending[rescuer_id] = job_id
 	return pending
 
-## world._combat_giver's own per-actor excluded-flee-destination set
-## (CombatGiver._blocked_targets, actor_id -> Dictionary[Vector2i, true]):
-## unlike `_fleeing`, this cannot be reconstructed from the scheduler's own
-## queued/active jobs after a load (a cancelled blocked flee job that
-## produced an exclusion is already gone from the queue by the time it is
-## excluded), so it must round-trip explicitly. Optional on read
-## (SaveIO._validate_state()) -- absent on any save written before this
-## round, decoded as no exclusions, exactly like "health" is optional on an
-## individual objects entry. Sorted actor keys give a deterministic encoding
-## order; each actor's own tiles are emitted in the live Dictionary's
-## insertion order (never re-sorted), which is itself deterministic given
-## identical prior ticks -- matching every other keyed-map encoder here.
+## CombatGiver's per-actor excluded flee destinations: the cancelled flee job that caused one
+## is gone after a load, so they must round-trip. Optional on read (absent = none). Sorted by
+## actor; each actor's tiles in their (deterministic) insertion order, never re-sorted.
 static func _encode_combat_blocked_targets(blocked: Dictionary) -> Array:
 	var keys := blocked.keys()
 	keys.sort()
@@ -92,14 +69,8 @@ static func _decode_combat_blocked_targets(list: Array) -> Dictionary:
 		decoded[String(entry["actorId"])] = tiles
 	return decoded
 
-## ApproachGiver.get_job_targets()'s own job_id -> {kind, id/tile} association,
-## encoded as an array of {jobId, kind, actorId} or {jobId, kind, tile}
-## entries (mirroring _encode_rescue_victim_assignments()'s job-keyed shape):
-## an object target has no living record to re-scan after a load (unlike an
-## actor target, which still exists to look up but is not re-derived from it
-## either, for the same "no per-job field" reason rescue's own victim
-## association is never re-derived). Sorted job-id keys give a deterministic
-## encoding order.
+## ApproachGiver's job_id -> target as [{jobId, kind, actorId | tile}], sorted by job id;
+## persisted because an object target has no live record to re-scan after a load.
 static func _encode_approach_job_targets(job_targets: Dictionary) -> Array:
 	var keys := job_targets.keys()
 	keys.sort()
@@ -123,9 +94,7 @@ static func _decode_approach_job_targets(list: Array) -> Dictionary:
 			decoded[String(entry["jobId"])] = {"kind": "object", "tile": StateCodec._decode_tile(entry["tile"])}
 	return decoded
 
-## Every decoded job still queued or active whose kind is "approach" -- a
-## terminal one carries no live ApproachGiver association (mirrors
-## _surviving_rescue_jobs()).
+## The decoded queued/active "approach" jobs, like _surviving_rescue_jobs().
 static func _surviving_approach_jobs(jobs: Array[Dictionary]) -> Array[Dictionary]:
 	var approach_jobs: Array[Dictionary] = []
 	for job in jobs:
@@ -133,11 +102,8 @@ static func _surviving_approach_jobs(jobs: Array[Dictionary]) -> Array[Dictionar
 			approach_jobs.append(job)
 	return approach_jobs
 
-## world._calendar_alerts_fired is a set of calendar window ids (Dictionary
-## keys -> true) that have already fired their one-shot alert for the current
-## occurrence (ADR 008 consequence 6: already_fired is caller-tracked, not
-## calendar-owned). Sorted for deterministic encoding order, matching every
-## other keyed-map encoder here.
+## The set of calendar window ids that already fired this occurrence (ADR 008: caller-tracked),
+## sorted.
 static func _encode_calendar_alerts(fired: Dictionary) -> Dictionary:
 	var keys := fired.keys()
 	keys.sort()
@@ -149,12 +115,7 @@ static func _decode_calendar_alerts(field: Dictionary) -> Dictionary:
 		decoded[String(window_id)] = true
 	return decoded
 
-## ToolFetchToil's own _excluded map (see tool_fetch_toil.gd's get_excluded()/
-## restore_excluded()): job_id -> Array[String] of tool ids already proven
-## unreachable within that job's current fetch attempt. Sorted job-id keys
-## give a deterministic encoding order, matching every other keyed-map
-## encoder here; a job id with an empty list is simply omitted (decode()'s
-## own default read is an empty array either way).
+## ToolFetchToil's job_id -> unreachable tool ids, sorted by job id; empty lists are omitted.
 static func _encode_tool_fetch_excluded(excluded: Dictionary) -> Array:
 	var keys := excluded.keys()
 	keys.sort()
@@ -175,11 +136,8 @@ static func _decode_tool_fetch_excluded(list: Array) -> Dictionary:
 		decoded[String(entry["jobId"])] = ids
 	return decoded
 
-## IncidentScheduler's own cooldown-until-day map, last-processed day, and its
-## independent seeded RNG stream (ADR 004 "WorldState's diagnostic hash
-## includes this continuation state") -- read directly off IncidentScheduler's
-## fields since that file exposes no accessor, mirroring how StateCodec.encode() reads the
-## world RNG directly rather than through a getter.
+## IncidentScheduler's cooldowns, last processed day and RNG (ADR 004: hashed continuation
+## state), read from its fields since it has no accessor.
 static func _encode_incident_scheduler(incidents: IncidentScheduler) -> Dictionary:
 	return {
 		"cooldownUntilDay": SchedulingCodec._encode_int_dict(incidents._cooldown_until_day),
