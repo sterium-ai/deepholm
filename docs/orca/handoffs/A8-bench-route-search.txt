@@ -1,0 +1,21 @@
+bench_route_search: commit=a8613c9 godot=4.7.2-stable (official) os=Windows cpu=AMD Ryzen 7 9800X3D 8-Core Processor threads=16
+bench_route_search: generated/passability() from=(225, 31) to=(225, 23) path_distance=8 status=found path_len=9 expansions=8 resume_calls(ticks)=1 time=0.09ms us/expansion=11.25 snapshot_json=1017B
+bench_route_search: generated/passability() from=(225, 31) to=(224, 0) path_distance=32 status=found path_len=33 expansions=50 resume_calls(ticks)=1 time=0.34ms us/expansion=6.90 snapshot_json=4159B
+bench_route_search: generated/passability() from=(225, 31) to=(192, 0) path_distance=64 status=found path_len=65 expansions=64 resume_calls(ticks)=1 time=0.52ms us/expansion=8.05 snapshot_json=7560B
+bench_route_search: generated/passability() from=(225, 31) to=(128, 0) path_distance=128 status=found path_len=129 expansions=167 resume_calls(ticks)=3 time=1.25ms us/expansion=7.49 snapshot_json=15661B
+bench_route_search: generated/passability() from=(225, 31) to=(0, 0) path_distance=256 status=found path_len=257 expansions=266 resume_calls(ticks)=5 time=2.22ms us/expansion=8.34 snapshot_json=26958B
+bench_route_search: open/array-cost from=(0, 0) to=(8, 0) path_distance=8 status=found path_len=9 expansions=8 resume_calls(ticks)=1 time=0.05ms us/expansion=6.25 snapshot_json=579B
+bench_route_search: open/array-cost from=(0, 0) to=(32, 0) path_distance=32 status=found path_len=33 expansions=32 resume_calls(ticks)=1 time=0.17ms us/expansion=5.19 snapshot_json=2148B
+bench_route_search: open/array-cost from=(0, 0) to=(64, 0) path_distance=64 status=found path_len=65 expansions=64 resume_calls(ticks)=1 time=0.34ms us/expansion=5.38 snapshot_json=4260B
+bench_route_search: open/array-cost from=(0, 0) to=(128, 0) path_distance=128 status=found path_len=129 expansions=128 resume_calls(ticks)=2 time=0.74ms us/expansion=5.80 snapshot_json=8709B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 1) path_distance=256 status=found path_len=257 expansions=256 resume_calls(ticks)=4 time=2.23ms us/expansion=8.70 snapshot_json=27102B
+bench_route_search: open/array-cost from=(0, 0) to=(255, 129) path_distance=384 status=found path_len=385 expansions=384 resume_calls(ticks)=6 time=2.71ms us/expansion=7.04 snapshot_json=41814B
+bench_route_search: open/unreachable from=(0, 0) to=(200, 200) path_distance=-1 status=unreachable path_len=0 expansions=65531 resume_calls(ticks)=1024 time=689.84ms us/expansion=10.53 snapshot_json=2124355B
+bench_route_search: regions full build (generated map, TileGrid.get_regions()) time=3.90ms
+bench_route_search: regions full build (open grid, array callable) time=16.08ms
+bench_route_search: regions on_passability_changed (block one tile mid open 256x256 region) time=62.89ms
+bench_route_search: regions on_passability_changed (unblock it again) time=0.02ms
+bench_route_search: rooms full build (generated map, TileGrid.get_rooms()) time=249.82ms
+bench_route_search: rooms on_passability_changed at (225, 31) (no passability change, open area) time=0.02ms
+bench_route_search: done
+bench_route_search: wall=3s exit=0
