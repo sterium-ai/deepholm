@@ -2,8 +2,8 @@ class_name ItemTable
 extends RefCounted
 
 ## WorldState's stackable ground items: the item map and its id counter, the
-## per-item faction map, the per-tile ground-berries counters, and dig's find
-## roll (ADR 026) with its own injected seeded RNG. Identity-bearing tools
+## per-item faction map, the per-tile ground-berries counters, and the work
+## find roll (ADR 026, ADR 051) with its own injected seeded RNG. Identity-bearing tools
 ## (axe/pick) live in tool_item_store.gd instead. Plain data, no
 ## scene/node/wall-clock dependency; every WorldState rule it needs arrives as
 ## a Callable.
@@ -22,9 +22,10 @@ extends RefCounted
 ##   nothing during a tick).
 ## - ground_berries_factions is persisted with ground_berries (one factionId
 ##   per groundBerries entry, ADR 047), so a load restores it.
-## - pending_dig_finds is staged during a tick and drained by
-##   resolve_dig_finds() in ascending job-id order, so the find sequence never
-##   depends on colonist iteration order. Always empty between ticks; not saved.
+## - pending_dig_finds ({job_id, kind, x, y}; any kind with a find_table, not
+##   only dig) is staged during a tick and drained by resolve_dig_finds() in
+##   ascending job-id order, so the find sequence never depends on colonist
+##   iteration order. Always empty between ticks; not saved.
 ## - roll draws exactly one randi_range() per staged find, whatever the outcome.
 ## - _ids_at (tile -> ground item ids, A4) is trusted only between begin_tick() and
 ##   end_tick(): WorldState.tick() brackets itself with them, and inside a tick every
@@ -198,16 +199,11 @@ func place_new_ground_item(kind: String, count: int, x: int, y: int) -> String:
 	_place_ground_item(item_id, kind, count, x, y)
 	return item_id
 
-func spawn_wood_item(x: int, y: int) -> void:
-	place_new_ground_item("wood", 1, x, y)
-
-## One unit of any content/items.json kind (ADR 026: dig's sand and finds, trade goods).
+## One unit of any content/items.json id: every work yield and find (ADR 051), trade goods.
 func spawn_item(kind: String, x: int, y: int) -> void:
 	place_new_ground_item(kind, 1, x, y)
 
-func spawn_stone_item(x: int, y: int) -> void:
-	place_new_ground_item("stone", 1, x, y)
-
+## One unit on the tile's ground-berry counter: berries are not an item (ADR 051).
 func spawn_berries_item(x: int, y: int) -> void:
 	var key := _ground_berries_key(x, y)
 	ground_berries[key] = int(ground_berries.get(key, 0)) + 1
@@ -303,6 +299,19 @@ func remove_stockpiled_item_unit(item_id: String) -> Vector2i:
 		_fail_haul_jobs_referencing_item.call(item_id)
 	return tile
 
+## jobs.json's effects block for kind (ADR 051), {} for a kind without one.
+func work_effects(kind: String) -> Dictionary:
+	var effects: Dictionary = _content.get_entry("jobs", kind).get("effects", {})
+	return effects
+
+## Where a yield of kind lands: effects.yields.placement "adjacent" uses
+## dig_item_placement(), "target" the tile itself.
+func yield_placement(kind: String, x: int, y: int) -> Vector2i:
+	var yields: Dictionary = work_effects(kind).get("yields", {})
+	if yields.get("placement", "") == "adjacent":
+		return dig_item_placement(x, y)
+	return Vector2i(x, y)
+
 ## ADR 026's placement rule: the first passable, non-trench orthogonal
 ## neighbour in row-major order (N, W, E, S), else (x, y) itself.
 func dig_item_placement(x: int, y: int) -> Vector2i:
@@ -311,13 +320,14 @@ func dig_item_placement(x: int, y: int) -> Vector2i:
 			return neighbor
 	return Vector2i(x, y)
 
-## Stages one dig completion for this tick's resolve_dig_finds().
-func stage_dig_find(job_id: String, x: int, y: int) -> void:
-	pending_dig_finds.append({"job_id": job_id, "x": x, "y": y})
+## Stages one completion of a kind with a find_table for this tick's resolve_dig_finds().
+func stage_dig_find(job_id: String, kind: String, x: int, y: int) -> void:
+	pending_dig_finds.append({"job_id": job_id, "kind": kind, "x": x, "y": y})
 
-## dig's find_table (content/jobs.json): the rolled item id, or "" for no find.
-func _roll_dig_find() -> String:
-	var find_table: Array = _content.get_entry("jobs", "dig").get("yields", {}).get("find_table", [])
+## kind's effects.yields.find_table (content/jobs.json): the rolled item id, or "" for no find.
+func _roll_dig_find(kind: String) -> String:
+	var yields: Dictionary = work_effects(kind).get("yields", {})
+	var find_table: Array = yields.get("find_table", [])
 	var roll := dig_find_random.randi_range(0, 99)
 	var cumulative := 0
 	for entry in find_table:
@@ -336,8 +346,11 @@ func resolve_dig_finds() -> void:
 	pending.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(String(a["job_id"]).trim_prefix("job_")) < int(String(b["job_id"]).trim_prefix("job_")))
 	for entry in pending:
-		var find_item := _roll_dig_find()
+		var kind: String = entry["kind"]
+		var find_item := _roll_dig_find(kind)
 		if find_item.is_empty():
 			continue
-		var at := dig_item_placement(int(entry["x"]), int(entry["y"]))
+		var x: int = entry["x"]
+		var y: int = entry["y"]
+		var at := yield_placement(kind, x, y)
 		spawn_item(find_item, at.x, at.y)

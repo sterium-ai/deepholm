@@ -38,13 +38,7 @@ const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
 const CombatGiverType = preload("res://scripts/core/combat/combat_giver.gd")
 const ApproachGiverType = preload("res://scripts/core/combat/approach_giver.gd")
 
-const TILE_ROCK := ContentRegistryType.TILE_ROCK
-const TILE_SOIL := ContentRegistryType.TILE_SOIL
-const TILE_FLOOR := ContentRegistryType.TILE_FLOOR
-const TILE_PLOWED_SOIL := ContentRegistryType.TILE_PLOWED_SOIL
-const TILE_PLANTED := ContentRegistryType.TILE_PLANTED
 const TILE_WATER := ContentRegistryType.TILE_WATER
-const TILE_TRENCH := ContentRegistryType.TILE_TRENCH
 
 ## Comparison-only stand-in for "unreachable" (hands-filling rules): _route_cost returns
 ## -1, and _toil_on_pick_up_success() needs a total order against a real cost.
@@ -352,8 +346,9 @@ func _toil_on_deposit_success(job_id: String) -> void:
 		drop_carried_item_from(colonist)
 	_finish_job.call(job_id, "complete_job")
 
-## Applies the kind's completion effect, then finishes the job. dig/mine/till/sow re-check
-## their tile: a released reservation can let another order complete there first.
+## Applies the kind's completion effect, then finishes the job: its jobs.json effects block
+## (apply_work_effects(), ADR 051), else the owning system's rule below. A tile check re-runs
+## here: a released reservation can let another order complete there first.
 ## Dirty-cell/region/room hooks fire only when the tile kind actually changed.
 func _toil_on_work_complete(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
@@ -362,47 +357,17 @@ func _toil_on_work_complete(job_id: String) -> void:
 	if _trench.trap_on_work_complete(job_id, job, target):
 		return
 	var tile_before: String = _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)]
+	var kind: String = job["kind"]
+	var effects := _item_table.work_effects(kind)
+	if not effects.is_empty():
+		var refusal := apply_work_effects(effects, job_id, kind, target, _tile_grid, _object_table, _item_table)
+		if not refusal.is_empty():
+			var reason: String = refusal["reason"]
+			var remedy: String = refusal["remedy"]
+			_scheduler.queue.set_pending_fail_reason(job_id, reason, remedy)
+			_finish_job.call(job_id, "fail_job")
+			return
 	match job["kind"]:
-		"dig":
-			if _tile_grid.get_tile(target.x, target.y) != TILE_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job.call(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_TRENCH
-			var sand_at := _item_table.dig_item_placement(target.x, target.y)
-			_item_table.spawn_item("sand", sand_at.x, sand_at.y)
-			_item_table.stage_dig_find(job_id, target.x, target.y)
-		"chop":
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_SOIL  # trees only grow on soil
-			_item_table.spawn_wood_item(target.x, target.y)
-		"mine":
-			if _tile_grid.get_tile(target.x, target.y) != TILE_ROCK:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job.call(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
-			_item_table.spawn_stone_item(target.x, target.y)
-		"forage":
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_FLOOR
-			_object_table.set_object(target.x, target.y, "")
-			_item_table.spawn_berries_item(target.x, target.y)
-		"till":
-			if _tile_grid.get_tile(target.x, target.y) != TILE_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job.call(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLOWED_SOIL
-		"sow":
-			if _tile_grid.get_tile(target.x, target.y) != TILE_PLOWED_SOIL:
-				_scheduler.queue.set_pending_fail_reason(job_id, "invalid_target", "resubmit_order")
-				_finish_job.call(job_id, "fail_job")
-				return
-			if not _item_table.remove_one_item_of_kind("seed"):
-				# Seed was consumed by another sow/haul after this job committed.
-				_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
-				_finish_job.call(job_id, "fail_job")
-				return
-			_tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] = TILE_PLANTED
 		"site_work":
 			# Progress is the site's shared counter (every builder adds to it), so N builders
 			# sum; ConstructionSystem finalizes the site once it meets build_ticks.
@@ -421,7 +386,37 @@ func _toil_on_work_complete(job_id: String) -> void:
 		_tile_grid.get_regions().on_passability_changed(target.x, target.y)
 		_tile_grid.get_rooms().on_passability_changed(target.x, target.y)
 	_finish_job.call(job_id, "complete_job")
-	resolve_giver_association(job_id, String(job["kind"]))
+	resolve_giver_association(job_id, kind)
+
+## A jobs.json effects block applied at target in its fixed order (ADR 051): the tile check,
+## the consumed input, the tile transform, the cleared object, the yields at their placement,
+## then the staged find. {} once applied; else the refusal {reason, remedy}, nothing changed.
+static func apply_work_effects(effects: Dictionary, job_id: String, kind: String, target: Vector2i,
+		tile_grid: TileGridType, object_table: ObjectTableType, item_table: ItemTableType) -> Dictionary:
+	var requires_tile: String = effects.get("requires_tile", "")
+	if not requires_tile.is_empty() and tile_grid.get_tile(target.x, target.y) != requires_tile:
+		return {"reason": "invalid_target", "remedy": "resubmit_order"}
+	# The input may have gone to another order or haul after this job committed.
+	var consumes: String = effects.get("consumes", "")
+	if not consumes.is_empty() and not item_table.remove_one_item_of_kind(consumes):
+		return {"reason": "blocked_missing_input", "remedy": "resubmit_order"}
+	var set_tile: String = effects.get("set_tile", "")
+	if not set_tile.is_empty():
+		tile_grid.tiles[tile_grid.tile_index(target.x, target.y)] = set_tile
+	var clear_object: bool = effects.get("clear_object", false)
+	if clear_object:
+		object_table.set_object(target.x, target.y, "")
+	var yields: Dictionary = effects.get("yields", {})
+	for item_id: String in (yields.get("always", []) as Array):
+		var at := item_table.yield_placement(kind, target.x, target.y)
+		item_table.spawn_item(item_id, at.x, at.y)
+	var ground_berries: int = yields.get("ground_berries", 0)
+	for _unit in ground_berries:
+		var at := item_table.yield_placement(kind, target.x, target.y)
+		item_table.spawn_berries_item(at.x, at.y)
+	if yields.has("find_table"):
+		item_table.stage_dig_find(job_id, kind, target.x, target.y)
+	return {}
 
 ## Tells the giver owning job_id (NeedGiver, RescueGiver, the site's builder slot) that it
 ## resolved, wherever a job terminates outside its giver's own advance()/resolve_job().

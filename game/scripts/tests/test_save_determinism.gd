@@ -524,7 +524,7 @@ func _check_mine_save_load() -> void:
 	world._colonists.append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
 		"route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
-	world._item_table.spawn_stone_item(5, 5)
+	world._item_table.spawn_item("stone", 5, 5)
 
 	var submit := _apply(world, "mine_1", "mine", {"x": 1, "y": 0, "priority": 1})
 	var job_id := String(submit["job_id"])

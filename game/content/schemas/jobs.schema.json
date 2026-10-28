@@ -22,26 +22,38 @@
           "priority": {"type": "integer", "minimum": 0},
           "retry_base_ticks": {"type": "integer", "minimum": 1},
           "retry_cap_ticks": {"type": "integer", "minimum": 1},
-          "yields": {
+          "effects": {
             "type": "object",
-            "required": ["always", "find_table"],
             "properties": {
-              "always": {
-                "type": "array",
-                "items": {"type": "string", "minLength": 1}
-              },
-              "find_table": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                  "type": "object",
-                  "required": ["item", "weight"],
-                  "properties": {
-                    "item": {"type": ["string", "null"], "minLength": 1},
-                    "weight": {"type": "integer", "minimum": 0}
+              "requires_tile": {"type": "string", "minLength": 1},
+              "consumes": {"type": "string", "minLength": 1},
+              "set_tile": {"type": "string", "minLength": 1},
+              "clear_object": {"type": "boolean"},
+              "yields": {
+                "type": "object",
+                "required": ["placement"],
+                "properties": {
+                  "placement": {"type": "string", "enum": ["target", "adjacent"]},
+                  "always": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 1}
                   },
-                  "additionalProperties": false
-                }
+                  "ground_berries": {"type": "integer", "minimum": 1},
+                  "find_table": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "required": ["item", "weight"],
+                      "properties": {
+                        "item": {"type": ["string", "null"], "minLength": 1},
+                        "weight": {"type": "integer", "minimum": 0}
+                      },
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

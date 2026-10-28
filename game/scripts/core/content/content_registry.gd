@@ -115,9 +115,9 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 		_fail(ERROR_DANGLING_REFERENCE, cross_check["message"], cross_check["file"])
 		return
 
-	var job_yields_check := _check_job_yields(raw_by_kind)
-	if not job_yields_check["ok"]:
-		_fail(ERROR_SCHEMA_VIOLATION, job_yields_check["message"], job_yields_check["file"])
+	var job_effects_error: Array[String] = _check_job_effects(raw_by_kind)
+	if not job_effects_error.is_empty():
+		_fail(job_effects_error[0], job_effects_error[1], "jobs.json")
 		return
 
 	var actor_tunables_check := _check_actor_component_tunables(raw_by_kind)
@@ -501,10 +501,10 @@ func _enum_has(options: Array, value: Variant) -> bool:
 
 ## A schema's "type" may be an array of type names (e.g. ["string", "null"]),
 ## standard JSON Schema for "this field is one of several primitive shapes" --
-## used by jobs.schema.json's yields.find_table[].item, which is either an
+## used by jobs.schema.json's effects.yields.find_table[].item, which is either an
 ## item id string or null (a bare "item": {} schema would silently accept
 ## any JSON value, so a wrong-typed item would only be caught later, by
-## _check_references(), and misreported as a dangling reference instead of a
+## _check_job_effects(), and misreported as a dangling reference instead of a
 ## structural violation). value passes when it matches
 ## at least one option; sibling constraints (minLength, minimum, ...) are
 ## re-checked per option against a duplicated schema, so they only apply to
@@ -574,22 +574,6 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 			if not ToilExecutorType.is_known_toil(String(toil)):
 				return {"ok": false, "file": "jobs.json",
 					"message": "job '%s' declares unknown toil '%s'" % [job_kind, toil]}
-		if job.has("yields"):
-			var yields: Dictionary = job["yields"]
-			for always_item in (yields.get("always", []) as Array):
-				var always_id := String(always_item)
-				if not item_kind_by_id.has(always_id):
-					return {"ok": false, "file": "jobs.json",
-						"message": "job '%s' yields.always names an unknown item id '%s'" % [job_kind, always_id]}
-			for find_entry in (yields.get("find_table", []) as Array):
-				var find_dict: Dictionary = find_entry
-				var item_raw: Variant = find_dict.get("item")
-				if typeof(item_raw) == TYPE_NIL:
-					continue
-				var find_id: String = item_raw
-				if not item_kind_by_id.has(find_id):
-					return {"ok": false, "file": "jobs.json",
-						"message": "job '%s' yields.find_table names an unknown item id '%s'" % [job_kind, find_id]}
 
 	for need in (raw_by_kind["needs"]["needs"] as Array):
 		var need_kind := String(need.get("kind", "?"))
@@ -661,28 +645,40 @@ func _check_references(raw_by_kind: Dictionary) -> Dictionary:
 
 	return {"ok": true}
 
-## Structural validation of a job's optional yields.find_table
-## (docs/decisions/026-trench-trapped-actor-and-rescue.md): each entry's weight
-## is already a non-negative integer per jobs.schema.json's "integer"/
-## "minimum: 0", but the table's weights summing to exactly 100 is a
-## cross-field arithmetic rule the minimal JSON Schema subset (_validate_node)
-## cannot express, so it is checked here instead, after _check_references()
-## has already confirmed every named item id resolves. A job with no
-## "yields" field (every kind but "dig" today) is skipped entirely.
-func _check_job_yields(raw_by_kind: Dictionary) -> Dictionary:
-	for job in (raw_by_kind["jobs"]["jobs"] as Array):
-		var job_kind := String(job.get("kind", "?"))
-		if not job.has("yields"):
+## ADR 051 work effects: an unknown tile or item id is a dangling_reference; no "work" toil or
+## find weights not 100, a schema_violation (yields.placement is the schema's enum).
+func _check_job_effects(raw_by_kind: Dictionary) -> Array[String]:
+	var known: Dictionary = {}
+	for kind: String in ["tiles", "items"]:
+		for entry: Dictionary in (raw_by_kind[kind][kind] as Array):
+			var entry_id: String = entry["id"]
+			known[kind + ":" + entry_id] = true
+	for job: Dictionary in (raw_by_kind["jobs"]["jobs"] as Array):
+		var effects: Dictionary = job.get("effects", {})
+		if effects.is_empty():
 			continue
-		var yields: Dictionary = job["yields"]
+		var bad := "job '%s' effects" % [job["kind"]]
+		if not (job["toils"] as Array).has("work"):
+			return [ERROR_SCHEMA_VIOLATION, bad + " need a 'work' toil"]
+		for field: String in ["requires_tile", "set_tile"]:
+			var tile_id: String = effects.get(field, "")
+			if not tile_id.is_empty() and not known.has("tiles:" + tile_id):
+				return [ERROR_DANGLING_REFERENCE, bad + ".%s names an unknown tile id '%s'" % [field, tile_id]]
+		var yields: Dictionary = effects.get("yields", {})
+		var named: Array = (yields.get("always", []) as Array).duplicate()
+		named.append_array([effects["consumes"]] if effects.has("consumes") else [])
 		var total := 0
-		for find_entry in (yields.get("find_table", []) as Array):
-			var find_dict: Dictionary = find_entry
-			total += int(find_dict.get("weight", 0))
-		if total != 100:
-			return {"ok": false, "file": "jobs.json",
-				"message": "job '%s' yields.find_table weights must sum to 100, got %d" % [job_kind, total]}
-	return {"ok": true}
+		for find_entry: Dictionary in (yields.get("find_table", []) as Array):
+			var weight: int = find_entry["weight"]
+			total += weight
+			if typeof(find_entry["item"]) == TYPE_STRING:
+				named.append(find_entry["item"])
+		for item_id: String in named:
+			if not known.has("items:" + item_id):
+				return [ERROR_DANGLING_REFERENCE, bad + " name an unknown item id '%s'" % item_id]
+		if yields.has("find_table") and total != 100:
+			return [ERROR_SCHEMA_VIOLATION, bad + ".yields.find_table weights must sum to 100, got %d" % total]
+	return []
 
 ## Per-component tunable validation (docs/decisions/012-actors-and-components.md):
 ## for every actor definition, every declared component's own validate(tunables)

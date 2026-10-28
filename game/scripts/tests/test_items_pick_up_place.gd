@@ -252,8 +252,8 @@ func _check_save_load_preserves_next_item_id_continuation() -> void:
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
 	_expect(restored._item_table.next_item_id == 7, "restore must preserve the source's next_item_id counter")
 
-	world._item_table.spawn_wood_item(9, 9)
-	restored._item_table.spawn_wood_item(9, 9)
+	world._item_table.spawn_item("wood", 9, 9)
+	restored._item_table.spawn_item("wood", 9, 9)
 	_expect(world._item_table.items.has("item_7") and restored._item_table.items.has("item_7"),
 		"the source and its restore must generate the same next item id after loading")
 	_expect(world._item_table.next_item_id == restored._item_table.next_item_id,

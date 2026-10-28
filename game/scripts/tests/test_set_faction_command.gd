@@ -3,8 +3,8 @@ extends SceneTree
 ## Exercises WorldState's set_faction debug command, mirroring
 ## test_labour_table.gd's test style for _apply_set_labour_command, the
 ## shape/validation pattern set_faction follows exactly. Also covers the
-## faction_id default ("colony") on a chopped/foraged item -- world_state.gd's
-## _spawn_wood_item()/_spawn_berries_item(), called directly the same way
+## faction_id default ("colony") on a chopped/foraged item -- ItemTable's
+## spawn_item("wood")/spawn_berries_item(), called directly the same way
 ## test_object_storage.gd calls _set_object() directly, since the toil
 ## pipeline that reaches them is already exercised elsewhere.
 
@@ -153,13 +153,13 @@ func _check_set_faction_persists_for_non_worker_actor() -> void:
 	_expect(world._find_colonist("wolf_test")["factionId"] == "wildlife",
 		"tick() must not reset a non-worker actor's factionId")
 
-## _spawn_wood_item() is chop's on_work_complete effect (world_state.gd); the
+## spawn_item("wood") is chop's on_work_complete effect (jobs.json, ADR 051); the
 ## toil pipeline that reaches it is exercised by test_toils_dig_chop_regression.gd.
 func _check_chopped_item_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(8, 10)
-	world._item_table.spawn_wood_item(5, 5)
+	world._item_table.spawn_item("wood", 5, 5)
 	var items := world.get_items()
 	_expect(items.size() == 1 and items[0]["faction_id"] == "colony",
 		"a chopped wood item must default to faction_id 'colony'")

@@ -494,7 +494,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	_expect(active, "setup: the mine job must reach active status before saving")
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_ROCK, "setup: the target tile must still be rock, not yet mined")
 
-	world._item_table.spawn_stone_item(5, 5)
+	world._item_table.spawn_item("stone", 5, 5)
 	var stone_item_id := ""
 	for item in world.get_items():
 		if String(item["kind"]) == "stone":

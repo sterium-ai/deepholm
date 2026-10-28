@@ -672,7 +672,7 @@ one.
 - **Non-goals:** loading a save onto different packs with automatic repair; a mod browser UI;
   hot-reloading packs.
 
-#### A14 — Data-driven work effects · `todo` · after R11
+#### A14 — Data-driven work effects · `review (antonelmejor50-hub/a14-data-driven-work-effects)` · after R11
 
 - **Goal:** `jobs.json` gains an `effects` block (tile transform, always-yields, find table).
   `_toil_on_work_complete()`'s per-kind `match` for dig, chop, mine, forage, till and sow is
