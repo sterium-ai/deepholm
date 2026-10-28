@@ -287,16 +287,19 @@ func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_
 ## _restore_reroutes() must reconstruct a drop_tool leg's
 ## in-flight search with the same plain passability the live toil always
 ## uses, not job.target's own target-tile exception -- proven here by placing
-## the job's own impassable target directly on a full-width wall between the
-## holder and its chosen stockpile cell, the one geometry where that
-## exception would open a "shortcut" a live/direct run could never take (the live
-## search is always plain, no exception, regardless of save/load). Compares
-## state_hash() after every tick, not merely at completion, so any single
-## diverging tick fails immediately.
+## the job's own impassable target directly on a wall between the holder and
+## its chosen stockpile cell, the one geometry where that exception would open
+## a "shortcut" a live/direct run could never take (the live search is always
+## plain, no exception, regardless of save/load). Compares state_hash() after
+## every tick, not merely at completion, so any single diverging tick fails
+## immediately. A8 (ADR 054: a target in another region "is refused at once,
+## before any search"): the wall stops one tile short of the east edge, so
+## the stockpile stays in the holder's region and the plain search is a real,
+## multi-tick detour through that gap instead of being refused outright.
 func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_holder_and_stockpile() -> void:
 	var world := WorldStateType.new(266019)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
-	for x in range(0, 48):
+	for x in range(0, 47):
 		TestAccess.set_tile(world, x, 6, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "route": null, "work": null})
@@ -319,7 +322,7 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 		if route != null and route.get("rerouting") != null and String(colonist.get("held_tool", "")) == pick_id:
 			mid_search = true
 			break
-	_expect(mid_search, "the colonist's drop-tool re-route search toward the walled-off stockpile cell must still be unresolved within budget")
+	_expect(mid_search, "the colonist's drop-tool re-route search toward the stockpile cell beyond the wall must still be unresolved within budget")
 
 	if FileAccess.file_exists(SAVE_IO_TEST_PATH):
 		DirAccess.remove_absolute(SAVE_IO_TEST_PATH)
@@ -348,10 +351,10 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 			restored_completed = true
 		if direct_completed and restored_completed:
 			break
-	_expect(direct_completed, "the uninterrupted run must complete forage_1 once the drop search proves the stockpile cell unreachable")
-	_expect(restored_completed, "the SaveIO-restored run must also complete forage_1 once the drop search proves the stockpile cell unreachable")
-	_expect(String(world.get_tool_item(pick_id).get("location", {}).get("type", "")) == "ground",
-		"with the wall having no legitimate crossing, the pick must fall back to dropping on the ground, not reach the stockpile via a fake shortcut")
+	_expect(direct_completed, "the uninterrupted run must complete forage_1 once the pick is dropped")
+	_expect(restored_completed, "the SaveIO-restored run must also complete forage_1 once the pick is dropped")
+	_expect(world.get_tool_item(pick_id).get("location", {}) == {"type": "stockpile", "x": 5, "y": 9},
+		"the pick must end on the stockpile cell, reached by the only legitimate crossing (the gap at the east edge), got %s" % [world.get_tool_item(pick_id).get("location", {})])
 
 ## Reconstructing the drop leg's identity from reservation state on restore
 ## is unsound in three cases (docs/decisions/013-tool-toils.md, "Drop-leg

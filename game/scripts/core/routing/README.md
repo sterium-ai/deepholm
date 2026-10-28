@@ -13,8 +13,10 @@ not schedule, prioritize, or share budget across colonists.
 ## Inputs and per-request state
 
 Construct with `start: Vector2i`, `target: Vector2i`, a deterministic
-`cost_fn(tile: Vector2i) -> Variant`, and an inclusive `bounds_min`/
-`bounds_max` rectangle. `cost_fn` must not mutate anything and encodes the
+`cost_fn(tile: Vector2i) -> Variant`, an inclusive `bounds_min`/
+`bounds_max` rectangle and, optionally, `reachable(from, target) -> bool`
+(the region check, below) and `min_cost` (the heuristic weight, default
+`MIN_TILE_COST = 1.0`). `cost_fn` must not mutate anything and encodes the
 caller's rules (`WorldState.passability(x, y)["cost"]` for the vertical
 slice: floor/soil cost 1, a passable object's own `move_cost`, 0 for
 anything impassable); this module has no tile-type knowledge of its own.
@@ -25,6 +27,11 @@ anything impassable); this module has no tile-type knowledge of its own.
 - a number — the cost to enter that tile; a value `<= 0` means impassable, a
   positive value is the tile's movement cost (a chair costs more than a
   floor tile, for example).
+
+Every positive cost must be `>= min_cost` (asserted in debug builds); the
+content schemas make `move_cost` an integer and a cost `<= 0` impassable, so
+every enterable tile costs at least 1 and the default fits every map in the
+game. `min_cost = 0` turns the heuristic off (plain Dijkstra, see below).
 
 Bounds fix a finite search space — required so the module can eventually
 *prove* a target unreachable rather than only exhaust one call's budget.
@@ -46,40 +53,54 @@ means calling `resume()` again on the same instance.
 
 ## Determinism and tie-break
 
-The search is a bounded uniform-cost (Dijkstra-style) search over
-4-directional neighbors, using `cost_fn`'s per-tile cost as edge weight, so
-it always finds the *cheapest* path (lowest total cost), not merely the
-shortest one in tile count. Each step dequeues the not-yet-expanded tile
-with the lowest accumulated cost from the frontier. Ties — either between
-tiles at the same accumulated cost, or every tile on a uniform cost-1 map —
-are broken deterministically: neighbors of a tile are expanded in ascending
-row-major coordinate order (lowest `y` first, then lowest `x`), matching the
-row-major tile indexing used elsewhere in the simulation core, and among
-frontier tiles at equal cost the earliest-discovered tile is dequeued first.
-Because a tile's cost depends only on the tile itself (not on which neighbor
-enters it), the first predecessor to discover a given tile is always its
-cheapest predecessor, so a uniform cost-1 map's tie-break and results are
-*identical* to a plain breadth-first search, so uniform-cost callers (and
-`is_passable`-style boolean callables) get breadth-first results. Given the same `cost_fn`, `start`,
-`target`, and bounds, `resume()` calls always take the same number of calls
-and produce the same path. No randomness is used or needed; this module
+The search is a bounded A* search (ADR 054) over 4-directional neighbors,
+using `cost_fn`'s per-tile cost as edge weight and the heuristic
+`h = Manhattan distance to target × min_cost`, so it always finds the
+*cheapest* path (lowest total cost), not merely the shortest one in tile
+count, while expanding roughly the tiles along the way instead of a disc
+around the start. Each step dequeues the open tile first in this order and
+closes it:
+
+1. lowest `f = g + h` (accumulated cost plus estimate);
+2. then lowest `h` (the tile nearer the target);
+3. then the **latest** pushed (so the search follows one line across a
+   plateau of equal `f` instead of widening along all of it).
+
+Neighbors of a tile are discovered in ascending row-major coordinate order
+(lowest `y` first, then lowest `x`). The heuristic is consistent, so a closed
+tile's cost is final; an open tile whose cost drops when a cheaper neighbor
+is expanded later gets the cheaper parent and is re-pushed (the old entry is
+skipped when popped). `STATUS_FOUND` is declared when the target is
+discovered, which ADR 054 shows is still a cheapest path. Among several
+equally cheap paths the one returned is fixed by the order above, and may
+differ from the one the pre-A8 Dijkstra search returned. Given the same
+`cost_fn`, `start`, `target`, bounds and `min_cost`, `resume()` calls always
+take the same number of calls and produce the same path.
+
+With `min_cost = 0` the heuristic is 0, no cost ever improves after
+discovery and equal costs pop earliest-first: exactly the pre-A8
+uniform-cost search, which on a uniform cost-1 map is breadth-first search.
+`test_route_search_recorded.gd` keeps that mode pinned to the values recorded
+before A3. No randomness is used or needed; this module
 never calls `randi()`, reads wall-clock/engine time, or runs on
 `_process`/`_physics_process`.
 
 ## Frontier structure and snapshots
 
-The frontier is ordered by (accumulated cost, insertion order). It is kept
-as a binary min-heap of the distinct costs still waiting plus, per cost, a
-FIFO of tiles; insertion numbers only grow, so each FIFO is already in
-insertion order and the head of the cheapest FIFO is exactly the tile the
-earlier linear scan picked. Neighbors come from the constant
-`NEIGHBOR_OFFSETS` table (already row-major), so a step allocates nothing.
-`test_route_search_recorded.gd` pins paths, statuses, expansion counts and a
-mid-search `snapshot()` digest for every A0 benchmark case against values
-recorded from the linear-scan implementation.
+The frontier is a binary min-heap of entry numbers (one entry per push, in
+insertion order) compared by the order above, plus a map from each open tile
+to its live entry. Neighbors come from the constant `NEIGHBOR_OFFSETS` table
+(already row-major). `test_route_search_recorded.gd` pins paths, statuses,
+expansion counts and a mid-search `snapshot()` digest for every A0 benchmark
+case, once as Dijkstra (values recorded before A3) and once as A* (recorded
+by A8), and checks that both modes' paths cost the same;
+`test_route_astar.gd` checks the same cost equality on seeded random weighted
+maps.
 
-`snapshot()` copies the whole search (frontier in insertion order, visited,
-came_from, path) and is meant for save and hash time. `summary()` is the
+`snapshot()` copies the whole search (frontier: the open tiles in insertion
+order; visited: every discovered tile; came_from: each tile's best parent;
+path); its shape is the one it had before A8, so saves are unaffected and a
+search saved by an older build is a valid A* state to continue from. It is meant for save and hash time. `summary()` is the
 constant-size part (`start`, `target`, `status`; `MeasuredRoute` adds
 `expansions` and `resume_calls`): `ToilExecutor` keeps it on a colonist's
 `route.rerouting` while a re-route is live, and `StateCodec` writes the live
@@ -102,6 +123,21 @@ bounds or impassable needs no separate check: such a tile can never be
 enqueued as visited or matched against, so `resume()` proves it unreachable
 once the bounded search space is exhausted, exactly like any other
 unreachable target.
+
+## Region check
+
+A caller that passes `reachable(from, target) -> bool` has the request
+refused in the constructor, before the frontier is seeded, when it returns
+false: `STATUS_UNREACHABLE` with no expansion and an empty snapshot. Every
+simulation caller passes `Passability.region_reachable` (`Regions.reachable()`:
+same region, or an impassable work target with a neighbor in that region):
+`WorldState._route_search_factory()` (ToilExecutor's go_to re-routes and
+`_route_cost()`), `NeedGiver`, `RescueGiver` and `ApproachGiver`.
+`GlobalAssignment.tick()` makes the same check itself before it creates its
+search. Regions follow the colony's passability, which no faction's
+passability exceeds (only doors differ, and the colony may pass them), so the
+check never refuses a target the search could reach; it only ends a doomed
+search at once instead of after it exhausts the map.
 
 ## Searching vs. unreachable
 

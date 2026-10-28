@@ -34,6 +34,8 @@ var _source_candidates: Callable
 var _candidates_this_pass: Dictionary = {}
 var _tile_key: Callable
 var _routable_to: Callable
+## Handed to every RouteSearch: a target in another region is refused before it expands.
+var _region_reachable: Callable
 var _submit_job: Callable
 var _set_reason: Callable
 var _emit_need_unmet: Callable
@@ -56,11 +58,12 @@ var _alerted: Dictionary = {}
 ## only peeked here; JobQueue acquires on activation. claimed_targets (NeedsSystem) names
 ## targets of queued need jobs, which are not reserved until activation, so two colonists never
 ## submit the same source.
+## region_reachable is Passability.region_reachable (ADR 054); invalid means no region check.
 func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, retry_cap_ticks: int,
 		priority: int, bounds_max: Vector2i, reservation_table, claimed_targets: Callable,
 		source_candidates: Callable, tile_key: Callable, routable_to: Callable, submit_job: Callable,
 		set_reason: Callable, emit_need_unmet: Callable, interrupt_current_job: Callable,
-		resume_interrupted_job: Callable, content_registry) -> void:
+		resume_interrupted_job: Callable, content_registry, region_reachable: Callable = Callable()) -> void:
 	_need_definitions = need_definitions
 	_content = content_registry
 	_need_full = need_full
@@ -73,6 +76,7 @@ func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, 
 	_source_candidates = source_candidates
 	_tile_key = tile_key
 	_routable_to = routable_to
+	_region_reachable = region_reachable
 	_submit_job = submit_job
 	_set_reason = set_reason
 	_emit_need_unmet = emit_need_unmet
@@ -258,7 +262,7 @@ func _advance_candidate_search(colonist: Dictionary, state: Dictionary, cursor: 
 	var search: RerouteType = state.get("search")
 	if search == null:
 		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		search = RerouteType.new(start, target, _routable_to.call(target), Vector2i.ZERO, _bounds_max)
+		search = RerouteType.new(start, target, _routable_to.call(target), Vector2i.ZERO, _bounds_max, _region_reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		search.resume()

@@ -57,15 +57,23 @@ func _check_step_budget_boundary() -> void:
 	_expect(beyond_search.resume() == RouteSearchType.STATUS_FOUND, "a route one step beyond STEP_BUDGET must complete on the second call")
 
 ## On an open grid with two equally short paths between start and target,
-## the documented coordinate tie-break (ascending y, then ascending x)
-## deterministically prefers moving along the lower row first.
+## the documented tie-break deterministically picks one of them. A8, ADR 054:
+## "the open tile popped next is the first by lowest f, then lowest h, then
+## the latest insertion" and "equal-cost paths may differ": (1,0) and (0,1)
+## tie on f and h, (0,1) was discovered last (row-major neighbor order), so
+## A* goes south first. With min_cost 0 (plain Dijkstra, ascending y then
+## ascending x, earliest first) the pre-A8 path along the top row is kept.
 func _check_tie_break_on_open_grid() -> void:
 	var passable := func(_tile: Vector2i) -> bool: return true
 	var search := RouteSearchType.new(Vector2i.ZERO, Vector2i(1, 1), passable, Vector2i.ZERO, Vector2i(3, 3))
 	var status := search.resume()
 	_expect(status == RouteSearchType.STATUS_FOUND, "an open grid must find the target")
-	var expected_path: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)]
-	_expect(search.get_path() == expected_path, "the coordinate tie-break must prefer the (1,0)-then-(1,1) path over (0,1)-then-(1,1)")
+	var expected_path: Array[Vector2i] = [Vector2i(0, 0), Vector2i(0, 1), Vector2i(1, 1)]
+	_expect(search.get_path() == expected_path, "the A* tie-break (ADR 054) must prefer the (0,1)-then-(1,1) path over (1,0)-then-(1,1)")
+	var dijkstra := RouteSearchType.new(Vector2i.ZERO, Vector2i(1, 1), passable, Vector2i.ZERO, Vector2i(3, 3), Callable(), 0.0)
+	_expect(dijkstra.resume() == RouteSearchType.STATUS_FOUND, "an open grid must find the target with min_cost 0 too")
+	var dijkstra_path: Array[Vector2i] = [Vector2i(0, 0), Vector2i(1, 0), Vector2i(1, 1)]
+	_expect(dijkstra.get_path() == dijkstra_path, "the coordinate tie-break must prefer the (1,0)-then-(1,1) path over (0,1)-then-(1,1)")
 
 func _run_long_route() -> Dictionary:
 	var passable := _corridor(100)

@@ -15,6 +15,7 @@ const WorldType = preload("res://scripts/core/world_state.gd")
 ## The pick pickup and two tile-advances (4 ticks each) reach the walling
 ## tile; the re-route then needs several resume() calls in this open area.
 const MAX_TICKS := 60
+const WALL_BOTTOM_Y := 40
 
 var _failed := false
 
@@ -46,12 +47,17 @@ func _build_world() -> WorldType:
 ## Ticks until the colonist stands on (4,10), walls (5,10) (and, with_chair,
 ## puts a chair on (4,11)), ticks once so the re-route starts and resumes,
 ## then removes the chair. Returns false if the re-route is not mid-flight.
+## A8 (ADR 054: "a long walk costs a few hundred tile checks instead of
+## fifteen thousand"): A* steps around one wall tile within a single resume(),
+## so the wall is a column x = 5, y = 0..WALL_BOTTOM_Y, and the detour round
+## its foot keeps the re-route searching for several ticks.
 func _advance_to_mid_reroute(world: WorldType, with_chair: bool) -> bool:
 	for _i in MAX_TICKS:
 		world.tick()
 		var colonist := world.get_colonists()[0]
 		if colonist["x"] == 4 and colonist["y"] == 10:
-			TestAccess.object_table(world).set_object(5, 10, "wooden_wall")
+			for y in WALL_BOTTOM_Y + 1:
+				TestAccess.object_table(world).set_object(5, y, "wooden_wall")
 			if with_chair:
 				TestAccess.object_table(world).set_object(4, 11, "chair")
 			world.tick()

@@ -22,6 +22,7 @@ const ColonistSpritesType = preload("res://scripts/viewer/colonist_sprites.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const SAVE_WRITE_FLEE_DIR := "user://test-combat-save-write-flee"
 

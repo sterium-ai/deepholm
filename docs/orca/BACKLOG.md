@@ -559,7 +559,7 @@ one.
 - **Non-goals:** changing what is saved, beyond the encoding and the accumulated route
   costs that make the continuation exact; cloud saves.
 
-#### A8 — A* and region-aware routing · `todo` · after A3 · ADR (paths may change)
+#### A8 — A* and region-aware routing · `review (antonelmejor50-hub/a8-a-and-region-aware)` · after A3 · ADR (paths may change)
 
 - **Goal:** `RouteSearch` uses an admissible heuristic (Manhattan × minimum tile cost), so
   expansions grow with distance instead of distance squared. Unreachable targets are refused
@@ -572,6 +572,7 @@ one.
   map ≤ 1,500 expansions (baseline 15,462) and ≤ 25 ticks to route (baseline 242);
   determinism tests updated with the ADR quoted.
 - **Non-goals:** hierarchical pathfinding (only if A8's numbers are not enough).
+- **Coordination approved by the owner (2026-10-28, in the A8 terminal):** the owner's note held existing tests frozen while R15 was in flight; asked whether A8 could change the routing/determinism tests it necessarily breaks, the owner answered "Actualizar tests existentes ya", then confirmed R15 had landed (`691c25e`) and asked for a rebase and "the affected routing/determinism tests updated with the minimal change and the ADR quoted". Those tests, including R15's shared builders under `game/scripts/tests/support/`, are "affected tests" here; the list and the reason per test are in `docs/orca/handoffs/A8.md`.
 
 #### A9 — Viewer at 1,000 actors · `todo` · after A5/A6
 

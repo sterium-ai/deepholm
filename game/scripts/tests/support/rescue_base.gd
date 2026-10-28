@@ -14,6 +14,7 @@ const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const ReservationInvariantsType = preload("res://scripts/core/jobs/reservation_invariants.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
+const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const TRAP_TICK_BOUND := 100
 const RESCUE_TICK_BOUND := 200
@@ -53,6 +54,22 @@ func _spawn_colonist(world: WorldStateType, id: String, x: int, y: int) -> Dicti
 	colonist["factionId"] = "colony"
 	TestAccess.append_colonist(world, colonist)
 	return colonist
+
+## The two-victim recipe (victim A trapped at (1, 0), victim B walking from
+## (6, 0) to (2, 0) over its own trench at (3, 0)) needs B never to be picked
+## as A's rescuer on the way. Before A8 that held only because the rescue
+## search restarted every time B moved and could not finish between steps;
+## A* (ADR 054: "a long walk costs a few hundred tile checks instead of
+## fifteen thousand") finishes it in one tick. Rock on row y = 1 from x = 3
+## east leaves B only routes that cross a trench, which the rescue safety
+## check always rejects, so the setup no longer depends on search speed.
+## Raw tile writes: the caches and region/room maps are rebuilt.
+func _fence_victim_b_lane(world: WorldStateType) -> void:
+	for x in range(3, TestAccess.tile_grid(world).width):
+		TestAccess.set_tile(world, x, 1, WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.tile_grid(world).regions = null
+	TestAccess.tile_grid(world).rooms = null
 
 func _tick_until_trapped(world: WorldStateType, colonist: Dictionary, bound: int) -> bool:
 	for _i in bound:

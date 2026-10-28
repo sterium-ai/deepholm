@@ -539,6 +539,10 @@ func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
 func _check_two_hostiles_trapped_on_same_tile_each_get_correct_duration() -> void:
 	var world := _fresh_world(324001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
+	# A8 (ADR 054: "equal-cost paths may differ"): wolf B's route to (1, 1)
+	# ties between the trench (1, 0) and (2, 1); A*'s tie-break takes (2, 1),
+	# so rock there leaves the trench as its only cheapest way.
+	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	var wolf_a := _spawn_wolf(world, "trap_wolf_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_b", 2, 0)
 	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_a")
@@ -688,6 +692,10 @@ func _check_save_load_immediately_after_trapping_preserves_escape_duration() -> 
 func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> void:
 	var world := _fresh_world(326002)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
+	# A8 (ADR 054: "equal-cost paths may differ"): wolf B's route to (1, 1)
+	# ties between the trench (1, 0) and (2, 1); A*'s tie-break takes (2, 1),
+	# so rock there leaves the trench as its only cheapest way.
+	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	var wolf_a := _spawn_wolf(world, "trap_wolf_q_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_q_b", 2, 0)
 	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_q_a")

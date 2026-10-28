@@ -335,6 +335,30 @@ full `snapshot()`, not the summary:
   as for any other unreachable job — rerouting invents no separate release
   path.
 
+### Route search: A* and the region check (ADR 054)
+
+Every route in this document (the scheduler's travel search, go_to
+re-routes, need/rescue/approach target searches, `_route_cost()`) is a
+`RouteSearch` (`game/scripts/core/routing/README.md`). Since A8 it is an A*
+search with the heuristic Manhattan distance × the minimum tile cost (1 for
+every map the content schemas allow): it still returns a cheapest path, but
+expands tiles roughly along the way to the target instead of a disc around
+the colonist (generated map, path distance 256: 266 expansions in 5 ticks of
+route budget instead of 15,462 in 242). Among equally cheap paths it returns
+the one its fixed tie-break picks (lowest `f`, then nearest the target, then
+latest pushed; ADR 054), which may differ from the path returned before A8;
+a colonist may therefore walk a different but equally cheap route than an
+older build did for the same order.
+
+Before a search starts, its target is checked against the colony region map
+(`Passability.region_reachable`): a target in another walkable region (or an
+impassable work target with no neighbor in the start's region) is refused at
+once as unreachable, with no expansion, instead of after the search has
+exhausted the map. The scheduler already made this check before A8; every
+other caller now makes it too. A refused re-route therefore reports
+`blocked_target_unreachable` on the tick the route breaks, not after the
+search has used up its budget over many ticks.
+
 ## Tile transforms on work completion
 
 `ToilBindings._toil_on_work_complete()` applies exactly these transforms when a job's
