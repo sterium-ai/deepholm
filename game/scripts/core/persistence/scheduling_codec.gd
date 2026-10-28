@@ -4,6 +4,8 @@ extends RefCounted
 ## StateCodec's "jobs" and "scheduling" encoding: the job list, GlobalAssignment's waiting
 ## queue, cursors, pending route searches and assignments, JSON-safe both ways.
 
+const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.gd")
+
 ## site: a site_fetch/site_work job's own construction-site origin tile --
 ## job_queue.gd's own native field (attach_site()), mirroring itemId/cell's
 ## own optional shape exactly, so an in-flight wall order and an in-flight
@@ -49,9 +51,9 @@ static func _decode_jobs(jobs: Array) -> Array[Dictionary]:
 		})
 	return decoded
 
-static func _encode_scheduling(world: WorldState) -> Dictionary:
-	var scheduler: WorldState.AssignmentType = world._scheduler
-	var event_log := world._event_log.encode()
+## scheduler is GlobalAssignment (its queue included); event_log is EventLog.encode()'s
+## {queueEventSequence, eventSequence}.
+static func _encode_scheduling(scheduler: AssignmentType, event_log: Dictionary) -> Dictionary:
 	return {
 		"nextJobId": scheduler.queue.get_next_id(),
 		"jobSequence": scheduler.queue.get_sequence(),

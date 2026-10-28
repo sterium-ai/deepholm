@@ -55,7 +55,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"entities": EntityCodec._encode_entities(world._colonists, world._reroutes),
 		"inventory": {},
 		"jobs": SchedulingCodec._encode_jobs(world._scheduler.queue.get_jobs()),
-		"scheduling": SchedulingCodec._encode_scheduling(world),
+		"scheduling": SchedulingCodec._encode_scheduling(world._scheduler, world._event_log.encode()),
 		"rng": {"seed": world._random.seed, "state": world._random.state},
 		"items": item_table["items"],
 		"objects": object_table["objects"],
@@ -95,7 +95,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"approachJobTargets": GiverCodec._encode_approach_job_targets(world._approach_giver.get_job_targets()),
 		"calendarAlerts": GiverCodec._encode_calendar_alerts(world._calendar_alerts_fired),
 		"toolFetchExcluded": GiverCodec._encode_tool_fetch_excluded(world._toils.get_fetch_tool_excluded()),
-		"incidentScheduler": GiverCodec._encode_incident_scheduler(world),
+		"incidentScheduler": GiverCodec._encode_incident_scheduler(world._incidents),
 		# ADR 026: dig's own find-roll RNG continuation (ItemTable.dig_find_random),
 		# mirroring "rng" above and "incidentScheduler.rng"; when absent, ItemTable.decode()
 		# keeps the constructor's fresh seed + WorldState.DIG_FIND_SEED_SALT stream.

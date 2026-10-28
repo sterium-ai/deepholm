@@ -175,14 +175,14 @@ static func _decode_tool_fetch_excluded(list: Array) -> Dictionary:
 		decoded[String(entry["jobId"])] = ids
 	return decoded
 
-## world._incidents' own cooldown-until-day map, last-processed day, and its
+## IncidentScheduler's own cooldown-until-day map, last-processed day, and its
 ## independent seeded RNG stream (ADR 004 "WorldState's diagnostic hash
 ## includes this continuation state") -- read directly off IncidentScheduler's
-## fields since that file exposes no accessor, mirroring how encode() already reads world._random
-## directly rather than through a getter.
-static func _encode_incident_scheduler(world: WorldState) -> Dictionary:
+## fields since that file exposes no accessor, mirroring how StateCodec.encode() reads the
+## world RNG directly rather than through a getter.
+static func _encode_incident_scheduler(incidents: IncidentScheduler) -> Dictionary:
 	return {
-		"cooldownUntilDay": SchedulingCodec._encode_int_dict(world._incidents._cooldown_until_day),
-		"lastProcessedDay": world._incidents._last_processed_day,
-		"rng": {"seed": world._incidents._random.seed, "state": world._incidents._random.state},
+		"cooldownUntilDay": SchedulingCodec._encode_int_dict(incidents._cooldown_until_day),
+		"lastProcessedDay": incidents._last_processed_day,
+		"rng": {"seed": incidents._random.seed, "state": incidents._random.state},
 	}
