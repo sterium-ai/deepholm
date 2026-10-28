@@ -103,11 +103,14 @@ enforced by `_check_references()`.
 **One registry per session.** `WorldState._init()` takes an optional `content` registry and only
 builds its own when given none. `boot.gd` builds the session registry once
 (`session_content()`, from `CONTENT_PACK_ROOTS`, empty today) and passes it to the world it
-builds. `ContentRegistry.packs()` returns the applied packs in load order as frozen `{id,
+builds, including the starting tools a New Game places (`new_game_setup.gd` reads the jobs'
+`needs_tool` from that registry). `ContentRegistry.packs()` returns the applied packs in load order as frozen `{id,
 version}` entries, ready to be recorded in a save.
 
 **Not done here (follow-ups).** Persistence was out of reach while R14 resets the save schema:
 `SaveIO` validation still uses its own tile/job/need literals, saves do not record
 `packs()` yet, there is no typed error for a save whose pack is missing, and `StateCodec`,
-`SaveIO`, `SaveMigrations` and the viewer's new-game paths still build their own
-`ContentRegistry` instead of receiving the session one.
+`SaveIO`, `SaveMigrations` and the debug scenario still build their own `ContentRegistry`
+instead of receiving the session one. A loaded save and an A11 replay
+(`ReplayLog` → `WorldState.from_save_state()` → `StateCodec.decode()`) therefore rebuild the
+world on the base bundle. Task A13b in `docs/orca/BACKLOG.md` covers all of this.
