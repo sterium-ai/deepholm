@@ -162,7 +162,7 @@ Orca helper scripts, this backlog.
   wiring and input wiring move to `viewer/` modules. Under 300 lines.
 - **Acceptance:** headless boot check passes; manual run shows the same screen and tools.
 
-### R14 — Reset the save schema to v1 (after R12, before any public release) · `todo`
+### R14 — Reset the save schema to v1 (after R12, before any public release) · `review (antonelmejor50-hub/r14-reset-the-save-schema)`
 
 - **Why (owner, 2026-10-25):** 24 chained migrations and 14 frozen fixtures exist for saves
   nobody has; `save_io.gd` is 2,200 lines with a 300-line validator. Pure legacy weight.

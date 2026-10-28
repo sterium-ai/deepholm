@@ -44,8 +44,8 @@ extends RefCounted
 ## validates. Every candidate rejected along the way is reported, in trial
 ## order, with its file name and SaveIO's typed failure code/message; slots
 ## never reached because an earlier candidate already succeeded are not
-## reported. No migration logic lives here: SaveIO.read() already delegates
-## to save_migrations.gd for an older schema version.
+## reported. No migration logic lives here: SaveIO.read() delegates to
+## save_migrations.gd for an older schema version and rejects pre-release saves.
 
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
@@ -190,9 +190,8 @@ func _order_candidates_newest_first() -> Array[Dictionary]:
 ## mismatch, schema error) can still be ordered by its recorded position.
 ## Returns null when the file cannot even be parsed enough to find one (for
 ## example a truncated write), in which case callers fall back to treating
-## it as oldest. "epoch" defaults to 0 for a pre-epoch-field body (matching
-## SaveMigrations' own v19->v20 backfill) so an old save on disk from before
-## epochs existed still orders sanely against a genuinely epoch-tagged one.
+## it as oldest. "epoch" defaults to 0 when a body lacks it (a pre-release
+## save, which SaveIO.read() then rejects) so it still orders sanely.
 static func _peek_epoch_tick(path: String):
 	if not FileAccess.file_exists(path):
 		return null

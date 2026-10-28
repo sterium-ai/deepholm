@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 3207
-untyped_declaration 607
+total 2973
+untyped_declaration 523
 unsafe_property_access 0
-unsafe_method_access 272
-unsafe_call_argument 2295
+unsafe_method_access 233
+unsafe_call_argument 2184
 other 33
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -17,7 +17,7 @@ file game/scripts/core/actors/components/mover.gd 1
 file game/scripts/core/actors/components/needs.gd 16
 file game/scripts/core/actors/components/wild.gd 1
 file game/scripts/core/actors/components/worker.gd 12
-file game/scripts/core/actors/needs_system.gd 41
+file game/scripts/core/actors/needs_system.gd 38
 file game/scripts/core/actors/trench_system.gd 52
 file game/scripts/core/calendar/calendar_service.gd 9
 file game/scripts/core/combat/approach_giver.gd 87
@@ -53,18 +53,32 @@ file game/scripts/core/jobs/tool_fetch_toil.gd 48
 file game/scripts/core/jobs/tool_handover.gd 10
 file game/scripts/core/jobs/tool_matching.gd 31
 file game/scripts/core/jobs/work_progress.gd 40
-file game/scripts/core/map/passability.gd 18
-file game/scripts/core/map/regions.gd 4
-file game/scripts/core/map/rooms.gd 24
-file game/scripts/core/map/tile_grid.gd 14
+file game/scripts/core/map/passability.gd 17
+file game/scripts/core/map/regions.gd 3
+file game/scripts/core/map/rooms.gd 26
+file game/scripts/core/map/tile_grid.gd 7
 file game/scripts/core/objects/construction_site.gd 26
 file game/scripts/core/objects/construction_system.gd 125
-file game/scripts/core/objects/object_table.gd 22
+file game/scripts/core/objects/object_table.gd 23
 file game/scripts/core/objects/zone_table.gd 7
-file game/scripts/core/persistence/save_io.gd 475
+file game/scripts/core/persistence/entity_codec.gd 105
+file game/scripts/core/persistence/giver_codec.gd 41
+file game/scripts/core/persistence/save_io.gd 64
+file game/scripts/core/persistence/save_json_ints.gd 24
 file game/scripts/core/persistence/save_manager.gd 35
-file game/scripts/core/persistence/save_migrations.gd 222
-file game/scripts/core/persistence/state_codec.gd 394
+file game/scripts/core/persistence/save_migrations.gd 3
+file game/scripts/core/persistence/scheduling_codec.gd 90
+file game/scripts/core/persistence/state_codec.gd 158
+file game/scripts/core/persistence/validators/calendar_validator.gd 10
+file game/scripts/core/persistence/validators/entity_validator.gd 66
+file game/scripts/core/persistence/validators/giver_validator.gd 32
+file game/scripts/core/persistence/validators/item_validator.gd 28
+file game/scripts/core/persistence/validators/map_validator.gd 11
+file game/scripts/core/persistence/validators/object_validator.gd 85
+file game/scripts/core/persistence/validators/save_check.gd 16
+file game/scripts/core/persistence/validators/scheduling_validator.gd 78
+file game/scripts/core/persistence/validators/tool_validator.gd 35
+file game/scripts/core/persistence/validators/work_progress_validator.gd 22
 file game/scripts/core/relations/relations.gd 6
 file game/scripts/core/routing/route_search.gd 11
 file game/scripts/core/scheduling/global_assignment.gd 98
@@ -75,4 +89,4 @@ file game/scripts/core/world/event_log.gd 16
 file game/scripts/core/world/tick_pipeline.gd 14
 file game/scripts/core/world_state.gd 66
 file game/scripts/core/worldgen/world_generator.gd 97
-file game/scripts/core/worldgen/world_seeding.gd 6
+file game/scripts/core/worldgen/world_seeding.gd 4

@@ -1,7 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm vertical-slice game state",
+  "title": "Deepholm save state, deepholm-save v1",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
@@ -339,7 +340,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 27 },
+    "schemaVersion": { "type": "integer", "const": 1 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },
@@ -372,7 +373,7 @@
       "items": { "$ref": "#/$defs/object" }
     },
     "constructionSites": {
-      "description": "One record per active construction site. Optional top-level field, like combatBlockedTargets/digFindRng: absent in saves written before construction sites existed, in which case WorldState loads with no active sites, the same as a fresh world.",
+      "description": "One record per active construction site. Always written by StateCodec.encode(); optional on the wire like combatBlockedTargets/digFindRng, absent meaning no active sites, the same as a fresh world.",
       "type": "array",
       "items": { "$ref": "#/$defs/constructionSite" }
     },
@@ -416,10 +417,6 @@
     "approachJobTargets": {
       "type": "array",
       "items": { "$ref": "#/$defs/approachJobTargetEntry" }
-    },
-    "approachRetiredActors": {
-      "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
     },
     "calendarAlerts": { "$ref": "#/$defs/calendarAlerts" },
     "toolFetchExcluded": {
@@ -565,7 +562,7 @@
           "itemId", "cell", "retryAt", "backoffTicks"],
         "allOf": [
           {
-            "description": "SaveIO._valid_state()'s site-job rule (supersedes the single-worker `build` job's buildKind-carrying shape): a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' looser (optional-for-legacy) shape below.",
+            "description": "SaveIO's site-job rule: a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' optional site below.",
             "if": { "properties": { "kind": { "enum": ["site_fetch", "site_work"] } } },
             "then": {
               "required": ["site"],
@@ -594,7 +591,7 @@
           "retryAt": { "type": "integer", "minimum": 0 },
           "backoffTicks": { "type": "integer", "minimum": 0 },
           "site": {
-            "description": "site_fetch/site_work jobs only: the construction site's origin tile. Optional for backward compatibility with a same-version save written before either kind existed; a job of kind site_fetch or site_work must carry a non-null tile here (enforced by the allOf rule above, matching SaveIO).",
+            "description": "site_fetch/site_work jobs only: the construction site's origin tile. Always written by StateCodec.encode() (null on other jobs); optional on the wire, but a job of kind site_fetch or site_work must carry a non-null tile here (enforced by the allOf rule above, matching SaveIO).",
             "anyOf": [
               { "type": "null" },
               { "$ref": "#/$defs/tile" }
@@ -714,7 +711,7 @@
       }
     },
     "areaOrders": {
-      "description": "ADR 044 (schemaVersion 26): pending area_order expansions (tile by tile in acceptance order; ticks expand them first in first out). Always written by StateCodec.encode() and backfilled empty by the v25->v26 migration; optional on the wire like constructionSites, absent meaning an empty queue.",
+      "description": "ADR 044: pending area_order expansions (tile by tile in acceptance order; ticks expand them first in first out). Always written by StateCodec.encode(); optional on the wire like constructionSites, absent meaning an empty queue.",
       "type": "object",
       "additionalProperties": false,
       "required": ["nextId", "list", "created"],
