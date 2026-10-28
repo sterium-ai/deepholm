@@ -720,7 +720,7 @@ one.
   `test_viewer_text_lint.gd` and `test_text_pseudo_locale.gd`; [ADR 052](../decisions/052-localisation-ready-text.md).
   See `docs/orca/handoffs/A15.md`.
 
-#### A16 — Scenarios as content · `todo` · after R12
+#### A16 — Scenarios as content · `review (antonelmejor50-hub/a16-scenarios-as-content)` · after R12
 
 - **Goal:** a `scenarios.json` kind with a schema (map size, seed or fixed map, starting
   roster, items and objects, enabled incidents, calendar). New game builds a world from a

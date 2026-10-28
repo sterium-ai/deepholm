@@ -292,9 +292,9 @@ func _check_debug_scenario_produces_plowed_tile_and_seed_stock_via_apply_and_tic
 	for item in world.get_items():
 		if String(item["kind"]) == "seed":
 			seed_count += int(item["count"])
-	_expect(seed_count == DebugScenarioType.STARTING_SEED_COUNT,
+	_expect(seed_count == DebugScenarioType.starting_seed_count(),
 		"the debug scenario must seed a starting stock of %d seed(s), got %d"
-			% [DebugScenarioType.STARTING_SEED_COUNT, seed_count])
+			% [DebugScenarioType.starting_seed_count(), seed_count])
 
 ## The work table panel, its banner, and the
 ## till/sow buttons must stay reachable within boot.gd's actual UI, not

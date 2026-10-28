@@ -1,0 +1,35 @@
+{
+  "scenarios": [
+    {
+      "id": "new_game",
+      "label": "New game",
+      "tick_rate": 10,
+      "incidents_enabled": true,
+      "setup": [
+        {"step": "needed_tools"},
+        {"step": "per_colonist_objects", "kind": "bed"}
+      ]
+    },
+    {
+      "id": "debug",
+      "label": "Debug scenario",
+      "seed": 20260915,
+      "map": {"width": 48, "height": 48},
+      "tick_rate": 10,
+      "incidents_enabled": true,
+      "setup": [
+        {"step": "object_rows", "seed_offset": 173, "rows": [
+          {"name": "wall", "anchor": "clearing_bottom", "offset": 0, "door": "door",
+            "objects": [{"kind": "wooden_wall", "count": 6}]},
+          {"name": "furniture", "anchor": "clearing_top", "offset": -2,
+            "objects": [{"kind": "chair", "count": 3}, {"kind": "table", "count": 2}]},
+          {"name": "forage", "anchor": "clearing_bottom", "offset": 2,
+            "objects": [{"kind": "berry_bush", "count": 1}, {"kind": "bed", "count": 1}]}
+        ]},
+        {"step": "dig_orders", "count": 24, "seed_offset": 91, "priority": 1},
+        {"step": "till_plot", "when": "scenario_seed", "search_radius": 15, "tick_budget": 800},
+        {"step": "ground_items", "when": "scenario_seed", "kind": "seed", "count": 3, "search_radius": 15}
+      ]
+    }
+  ]
+}
