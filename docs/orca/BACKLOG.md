@@ -192,8 +192,18 @@ Orca helper scripts, this backlog.
   were prose become `assert`s or tests; `docs/architecture/*.md` and the ADR index updated to
   the module names (R2 and R3 listed the stale references in their handoffs); duplicate ADR
   numbers renumbered with redirects noted in the index.
+- **Owned paths** (added 2026-10-28 when opened, per the operating rules): `game/scripts/core/**`
+  (comments, doc-comments and `assert`s only — no logic change, no renames, byte-identical saves
+  and `state_hash()` on the R-plan scenarios), `docs/architecture/**`, `docs/decisions/**` (index,
+  renumbering redirects), `docs/orca/handoffs/R16.md`. New invariant tests go in **new** files under
+  `game/scripts/tests/`; existing tests are R15's and are not touched until R15 is on `main`.
+- **Non-goals:** any behaviour change; moving code between modules; touching the viewer,
+  `tools/` or the content JSON; rewriting ADR bodies (only the index and cross-references).
 - **Acceptance:** `measure_core` comment lines in `game/scripts/core/` below 25 % of total;
-  `git grep` finds no `_events`, `_items`, `_tiles`, `_objects` field names in docs; suite passes.
+  `git grep` finds no `_events`, `_items`, `_tiles`, `_objects` field names in docs; every
+  `docs/architecture/*.md` names the module that owns each concept (no reference to a function
+  that no longer lives in `world_state.gd`); ADR index has no duplicate numbers; suite passes and
+  the R-plan byte-identity probe is quoted in the handoff.
 
 ---
 
