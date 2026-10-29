@@ -85,8 +85,10 @@ static func _pack_map_and_routes(state: Dictionary) -> Dictionary:
 	return packed
 
 ## Restores the plain form in place (state is a freshly parsed save, after SaveIO's int
-## coercion). {"ok": true} or a schema_error naming the malformed field.
-static func unpack(state: Dictionary) -> Dictionary:
+## coercion). {"ok": true} or a schema_error naming the malformed field. max_world_size is the
+## session's cap (SaveIO.content_rules()): a packed map larger than it is refused before any
+## tile is expanded, so a hostile run length cannot make the reader allocate past it.
+static func unpack(state: Dictionary, max_world_size: int) -> Dictionary:
 	for key in RECORD_LISTS:
 		var records := _unpack_records_at(state, key)
 		if not records["ok"]:
@@ -100,7 +102,7 @@ static func unpack(state: Dictionary) -> Dictionary:
 	if not (map_value is Dictionary):
 		return {"ok": true}
 	var map: Dictionary = map_value
-	var map_check := _unpack_map(map)
+	var map_check := _unpack_map(map, max_world_size)
 	if not map_check["ok"] or not _is_size(map):
 		return map_check
 	var width: int = map["width"]
@@ -219,20 +221,27 @@ static func _pack_map(map: Dictionary) -> Dictionary:
 	packed["tileRuns"] = Array(runs)
 	return packed
 
-static func _unpack_map(map: Dictionary) -> Dictionary:
+static func _unpack_map(map: Dictionary, max_world_size: int) -> Dictionary:
 	if not map.has("palette") and not map.has("tileRuns"):
 		return {"ok": true}
 	if map.has("tiles"):
 		return _fail("map has both tiles and tileRuns")
+	if not _is_size(map):
+		return _fail("invalid map dimensions")
+	var width: int = map["width"]
+	var height: int = map["height"]
+	# MapValidator's own message: the same refusal, before anything is allocated.
+	if width > max_world_size or height > max_world_size:
+		return _fail("map dimensions exceed the supported maximum")
 	var palette_value: Variant = map.get("palette")
 	var runs_value: Variant = map.get("tileRuns")
 	if not (palette_value is Array) or not (runs_value is Array) or (runs_value as Array).size() % 2 != 0:
 		return _fail("invalid map palette or tileRuns")
 	var palette: Array = palette_value
 	var runs: Array = runs_value
-	# Bounded by the validator's width*height check afterwards; capped here so a hostile run
-	# length cannot allocate an unbounded array first.
-	var max_tiles := _max_tiles(map)
+	# Never more than width*height (at most max_world_size squared) tiles; the validator then
+	# checks the count is exact.
+	var max_tiles := width * height
 	var tiles: Array = []
 	var i := 0
 	while i < runs.size():
@@ -252,13 +261,6 @@ static func _unpack_map(map: Dictionary) -> Dictionary:
 	map.erase("tileRuns")
 	map["tiles"] = tiles
 	return {"ok": true}
-
-static func _max_tiles(map: Dictionary) -> int:
-	if not _is_size(map):
-		return 0
-	var width: int = map["width"]
-	var height: int = map["height"]
-	return width * height
 
 # --- route searches ----------------------------------------------------------------
 

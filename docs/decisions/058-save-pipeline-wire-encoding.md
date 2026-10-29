@@ -48,7 +48,8 @@ The "one ContentRegistry per session" part of the A7 entry was done by A13b.
    `entities`, `jobs` and `scheduling.waiting` to a record table (`{"$keys": [...]}` then one
    row per record). The packer leaves anything it cannot restore exactly in the plain form
    and the reader accepts the plain form of every packed field. Costs are the only floats in
-   the state and never appear as JSON numbers.
+   the state and never appear as JSON numbers. A packed map larger than the session's
+   `max_world_size` is refused before any tile is expanded (`test_save_wire.gd`).
 3. **One pass.** The integrity hash is the SHA-256 of the state text exactly as written; the
    envelope is assembled around that text. `read()` hashes the raw `state` span located by
    `SaveJsonInts`, and falls back to the pre-A7 rule (hash of `JSON.stringify` of the parsed
@@ -60,10 +61,14 @@ The "one ContentRegistry per session" part of the A7 entry was done by A13b.
    `SaveManager.begin_save_*()` return the handle; the blocking `save_*()` wait on it.
 5. **Schema v5** with a v4 -> v5 migration (shape unchanged; v4 routes stay without `cost`)
    and `save_schema_v5_fixture.json`, the same session as the v1 to v4 fixtures.
-6. **`WorldState.dispose()`** (`WorldDisposer`) walks every object reachable from the world
-   through script variables, then replaces each Object, Callable, Array and Dictionary
-   variable with an empty one, which breaks the cycles. The session `ContentRegistry` is not
-   walked, and containers are replaced rather than cleared, so shared data is untouched.
+6. **`WorldState.dispose()`** (`WorldDisposer`) walks the objects the world owns: those
+   reachable through Object variables and the containers holding them, never through a
+   Callable, since a Callable may point outside the world (the viewer's `CommandRecorder`
+   hooked on as the command listener). It then replaces each Object, Callable, Array and
+   Dictionary variable of the walked objects with an empty one, which breaks the cycles and
+   only detaches outside listeners. What the caller handed in, the session `ContentRegistry`
+   and the `WorldSetup`, is neither walked nor reset, and containers are replaced rather than
+   cleared, so shared data is untouched (`test_world_dispose.gd`).
 
 ## Alternatives considered
 

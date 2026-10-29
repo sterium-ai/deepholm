@@ -398,7 +398,7 @@ func to_save_state() -> Dictionary:
 ## Reconstructs a WorldState from to_save_state(), resuming any in-flight search.
 static func from_save_state(state: Dictionary) -> WorldState: return StateCodec.decode(state)
 ## Frees a replaced world (A7): breaks the module/Callable cycles; unusable afterwards.
-func dispose() -> void: WorldDisposer.dispose(self, [_content])
+func dispose() -> void: WorldDisposer.dispose(self, [_content, _setup])
 
 # Read-only getters (presentation and tests).
 func get_seed() -> int: return _seed

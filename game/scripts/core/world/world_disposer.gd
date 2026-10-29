@@ -4,12 +4,15 @@ extends RefCounted
 ## WorldState.dispose() (A7): frees a world that is being replaced (a load, a New Game).
 ## The modules reach each other and the façade through bound Callables and back-references,
 ## so a dropped WorldState is a RefCounted cycle that never frees (bench_save_load's leak
-## check). This walks every object reachable from the world through script variables (Objects,
-## Callables, and the Arrays/Dictionaries holding them) and then empties each of those
-## variables, which breaks every cycle at once. Containers are replaced, never cleared in place,
-## so data shared with something that outlives the world (the session ContentRegistry's
-## documents) is left as it was; the objects in keep (that registry) are not walked at all.
-## A disposed world and its modules are unusable afterwards.
+## check). This walks the objects the world owns: those reachable from it through Object
+## variables and the Arrays/Dictionaries holding them, never through a Callable (a Callable
+## may point outside the world, e.g. the viewer's command listener bound to its
+## CommandRecorder). It then empties every Object, Callable and container variable of the
+## walked objects, which breaks every cycle at once: a Callable variable is reset, not
+## followed, so an outside listener is only detached. Containers are replaced, never cleared in
+## place, so data shared with something that outlives the world is left as it was; the objects
+## in keep (what the caller handed in: the session ContentRegistry, the WorldSetup) are
+## neither walked nor reset. A disposed world and its modules are unusable afterwards.
 
 static func dispose(root: Object, keep: Array[Object]) -> void:
 	var seen: Dictionary = {}
@@ -52,14 +55,9 @@ static func _collect(value: Variant, seen: Dictionary, pending: Array[Object]) -
 			if object != null and is_instance_valid(object) and not seen.has(object.get_instance_id()):
 				seen[object.get_instance_id()] = true
 				pending.append(object)
-		TYPE_CALLABLE:
-			var callable: Callable = value
-			_collect(callable.get_object(), seen, pending)
-			for argument: Variant in callable.get_bound_arguments():
-				_collect(argument, seen, pending)
 		TYPE_ARRAY:
 			var array: Array = value
-			if array.is_typed() and array.get_typed_builtin() not in [TYPE_OBJECT, TYPE_CALLABLE, TYPE_ARRAY, TYPE_DICTIONARY, TYPE_NIL]:
+			if array.is_typed() and array.get_typed_builtin() not in [TYPE_OBJECT, TYPE_ARRAY, TYPE_DICTIONARY, TYPE_NIL]:
 				return
 			for item: Variant in array:
 				_collect(item, seen, pending)

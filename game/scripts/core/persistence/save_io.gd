@@ -152,7 +152,9 @@ static func _read_and_verify(path: String, check: Dictionary) -> Dictionary:
 	if not dig_find_rng_restore["ok"]:
 		return {"ok": false, "code": "schema_error", "message": dig_find_rng_restore["message"], "file": path}
 	# Back to the plain state before anything reads a field SaveWire packs (A7).
-	var unpacked := SaveWireType.unpack(state as Dictionary)
+	var wire_rules: Dictionary = check["rules"]
+	var max_world_size: int = wire_rules["maxWorldSize"]
+	var unpacked := SaveWireType.unpack(state as Dictionary, max_world_size)
 	if not unpacked["ok"]:
 		return {"ok": false, "code": unpacked["code"], "message": unpacked["message"], "file": path}
 	if not state.has("schemaVersion"):
