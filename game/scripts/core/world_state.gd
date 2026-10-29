@@ -161,7 +161,7 @@ var _construction_giver: ConstructionGiverType
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
 
-## The start fields (roster, calendar, incident list) a new world was built with; never persisted.
+## The start a world was built with (ADR 057); its calendar and incident list are saved ("scenarioStart").
 var _setup: WorldSetupType
 
 ## content is the session's ContentRegistry (one per session); null builds the base bundle.

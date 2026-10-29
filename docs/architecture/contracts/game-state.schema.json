@@ -153,7 +153,7 @@
       }
     },
     "scenarioStart": {
-      "description": "ADR 057 (v3): the scenario start a world keeps running under. calendar is null (content/calendar.json) or the scenario's calendar document; enabledIncidents lists the incident ids the daily draw considers, [] meaning every incident.",
+      "description": "ADR 057 (v4): the scenario start a world keeps running under. calendar is null (content/calendar.json) or the scenario's calendar document; enabledIncidents lists the incident ids the daily draw considers, [] meaning every incident.",
       "type": "object",
       "additionalProperties": false,
       "required": ["calendar", "enabledIncidents"],

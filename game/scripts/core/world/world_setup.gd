@@ -6,7 +6,7 @@ extends RefCounted
 ## entry (the starting roster, the calendar document and the enabled-incident list). Pure data
 ## with no WorldState reference; a default WorldSetup is the base start (mapgen.json's colonist
 ## count, calendar.json, every incident). The calendar and the incident list keep ruling the
-## world after the start, so they are saved (the "scenarioStart" field, schema v3) and a decoded
+## world after the start, so they are saved (the "scenarioStart" field, schema v4) and a decoded
 ## world is built from them; the roster is not, because the saved entities already are it.
 
 const ContentTablesType = preload("res://scripts/core/content/content_tables.gd")

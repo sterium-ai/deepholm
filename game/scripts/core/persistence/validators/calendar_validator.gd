@@ -57,7 +57,7 @@ static func _valid_incident_scheduler(value) -> Dictionary:
 		return _fail("invalid incidentScheduler.rng fields")
 	return {"ok": true}
 
-## The scenario start a world keeps running under (A16b, ADR 057, schema v3): "calendar" is null
+## The scenario start a world keeps running under (A16b, ADR 057, schema v4): "calendar" is null
 ## (calendar.json) or a calendar document in calendar.schema.json's shape, window ids unique;
 ## "enabledIncidents" is a list of distinct incident ids (id pattern only; [] is every incident).
 static func _valid_scenario_start(value: Variant) -> Dictionary:

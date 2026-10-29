@@ -81,7 +81,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"digFindRng": item_table["digFindRng"],
 		# ADR 044: pending area_order expansions, resumed at their next row-major tile.
 		"areaOrders": world._area_orders.encode(),
-		# ADR 057 (v3): the scenario calendar and incident list the world keeps running under.
+		# ADR 057 (v4): the scenario calendar and incident list the world keeps running under.
 		"scenarioStart": world._setup.encode(),
 	}
 
