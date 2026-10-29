@@ -853,10 +853,49 @@ Order follows `../design/baseline.md` §"Suggested order". Each entry is a place
 the owner has answered its design questions in a chat session and the answers are written
 into the entry. Do not start an `F*` whose **Design** block says *pending*.
 
-### F1 — Crops: growth stages and harvest on tilled/sown tiles · `todo` · Design: *pending*
+### F0 — Calendar: months and years · `todo` · *parallel-safe (calendar + viewer date label)* · Design: closed 2026-10-29
 
-Questions: growth time per crop (days), stages visible, what harvest yields and where it
-goes, drought/season failure rule, farm zone vs. per-tile orders.
+- **Design (owner, 2026-10-29):** 3 days per month, 12 months per year (a year = 36 days of
+  2,200 ticks). Day numbering stays as today (day N from the start); month and year are derived
+  from it, so no save change. Calendar windows may be declared by month range as well as by day
+  range (both accepted; `sow` stays as declared). The viewer shows "day D · month M · year Y"
+  and the window label.
+- **Owned paths:** `game/content/calendar.json` and its schema, `core/calendar/calendar_service.gd`,
+  the viewer date label (`viewer/*.gd` where the day is shown), `docs/architecture/*.md` where the
+  calendar is described, `docs/design/baseline.md` (decision 1 → decided), tests, an ADR.
+- **Acceptance:** `CalendarService` exposes month/year for any tick, deterministic; a window
+  declared by months matches the same ticks as the equivalent day range; `state_hash()` unchanged
+  on the R-plan scenarios; viewer shows the three values; suite green.
+- **Non-goals:** seasons as gameplay (temperature, drought), holidays, changing `day_length_ticks`.
+
+### F1 — Crops: growth stages, harvest and farm zones · `todo` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29
+
+- **Design (owner, 2026-10-29):** one crop in v1 (content-defined so more can be added as data);
+  a sown tile goes through three visible stages (sprout → grown → ripe) over ~4 days inside the
+  sowing window; a ripe tile gets a `harvest` job (labour `farm`) that leaves **2 food and 1 seed
+  on the tile** (hauled to a stockpile like berries) and returns the tile to `plowed_soil`.
+  Outside the sowing window planted tiles do not grow; one day after the window ends an unripe
+  tile withers back to `plowed_soil` (no drought rule in v1). A **farm zone** (new zone kind
+  `farm`, painted like a stockpile, with a crop) makes colonists till, sow and harvest its tiles
+  without per-tile orders; per-tile till/sow orders keep working. Growth and harvest are
+  deterministic (tick-based, seeded like everything else).
+- **Owned paths:** new `core/farming/` module (crop growth state composed into `WorldState`
+  through the existing module pattern — no new lines in `world_state.gd` beyond composition; move
+  code out if needed), a `FarmGiver` in `core/jobs/givers/`, `core/objects/zone_table.gd` (zone
+  kind `farm` + crop), `core/commands/handlers/zone_handler.gd` and `area_orders.gd` (paint a
+  farm zone), `content/jobs.json` (`harvest`), `content/items.json`/`tiles.json`/new
+  `crops.json` + schema, `core/items/item_table.gd` only if ground food needs generalising,
+  persistence (`state_codec.gd`, `save_io.gd`, validators, schema bump + migration + fixture),
+  viewer tiles for the three stages (pack art if the pack has it, else placeholder, per B3's
+  mapping), `docs/architecture/*.md`, an ADR, tests, `docs/orca/handoffs/F1.md`.
+- **Acceptance:** headless scenario: a 4×4 farm zone, seeds in a stockpile, 6 idle colonists,
+  inside the window → within 6 days every tile has been harvested at least once, stockpile food
+  ≥ 2 × tiles and seeds ≥ the starting count; outside the window no tile advances and an unripe
+  tile withers one day after the window; save/load mid-growth continues with an identical
+  `state_hash()`; replay (A11) of the scenario reproduces it; per-tile till/sow orders unchanged
+  (`test_toils_dig_chop_regression` and friends pass); `measure_core` budgets respected; suite green.
+- **Non-goals:** drought and fertilise (later F1b), several crops shipped (only content-ready),
+  animals, food processing, farm zone priorities/UI beyond painting the zone.
 
 ### F2 — Workbench recipes and item groups · `todo` · Design: *pending*
 
