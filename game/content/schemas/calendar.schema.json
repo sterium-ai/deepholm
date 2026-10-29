@@ -4,8 +4,8 @@
   "required": ["day_length_ticks", "windows"],
   "properties": {
     "day_length_ticks": {"type": "integer", "minimum": 1},
-    "days_per_month": {"type": "integer", "minimum": 1, "description": "Days in a month (ADR 056), 1 when absent. Month and year are derived from the day number, never stored."},
-    "months_per_year": {"type": "integer", "minimum": 1, "description": "Months in a year (ADR 056), 1 when absent; a year is days_per_month * months_per_year days."},
+    "days_per_month": {"type": "integer", "minimum": 1, "description": "Days in a month (ADR 060), 1 when absent. Month and year are derived from the day number, never stored."},
+    "months_per_year": {"type": "integer", "minimum": 1, "description": "Months in a year (ADR 060), 1 when absent; a year is days_per_month * months_per_year days."},
     "windows": {
       "type": "array",
       "items": {
@@ -15,7 +15,7 @@
         "properties": {
           "id": {"type": "string", "minLength": 1},
           "labour": {"type": "string", "minLength": 1},
-          "from": {"type": "integer", "minimum": 1, "description": "First day (inclusive), a day number from the start of the game. A window declares from/to or from_month/to_month, never both (ADR 056)."},
+          "from": {"type": "integer", "minimum": 1, "description": "First day (inclusive), a day number from the start of the game. A window declares from/to or from_month/to_month, never both (ADR 060)."},
           "to": {"type": "integer", "minimum": 1},
           "from_month": {"type": "integer", "minimum": 1, "description": "First month (inclusive): the window opens on day (from_month - 1) * days_per_month + 1."},
           "to_month": {"type": "integer", "minimum": 1, "description": "Last month (inclusive): the window closes after day to_month * days_per_month."},

@@ -915,7 +915,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   passed in `get_view_snapshot()`'s `sources`; no line added, 789 lines). Also touched, flagged in
   `handoffs/F0.md` for the owner: two text keys in `game/data/text/en.json` (ADR 052: no player
   text in code) and `docs/architecture/warnings-baseline.txt` lowered by one (the gate's `-Update`).
-  ADR 056; evidence `docs/orca/handoffs/F0.md`.
+  ADR 060; evidence `docs/orca/handoffs/F0.md`.
 
 ### F1 — Crops: growth stages, harvest and farm zones · `todo` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29
 

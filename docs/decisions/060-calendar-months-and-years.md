@@ -1,4 +1,4 @@
-# ADR 056: Calendar months and years derived from the day
+# ADR 060: Calendar months and years derived from the day
 
 > **In short:** A month is 3 days and a year is 12 months. The game still counts only days,
 > from the start; month and year are worked out from the day number, so saves do not change.

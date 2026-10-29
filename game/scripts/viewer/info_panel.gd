@@ -12,7 +12,7 @@ const WorkTablePanelType = preload("res://scripts/viewer/work_table_panel.gd")
 
 var content: VBoxContainer
 ## "Day D · month M · year Y" plus the open calendar window's label, from the
-## snapshot's "date" (F0, ADR 056): the core computes it, this only formats it.
+## snapshot's "date" (F0, ADR 060): the core computes it, this only formats it.
 var date_label: Label
 var status_label: Label
 var work_table_panel: WorkTablePanelType

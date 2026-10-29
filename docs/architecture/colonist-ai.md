@@ -390,7 +390,7 @@ completion effect.
 ### 3.7 Calendar urgency
 
 `content/calendar.json`: `{day_length_ticks: int, days_per_month: int, months_per_year: int,
-windows: [{id, labour, from, to, boost, label}]}` (ADR 008, ADR 056). `day_length_ticks` is the
+windows: [{id, labour, from, to, boost, label}]}` (ADR 008, ADR 060). `day_length_ticks` is the
 tick count of one in-game day; `from`/`to` are 1-indexed, inclusive day numbers counted from the
 start of the game. A window may instead declare `from_month`/`to_month` (never both pairs):
 month `m` is days `(m - 1) * days_per_month + 1 .. m * days_per_month`, so the window matches

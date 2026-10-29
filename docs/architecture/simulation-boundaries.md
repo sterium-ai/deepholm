@@ -53,7 +53,7 @@ The viewer reads the core once per refresh through
 `WorldState.get_view_snapshot(detail_ids)`: per-actor columns for the map and the lists,
 full records only for the colonists whose panel rows it is rewriting, one copy of each
 other collection it shows, and the date of the world's own calendar (day, month, year and the
-open window's label, [ADR 056](../decisions/056-calendar-months-and-years.md)). Every container in it is read-only and it is never persisted or
+open window's label, [ADR 060](../decisions/060-calendar-months-and-years.md)). Every container in it is read-only and it is never persisted or
 hashed ([ADR 055](../decisions/055-viewer-snapshot.md)). Viewer scripts and `boot.gd` never
 touch a private `WorldState` member (`world._x`); `test_architecture_rules.gd` enforces it.
 

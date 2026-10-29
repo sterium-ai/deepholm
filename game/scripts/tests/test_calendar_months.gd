@@ -1,6 +1,6 @@
 extends SceneTree
 
-## F0 (ADR 056): months and years on top of the day count. content/calendar.json
+## F0 (ADR 060): months and years on top of the day count. content/calendar.json
 ## declares 3 days per month and 12 months per year; CalendarService derives month and
 ## year from the day number (nothing new is stored), a window may be declared by
 ## from_month/to_month and then matches exactly the ticks of the equivalent day range,

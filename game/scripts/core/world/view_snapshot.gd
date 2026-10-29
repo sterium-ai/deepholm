@@ -11,7 +11,7 @@ extends RefCounted
 ## never hashed. Keys:
 ##   tick             int
 ##   date             {day, month, year, window_label}: CalendarService.date_of_tick(tick)
-##                    of the world's own calendar (F0, ADR 056)
+##                    of the world's own calendar (F0, ADR 060)
 ##   ids              String column, every actor in actor-table order; row i of
 ##                    every column below is ids[i]
 ##   kinds, factions  String columns: "kind", "factionId" ("colony" when absent)

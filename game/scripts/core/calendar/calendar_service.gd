@@ -1,7 +1,7 @@
 class_name CalendarService
 extends RefCounted
 
-## Calendar content and pure calendar queries (colonist-ai.md 3.7, ADR 056): a day length in
+## Calendar content and pure calendar queries (colonist-ai.md 3.7, ADR 060): a day length in
 ## ticks, days per month and months per year, and labour boost windows ({labour, from, to, boost,
 ## label}, 1-indexed inclusive day numbers counted from the start of the game, or the same window
 ## declared as {from_month, to_month}). Day numbering is the only clock: month and year are derived
