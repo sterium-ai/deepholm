@@ -818,6 +818,10 @@ one.
   and the tests that hand-build current-schema states); a roster larger than the spawn clearing
   is rejected at load and a short placement at build. A13b also bumps v2 → v3, so "your bump is
   the next free number when you rebase (probably v4)".
+- **Rebased onto A13b (`d4b064e`, 2026-10-29), as the owner asked:** A13b's v3 (`contentPacks`)
+  kept; this bump renumbered to **v3 → v4** (`SaveMigrations._v3_to_v4()`,
+  `save_schema_v4_fixture.json`, which the v1/v2/v3 fixtures migrate to exactly). ADR 057 does not
+  collide (A13b used ADR 010 amendment 2).
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

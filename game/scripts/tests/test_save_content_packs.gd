@@ -243,7 +243,10 @@ func _check_malformed_content_packs() -> void:
 ## v2 -> v3 adds an empty list right after contentVersion and refuses a v2 state that already
 ## claims one; the input is never mutated.
 func _check_v2_to_v3_step() -> void:
+	# The v3 shape: this build's encode without v4's scenarioStart (A16b, ADR 057).
 	var v3 := StateCodecType.encode(WorldStateType.new(SEED, 3, 16, 16))
+	v3.erase("scenarioStart")
+	v3["schemaVersion"] = 3
 	var v2 := v3.duplicate(true)
 	v2.erase("contentPacks")
 	v2["schemaVersion"] = 2
@@ -254,7 +257,7 @@ func _check_v2_to_v3_step() -> void:
 	if migrated["ok"]:
 		var keys: Array = (migrated["state"] as Dictionary).keys()
 		_expect(keys.find("contentPacks") == keys.find("contentVersion") + 1, "contentPacks must follow contentVersion")
-		_expect(JSON.stringify(migrated["state"]) == JSON.stringify(v3), "the migrated state must equal this build's v3 encode")
+		_expect(JSON.stringify(migrated["state"]) == JSON.stringify(v3), "the migrated state must equal this build's encode in the v3 shape")
 	v2["contentPacks"] = []
 	var refused := SaveMigrationsType.migrate(v2, 2, 3)
 	_expect(not refused["ok"] and refused.get("code") == "schema_error", "a v2 state that already has contentPacks must be refused: %s" % refused)

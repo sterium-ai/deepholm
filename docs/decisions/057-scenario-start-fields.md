@@ -3,15 +3,15 @@
 > **In short:** A scenario entry can now say how many colonists start (and give some of them
 > their own labour priorities), which calendar the world runs on, and which incidents can
 > happen. `ScenarioBuilder` hands these to `WorldState` when it is constructed, through a
-> small `WorldSetup` object. The calendar and the incident list are saved (save schema v3,
-> which becomes v4 once A13b's v3 lands first), so a loaded world and a replay keep them. An
+> small `WorldSetup` object. The calendar and the incident list are saved (save schema v4), so
+> a loaded world and a replay keep them. An
 > entry that leaves the fields out (both shipped entries) builds exactly the same world as
 > before.
 
 - **Status:** accepted
 - **Date:** 2026-10-29
 - **Scope:** content (three optional `scenarios.json` fields), simulation (one new
-  `WorldState` construction parameter), persistence (save schema v3, `scenarioStart`)
+  `WorldState` construction parameter), persistence (save schema v4, `scenarioStart`)
 - **Extends:** ADR 054 (scenarios as content; this closes the three fields its
   "Consequences" deferred)
 - **Depends on:** ADR 008 (calendar), ADR 017 (incidents), ADR 020 (spawn clearing),
@@ -72,7 +72,7 @@ naming `scenarios.json`:
   (`IncidentScheduler.reconcile_after_load()`, same statements; `WorldState` keeps a one-line
   delegator for `StateCodec`). `world_state.gd` goes from 790 to 783 lines.
 
-### Persistence: save schema v3
+### Persistence: save schema v4
 
 The calendar and the incident list keep ruling the world after tick 0 (day length, boosts,
 alerts, needs' per-day rates, the incident draw), so they are save state. The roster is not:
@@ -85,13 +85,15 @@ the saved entities already are the roster.
 - `WorldSetup.encode()`/`WorldSetup.decode()` convert it; `StateCodec.decode()` builds the world
   from the decoded setup (the roster fields stay at the base start: the saved entities replace
   the generated ones). A replay starts from a save, so it keeps them too.
-- `StateCodec.SCHEMA_VERSION` 2 → 3; `SaveMigrations` v2 → v3 adds the base start (exactly what a
-  v2 world ran on) and refuses a v2 state that already has the field;
+- `StateCodec.SCHEMA_VERSION` 3 → 4; `SaveMigrations` v3 → v4 adds the base start (exactly what a
+  v3 world ran on) and refuses a v3 state that already has the field;
   `CalendarValidator._valid_scenario_start()` validates the shape;
   `docs/architecture/contracts/game-state.schema.json` and `save-system.md` describe it; the
-  fixture `save_schema_v3_fixture.json` is the v1/v2 fixtures' session written at v3.
-- **Numbering:** A13b also bumps the schema (v2 → v3). Whichever lands second renumbers: when
-  A16b rebases onto A13b, this step becomes v3 → v4 and the fixture `save_schema_v4_fixture.json`.
+  fixture `save_schema_v4_fixture.json` is the v1/v2/v3 fixtures' session written at v4.
+- **Numbering:** v3 is A13b's (`contentPacks`, ADR 010 amendment 2), which landed first; this
+  change was written as v2 → v3 and renumbered to v3 → v4 when rebased onto it.
+- `scenarioStart` is checked after `contentPacks`: a save on a scenario pack names the missing
+  pack (`content_packs_mismatch`), and loads only on that pack's session registry.
 - `scenarioStart` is not in `state_hash()`, like the content files it replaces.
 
 ### Determinism
@@ -99,7 +101,7 @@ the saved entities already are the roster.
 Every new input is content, read at construction; no new RNG stream. A scenario that uses none of
 the fields takes exactly the old code paths: the shipped `new_game` and `debug` entries build
 identical event logs and 100 ticks of `state_hash()`, and saves that differ from `main`'s only by
-`schemaVersion` 3 and the added base-start `scenarioStart` (the A16 probe,
+`schemaVersion` 4 and the added base-start `scenarioStart` (the A16 probe,
 `docs/orca/handoffs/A16-scenario_dump.gd`, compared by `A16b-compare_probe.py`; see
 `docs/orca/handoffs/A16b.md`).
 
@@ -123,7 +125,7 @@ identical event logs and 100 ticks of `state_hash()`, and saves that differ from
 
 - A scenario can now be a small colony, a big one, a short-day or long-day world, or a quiet start
   with only peaceful visitors, as content only.
-- The calendar and incident list are saved (schema v3); `incidents_enabled` is still not (the
+- The calendar and incident list are saved (schema v4); `incidents_enabled` is still not (the
   boot layer re-applies it after a load, as before).
 - A roster larger than the spawn clearing is rejected rather than placed in a bigger clearing:
   growing the clearing would change `WorldGenerator.place_spawn()`, which is at its frozen size
@@ -139,5 +141,5 @@ identical event logs and 100 ticks of `state_hash()`, and saves that differ from
   contract), `extension-points.md` ("Scenario"), `game-state.schema.json` and `save-system.md`.
 - [x] Contracts, examples and tests: `scenarios.schema.json`, `game-state.schema.json`,
   `game/scripts/tests/test_scenario_start.gd`, `test_save_migration.gd`.
-- [x] Save/migration impact: schema v3 with its v2 → v3 migration and the v3 fixture.
+- [x] Save/migration impact: schema v4 with its v3 → v4 migration and the v4 fixture.
 - [x] The source-of-truth index still points to `scenarios.schema.json`.
