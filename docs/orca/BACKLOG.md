@@ -806,7 +806,7 @@ one.
   `WorldState` at construction through the new `core/world/world_setup.gd`. Room was made by moving
   the startup content checks to `WorldSetup.startup_tables()` and the after-load incident
   reconciliation to `IncidentScheduler.reconcile_after_load()` (`world_state.gd` 790 → 783; it was
-  790, not 800, on `main`). `test_scenario_start.gd`; [ADR 057](../decisions/057-scenario-start-fields.md).
+  790, not 800, on `main`; 789 → 782 after A9). `test_scenario_start.gd`; [ADR 057](../decisions/057-scenario-start-fields.md).
   See `docs/orca/handoffs/A16b.md`.
 - **Owner (2026-10-29, after review round 1, in the A16b terminal):** scope extension to
   persistence. "guardar y cargar pierde el calendario del escenario y el filtro de incidentes …:
@@ -821,7 +821,8 @@ one.
 - **Rebased onto A13b (`d4b064e`, 2026-10-29), as the owner asked:** A13b's v3 (`contentPacks`)
   kept; this bump renumbered to **v3 → v4** (`SaveMigrations._v3_to_v4()`,
   `save_schema_v4_fixture.json`, which the v1/v2/v3 fixtures migrate to exactly). ADR 057 does not
-  collide (A13b used ADR 010 amendment 2).
+  collide (A13b used ADR 010 amendment 2). Then rebased onto A9 (`33afba3`); full suite rerun on
+  HEAD.
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

@@ -70,7 +70,7 @@ naming `scenarios.json`:
   checks (`WorldSetup.startup_tables()`: tool requirements, then the haul entry, the same
   messages in the same order) and the after-load incident reconciliation
   (`IncidentScheduler.reconcile_after_load()`, same statements; `WorldState` keeps a one-line
-  delegator for `StateCodec`). `world_state.gd` goes from 790 to 783 lines.
+  delegator for `StateCodec`). `world_state.gd` goes from 790 to 783 lines (789 to 782 once A9 landed).
 
 ### Persistence: save schema v4
 
