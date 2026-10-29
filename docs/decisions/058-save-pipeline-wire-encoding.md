@@ -49,7 +49,10 @@ The "one ContentRegistry per session" part of the A7 entry was done by A13b.
    row per record). The packer leaves anything it cannot restore exactly in the plain form
    and the reader accepts the plain form of every packed field. Costs are the only floats in
    the state and never appear as JSON numbers. A packed map larger than the session's
-   `max_world_size` is refused before any tile is expanded (`test_save_wire.gd`).
+   `max_world_size` is refused before any tile is expanded, and so is a plain map of that size
+   before its packed routes are; run lengths are compared against the remaining tiles (never
+   summed, which could wrap past int64) and every route box part is checked against the map
+   before its int32 narrowing (`test_save_wire.gd`).
 3. **One pass.** The integrity hash is the SHA-256 of the state text exactly as written; the
    envelope is assembled around that text. `read()` hashes the raw `state` span located by
    `SaveJsonInts`, and falls back to the pre-A7 rule (hash of `JSON.stringify` of the parsed

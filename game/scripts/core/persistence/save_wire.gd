@@ -107,6 +107,9 @@ static func unpack(state: Dictionary, max_world_size: int) -> Dictionary:
 		return map_check
 	var width: int = map["width"]
 	var height: int = map["height"]
+	# A plain map is not expanded, but its size bounds every packed route below: same refusal.
+	if width > max_world_size or height > max_world_size:
+		return _fail("map dimensions exceed the supported maximum")
 	var entities: Variant = state.get("entities")
 	if entities is Array:
 		for entity: Variant in entities:
@@ -251,7 +254,8 @@ static func _unpack_map(map: Dictionary, max_world_size: int) -> Dictionary:
 		var length: int = runs[i + 1]
 		if index < 0 or index >= palette.size() or length < 1:
 			return _fail("invalid map tileRuns entry")
-		if tiles.size() + length > max_tiles:
+		# Compared as a remainder: tiles.size() + length could overflow int64 on a hostile length.
+		if length > max_tiles - tiles.size():
 			return _fail("map tiles length does not match width*height")
 		var tile: Variant = palette[index]
 		for _r in length:
@@ -432,15 +436,19 @@ static func _box_of(tiles: Array[Vector2i]) -> Vector4i:
 	return Vector4i(low.x, low.y, high.x - low.x + 1, high.y - low.y + 1)
 
 ## A packed "box" as (x, y, width, height), or x = -1 unless it is four ints inside the map.
+## Every part is checked against the map as an int64 before the Vector4i (int32) narrowing,
+## and each sum is of two values already bounded by the map, so neither can wrap.
 static func _box_from(value: Variant, width: int, height: int) -> Vector4i:
 	if not (value is Array) or (value as Array).size() != 4:
 		return Vector4i(-1, 0, 0, 0)
-	var parts := PackedInt32Array()
-	for part: Variant in value:
+	var parts: Array[int] = []
+	var limits: Array[int] = [width, height, width, height]
+	for i in 4:
+		var part: Variant = (value as Array)[i]
 		if typeof(part) != TYPE_INT:
 			return Vector4i(-1, 0, 0, 0)
 		var number: int = part
-		if number < 0:
+		if number < 0 or number > limits[i]:
 			return Vector4i(-1, 0, 0, 0)
 		parts.append(number)
 	if parts[0] + parts[2] > width or parts[1] + parts[3] > height:
