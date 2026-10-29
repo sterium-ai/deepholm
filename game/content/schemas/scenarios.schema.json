@@ -24,6 +24,56 @@
           },
           "tick_rate": {"type": "integer", "minimum": 1},
           "incidents_enabled": {"type": "boolean"},
+          "roster": {
+            "type": "object",
+            "description": "The starting roster (ADR 057): count replaces mapgen.json's colonist_count; colonists[i], when present, defines colonist_i (the rest keep actors.json's defaults).",
+            "required": ["count"],
+            "properties": {
+              "count": {"type": "integer", "minimum": 0},
+              "colonists": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "labour": {"type": "object", "description": "Labour kind -> level, each a declared worker labour within its labour_min..labour_max (actors.json's colonist)."}
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "calendar": {
+            "type": "object",
+            "description": "This scenario's calendar document, used instead of calendar.json; the same shape as calendar.schema.json.",
+            "required": ["day_length_ticks", "windows"],
+            "properties": {
+              "day_length_ticks": {"type": "integer", "minimum": 1},
+              "windows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["id", "labour", "from", "to", "boost", "label"],
+                  "properties": {
+                    "id": {"type": "string", "minLength": 1},
+                    "labour": {"type": "string", "minLength": 1},
+                    "from": {"type": "integer", "minimum": 1},
+                    "to": {"type": "integer", "minimum": 1},
+                    "boost": {"type": "integer"},
+                    "label": {"type": "string", "minLength": 1}
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "incidents": {
+            "type": "array",
+            "description": "The incidents.json ids this scenario's daily draw considers; omitted means every incident. No incidents at all is incidents_enabled: false.",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 1}
+          },
           "setup": {
             "type": "array",
             "items": {

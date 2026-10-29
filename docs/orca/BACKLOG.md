@@ -780,7 +780,7 @@ one.
     `test_text_pseudo_locale.gd` collects scenario labels. This follows A15's rule that content
     labels are text keys.
 
-#### A16b — Scenario roster, calendar and incident list · `todo` · after A16
+#### A16b — Scenario roster, calendar and incident list · `review (antonelmejor50-hub/a16b-scenario-roster-calendar-and)` · after A16
 
 - **Goal:** the three scenario fields A16 deferred (ADR 053, "Consequences"):
   - a starting roster: the colonist count, and optionally per-colonist definitions;
@@ -800,6 +800,29 @@ one.
 - **Non-goals:** win/lose conditions (A17); a campaign; new setup steps.
 - **Note:** `world_state.gd` is at 800 of 800 lines (since A5). Make room first, by moving code out
   rather than raising the cap.
+- **Done in this branch:** optional `roster` `{count, colonists?[{labour}]}`, `calendar` (a whole
+  calendar document) and `incidents` (non-empty id list) fields in `scenarios.schema.json`,
+  cross-checked by `ContentRegistry._check_scenario_start()`; `ScenarioBuilder` passes them to
+  `WorldState` at construction through the new `core/world/world_setup.gd`. Room was made by moving
+  the startup content checks to `WorldSetup.startup_tables()` and the after-load incident
+  reconciliation to `IncidentScheduler.reconcile_after_load()` (`world_state.gd` 790 → 783; it was
+  790, not 800, on `main`; 789 → 782 after A9). `test_scenario_start.gd`; [ADR 057](../decisions/057-scenario-start-fields.md).
+  See `docs/orca/handoffs/A16b.md`.
+- **Owner (2026-10-29, after review round 1, in the A16b terminal):** scope extension to
+  persistence. "guardar y cargar pierde el calendario del escenario y el filtro de incidentes …:
+  persistelos con bump de esquema + migracion + fixture y tests de continuacion save/load y
+  replay", and for the roster "adapta la colocacion al numero pedido o rechazalo explicitamente,
+  con test de regresion". Done: save schema v3 with a required `scenarioStart` field
+  (`persistence/state_codec.gd`, `save_io.gd`, `save_migrations.gd`,
+  `validators/calendar_validator.gd`, `game-state.schema.json`, `save-system.md`, the v3 fixture
+  and the tests that hand-build current-schema states); a roster larger than the spawn clearing
+  is rejected at load and a short placement at build. A13b also bumps v2 → v3, so "your bump is
+  the next free number when you rebase (probably v4)".
+- **Rebased onto A13b (`d4b064e`, 2026-10-29), as the owner asked:** A13b's v3 (`contentPacks`)
+  kept; this bump renumbered to **v3 → v4** (`SaveMigrations._v3_to_v4()`,
+  `save_schema_v4_fixture.json`, which the v1/v2/v3 fixtures migrate to exactly). ADR 057 does not
+  collide (A13b used ADR 010 amendment 2). Then rebased onto A9 (`33afba3`); full suite rerun on
+  HEAD.
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

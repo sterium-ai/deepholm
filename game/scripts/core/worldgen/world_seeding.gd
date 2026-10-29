@@ -8,16 +8,23 @@ extends RefCounted
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
+const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 
-## {"tiles": Array[String], "colonists": Array[Dictionary], "clearing": Dictionary}.
+## {"tiles": Array[String], "colonists": Array[Dictionary], "clearing": Dictionary}. mapgen's
+## colonist_count sizes the roster; colonist_definitions[i] (a scenario roster's per-colonist
+## {"labour": {kind: level}}, ADR 057) applies to colonist_i, the rest keep actors.json's defaults.
 static func seed_world(geography_seed: int, placement_seed: int, width: int, height: int, mapgen: Dictionary,
-		content: ContentRegistry, object_table: ObjectTableType) -> Dictionary:
+		content: ContentRegistry, object_table: ObjectTableType, colonist_definitions: Array = []) -> Dictionary:
 	var generated := _generate_map(geography_seed, width, height, mapgen)
 	var tiles: Array[String] = generated["tiles"]
 	var water_tiles: Array[Vector2i] = generated["water_tiles"]
 	var berry_bush_tiles: Array[Vector2i] = generated["berry_bush_tiles"]
 	var placement := _spawn_colonists(placement_seed, tiles, width, height, mapgen, content, object_table,
 		water_tiles, berry_bush_tiles)
+	var colonists: Array[Dictionary] = placement["colonists"]
+	for i in mini(colonist_definitions.size(), colonists.size()):
+		var definition: Dictionary = colonist_definitions[i]
+		_apply_colonist_definition(colonists[i], definition)
 	return {"tiles": tiles, "colonists": placement["colonists"], "clearing": placement["clearing"]}
 
 ## Terrain in a fixed draw order (rock veins, hazards, tree groves, river, berry
@@ -47,3 +54,12 @@ static func _spawn_colonists(placement_seed: int, map: Array[String], width: int
 		colonist["trapped"] = null # unconditional like health/route
 		spawned.append(colonist)
 	return {"colonists": spawned, "clearing": placement["clearing"]}
+
+## Writes each listed labour level into the spawned labourTable in place, so its declared key
+## order (state_hash() is key-order-sensitive) never changes; ContentRegistry checked the kinds
+## and levels against the colonist's worker tunables.
+static func _apply_colonist_definition(colonist: Dictionary, definition: Dictionary) -> void:
+	var labour: Dictionary = definition.get("labour", {})
+	for kind: String in labour.keys():
+		var level: int = labour[kind]
+		WorkerType.set_labour_level(colonist, kind, level)

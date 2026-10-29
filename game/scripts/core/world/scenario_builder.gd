@@ -2,11 +2,12 @@ class_name ScenarioBuilder
 extends RefCounted
 
 ## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 054): the map
-## size, seed, tick rate and incident switch, then the entry's setup steps in order. A
-## caller-side factory, not a WorldState module: it constructs the world and drives it only
-## through apply()/tick() and the public spawn_ground_tool_item(), except for the two
-## bootstrap writes documented on _run_till_plot() and _run_ground_items(). Pure and seeded:
-## the same scenario, content and options always build the same state_hash().
+## size, seed, tick rate and incident switch, the start fields WorldSetup carries into the
+## world's construction (roster, calendar, enabled incidents; A16b, ADR 057), then the entry's
+## setup steps in order. A caller-side factory, not a WorldState module: it constructs the
+## world and drives it only through apply()/tick() and the public spawn_ground_tool_item(),
+## except for the two bootstrap writes documented on _run_till_plot() and _run_ground_items().
+## Pure and seeded: the same scenario, content and options always build the same state_hash().
 ##
 ## Step vocabulary (the fields each reads are ContentRegistry.SCENARIO_STEP_FIELDS):
 ## - needed_tools: one ground tool per job needs_tool kind, on the spawn clearing's land pool;
@@ -22,6 +23,7 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
+const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 
 const NEW_GAME_SCENARIO_ID := "new_game"
 const NO_TILE := Vector2i(-1, -1)
@@ -42,7 +44,9 @@ class BuildContext:
 ## The world scenario_id describes, built on content (the session registry). options may
 ## set "seed", "tick_rate" and "incidents_enabled" over the entry's own values; a scenario
 ## with no "seed" needs options.seed. Returns null, with an error pushed, when the scenario
-## is unknown or has no seed to use.
+## is unknown, has no seed to use, or its roster could not be placed in full (a map whose
+## spawn search fell back past the rectangular clearing; ContentRegistry already rejects a
+## roster larger than that clearing).
 static func build(content: ContentRegistryType, scenario_id: String, options: Dictionary = {}) -> WorldStateType:
 	var scenario := content.get_entry("scenarios", scenario_id)
 	if scenario.is_empty():
@@ -59,7 +63,12 @@ static func build(content: ContentRegistryType, scenario_id: String, options: Di
 		var width: int = map["width"]
 		var height: int = map["height"]
 		size = Vector2i(width, height)
-	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content)
+	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content, WorldSetupType.from_scenario(scenario))
+	var roster: Dictionary = scenario.get("roster", {})
+	var roster_count: int = roster.get("count", -1)
+	if roster_count >= 0 and world.get_colonists().size() != roster_count:
+		push_error("ScenarioBuilder: scenario '%s' placed %d of its %d colonists" % [scenario_id, world.get_colonists().size(), roster_count])
+		return null
 	var incidents_enabled: bool = options.get("incidents_enabled", scenario["incidents_enabled"])
 	if incidents_enabled:
 		world.enable_incidents()

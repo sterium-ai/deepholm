@@ -66,6 +66,7 @@ all with one size rule.
 | [053](053-job-storage-retired-history.md) | Live job storage, a bounded history of retired jobs, read-only views |
 | [054](054-scenarios-as-content.md) | Scenarios as content |
 | [055](055-viewer-snapshot.md) | One read-only view snapshot per viewer refresh |
+| [057](057-scenario-start-fields.md) | Scenario start fields: roster, calendar, enabled incidents |
 
 ## Renumbered records (redirects)
 

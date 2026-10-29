@@ -136,6 +136,7 @@ func _base_state() -> Dictionary:
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],
 		"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 1, "state": 0}},
+		"scenarioStart": {"calendar": null, "enabledIncidents": []},
 	}
 
 func _flat_soil_tiles() -> Array:
