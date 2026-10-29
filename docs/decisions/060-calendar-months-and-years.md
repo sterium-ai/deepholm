@@ -33,8 +33,10 @@ left as declared, and that the viewer shows the date and the window label.
    division. Nothing new is stored, hashed or saved: month and year are pure functions of the
    tick and the content.
 3. **Month-range windows.** A window declares `from`/`to` (days) or `from_month`/`to_month`
-   (months), not both (the schema's `oneOf`, for external tools; ContentRegistry's schema
-   subset does not check `oneOf`). `CalendarService` converts a month range once, when it loads,
+   (months), exactly one complete pair. The schema says so with `oneOf`; ContentRegistry's
+   schema subset does not read `oneOf`, so `ContentRegistry._init()` calls
+   `CalendarService.window_range_error()` and rejects a half, mixed, doubled or missing range as
+   `schema_violation` (`calendar.json`). `CalendarService` converts a month range once, when it loads,
    to the day range `(from_month - 1) * days_per_month + 1 .. to_month * days_per_month`, and
    every query (`active_boost`, `alert_state`, the alert giver's soonest window) reads only
    `from`/`to`. A month window is therefore exactly the equivalent day window, tick for tick.
@@ -67,7 +69,8 @@ left as declared, and that the viewer shows the date and the window label.
 ## Acceptance criteria
 
 - [x] `docs/architecture/colonist-ai.md` §3.7 documents the new fields and queries.
-- [x] `test_calendar_months.gd` covers month/year boundaries, determinism, month windows against
+- [x] `test_calendar_months.gd` covers the registry rejecting incomplete or conflicting ranges,
+      month/year boundaries, determinism, month windows against
       the equivalent day range (pure and through `WorldState.tick()`), the snapshot's date and
       the viewer's date line.
 - [x] Save/migration impact: none (nothing new persisted).

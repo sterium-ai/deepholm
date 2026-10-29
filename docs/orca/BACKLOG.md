@@ -912,9 +912,12 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Scope extension (owner, 2026-10-29):** the date reaches the viewer through the A9 view
   snapshot, not a new getter: `core/world/view_snapshot.gd` gains a `"date"` key computed by the
   world's own `CalendarService`, and `world_state.gd` changes one existing line (the calendar is
-  passed in `get_view_snapshot()`'s `sources`; no line added, 782 lines after A16b). Also touched, flagged in
-  `handoffs/F0.md` for the owner: two text keys in `game/data/text/en.json` (ADR 052: no player
-  text in code) and `docs/architecture/warnings-baseline.txt` lowered to 2945 (the gate's `-Update`; 1 of the 5 is F0, 4 are A16b's).
+  passed in `get_view_snapshot()`'s `sources`; no line added, 782 lines after A16b).
+- **Scope extension (owner, 2026-10-30, after review round 1):** `game/data/text/en.json` (two
+  keys for the date line; ADR 052: no player text in code) and `core/content/content_registry.gd`
+  (one preload and one call to `CalendarService.window_range_error()` in `_init()`, so a calendar
+  window without exactly one complete day or month range fails as `schema_violation`).
+  `docs/architecture/warnings-baseline.txt` is no longer changed.
   ADR 060; evidence `docs/orca/handoffs/F0.md`.
 
 ### F1 — Crops: growth stages, harvest and farm zones · `todo` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29

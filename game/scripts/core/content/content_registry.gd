@@ -62,6 +62,7 @@ const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 ## For the static is_known_relation_value() check only (Relations takes the registry
 ## untyped, so there is no preload cycle).
 const RelationsType = preload("res://scripts/core/relations/relations.gd")
+const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 
 ## {} when valid; otherwise {"code": String, "message": String, "file": String}.
 var _error: Dictionary = {}
@@ -104,6 +105,12 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 	var scenario_check := _check_scenarios(raw_by_kind)
 	if not scenario_check["ok"]:
 		_fail("%s" % scenario_check["code"], "%s" % scenario_check["message"], "scenarios.json")
+		return
+
+	# ADR 060: one complete day or month range per calendar window (the schema's oneOf).
+	var calendar_error := CalendarServiceType.window_range_error(raw_by_kind["calendar"])
+	if not calendar_error.is_empty():
+		_fail(ERROR_SCHEMA_VIOLATION, calendar_error, "calendar.json")
 		return
 
 	for kind: String in raw_by_kind.keys():

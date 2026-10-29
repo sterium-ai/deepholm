@@ -12,6 +12,8 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const InfoPanelType = preload("res://scripts/viewer/info_panel.gd")
 const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
+const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
+const FIXTURE_DIR := "user://test-calendar-months-content/"
 const BOOT_SCENE_PATH := "res://scenes/boot.tscn"
 
 var _failed := false
@@ -21,6 +23,7 @@ func _init() -> void:
 	_check_month_and_year_of_tick()
 	_check_date_is_deterministic()
 	_check_month_window_matches_day_range()
+	_check_registry_requires_one_complete_range()
 	_check_month_window_through_world_ticks()
 	_check_view_snapshot_carries_the_world_calendar_date()
 	_check_viewer_date_label()
@@ -114,6 +117,44 @@ func _check_month_window_matches_day_range() -> void:
 	_expect(by_month.active_boost("farm", 59) == 0 and by_month.active_boost("farm", 60) == 2
 		and by_month.active_boost("farm", 149) == 2 and by_month.active_boost("farm", 150) == 0,
 		"the window opens at tick 60 (day 7) and closes after tick 149 (day 15)")
+
+## The schema's oneOf (exactly one complete pair, from/to or from_month/to_month) is not part of
+## ContentRegistry's schema subset, so the registry checks it itself: a bundle whose calendar.json
+## has a half pair, a mixed pair, both pairs or no range at all is rejected as schema_violation,
+## and a month window loads and converts like its day range.
+func _check_registry_requires_one_complete_range() -> void:
+	var base := {"id": "w", "labour": "farm", "boost": 1, "label": "test window"}
+	var rejected := [{"from_month": 2}, {"from": 4, "to_month": 3}, {"from": 4, "to": 9, "from_month": 2, "to_month": 3},
+		{}, {"to": 9}]
+	for ranges: Dictionary in rejected:
+		var window := base.duplicate()
+		window.merge(ranges)
+		var registry := _registry_with_windows([window])
+		var error := registry.get_error()
+		_expect(not registry.is_valid() and error.get("code") == ContentRegistryType.ERROR_SCHEMA_VIOLATION
+			and error.get("file") == "calendar.json", "window %s must be rejected as schema_violation, got %s" % [ranges, error])
+		_expect(CalendarServiceType.window_range_error({"windows": [window]}) != "", "window_range_error must flag %s" % [ranges])
+	var by_month := base.duplicate()
+	by_month.merge({"from_month": 2, "to_month": 3})
+	var registry := _registry_with_windows([by_month])
+	_expect(registry.is_valid(), "a complete month range must load, got %s" % [registry.get_error()])
+	if registry.is_valid():
+		var calendar := CalendarServiceType.new("", registry.document("calendar"))
+		var defined: Dictionary = calendar.window_definitions()[0]
+		_expect(int(defined["from"]) == 4 and int(defined["to"]) == 9, "months 2-3 load as days 4-9, got %s" % defined)
+	_expect(ContentRegistryType.new().is_valid(), "the shipped content still loads")
+
+## A copy of res://content/ whose calendar.json has `windows` (3-day months, 12-month years).
+func _registry_with_windows(windows: Array) -> ContentRegistryType:
+	DirAccess.make_dir_recursive_absolute(FIXTURE_DIR)
+	for file_name in DirAccess.get_files_at("res://content/"):
+		if file_name.ends_with(".json"):
+			DirAccess.copy_absolute("res://content/" + file_name, FIXTURE_DIR + file_name)
+	var file := FileAccess.open(FIXTURE_DIR + "calendar.json", FileAccess.WRITE)
+	file.store_string(JSON.stringify({"day_length_ticks": 2200, "days_per_month": 3, "months_per_year": 12,
+		"windows": windows}))
+	file.close()
+	return ContentRegistryType.new(FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
 
 ## Through WorldState.tick(): a month-declared window raises the farm boost and fires its
 ## calendar_alert on the same ticks as the equivalent day-declared window.

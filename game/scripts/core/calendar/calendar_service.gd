@@ -42,6 +42,21 @@ func _with_day_range(entry: Dictionary) -> Dictionary:
 	window["to"] = _int_of(entry["to_month"]) * _days_per_month
 	return window
 
+## "" when every window of a calendar document declares exactly one complete range, from/to or
+## from_month/to_month (calendar.schema.json's oneOf, which ContentRegistry's schema subset does
+## not check); otherwise the first offending window, for ContentRegistry to reject as a
+## schema_violation.
+static func window_range_error(document: Dictionary) -> String:
+	for entry: Variant in (document.get("windows", []) as Array):
+		var window: Dictionary = entry
+		var has_days := window.has("from") or window.has("to")
+		var has_months := window.has("from_month") or window.has("to_month")
+		var by_days := window.has("from") and window.has("to") and not has_months
+		var by_months := window.has("from_month") and window.has("to_month") and not has_days
+		if not (by_days or by_months):
+			return "calendar window '%s' must declare exactly one complete range: from/to or from_month/to_month" 				% str(window.get("id", ""))
+	return ""
+
 ## A content number as an int: parsed JSON gives floats, ContentRegistry and tests ints.
 static func _int_of(value: Variant) -> int:
 	if value is float:
