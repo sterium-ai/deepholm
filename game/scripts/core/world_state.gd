@@ -513,10 +513,10 @@ func get_jobs(kinds: Array = [], retired: bool = true) -> Array[Dictionary]:
 		ToolHandoverType.apply(job, assignments, _toils)
 	return jobs
 
-## One job as get_jobs() shows it ({} when unknown).
-func get_job(job_id: String) -> Dictionary:
+## One job as get_jobs() shows it ({} when unknown). A caller reading many jobs passes one get_assignments() copy.
+func get_job(job_id: String, assignments: Dictionary = {}) -> Dictionary:
 	var job := _scheduler.queue.get_job(job_id)
-	ToolHandoverType.apply(job, _scheduler.get_assignments(), _toils)
+	ToolHandoverType.apply(job, assignments if not assignments.is_empty() else _scheduler.get_assignments(), _toils)
 	return job
 
 ## CombatGiver's flee-destination check: true when (x, y) is already another job's "tile:" target.

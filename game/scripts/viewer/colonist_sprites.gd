@@ -249,21 +249,25 @@ func _refresh(snapshot: Dictionary) -> void:
 	var max_hp: Array = snapshot["max_hp"]
 	var last_hp: Array = _last.get("hp", [])
 	var last_max: Array = _last.get("max_hp", [])
+	# Whole columns compare natively: per row, only the columns that changed somewhere
+	# are compared, so an unchanged colonist costs its tile check and little else.
+	var badges_same: bool = same_rows and carrying == last_carrying and tools == last_tools 		and trapped == last_trapped and work_kinds == last_work
+	var health_same: bool = same_rows and hp == last_hp and max_hp == last_max
 	for row in ids.size():
+		var moved: bool = not same_rows or xs[row] != last_x[row] or ys[row] != last_y[row]
 		# Health bar: every actor with a `health` component (hp >= 0), not just the
 		# worker roster below, so a wolf/trader gets its own bar even though this
 		# file draws no body for one.
 		if hp[row] >= 0:
-			if not (same_rows and xs[row] == last_x[row] and ys[row] == last_y[row] and hp[row] == last_hp[row]
-					and max_hp[row] == last_max[row]):
+			if moved or (not health_same and (hp[row] != last_hp[row] or max_hp[row] != last_max[row])):
 				_health_bars[ids[row]] = {"position": Vector2(xs[row] * TILE_SIZE, ys[row] * TILE_SIZE) + HEALTH_BAR_OFFSET,
 					"fill": health_bar_fill({"hp": hp[row], "maxHp": max_hp[row]})}
-		elif same_rows and last_hp[row] >= 0:
+		elif not health_same and same_rows and last_hp[row] >= 0:
 			_health_bars.erase(ids[row])
 		if worker[row] == 0:
 			continue
-		if same_rows and xs[row] == last_x[row] and ys[row] == last_y[row] and carrying[row] == last_carrying[row] \
-				and tools[row] == last_tools[row] and trapped[row] == last_trapped[row] and work_kinds[row] == last_work[row]:
+		if not moved and (badges_same or (carrying[row] == last_carrying[row] and tools[row] == last_tools[row]
+				and trapped[row] == last_trapped[row] and work_kinds[row] == last_work[row])):
 			continue
 		_refresh_colonist(ids[row], Vector2i(xs[row], ys[row]), carrying[row], tools[row], trapped[row] == 1,
 			work_kinds[row])

@@ -53,14 +53,16 @@ var _trade_keys: Array[String] = []
 var _buttons: Dictionary = {}
 var _seen_ids: Array = []
 var _seen_worker: Array = []
-## A9: on a tick refresh, at most this many colonist lines are recomposed in a window
-## that walks the id-sorted roster (_cursor), plus every row on screen (inside the
-## enclosing ScrollContainer) and every row that is new or rebuilt. A colony this size
-## or smaller gets every line every refresh, as before; in a larger one a row off
-## screen is at most ceil(roster / ROWS_PER_REFRESH) ticks old. A refresh at the same
-## tick as the last one is not a tick's: it follows a command or a world swap (also
-## while paused), so it recomposes every row.
-const ROWS_PER_REFRESH := 16
+## A9: a colony of at most ALL_ROWS_UP_TO colonists gets every line on every refresh,
+## as before. In a larger one a tick refresh recomposes every row on screen (inside the
+## enclosing ScrollContainer), every new or rebuilt row, and ROWS_PER_REFRESH more in a
+## window that walks the id-sorted roster (_cursor), so a row off screen is at most
+## ceil(roster / ROWS_PER_REFRESH) ticks old; a row scrolled into view is recomposed at
+## once if it is older than the current tick (refresh_rows_on_screen()), so an old line
+## is never shown. A refresh at the same tick as the last one is not a tick's: it follows
+## a command or a world swap (also while paused), so it recomposes every row.
+const ALL_ROWS_UP_TO := 16
+const ROWS_PER_REFRESH := 4
 ## The id-sorted colonist roster of the last refresh, and where its window starts.
 var _roster: PackedStringArray = PackedStringArray()
 var _cursor: int = 0
@@ -132,6 +134,8 @@ func detail_ids() -> Array:
 	return _window_ids(_visible_ids())
 
 func _window_ids(extra: Array) -> Array:
+	if _roster.size() <= ALL_ROWS_UP_TO:
+		return Array(_roster)
 	var ids: Array = extra.duplicate()
 	for k in mini(ROWS_PER_REFRESH, _roster.size()):
 		var id := _roster[(_cursor + k) % _roster.size()]
@@ -232,7 +236,7 @@ func refresh(snapshot: Dictionary = {}) -> void:
 		_trade_keys = trade_keys
 	_use_snapshot({})
 	_last_tick = tick
-	if not every_row and _roster.size() > ROWS_PER_REFRESH:
+	if not every_row and _roster.size() > ALL_ROWS_UP_TO:
 		_cursor = (_cursor + ROWS_PER_REFRESH) % _roster.size()
 
 ## Drops every row and the roster, so the next refresh() rebuilds them all with

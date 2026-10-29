@@ -41,9 +41,10 @@ holds `WorldState`). Its keys are documented at the top of that file. In short:
   cannot be made read-only (a test showed a viewer write reaching the snapshot); a reader that
   wants packed speed assigns a column to a `Packed*Array` variable and gets its own copy.
 - **Details.** A frozen `get_colonists()`-shaped copy of each worker named in `detail_ids`,
-  and, for those workers only, the jobs their assignment, route, work or pending need job
-  names (`get_job()` copies), their pending need job ids and their rescue reasons.
-- **Once-per-refresh copies** of `get_assignments()`, `get_queued_job_summary()`,
+  and, for those workers only, their `get_assignments()` entries, the jobs their assignment,
+  route, work or pending need job names (`get_job()` copies, all sharing one assignments
+  copy), their pending need job ids and their rescue reasons.
+- **Once-per-refresh copies** of `get_queued_job_summary()`,
   `get_tool_items()`, `get_items()`, `get_construction_sites()`, `get_zones()`,
   `get_pending_trade_offers()` and the need reasons.
 
@@ -76,13 +77,15 @@ write in the viewer and `boot.gd`.
 
 ## Consequences
 
-- The per-tick viewer refresh at 1,000 actors drops from about 415 ms to 3.1–5.0 ms (mean per run, depending
-  on the machine's load; borderline against A9's ≤ 4 ms)
-  (`docs/orca/handoffs/A9.md` has the numbers and the command).
-- On a tick, the colonist panel recomposes at most `ColonistPanel.ROWS_PER_REFRESH` (16)
-  lines in a window that walks the id-sorted roster, plus every row on screen and any new or
-  rebuilt row. A colony of 16 or fewer sees every line every tick, as before; at 1,000
-  colonists a row off screen is at most 63 ticks old. A refresh at the same tick as the last
+- The per-tick viewer refresh at 1,000 actors drops from about 415 ms to about 3.2 ms (mean;
+  2.9–3.6 ms per run with the UI laid out and 3 colonist rows on screen; p95 4.1–4.5 ms;
+  `docs/orca/handoffs/A9.md` has the numbers and the command).
+- `WorldState.get_job()` takes an optional `assignments` copy, so the snapshot's job lookups
+  share one instead of each deep-copying every assignment for the tool-handover overlay.
+- A colony of `ColonistPanel.ALL_ROWS_UP_TO` (16) or fewer sees every line every tick, as
+  before. In a larger one a tick recomposes every row on screen, any new or rebuilt row, and
+  `ColonistPanel.ROWS_PER_REFRESH` (4) more in a window that walks the id-sorted roster; at
+  1,000 colonists a row off screen is at most 250 ticks old. A refresh at the same tick as the last
   one (it follows a command or a world swap, also while paused) recomposes every row, so a
   command's effect shows at once anywhere in the list; at 1,000 colonists that refresh costs
   about 33 ms. Scrolling or resizing the panel recomposes, at once, every row that comes on

@@ -29,13 +29,13 @@ extends RefCounted
 ##                    assignment, route, work or pending need job names
 ##   need_job_ids     {detailed id: get_active_need_job_id()}, non-empty only
 ##   rescue_reasons   {detailed trapped id: get_colonist_rescue_reason()}
-##   assignments, queued_job_summary, tool_items, items, construction_sites, zones,
+##   assignments      the detailed workers' entries of get_assignments()
+##   queued_job_summary, tool_items, items, construction_sites, zones,
 ##   pending_trade_offers   the getters of the same name, called once
 
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
-const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 
 ## `actors` is the live actor table, read and never written. `sources` holds the
 ## live read-only views job_kinds ({job id: kind}) and need_status ({id: reason}) and
@@ -45,12 +45,16 @@ static func build(tick: int, actors: Array, content: ContentRegistryType, source
 		detail_ids: Array) -> Dictionary:
 	var snapshot := {"tick": tick}
 	snapshot.merge(parts)
-	var tool_kinds := {}
+	# The tool store records which worker holds each tool (location "held"), so the
+	# tool_kinds column needs no per-actor read of the worker's held_tool.
+	var held_kinds := {}
 	for tool_item: Dictionary in parts["tool_items"]:
-		var tool_id: String = tool_item["id"]
-		tool_kinds[tool_id] = tool_item["kind"]
+		var location: Dictionary = tool_item["location"]
+		if location.get("type") == "held":
+			var holder: String = location["colonist_id"]
+			held_kinds[holder] = tool_item["kind"]
 	var job_kinds: Dictionary = sources["job_kinds"]
-	_add_columns(snapshot, actors, content, job_kinds, tool_kinds)
+	_add_columns(snapshot, actors, content, job_kinds, held_kinds)
 	var need_reasons: Dictionary = (sources["need_status"] as Dictionary).duplicate()
 	need_reasons.make_read_only() # flat strings: freeze() need not walk it
 	snapshot["need_reasons"] = need_reasons
@@ -58,7 +62,7 @@ static func build(tick: int, actors: Array, content: ContentRegistryType, source
 	return freeze(snapshot)
 
 static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRegistryType, job_kinds: Dictionary,
-		tool_kinds: Dictionary) -> void:
+		held_kinds: Dictionary) -> void:
 	var ids := PackedStringArray()
 	var kinds := PackedStringArray()
 	var factions := PackedStringArray()
@@ -72,6 +76,9 @@ static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRe
 	var hp := PackedInt32Array()
 	var max_hp := PackedInt32Array()
 	var worker_kinds := {} # kind -> has a worker component, looked up once per kind
+	var last_kind := ""
+	var is_worker := false
+	var anyone_holds := not held_kinds.is_empty()
 	# Hot loop (every actor, every refresh): one read per field, no copies.
 	for actor: Dictionary in actors:
 		var id: String = actor["id"]
@@ -84,17 +91,16 @@ static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRe
 		factions.append(faction)
 		xs.append(x)
 		ys.append(y)
-		var is_worker: Variant = worker_kinds.get(kind)
-		if is_worker == null:
-			is_worker = ActorTableType.has_component(actor, "worker", content)
-			worker_kinds[kind] = is_worker
+		if kind != last_kind or ids.size() == 1: # runs of one kind skip the lookup
+			if not worker_kinds.has(kind):
+				worker_kinds[kind] = ActorTableType.has_component(actor, "worker", content)
+			is_worker = worker_kinds[kind]
+			last_kind = kind
 		worker.append(1 if is_worker else 0)
 		var hands: Variant = actor.get("hands")
 		var carried: String = hands[0]["kind"] if hands else ""
 		carrying.append(carried)
-		# held_tool belongs to the worker component (ADR 012), read through its accessor.
-		var held_tool: String = WorkerType.get_held_tool(actor) if is_worker else ""
-		var tool_kind: String = tool_kinds.get(held_tool, "") if held_tool != "" else ""
+		var tool_kind: String = held_kinds.get(id, "") if anyone_holds and is_worker else ""
 		tools.append(tool_kind)
 		trapped.append(0 if actor.get("trapped") == null else 1)
 		var work: Variant = actor.get("work")
@@ -167,7 +173,10 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 	var jobs := {}
 	var need_job_ids := {}
 	var rescue_reasons := {}
+	# get_assignments()' full copy serves the job lookups; the snapshot keeps only the
+	# detailed workers' entries, which is all the panels read (and all that is frozen).
 	var assignments: Dictionary = snapshot["assignments"]
+	var detailed_assignments := {}
 	for wanted: Variant in detail_ids:
 		var id: String = wanted
 		var row := _worker_row(id) # _add_columns() just sorted this snapshot's workers
@@ -178,6 +187,7 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 		var job_ids: Array[String] = []
 		if assignments.has(id):
 			var assignment: Dictionary = assignments[id]
+			detailed_assignments[id] = assignment
 			var assigned_job: String = assignment["job_id"]
 			job_ids.append(assigned_job)
 		# The route through the mover component (ADR 012); "work" is ToilExecutor's own field.
@@ -197,8 +207,9 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 			rescue_reasons[id] = rescue_reason
 		for job_id in job_ids:
 			if not job_id.is_empty() and not jobs.has(job_id):
-				jobs[job_id] = get_job.call(job_id)
-	snapshot.merge({"details": details, "jobs": jobs, "need_job_ids": need_job_ids, "rescue_reasons": rescue_reasons})
+				jobs[job_id] = get_job.call(job_id, assignments) # one assignments copy for every job
+	snapshot.merge({"details": details, "jobs": jobs, "need_job_ids": need_job_ids, "rescue_reasons": rescue_reasons,
+		"assignments": detailed_assignments}, true)
 
 ## One actor as get_colonists() shows it: a deep copy plus the "carrying" view.
 static func actor_copy(actor: Dictionary) -> Dictionary:

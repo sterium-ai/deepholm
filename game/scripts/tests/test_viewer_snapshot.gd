@@ -6,7 +6,8 @@ extends SceneTree
 ##    read-only all the way down, and is a copy: ticking the world never changes it;
 ## 2) the sprite layers keep no node per actor (one _draw() per layer);
 ## 3) the colonist panel keeps its row nodes across refreshes; on a tick it recomposes
-##    at most ROWS_PER_REFRESH lines plus the rows on screen, and still reaches every
+##    every row up to ALL_ROWS_UP_TO colonists, otherwise at most ROWS_PER_REFRESH lines
+##    plus the rows on screen, and still reaches every
 ##    row in turn; a refresh at the same tick (a command, also while paused)
 ##    recomposes every row;
 ## 4) TickDriver runs at most MAX_TICKS_PER_FRAME ticks per frame and drops the rest
@@ -111,7 +112,13 @@ func _check_snapshot_matches_getters() -> void:
 	_expect(worker.has(0), "the scenario's wolf is a non-worker row")
 	for job_id: String in snapshot["jobs"]:
 		_expect(snapshot["jobs"][job_id] == world.get_job(job_id), "job %s equals get_job()" % job_id)
-	_expect(snapshot["assignments"] == world.get_assignments(), "assignments equal get_assignments()")
+	var all_assignments := world.get_assignments()
+	var detailed_assignments := {}
+	for id: String in all_assignments:
+		if ids.has(id):
+			detailed_assignments[id] = all_assignments[id]
+	_expect(snapshot["assignments"] == detailed_assignments, "assignments equal get_assignments() for the detailed workers")
+	_expect((world.get_view_snapshot()["assignments"] as Dictionary).is_empty(), "no detail_ids -> no assignments")
 	_expect(snapshot["items"] == world.get_items() and snapshot["zones"] == world.get_zones()
 		and snapshot["construction_sites"] == world.get_construction_sites(), "map collections equal their getters")
 	var none := world.get_view_snapshot()
@@ -159,9 +166,10 @@ func _check_layers_keep_no_nodes() -> void:
 	_expect(actors.get_child_count() == 0, "actor layer keeps no node per actor")
 	actors.free()
 
-## A world of ROWS_PER_REFRESH * 2 + 5 colonists, several of them working till orders.
-func _panel_world() -> WorldStateType:
-	var world := BenchCommon.world_with_colonists(7, 64, 64, ColonistPanelType.ROWS_PER_REFRESH * 2 + 5)
+## A world of ALL_ROWS_UP_TO + ROWS_PER_REFRESH * 2 + 5 colonists (or `count`), several of
+## them working till orders.
+func _panel_world(count: int = ColonistPanelType.ALL_ROWS_UP_TO + ColonistPanelType.ROWS_PER_REFRESH * 2 + 5) -> WorldStateType:
+	var world := BenchCommon.world_with_colonists(7, 64, 64, count)
 	BenchCommon.submit_till_orders(world, world.get_colonists().size())
 	for _i in 6:
 		world.tick()
@@ -197,6 +205,16 @@ func _check_panel_rows_rotate() -> void:
 	_expect(_fresh_count(list) == count, "every row is recomposed within ceil(roster / ROWS_PER_REFRESH) ticks")
 	_expect(list.get_child(0) == first_row, "rows are updated in place, not rebuilt")
 	panel.free()
+	# A colony of at most ALL_ROWS_UP_TO colonists gets every line on every tick, as on main.
+	var small_world := _panel_world(ColonistPanelType.ALL_ROWS_UP_TO)
+	var small := ColonistPanelType.new()
+	small.setup(small_world, TextTableType.new())
+	_mark_stale(small._list)
+	small_world.tick()
+	small.refresh()
+	_expect(_fresh_count(small._list) == ColonistPanelType.ALL_ROWS_UP_TO,
+		"a colony of ALL_ROWS_UP_TO recomposes every row on a tick (%d fresh)" % _fresh_count(small._list))
+	small.free()
 
 ## The reviewer's case: while paused (no tick), a command changes a colonist whose row
 ## is outside the window; the refresh that follows the command must show it.

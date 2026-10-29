@@ -10,7 +10,9 @@ extends SceneTree
 ## while the rest idles, its needs ticking down. Each
 ## sample is one world.tick() (not timed) followed by one timed boot._refresh(); the
 ## world swap itself (boot._replace_world(), which builds every row and sprite) is
-## reported on its own ("swap").
+## reported on its own ("swap"). The window is the project's size and a few frames run so
+## the UI is laid out, with the info column scrolled to the colonist list: the panel
+## recomposes its on-screen rows on every tick, and "on_screen_rows" says how many.
 ## The breakdown times the parts of _refresh() (the snapshot, then the four calls that
 ## read it) separately on the ticks in between.
 ##
@@ -39,13 +41,16 @@ func _run_all() -> void:
 	print(BenchCommon.header("bench_viewer_refresh"))
 	print("bench_viewer_refresh: map=%dx%d seed=%d ticks<=%d per run" % [SIZE, SIZE, SEED, args["ticks"]])
 	for actor_count in args["actors"]:
-		_run(int(actor_count), int(args["ticks"]))
+		await _run(int(actor_count), int(args["ticks"]))
 	print("bench_viewer_refresh: done")
 	quit(0)
 
 func _run(actor_count: int, ticks: int) -> void:
 	var world := BenchCommon.world_with_colonists(SEED, SIZE, SIZE, actor_count)
 	var orders := BenchCommon.submit_till_orders(world, actor_count)
+	# The project's window size (headless defaults to 64x64), so the UI lays out as in the game.
+	root.size = Vector2i(int(ProjectSettings.get_setting("display/window/size/viewport_width")),
+		int(ProjectSettings.get_setting("display/window/size/viewport_height")))
 	var boot := Boot.new()
 	root.add_child(boot)
 	boot.tick_driver.pause()
@@ -53,6 +58,15 @@ func _run(actor_count: int, ticks: int) -> void:
 	var start := Time.get_ticks_usec()
 	boot._replace_world(world)
 	var swap_usec := Time.get_ticks_usec() - start
+	# Let the UI lay out (headless still sizes Controls) so the colonist panel's rows have
+	# real on-screen rects: a tick refresh recomposes the rows on screen, as in the game.
+	for _i in 3:
+		await process_frame
+	# Scrolled to the colonist list, as a player watching the colonists has it.
+	boot._ui_scroll.scroll_vertical = int(boot._ui_scroll.colonist_panel.position.y)
+	for _i in 3:
+		await process_frame
+	var on_screen: int = boot._ui_scroll.colonist_panel._visible_ids().size()
 	var samples: Array = []
 	var parts: Dictionary = {}
 	var run_usec := 0
@@ -74,8 +88,9 @@ func _run(actor_count: int, ticks: int) -> void:
 		var mean_ms: float = int(parts.get(part, 0)) / 1000.0 / maxi(1, samples.size())
 		split.append("%s=%.2fms" % [part, mean_ms])
 		split_values[part + " ms"] = "%.2f" % mean_ms
-	print("bench_viewer_refresh: actors=%d orders=%d swap=%.2fms %s | %s" % [world.get_colonists().size(),
-		orders, swap_usec / 1000.0, BenchCommon.format_stats(stats), " ".join(split)])
+	print("bench_viewer_refresh: actors=%d orders=%d on_screen_rows=%d swap=%.2fms %s | %s" % [
+		world.get_colonists().size(), orders, on_screen, swap_usec / 1000.0, BenchCommon.format_stats(stats),
+		" ".join(split)])
 	var values := {"actors": world.get_colonists().size(), "swap ms": "%.2f" % (swap_usec / 1000.0)}
 	values.merge(BenchCommon.stats_values(stats))
 	values.merge(split_values)
