@@ -14,9 +14,10 @@ const InventoryType = preload("res://scripts/core/actors/components/inventory.gd
 const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
 ## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2); v4 saves the scenario's
-## calendar and enabled incidents (A16b, ADR 057). Every later shape change bumps this and adds
-## a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 4
+## calendar and enabled incidents (A16b, ADR 057); v5 saves route-search costs and SaveIO writes
+## the compact SaveWire encoding (A7, ADR 058). Every later shape change bumps this and adds a
+## SaveMigrations step and a fixture.
+const SCHEMA_VERSION := 5
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.

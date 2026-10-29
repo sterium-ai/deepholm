@@ -185,7 +185,7 @@ static func _encode_route(route_state):
 	var came_from_map: Dictionary = route_state["came_from"]
 	for child in came_from_map.keys():
 		came_from.append({"child": StateCodec._encode_tile(child), "parent": StateCodec._encode_tile(came_from_map[child])})
-	return {
+	var encoded := {
 		"start": StateCodec._encode_tile(route_state["start"]),
 		"target": StateCodec._encode_tile(route_state["target"]),
 		"status": route_state["status"],
@@ -196,6 +196,18 @@ static func _encode_route(route_state):
 		"expansions": route_state["expansions"],
 		"resumeCalls": route_state["resume_calls"],
 	}
+	# A7 (schema v5): the accumulated cost of each visited tile, in "visited" order. These are the
+	# only floats in the state; SaveWire writes them as base64 doubles, never as JSON numbers.
+	var cost_value: Variant = (route_state as Dictionary).get("cost")
+	if cost_value is Dictionary:
+		var cost_map: Dictionary = cost_value
+		var visited_map: Dictionary = (route_state as Dictionary)["visited"]
+		var cost: Array = []
+		for tile: Vector2i in visited_map:
+			var g: float = cost_map[tile]
+			cost.append(g)
+		encoded["cost"] = cost
+	return encoded
 
 static func _decode_route(route):
 	if route == null:
@@ -206,7 +218,7 @@ static func _decode_route(route):
 	var came_from: Dictionary = {}
 	for pair in route["cameFrom"]:
 		came_from[StateCodec._decode_tile(pair["child"])] = StateCodec._decode_tile(pair["parent"])
-	return {
+	var decoded := {
 		"start": StateCodec._decode_tile(route["start"]),
 		"target": StateCodec._decode_tile(route["target"]),
 		"status": route["status"],
@@ -217,6 +229,18 @@ static func _decode_route(route):
 		"expansions": int(route["expansions"]),
 		"resume_calls": int(route["resumeCalls"]),
 	}
+	# Absent in a state migrated from v4: RouteSearch.restore() then rebuilds the costs.
+	var cost_value: Variant = (route as Dictionary).get("cost")
+	if cost_value is Array:
+		var saved: Array = cost_value
+		var visited_list: Array = (route as Dictionary)["visited"]
+		var cost: Dictionary = {}
+		for i in visited_list.size():
+			var tile: Dictionary = visited_list[i]
+			var g: float = saved[i]
+			cost[StateCodec._decode_tile(tile)] = g
+		decoded["cost"] = cost
+	return decoded
 
 static func _encode_assignments(assignments: Dictionary) -> Dictionary:
 	var encoded: Dictionary = {}

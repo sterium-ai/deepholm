@@ -145,7 +145,8 @@ static func _locate_state_object(text: String) -> Dictionary:
 	var state_members := _scan_object_members(text, state_start + 1)
 	if not state_members.has("__end__"):
 		return {"ok": false}
-	return {"ok": true, "members": state_members, "text": text}
+	# "start"/"end": the raw state object's span, which SaveIO hashes (integrity, A7).
+	return {"ok": true, "members": state_members, "text": text, "start": state_start, "end": state_members["__end__"]}
 
 ## The direct members of the object at `pos` (after its `{`): decoded key -> {start, end} raw
 ## value span; never recurses. A duplicate key keeps the last occurrence, like

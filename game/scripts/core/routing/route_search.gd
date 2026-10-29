@@ -151,12 +151,22 @@ func resume() -> String:
 
 ## Native-Variant continuation state; callers translate Vector2i through their codec
 ## (state_codec.gd). Copies the whole search: for save/hash time only, per-tick readers use summary().
+## "cost" is the accumulated cost g of every visited tile (A7): a search can span a map change,
+## so its costs are part of the continuation and are never recomputed from the current map.
 func snapshot() -> Dictionary:
 	var frontier: Array[Vector2i] = []
 	frontier.assign(_open.keys())
 	return {"start": _start, "target": _target, "status": _status,
 		"frontier": frontier, "visited": _visited_in_insertion_order(),
-		"came_from": _came_from.duplicate(), "path": _path.duplicate()}
+		"came_from": _came_from.duplicate(), "cost": _g.duplicate(), "path": _path.duplicate()}
+
+## Runs search to a terminal status: its path's step count, or -1 when unreachable.
+static func finish_steps(search: RouteSearch) -> int:
+	while not search.is_terminal():
+		search.resume()
+	if search.get_status() != STATUS_FOUND:
+		return -1
+	return search.get_path().size() - 1
 
 ## The constant-size part of snapshot() (start, target, status), cheap enough for every tick.
 func summary() -> Dictionary:
@@ -164,7 +174,9 @@ func summary() -> Dictionary:
 
 ## Resumes an in-flight search from snapshot(). Call right after construction with the current
 ## cost_fn/bounds/min_cost (a Callable cannot be persisted). The frontier is re-pushed in its saved
-## order, so the restored search expands exactly as the uninterrupted one.
+## order with its saved costs, so the restored search expands exactly as the uninterrupted one
+## even when the map changed since a tile was visited. A state without "cost" (a save from
+## before schema v5) rebuilds the costs from the current map, as those saves always did.
 func restore(state: Dictionary) -> void:
 	_start = state["start"]
 	_target = state["target"]
@@ -174,7 +186,12 @@ func restore(state: Dictionary) -> void:
 	_path.clear()
 	for tile in state["path"]:
 		_path.append(tile)
-	_g = _rebuild_costs() if _seeded else {}
+	if not _seeded:
+		_g = {}
+	elif state.has("cost"):
+		_g = (state["cost"] as Dictionary).duplicate()
+	else:
+		_g = _rebuild_costs()
 	_open.clear()
 	_heap.clear()
 	_entry_f.clear()
@@ -200,7 +217,8 @@ func _cost_of(tile: Vector2i) -> float:
 		return 1.0 if result else 0.0
 	return float(result)
 
-## Accumulated cost per visited tile, rebuilt after restore() (not part of the snapshot).
+## Accumulated cost per visited tile from the current map: only for a state saved without
+## "cost" (schema < v5), see restore().
 func _rebuild_costs() -> Dictionary:
 	var costs := {_start: 0.0}
 	for tile in _came_from.keys():

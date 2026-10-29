@@ -13,6 +13,8 @@ extends RefCounted
 ## Reads are checked against the session ContentRegistry given at construction (A13b): a slot
 ## made on other content packs is skipped with content_packs_mismatch. A write is checked
 ## against the registry of the world it encodes.
+## begin_save_manual()/begin_save_autosave() return a SaveWrite whose file work runs on a worker
+## thread (A7); save_manual()/save_autosave() are the same call followed by wait().
 
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
@@ -27,6 +29,8 @@ var _save_dir: String
 var _last_known_good: Variant = null
 ## The session registry; null until first needed when none was given (then the base bundle).
 var _content: ContentRegistryType
+## The latest begin_save_*() handle until it is waited on.
+var _in_flight: SaveWrite = null
 
 func _init(save_dir: String = DEFAULT_SAVE_DIR, content: ContentRegistryType = null) -> void:
 	_save_dir = save_dir
@@ -34,27 +38,47 @@ func _init(save_dir: String = DEFAULT_SAVE_DIR, content: ContentRegistryType = n
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_save_dir))
 
 func save_manual(world: WorldState, epoch: int = 0) -> Dictionary:
-	var state: Dictionary = StateCodecType.encode(world)
-	state["epoch"] = epoch
-	var result: Dictionary = SaveIOType.write_atomic(_manual_path(), state, Callable(), Callable(), StateCodecType.content_of(world))
-	if result.get("ok", false):
-		_advance_last_known_good(MANUAL_SLOT, _manual_path(), epoch, int(state["tick"]))
-	return result
+	return begin_save_manual(world, epoch).wait()
 
 ## Never touches the manual slot; overwrites the oldest autosave.
 func save_autosave(world: WorldState, epoch: int = 0) -> Dictionary:
+	return begin_save_autosave(world, epoch).wait()
+
+## save_manual() with the file work on a worker thread (A7, SaveIO.begin_write()): encode()
+## and the one stringify run here, then the world may tick on. The last-known-good pointer
+## advances inside the handle's wait(), on the caller's thread.
+func begin_save_manual(world: WorldState, epoch: int = 0) -> SaveWrite:
+	return _begin_save(world, epoch, MANUAL_SLOT, _manual_path())
+
+## save_autosave() on a worker thread, like begin_save_manual().
+func begin_save_autosave(world: WorldState, epoch: int = 0) -> SaveWrite:
+	# A write still in flight may be the slot this pick would choose: finish it first.
+	_finish_in_flight()
+	var index := _pick_autosave_slot()
+	return _begin_save(world, epoch, _autosave_slot_name(index), _autosave_path(index))
+
+func _begin_save(world: WorldState, epoch: int, slot: String, path: String) -> SaveWrite:
+	_finish_in_flight()
 	var state: Dictionary = StateCodecType.encode(world)
 	state["epoch"] = epoch
-	var index := _pick_autosave_slot()
-	var path := _autosave_path(index)
-	var result: Dictionary = SaveIOType.write_atomic(path, state, Callable(), Callable(), StateCodecType.content_of(world))
-	if result.get("ok", false):
-		_advance_last_known_good(_autosave_slot_name(index), path, epoch, int(state["tick"]))
-	return result
+	var tick: int = state["tick"]
+	var write: SaveWrite = SaveIOType.begin_write(path, state, StateCodecType.content_of(world))
+	write.on_finished(func(result: Dictionary) -> void:
+		if result.get("ok", false):
+			_advance_last_known_good(slot, path, epoch, tick))
+	_in_flight = write
+	return write
+
+## One write at a time per manager: slots are picked and read from what is on disk.
+func _finish_in_flight() -> void:
+	if _in_flight != null:
+		_in_flight.wait()
+		_in_flight = null
 
 ## {"ok": true, "slot", "file", "tick", "epoch", "state", "skipped"} for the newest slot that
 ## validates, else {"ok": false, "skipped"}; "skipped" lists rejected candidates in order.
 func load_best() -> Dictionary:
+	_finish_in_flight()
 	var ordered := _order_candidates_newest_first()
 	var skipped: Array[Dictionary] = []
 	for candidate in ordered:

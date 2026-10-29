@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v4",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v5",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
@@ -376,6 +376,7 @@
             }
           }
         },
+        "cost": { "description": "One accumulated cost per visited tile, in visited order (v5).", "type": "array", "items": { "type": "number", "minimum": 0 } },
         "path": { "type": "array", "items": { "$ref": "#/$defs/tile" } },
         "expansions": { "type": "integer", "minimum": 0 },
         "resumeCalls": { "type": "integer", "minimum": 0 }
@@ -383,7 +384,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 4 },
+    "schemaVersion": { "type": "integer", "const": 5 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",

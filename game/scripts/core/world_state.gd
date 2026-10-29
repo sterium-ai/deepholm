@@ -397,6 +397,8 @@ func to_save_state() -> Dictionary:
 	return StateCodec.encode(self)
 ## Reconstructs a WorldState from to_save_state(), resuming any in-flight search.
 static func from_save_state(state: Dictionary) -> WorldState: return StateCodec.decode(state)
+## Frees a replaced world (A7): breaks the module/Callable cycles; unusable afterwards.
+func dispose() -> void: WorldDisposer.dispose(self, [_content])
 
 # Read-only getters (presentation and tests).
 func get_seed() -> int: return _seed
@@ -748,11 +750,7 @@ func _fail_startup(message: String) -> void:
 ## Travel cost from `from` to `to` under the same rule the go_to toil moves by, run to
 ## completion (bounded by the map). -1 when unreachable.
 func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
-	if from == to: return 0
-	var route := _route_search_factory(from, to, _routable_to(to, faction_id))
-	while not route.is_terminal(): route.resume()
-	if route.get_status() != RerouteType.STATUS_FOUND: return -1
-	return route.get_path().size() - 1
+	return 0 if from == to else RerouteType.finish_steps(_route_search_factory(from, to, _routable_to(to, faction_id)))
 
 func _colonist_at(x: int, y: int) -> bool:
 	return _actor_index.any_at(_colonists, x, y)

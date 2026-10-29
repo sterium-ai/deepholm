@@ -34,9 +34,12 @@ static func _valid_route_state(value, map_width: int, map_height: int) -> Dictio
 		return _fail("invalid route state type")
 	var route: Dictionary = value
 	var required := ["start", "target", "status", "frontier", "visited", "cameFrom", "path", "expansions", "resumeCalls"]
-	var check := _require_fields(route, required, "route state")
-	if not check["ok"]:
-		return check
+	# "cost" (A7, schema v5) is optional: a state migrated from v4 has none.
+	if not _keys_allowed(route, required + ["cost"]):
+		return _fail("unexpected route state field")
+	for key: String in required:
+		if not route.has(key):
+			return _fail_missing("missing route state field '%s'" % key)
 	var start_check := _valid_tile(route["start"], map_width, map_height)
 	if not start_check["ok"]:
 		return start_check
@@ -70,6 +73,20 @@ static func _valid_route_state(value, map_width: int, map_height: int) -> Dictio
 			return parent_check
 	if not _is_int_min(route["expansions"], 0) or not _is_int_min(route["resumeCalls"], 0):
 		return _fail("invalid route expansions or resumeCalls")
+	if route.has("cost"):
+		return _valid_route_cost(route["cost"], (route["visited"] as Array).size())
+	return {"ok": true}
+
+## One finite, non-negative accumulated cost per visited tile, in "visited" order.
+static func _valid_route_cost(value: Variant, visited_count: int) -> Dictionary:
+	if not (value is Array) or (value as Array).size() != visited_count:
+		return _fail("route cost must hold one number per visited tile")
+	for cost: Variant in value:
+		if typeof(cost) != TYPE_FLOAT and typeof(cost) != TYPE_INT:
+			return _fail("invalid route cost")
+		var number: float = cost
+		if not is_finite(number) or number < 0.0:
+			return _fail("invalid route cost")
 	return {"ok": true}
 
 static func _valid_found_entry(value, map_width: int, map_height: int) -> Dictionary:

@@ -13,6 +13,7 @@ const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
+const SaveWireType = preload("res://scripts/core/persistence/save_wire.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Always written by StateCodec.encode().
 const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
@@ -23,23 +24,45 @@ const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescu
 ## Every entry point takes the session's ContentRegistry (A13b, ADR 010 amendment 2): its
 ## version, packs and tile/job/need ids are what a save is checked against. null builds the
 ## base bundle, as WorldState does.
+## One pass (A7): the state is validated, packed (SaveWire) and stringified once; the integrity
+## hash is taken once, over exactly the state text written, and the envelope is built around it.
 static func write_atomic(path: String, state: Dictionary, before_rename: Callable = Callable(), after_temp_write: Callable = Callable(),
 		content: ContentRegistryType = null) -> Dictionary:
-	var temporary := path + ".tmp"
 	var registry := _session(content)
 	var validation := _validate_state(state, registry)
 	if not validation["ok"]:
-		_remove_temporary(temporary)
+		_remove_temporary(path + ".tmp")
 		return _error(validation["code"], validation["message"], path)
+	return commit_body(path, state_text(state), content_check(registry), before_rename, after_temp_write)
 
-	# rng.seed/state stay real JSON integers; read() recovers them exactly from the raw text.
-	var json_safe: Dictionary = state.duplicate(true)
-	var body := JSON.stringify(json_safe)
-	# Hash the parsed-back form: read() can only hash floats, so both sides must match.
-	var round_tripped: Variant = JSON.parse_string(body)
-	var hash := _sha256(JSON.stringify(round_tripped).to_utf8_buffer())
-	var envelope := {"format": FORMAT, "integrity": hash, "state": json_safe}
-	var encoded := JSON.stringify(envelope)
+## Starts write_atomic()'s file work on a worker thread (A7) and returns its SaveWrite handle.
+## Only SaveWire.pack() and the one JSON.stringify run on the calling thread: once this returns,
+## nothing reads state or the world it was encoded from. The worker hashes, writes the
+## candidate, reads it back through read()'s checks (a state that does not validate fails
+## there, before the target changes) and renames. wait() returns what write_atomic() would.
+static func begin_write(path: String, state: Dictionary, content: ContentRegistryType = null) -> SaveWrite:
+	var check := content_check(_session(content))
+	# The read-back scans with SaveJsonInts' shared RegEx: compile it here, not on the worker.
+	SaveJsonInts._get_number_regex()
+	return SaveWrite.new(path, state_text(state), check)
+
+## The one JSON.stringify of a write: the packed state, exactly as the file holds it.
+static func state_text(state: Dictionary) -> String:
+	return JSON.stringify(SaveWireType.pack(state))
+
+## What a save is checked against, as plain data a worker thread may read while the main
+## thread keeps using the registry: its version, packs and content_rules().
+static func content_check(registry: ContentRegistryType) -> Dictionary:
+	return {"version": registry.version(), "packs": registry.packs().duplicate(true), "rules": content_rules(registry)}
+
+## Hashes body, writes the envelope around it to path + ".tmp", reads that back through
+## read()'s checks, then renames it over path. Reads no Object but the file system, so it is
+## what SaveWrite runs on its worker thread.
+static func commit_body(path: String, body: String, check: Dictionary, before_rename: Callable = Callable(),
+		after_temp_write: Callable = Callable()) -> Dictionary:
+	var temporary := path + ".tmp"
+	var integrity := _sha256(body.to_utf8_buffer())
+	var encoded := "{\"format\":%s,\"integrity\":\"%s\",\"state\":%s}" % [JSON.stringify(FORMAT), integrity, body]
 	var file := FileAccess.open(temporary, FileAccess.WRITE)
 	if file == null:
 		_remove_temporary(temporary)
@@ -60,7 +83,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		after_temp_write.call(temporary)
 
 	# Read the candidate back: catches truncation and storage failures before the target changes.
-	var verified := _read_and_verify(temporary, registry)
+	var verified := _read_and_verify(temporary, check)
 	if not verified["ok"]:
 		_remove_temporary(temporary)
 		return _error(verified["code"], verified["message"], path)
@@ -75,7 +98,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 	return {"ok": true, "code": "ok", "message": "save written", "file": path}
 
 static func read(path: String, content: ContentRegistryType = null) -> Dictionary:
-	var result := _read_and_verify(path, _session(content))
+	var result := _read_and_verify(path, content_check(_session(content)))
 	if not result["ok"]:
 		var failed := _error(result["code"], result["message"], path)
 		if result.has("reason"):
@@ -83,7 +106,8 @@ static func read(path: String, content: ContentRegistryType = null) -> Dictionar
 		return failed
 	return {"ok": true, "code": "ok", "message": "save loaded", "file": path, "state": result["state"]}
 
-static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dictionary:
+## check is content_check()'s plain data, never the registry: this also runs on SaveWrite's thread.
+static func _read_and_verify(path: String, check: Dictionary) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {"ok": false, "code": "read_failed", "message": "could not open save", "file": path}
@@ -102,12 +126,12 @@ static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dic
 	var state: Variant = envelope["state"]
 	if not (state is Dictionary):
 		return {"ok": false, "code": "schema_error", "message": "save state is not an object", "file": path}
+	# Locate "state" once; the integrity hash and every exact-int restore below share the scan.
+	var located_state := SaveJsonInts._locate_state_object(text)
 	# Version before hash: a newer producer gets the distinct version error.
-	var stored_state_hash := _sha256(JSON.stringify(state).to_utf8_buffer())
+	var integrity_ok := _integrity_matches(str(envelope["integrity"]), text, located_state, state as Dictionary)
 	# Normalise ints for the type checks; the hash above used the exact wire text.
 	_coerce_ints(state)
-	# Locate "state" once; every exact-int restore below shares the scan.
-	var located_state := SaveJsonInts._locate_state_object(text)
 	var rng_restore := SaveJsonInts._restore_exact_rng(state, located_state)
 	var seed_restore := SaveJsonInts._restore_exact_seed(state, located_state)
 	var incident_rng_restore := SaveJsonInts._restore_exact_incident_rng(state, located_state)
@@ -115,7 +139,7 @@ static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dic
 	var version_value: Variant = state.get("schemaVersion")
 	if _is_int(version_value) and int(version_value) > SCHEMA_VERSION:
 		return {"ok": false, "code": "save_from_newer_version", "message": "save schema is newer than this build", "file": path}
-	if str(envelope["integrity"]) != stored_state_hash:
+	if not integrity_ok:
 		return {"ok": false, "code": "integrity_mismatch", "message": "save integrity hash does not match", "file": path}
 	# After version and hash: a fractional or out-of-int64 seed/rng token is a schema
 	# violation, never truncated into a plausible integer.
@@ -127,6 +151,10 @@ static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dic
 		return {"ok": false, "code": "schema_error", "message": incident_rng_restore["message"], "file": path}
 	if not dig_find_rng_restore["ok"]:
 		return {"ok": false, "code": "schema_error", "message": dig_find_rng_restore["message"], "file": path}
+	# Back to the plain state before anything reads a field SaveWire packs (A7).
+	var unpacked := SaveWireType.unpack(state as Dictionary)
+	if not unpacked["ok"]:
+		return {"ok": false, "code": unpacked["code"], "message": unpacked["message"], "file": path}
 	if not state.has("schemaVersion"):
 		return {"ok": false, "code": "no_migration_available", "message": "missing required field 'schemaVersion'", "file": path}
 	if not _is_int(version_value):
@@ -141,7 +169,7 @@ static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dic
 		state = migrated["state"]
 	# Another content bundle gets one chance through a registered rename
 	# (SaveMigrations.resolve_content_version()), otherwise it is rejected, never loaded stale.
-	var current_content_version := registry.version()
+	var current_content_version: String = check["version"]
 	var content_version_value: Variant = state.get("contentVersion")
 	if content_version_value is String and String(content_version_value) != current_content_version:
 		var resolved := SaveMigrationsType.resolve_content_version(state, current_content_version)
@@ -151,14 +179,29 @@ static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dic
 				"file": path}
 		state = resolved["state"]
 	# Before the shape check: a save on a missing pack names the pack, not one of its tiles.
-	var packs_check := check_content_packs((state as Dictionary).get("contentPacks"), registry.packs())
+	var loaded_packs: Array = check["packs"]
+	var packs_check := check_content_packs((state as Dictionary).get("contentPacks"), loaded_packs)
 	if not packs_check["ok"]:
 		packs_check["file"] = path
 		return packs_check
-	var validation := _validate_state(state, registry)
+	var rules: Dictionary = check["rules"]
+	var validation := _validate_state_rules(state as Dictionary, rules)
 	if not validation["ok"]:
 		return {"ok": false, "code": validation["code"], "message": validation["message"], "file": path}
 	return {"ok": true, "state": state}
+
+## A7 writers hash the state text exactly as written (one hash, no re-stringify). A file whose
+## raw text does not match is checked the pre-A7 way, against JSON.stringify of the parsed
+## state: what every earlier writer hashed, and what tests that rehash an edited state use.
+## Runs before _coerce_ints(), like the pre-A7 hash.
+static func _integrity_matches(integrity: String, text: String, located_state: Dictionary, state: Dictionary) -> bool:
+	if located_state.get("ok", false):
+		var start: int = located_state["start"]
+		var end: int = located_state["end"]
+		var raw := text.substr(start, end - start)
+		if _sha256(raw.to_utf8_buffer()) == integrity:
+			return true
+	return _sha256(JSON.stringify(state).to_utf8_buffer()) == integrity
 
 static func _coerce_ints(state: Dictionary) -> void:
 	# The schema has no float fields, so every whole float from JSON is an int; walk the whole
@@ -171,7 +214,10 @@ static func _coerce_ints(state: Dictionary) -> void:
 ## below is the order the checks run in, so the first error reported is stable.
 ## content null checks against the base bundle (headless tests call it that way).
 static func _validate_state(state: Dictionary, content: ContentRegistryType = null) -> Dictionary:
-	var rules := content_rules(_session(content))
+	return _validate_state_rules(state, content_rules(_session(content)))
+
+## _validate_state() against content_rules()'s plain data (all SaveWrite's thread has).
+static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dictionary:
 	var tile_ids: Array[String] = rules["tiles"]
 	var job_kinds: Array[String] = rules["jobKinds"]
 	var need_kinds: Array[String] = rules["needs"]
