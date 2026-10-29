@@ -5,6 +5,7 @@ extends RefCounted
 ## v1 before release (R14, ADR 049): saves written before the reset are rejected by
 ## SaveIO, never migrated. Steps since the reset:
 ## - v1 -> v2 (A5, ADR 053): terminal jobs leave the save.
+## - v2 -> v3 (A13b, ADR 010 amendment 2): the save records its content packs.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -28,6 +29,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 	match from_version:
 		1:
 			return _v1_to_v2(state)
+		2:
+			return _v2_to_v3(state)
 		_:
 			return {
 				"ok": false,
@@ -49,6 +52,23 @@ static func _v1_to_v2(state: Dictionary) -> Dictionary:
 		live.append(job)
 	migrated["jobs"] = live
 	migrated["schemaVersion"] = 2
+	return {"ok": true, "state": migrated}
+
+## v2 -> v3 (A13b, ADR 010 amendment 2): adds "contentPacks" right after "contentVersion" (the
+## order encode() writes). boot.gd applied no pack roots before v3 (CONTENT_PACK_ROOTS was
+## empty), so every v2 save was made on the base bundle alone: the list is empty.
+static func _v2_to_v3(state: Dictionary) -> Dictionary:
+	if state.has("contentPacks"):
+		return {"ok": false, "code": "schema_error", "message": "v2 save already has contentPacks"}
+	var migrated: Dictionary = {}
+	for key: Variant in state.keys():
+		migrated[key] = state[key]
+		if key == "contentVersion":
+			migrated["contentPacks"] = []
+	if not migrated.has("contentPacks"):
+		migrated["contentPacks"] = []
+	migrated = migrated.duplicate(true)
+	migrated["schemaVersion"] = 3
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

@@ -1,12 +1,12 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2956
-untyped_declaration 519
+total 2950
+untyped_declaration 515
 unsafe_property_access 0
 unsafe_method_access 229
-unsafe_call_argument 2175
-other 33
+unsafe_call_argument 2174
+other 32
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
 file game/scripts/core/actors/combat_system.gd 34
@@ -43,7 +43,8 @@ file game/scripts/core/jobs/givers/construction_giver.gd 41
 file game/scripts/core/jobs/givers/haul_giver.gd 18
 file game/scripts/core/jobs/givers/need_giver.gd 48
 file game/scripts/core/jobs/givers/rescue_giver.gd 52
-file game/scripts/core/jobs/job_index.gd 22
+file game/scripts/core/jobs/job_event_log.gd 1
+file game/scripts/core/jobs/job_index.gd 21
 file game/scripts/core/jobs/job_queue.gd 68
 file game/scripts/core/jobs/reservation_invariants.gd 16
 file game/scripts/core/jobs/reservation_table.gd 5
@@ -71,17 +72,17 @@ file game/scripts/core/persistence/save_migrations.gd 3
 file game/scripts/core/persistence/scheduling_codec.gd 90
 file game/scripts/core/persistence/state_codec.gd 158
 file game/scripts/core/persistence/validators/calendar_validator.gd 10
-file game/scripts/core/persistence/validators/entity_validator.gd 66
+file game/scripts/core/persistence/validators/entity_validator.gd 64
 file game/scripts/core/persistence/validators/giver_validator.gd 32
 file game/scripts/core/persistence/validators/item_validator.gd 28
-file game/scripts/core/persistence/validators/map_validator.gd 11
+file game/scripts/core/persistence/validators/map_validator.gd 10
 file game/scripts/core/persistence/validators/object_validator.gd 85
 file game/scripts/core/persistence/validators/save_check.gd 16
 file game/scripts/core/persistence/validators/scheduling_validator.gd 78
 file game/scripts/core/persistence/validators/tool_validator.gd 35
 file game/scripts/core/persistence/validators/work_progress_validator.gd 22
 file game/scripts/core/relations/relations.gd 6
-file game/scripts/core/routing/route_search.gd 11
+file game/scripts/core/routing/route_search.gd 8
 file game/scripts/core/scheduling/global_assignment.gd 98
 file game/scripts/core/scheduling/measured_route.gd 2
 file game/scripts/core/scheduling/waiting_index.gd 13

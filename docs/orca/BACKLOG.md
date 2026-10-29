@@ -662,7 +662,7 @@ one.
   unchanged, so the registry fits ADR 048), and `viewer/new_game_setup.gd`, which takes the
   session registry so a New Game spawns the tools the pack's jobs need.
 
-#### A13b — Content packs in saves · `todo` · after R14 and A13
+#### A13b — Content packs in saves · `review (antonelmejor50-hub/a13b-content-packs-in-saves)` · after R14 and A13
 
 - **Goal:** a save records the content packs it was made with (`ContentRegistry.packs()`:
   ordered `{id, version}`). Loading a save whose packs are not loaded in the session (missing,
@@ -686,6 +686,23 @@ one.
   report); the full suite passes.
 - **Non-goals:** loading a save onto different packs with automatic repair; a mod browser UI;
   hot-reloading packs.
+- **Approved scope extension (owner, 2026-10-29, in the A13b terminal):**
+  - "Ampliar a validators": since R14 the tile, job and need literals live in
+    `persistence/validators/{map,scheduling,entity}_validator.gd`, not in `save_io.gd`, so
+    `persistence/validators/*.gd` joins the owned paths. "Solo los de jobs.json": the job
+    whitelist is exactly `jobs.json`'s kinds, which drops the old literal's `craft` (no job of
+    that kind exists).
+  - "Sí, añadir la clave": `game/data/text/en.json` gets `save.reason.content_packs_mismatch`, so
+    the viewer explains a slot skipped for other packs.
+  - Also changed, as docs and generated files of the owned paths: `save-system.md` and
+    `replay.md` (contract text for the new field and error) and `warnings-baseline.txt`,
+    lowered with `tools\check_core_warnings.ps1 -Update` as the gate asks.
+- **Done in this branch:** schema v3 `contentPacks` with the v2 -> v3 migration and
+  `save_schema_v3_fixture.json`; `content_packs_mismatch` (`reason` missing, version,
+  unexpected or order) in `SaveIO.read()` and `ReplayLog.replay()`; whitelists from
+  `SaveIO.content_rules()`; the session registry passed to `SaveIO`, `StateCodec`,
+  `SaveManager`, `SaveWiring` and `ReplayLog`; ADR 010 amendment 2;
+  `test_save_content_packs.gd`. See `docs/orca/handoffs/A13b.md`.
 
 #### A14 — Data-driven work effects · `review (antonelmejor50-hub/a14-data-driven-work-effects)` · after R11
 

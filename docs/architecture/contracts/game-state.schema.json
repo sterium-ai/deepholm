@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v2",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v3",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
+  "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
   "$defs": {
     "tile": {
       "type": "object",
@@ -340,8 +340,21 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 2 },
+    "schemaVersion": { "type": "integer", "const": 3 },
     "contentVersion": { "type": "string", "minLength": 1 },
+    "contentPacks": {
+      "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "version": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
     "seed": { "type": "integer" },
     "tick": { "type": "integer", "minimum": 0 },
     "epoch": { "type": "integer", "minimum": 0 },

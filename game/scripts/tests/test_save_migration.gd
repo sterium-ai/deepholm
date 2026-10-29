@@ -1,10 +1,11 @@
 extends SceneTree
 
-## The save format after the R14 reset (ADR 049), now at schema v2 (A5, ADR 053:
-## terminal jobs leave the save). Proves a save written before the reset is
-## rejected with a clear message, the committed v1 fixture migrates to exactly the
-## v2 fixture, a v1 save holding terminal jobs loads without them and with the
-## original state_hash, the committed v2 fixture loads and re-encodes unchanged, a
+## The save format after the R14 reset (ADR 049), now at schema v3 (A5, ADR 053:
+## terminal jobs leave the save; A13b, ADR 010 amendment 2: the save records its
+## content packs). Proves a save written before the reset is rejected with a clear
+## message, the committed v1 and v2 fixtures migrate to exactly the v3 fixture, a v1
+## save holding terminal jobs loads without them and with the original state_hash,
+## the committed v3 fixture loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
 ## live beside the old migration chain.
@@ -20,12 +21,14 @@ const PRE_RELEASE_FIXTURE := "res://scripts/tests/fixtures/pre_release_save_v27.
 ## The same session written after R14: envelope "deepholm-save", schemaVersion 1.
 ## The starting point of the v1 -> v2 migration test.
 const V1_FIXTURE := "res://scripts/tests/fixtures/save_schema_v1_fixture.json"
-## The same session written by this build (docs/orca/handoffs/A5-write-save.gd): schemaVersion 2.
+## The same session written by docs/orca/handoffs/A5-write-save.gd: schemaVersion 2.
 const V2_FIXTURE := "res://scripts/tests/fixtures/save_schema_v2_fixture.json"
+## The same session written by this build (docs/orca/handoffs/A13b-write-save.gd): schemaVersion 3.
+const V3_FIXTURE := "res://scripts/tests/fixtures/save_schema_v3_fixture.json"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
 const FRESH_SAVE_PATH := "user://test-save-migration-fresh.json"
-const V2_RESAVE_PATH := "user://test-save-migration-v2-resave.json"
+const V3_RESAVE_PATH := "user://test-save-migration-v3-resave.json"
 const MALFORMED_FIXTURE_DIR := "user://test-save-migration-malformed-fixture"
 ## Proves SaveIO.read() rejects a save whose contentVersion has no
 ## registered rename with the new typed content_version_mismatch code, never
@@ -47,9 +50,9 @@ var _failed := false
 
 func _init() -> void:
 	_check_pre_release_save_is_rejected()
-	_check_v1_fixture_migrates_to_v2_fixture()
+	_check_v1_and_v2_fixtures_migrate_to_v3_fixture()
 	_check_v1_terminal_jobs_leave_the_save()
-	_check_v2_fixture_loads_and_reencodes_unchanged()
+	_check_v3_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -99,18 +102,31 @@ func _check_pre_release_save_is_rejected() -> void:
 		"load_best() must report the pre-release slot as skipped with unsupported_pre_release_save: %s" % [skipped])
 	_cleanup_dir(PRE_RELEASE_SLOT_DIR)
 
-## Acceptance (A5): the committed v1 fixture loads through SaveIO.read() migrated to
-## v2, and equals the v2 fixture (the same session written by this build) exactly.
-func _check_v1_fixture_migrates_to_v2_fixture() -> void:
-	var result := SaveIOType.read(V1_FIXTURE)
-	_expect(result["ok"], "the v1 fixture must load through SaveIO.read(): %s" % result)
-	var v2 := SaveIOType.read(V2_FIXTURE)
-	_expect(v2["ok"], "the v2 fixture must load through SaveIO.read(): %s" % v2)
-	if not result["ok"] or not v2["ok"]:
+## Acceptance (A5, A13b): the committed v1 and v2 fixtures load through SaveIO.read()
+## migrated to v3 and equal the v3 fixture (the same session written by this build)
+## exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the v2 fixture.
+func _check_v1_and_v2_fixtures_migrate_to_v3_fixture() -> void:
+	var v3 := SaveIOType.read(V3_FIXTURE)
+	_expect(v3["ok"], "the v3 fixture must load through SaveIO.read(): %s" % v3)
+	if not v3["ok"]:
 		return
-	_expect(int(result["state"]["schemaVersion"]) == 2, "the v1 fixture must load as schemaVersion 2")
-	_expect(JSON.stringify(result["state"]) == JSON.stringify(v2["state"]),
-		"the migrated v1 fixture must equal the v2 fixture exactly")
+	for fixture: String in [V1_FIXTURE, V2_FIXTURE]:
+		var result := SaveIOType.read(fixture)
+		_expect(result["ok"], "%s must load through SaveIO.read(): %s" % [fixture, result])
+		if not result["ok"]:
+			continue
+		_expect(int(result["state"]["schemaVersion"]) == 3, "%s must load as schemaVersion 3" % fixture)
+		_expect(result["state"]["contentPacks"] == [], "%s must load with no content packs" % fixture)
+		_expect(JSON.stringify(result["state"]) == JSON.stringify(v3["state"]),
+			"the migrated %s must equal the v3 fixture exactly" % fixture)
+	var v1_raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V1_FIXTURE))["state"]
+	var v2_raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V2_FIXTURE))["state"]
+	var step := SaveMigrationsType.migrate(v1_raw, 1, 2)
+	_expect(step["ok"], "the v1 -> v2 step must apply to the v1 fixture: %s" % step)
+	if step["ok"]:
+		# Through JSON both ways, so the step's int schemaVersion compares like the parsed one.
+		_expect(JSON.stringify(JSON.parse_string(JSON.stringify(step["state"]))) == JSON.stringify(v2_raw),
+			"the v1 -> v2 step alone must turn the v1 fixture into exactly the v2 fixture")
 
 ## Acceptance (A5): a v1 save that still lists terminal jobs (as every v1 save of a
 ## played session did) loads through SaveIO.read() as v2 without them, decodes to the
@@ -133,6 +149,8 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	var live_jobs: Array = v1_state["jobs"]
 	v1_state["jobs"] = TestAccess.scheduling_encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
 	v1_state["schemaVersion"] = 1
+	# A v1 save predates contentPacks (schema v3).
+	v1_state.erase("contentPacks")
 	_expect(v1_state["jobs"].size() > live_jobs.size(), "the v1 state must really list terminal jobs for this to prove anything")
 	var path := _write_state_fixture(V1_TERMINAL_JOBS_DIR, v1_state)
 	var result := SaveIOType.read(path)
@@ -140,7 +158,7 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	_expect(result["ok"], "a v1 save with terminal jobs must load: %s" % result)
 	if not result["ok"]:
 		return
-	_expect(int(result["state"]["schemaVersion"]) == 2, "it must load as schemaVersion 2")
+	_expect(int(result["state"]["schemaVersion"]) == 3, "it must load as schemaVersion 3")
 	_expect(JSON.stringify(result["state"]["jobs"]) == JSON.stringify(live_jobs),
 		"the migrated jobs must be exactly the live jobs this build saves")
 	var loaded := StateCodecType.decode(result["state"])
@@ -150,30 +168,30 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		loaded.tick()
 	_expect(loaded.state_hash() == world.state_hash(), "the migrated world must keep ticking in step with the original")
 
-## The committed v2 fixture loads through SaveIO.read(), decodes, and re-encodes to
+## The committed v3 fixture loads through SaveIO.read(), decodes, and re-encodes to
 ## exactly the state it was read from (the persisted shape is the codec's shape), and
 ## the decoded world keeps its state_hash through a second write/read.
-func _check_v2_fixture_loads_and_reencodes_unchanged() -> void:
-	var result := SaveIOType.read(V2_FIXTURE)
-	_expect(result["ok"], "the v2 fixture must load through SaveIO.read(): %s" % result)
+func _check_v3_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V3_FIXTURE)
+	_expect(result["ok"], "the v3 fixture must load through SaveIO.read(): %s" % result)
 	if not result["ok"]:
 		return
 	var state: Dictionary = result["state"]
-	_expect(int(state["schemaVersion"]) == 2 and StateCodecType.SCHEMA_VERSION == 2,
-		"the v2 fixture and this build must both be schemaVersion 2")
+	_expect(int(state["schemaVersion"]) == 3 and StateCodecType.SCHEMA_VERSION == 3,
+		"the v3 fixture and this build must both be schemaVersion 3")
 	var world := StateCodecType.decode(state)
 	var reencoded := StateCodecType.encode(world)
 	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
-		"decode() -> encode() of the v2 fixture must reproduce its state exactly")
-	_remove(V2_RESAVE_PATH)
-	var write_result := SaveIOType.write_atomic(V2_RESAVE_PATH, reencoded)
-	_expect(write_result["ok"], "the re-encoded v2 fixture must save: %s" % write_result)
-	var reread := SaveIOType.read(V2_RESAVE_PATH)
-	_expect(reread["ok"], "the re-saved v2 fixture must load: %s" % reread)
+		"decode() -> encode() of the v3 fixture must reproduce its state exactly")
+	_remove(V3_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V3_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v3 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V3_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v3 fixture must load: %s" % reread)
 	if reread["ok"]:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
-			"a second write/read of the v2 fixture must keep the decoded state_hash")
-	_remove(V2_RESAVE_PATH)
+			"a second write/read of the v3 fixture must keep the decoded state_hash")
+	_remove(V3_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.
@@ -787,7 +805,7 @@ func _cleanup_dir(dir_path: String) -> void:
 ## contentVersion and the one item's "kind" vary between calls.
 func _minimal_current_schema_state(content_version: String, item_kind: String) -> Dictionary:
 	return {
-		"schemaVersion": SaveIOType.SCHEMA_VERSION, "contentVersion": content_version, "seed": 1, "tick": 0,
+		"schemaVersion": SaveIOType.SCHEMA_VERSION, "contentVersion": content_version, "contentPacks": [], "seed": 1, "tick": 0,
 		"epoch": 0,
 		"map": {"width": 1, "height": 1, "tiles": ["soil"], "generatorVersion": 1},
 		"entities": [],

@@ -12,13 +12,18 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 ## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
-## ADR 053). Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 2
+## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2). Every later shape
+## change bumps this and adds a SaveMigrations step and a fixture.
+const SCHEMA_VERSION := 3
 
-## content/manifest.json's version, read fresh each call so a save records the bundle on disk
-## now; "" when the registry is invalid, which SaveIO._validate_state() rejects.
-static func content_version() -> String:
-	return ContentRegistryType.new().version()
+## The session registry's manifest version (null: the base bundle on disk); "" when the
+## registry is invalid, which SaveIO._validate_state() rejects.
+static func content_version(content: ContentRegistryType = null) -> String:
+	return (content if content != null else ContentRegistryType.new()).version()
+
+## The ContentRegistry world was built on: what its save records and is validated against.
+static func content_of(world: WorldState) -> ContentRegistryType:
+	return world._content
 
 static func encode(world: WorldState) -> Dictionary:
 	var item_table := world._item_table.encode()
@@ -27,7 +32,9 @@ static func encode(world: WorldState) -> Dictionary:
 	var work_progress := world._progress_table.encode()
 	return {
 		"schemaVersion": SCHEMA_VERSION,
-		"contentVersion": content_version(),
+		"contentVersion": world._content.version(),
+		# Ordered like ContentRegistry.packs(); SaveIO refuses to load it on any other list.
+		"contentPacks": _encode_content_packs(world._content.packs()),
 		"seed": world._seed,
 		"tick": world._clock.tick,
 		# SaveManager's session marker; WorldState has no session, so SaveManager overwrites it.
@@ -76,11 +83,13 @@ static func encode(world: WorldState) -> Dictionary:
 
 ## Reconstructs a WorldState that ticks identically to the one that produced state,
 ## including in-flight route searches; the constructor's own generation is overwritten.
-static func decode(state: Dictionary) -> WorldState:
+## content is the session registry the save was checked against (SaveIO.read()); null builds
+## the base bundle.
+static func decode(state: Dictionary, content: ContentRegistryType = null) -> WorldState:
 	var map: Dictionary = state["map"]
 	var width := int(map["width"])
 	var height := int(map["height"])
-	var world := WorldState.new(int(state["seed"]), 10, width, height)
+	var world := WorldState.new(int(state["seed"]), 10, width, height, false, content)
 	# The constructor clamps size to the new-game 16..512 range; a saved map keeps its own size
 	# (e.g. a 3x2 fixture), set before the tiles or the row stride is wrong.
 	world._tile_grid.width = width
@@ -202,6 +211,15 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		world._reroutes[colonist["id"]] = search
 		# Back to the live shape: the full snapshot stays on the search.
 		route["rerouting"] = search.summary()
+
+## Plain (unfrozen) copies, so the state stays a mutable Dictionary like every other field.
+static func _encode_content_packs(packs: Array) -> Array:
+	var encoded: Array = []
+	for pack: Dictionary in packs:
+		var id: String = pack["id"]
+		var version: String = pack["version"]
+		encoded.append({"id": id, "version": version})
+	return encoded
 
 # --- tiles ---------------------------------------------------------------
 

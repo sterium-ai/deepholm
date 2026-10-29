@@ -12,13 +12,14 @@ const AutosaveTriggerType = preload("res://scripts/viewer/autosave_trigger.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 
 ## SaveManager.load_best()'s own result; when "ok", "world" also holds the
-## decoded WorldState. decode() always builds with incidents disabled: the
-## caller (boot.gd) re-enables them before using the world.
+## decoded WorldState, built on the save manager's session registry (the one
+## the save was checked against). decode() always builds with incidents
+## disabled: the caller (boot.gd) re-enables them before using the world.
 static func load_best(save_manager: SaveManagerType) -> Dictionary:
 	var result: Dictionary = save_manager.load_best()
 	if not result.get("ok", false):
 		return result
-	var new_world: WorldStateType = StateCodecType.decode(result["state"])
+	var new_world: WorldStateType = StateCodecType.decode(result["state"], save_manager.get_content())
 	result["world"] = new_world
 	return result
 

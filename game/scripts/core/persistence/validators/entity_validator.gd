@@ -155,16 +155,17 @@ static func _valid_entity_hands(value) -> Dictionary:
 		return _fail("entity hands total count exceeds capacity")
 	return {"ok": true}
 
-static func _valid_entities(value, map_width: int, map_height: int) -> Dictionary:
+## need_kinds: needs.json's kinds from the session registry (SaveIO.content_rules()).
+static func _valid_entities(value, map_width: int, map_height: int, need_kinds: Array[String]) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entities type")
 	for entity in value:
-		var entity_check := _valid_entity(entity, map_width, map_height)
+		var entity_check := _valid_entity(entity, map_width, map_height, need_kinds)
 		if not entity_check["ok"]:
 			return entity_check
 	return {"ok": true}
 
-static func _valid_entity(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Array[String]) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity type")
 	var entity: Dictionary = value
@@ -187,7 +188,7 @@ static func _valid_entity(value, map_width: int, map_height: int) -> Dictionary:
 	var health_check := _valid_entity_health(entity["health"])
 	if not health_check["ok"]:
 		return health_check
-	var needs_check := _valid_entity_needs(entity)
+	var needs_check := _valid_entity_needs(entity, need_kinds)
 	if not needs_check["ok"]:
 		return needs_check
 	if entity.has("labourTable"):
@@ -223,26 +224,27 @@ static func _valid_entity(value, map_width: int, map_height: int) -> Dictionary:
 			return _fail("invalid entity %s" % flag)
 	return {"ok": true}
 
-## "needs" and "needsAccumulator", each present only for the kinds that declare them.
-static func _valid_entity_needs(entity: Dictionary) -> Dictionary:
+## "needs" and "needsAccumulator", each present only for the kinds that declare them, keyed by
+## exactly the registry's need kinds.
+static func _valid_entity_needs(entity: Dictionary, need_kinds: Array[String]) -> Dictionary:
 	if entity.has("needs"):
 		var needs: Variant = entity["needs"]
 		if not (needs is Dictionary):
 			return _fail("invalid entity needs type")
-		var needs_check := _require_fields(needs, ["food", "water", "rest"], "entity needs")
+		var needs_check := _require_fields(needs, need_kinds, "entity needs")
 		if not needs_check["ok"]:
 			return needs_check
-		for need_key in ["food", "water", "rest"]:
+		for need_key in need_kinds:
 			if not _is_int(needs[need_key]) or int(needs[need_key]) < 0 or int(needs[need_key]) > 100:
 				return _fail("invalid entity need '%s'" % need_key)
 	if entity.has("needsAccumulator"):
 		var accumulator: Variant = entity["needsAccumulator"]
 		if not (accumulator is Dictionary):
 			return _fail("invalid entity needsAccumulator type")
-		var accumulator_check := _require_fields(accumulator, ["food", "water", "rest"], "entity needsAccumulator")
+		var accumulator_check := _require_fields(accumulator, need_kinds, "entity needsAccumulator")
 		if not accumulator_check["ok"]:
 			return accumulator_check
-		for need_key in ["food", "water", "rest"]:
+		for need_key in need_kinds:
 			if not _is_int(accumulator[need_key]) or int(accumulator[need_key]) < 0:
 				return _fail("invalid entity needsAccumulator '%s'" % need_key)
 	return {"ok": true}
