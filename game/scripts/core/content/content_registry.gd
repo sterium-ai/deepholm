@@ -56,6 +56,8 @@ const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
 
 ## For the static is_known_component() check only; never spawns an actor.
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
+## For the static is_valid_labour_value() check of a scenario roster only.
+const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 
 ## For the static is_known_relation_value() check only (Relations takes the registry
 ## untyped, so there is no preload cycle).
@@ -628,6 +630,49 @@ func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 					return {"ok": false, "code": ERROR_DANGLING_REFERENCE, "message": "%s names an unknown %s" % [where, ref.replace(":", " kind '") + "'"]}
 			if step["step"] == "ground_items" and known["item:%s" % step["kind"]] == "tool":
 				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s names tool item '%s'; tools are placed by needed_tools" % [where, step["kind"]]}
+		var start_check := _check_scenario_start(scenario, raw_by_kind)
+		if not start_check["ok"]:
+			return start_check
+	return {"ok": true}
+
+## A16b (ADR 057): a scenario's start fields. The roster defines no more colonists than its count,
+## each with declared worker labours at levels inside the colonist's labour_min..labour_max; the
+## calendar's window ids are unique and each names a declared labour; every enabled incident is an
+## incidents.json id, listed once.
+func _check_scenario_start(scenario: Dictionary, raw_by_kind: Dictionary) -> Dictionary:
+	var where := "scenario '%s'" % scenario["id"]
+	var actors_by_id: Dictionary = {}
+	for actor: Dictionary in (raw_by_kind["actors"]["actors"] as Array):
+		actors_by_id[actor["id"]] = actor
+	var colonist_definition: Dictionary = actors_by_id.get("colonist", {})
+	var tunables: Dictionary = colonist_definition.get("tunables", {})
+	var worker_tunables: Dictionary = tunables.get("worker", {})
+	var roster: Dictionary = scenario.get("roster", {})
+	var definitions: Array = roster.get("colonists", [])
+	var count: int = roster.get("count", 0)
+	if definitions.size() > count:
+		return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s defines %d colonists for a roster of %d" % [where, definitions.size(), count]}
+	for definition: Dictionary in definitions:
+		var labour: Dictionary = definition.get("labour", {})
+		for kind: String in labour.keys():
+			var level: int = labour[kind] if labour[kind] is int else -1
+			if not WorkerType.is_valid_labour_value(worker_tunables, kind, level):
+				return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s roster labour '%s' = %s is not a declared labour level" % [where, kind, labour[kind]]}
+	var window_ids: Dictionary = {}
+	var calendar: Dictionary = scenario.get("calendar", {})
+	for window: Dictionary in (calendar.get("windows", []) as Array):
+		if window_ids.has(window["id"]):
+			return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s calendar window '%s' is listed twice" % [where, window["id"]]}
+		window_ids[window["id"]] = true
+		if not (worker_tunables.get("labours", []) as Array).has(window["labour"]):
+			return {"ok": false, "code": ERROR_DANGLING_REFERENCE, "message": "%s calendar window '%s' names unknown labour '%s'" % [where, window["id"], window["labour"]]}
+	var incident_ids: Array = (raw_by_kind["incidents"]["incidents"] as Array).map(func(entry: Dictionary) -> String: return entry["id"])
+	var enabled: Array = scenario.get("incidents", [])
+	for i in enabled.size():
+		if not incident_ids.has(enabled[i]):
+			return {"ok": false, "code": ERROR_DANGLING_REFERENCE, "message": "%s enables unknown incident '%s'" % [where, enabled[i]]}
+		if enabled.find(enabled[i]) != i:
+			return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s enables incident '%s' twice" % [where, enabled[i]]}
 	return {"ok": true}
 
 ## The "object:<kind>"/"item:<id>" references one scenario setup step makes.

@@ -235,13 +235,19 @@ boundaries and are not a separate extension point.
 
 - Files: add an entry to `game/content/scenarios.json`, validated against
   `game/content/schemas/scenarios.schema.json`. An entry is `{id, label, seed?, map?, tick_rate,
-  incidents_enabled, setup}`:
+  incidents_enabled, roster?, calendar?, incidents?, setup}`:
   - `label` is a `data/text` key, added to `game/data/text/en.json`.
   - With no `seed`, the New Game dialog's seed is used. With no `map`, `mapgen.json`'s default
     New Game size is used.
   - `setup` is an ordered list of steps from a closed vocabulary: `needed_tools`,
     `per_colonist_objects`, `object_rows`, `dig_orders`, `till_plot` and `ground_items`. A step
     may add `"when": "scenario_seed"` to run only on the scenario's own seed.
+  - The start fields (ADR 057) are passed to `WorldState` at construction through `WorldSetup`
+    (`game/scripts/core/world/world_setup.gd`): `roster` `{count, colonists?}` replaces
+    `mapgen.json`'s `colonist_count` and may give `colonist_i` its own `labour` levels;
+    `calendar` is a whole calendar document used instead of `calendar.json`; `incidents` is the
+    non-empty list of `incidents.json` ids the daily draw considers (omitted: all). They are not
+    saved: a loaded world runs on `calendar.json` and every incident.
 
   `ContentRegistry` loads `scenarios` as an optional collection kind, so a content pack may add
   or override a scenario. It checks that each step carries exactly the fields

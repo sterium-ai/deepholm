@@ -2,11 +2,12 @@ class_name ScenarioBuilder
 extends RefCounted
 
 ## Builds a fresh WorldState from one content/scenarios.json entry (A16, ADR 054): the map
-## size, seed, tick rate and incident switch, then the entry's setup steps in order. A
-## caller-side factory, not a WorldState module: it constructs the world and drives it only
-## through apply()/tick() and the public spawn_ground_tool_item(), except for the two
-## bootstrap writes documented on _run_till_plot() and _run_ground_items(). Pure and seeded:
-## the same scenario, content and options always build the same state_hash().
+## size, seed, tick rate and incident switch, the start fields WorldSetup carries into the
+## world's construction (roster, calendar, enabled incidents; A16b, ADR 057), then the entry's
+## setup steps in order. A caller-side factory, not a WorldState module: it constructs the
+## world and drives it only through apply()/tick() and the public spawn_ground_tool_item(),
+## except for the two bootstrap writes documented on _run_till_plot() and _run_ground_items().
+## Pure and seeded: the same scenario, content and options always build the same state_hash().
 ##
 ## Step vocabulary (the fields each reads are ContentRegistry.SCENARIO_STEP_FIELDS):
 ## - needed_tools: one ground tool per job needs_tool kind, on the spawn clearing's land pool;
@@ -22,6 +23,7 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
+const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 
 const NEW_GAME_SCENARIO_ID := "new_game"
 const NO_TILE := Vector2i(-1, -1)
@@ -59,7 +61,7 @@ static func build(content: ContentRegistryType, scenario_id: String, options: Di
 		var width: int = map["width"]
 		var height: int = map["height"]
 		size = Vector2i(width, height)
-	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content)
+	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content, WorldSetupType.from_scenario(scenario))
 	var incidents_enabled: bool = options.get("incidents_enabled", scenario["incidents_enabled"])
 	if incidents_enabled:
 		world.enable_incidents()

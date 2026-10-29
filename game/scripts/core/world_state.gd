@@ -50,6 +50,7 @@ const ZoneHandlerType = preload("res://scripts/core/commands/handlers/zone_handl
 const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_handler.gd")
 const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
 const ActorIndexType = preload("res://scripts/core/actors/actor_index.gd")
+const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 
 ## Default/fixture map size; a new game's size comes from mapgen.json via boot.gd.
 const MAP_WIDTH := 48
@@ -160,9 +161,14 @@ var _construction_giver: ConstructionGiverType
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
 
+## The start fields (roster, calendar, incident list) a new world was built with; never persisted.
+var _setup: WorldSetupType
+
 ## content is the session's ContentRegistry (one per session); null builds the base bundle.
+## setup is a scenario's start (world/world_setup.gd, ADR 057); null is the base start.
 func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_height: int = MAP_HEIGHT, incidents_enabled: bool = false,
-		content: ContentRegistryType = null) -> void:
+		content: ContentRegistryType = null, setup: WorldSetupType = null) -> void:
+	_setup = setup if setup != null else WorldSetupType.new()
 	_seed = p_seed
 	_clock = SeededClockType.new(tick_rate)
 	_random = RandomNumberGenerator.new()
@@ -178,17 +184,12 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_build_scheduling(dig_find_random)
 	_build_systems()
 	_build_commands()
-	var tool_requirements_by_kind: Dictionary = {}
-	var tool_error := ContentTablesType.tool_requirements(_content, tool_requirements_by_kind)
-	if not tool_error.is_empty():
-		_fail_startup(tool_error)
+	var tables := WorldSetupType.startup_tables(_content)
+	if not tables.error.is_empty():
+		_fail_startup(tables.error)
 		return
-	var haul_definition: Dictionary = ContentTablesType.index_by_field(_content.list("jobs"), "kind").get("haul", {})
-	if not (haul_definition.has("priority") and haul_definition.has("retry_base_ticks") and haul_definition.has("retry_cap_ticks")):
-		_fail_startup("jobs.json's 'haul' entry is missing priority/retry_base_ticks/retry_cap_ticks")
-		return
-	_build_work_engine(tool_requirements_by_kind)
-	_build_givers(haul_definition)
+	_build_work_engine(tables.tool_requirements)
+	_build_givers(tables.haul)
 	_build_dimension_services(incidents_enabled)
 
 func _build_map(p_width: int, p_height: int) -> void:
@@ -206,7 +207,7 @@ func _build_map(p_width: int, p_height: int) -> void:
 		_actor_faction, _find_colonist)
 	_need_full = int(ContentTablesType.need_config(_content)["full"]); NEED_FULL = _need_full # before seeding and NeedsSystem/NeedGiver
 	var seeded := WorldSeedingType.seed_world(_seed + GEOGRAPHY_SEED_SALT, _seed + PLACEMENT_SEED_SALT, _tile_grid.width,
-		_tile_grid.height, _mapgen, _content, _object_table)
+		_tile_grid.height, _setup.seeding_mapgen(_mapgen), _content, _object_table, _setup.colonists)
 	_tile_grid.tiles = seeded["tiles"]
 	_colonists = seeded["colonists"]
 	_spawn_clearing = seeded["clearing"]
@@ -232,7 +233,7 @@ func _build_scheduling(dig_find_random: RandomNumberGenerator) -> void:
 		_flee_target_reserved, _cancel_autonomous_job)
 
 func _build_systems() -> void:
-	_calendar = CalendarServiceType.new("", _content.document("calendar"))
+	_calendar = CalendarServiceType.new("", _setup.calendar_document(_content))
 	_work_ticks = ContentTablesType.work_ticks(_content)
 	_progress_table = WorkProgressType.new(_scheduler.queue, _work_ticks, _tile_key, _work_target_for)
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
@@ -331,7 +332,8 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	_incidents = IncidentSchedulerType.new(_seed, _content, _append_colonist, _remove_colonist_by_id,
 		_tile_grid.width, _tile_grid.height, _passability.passable_for_faction, _is_bare_tile, _tile_grid.get_regions, _submit_incident_job,
 		_get_job, _finish_job.bind("cancel_job"), _set_work_progress,
-		_calendar.day_of_tick, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK, incidents_enabled)
+		_calendar.day_of_tick, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK, incidents_enabled,
+		_setup.enabled_incidents)
 	_tick_pipeline = TickPipelineType.new(_clock, _area_orders, _needs_system, _need_giver, _haul_giver, _construction_giver,
 		_combat_system, _combat_giver, _construction, _scheduler, _passability, _tile_grid, _toils, func() -> CalendarServiceType: return _calendar, _rescue_giver,
 		_trench, _incidents, _approach_giver, _item_table, _event_log, _calendar_alert_giver, _progress_table, _reroutes,
@@ -562,19 +564,10 @@ func _submit_incident_job(actor_id: String, target: Vector2i) -> String:
 	var result := _scheduler.submit_autonomous(target, 1, _clock.tick, "incident", actor_id)
 	return String(result["job_id"]) if result.get("ok", false) else ""
 
-## After a load (IncidentScheduler persists nothing): re-associates each live incident job with
-## its actor, or retires it. A queued job with a restrict_to_for() was activated (paused by a flee).
+## After a load (IncidentScheduler persists nothing): IncidentScheduler.reconcile_after_load().
 func _reconcile_incident_jobs_after_load() -> void:
-	for job in _scheduler.queue.view_jobs_of_kinds(["incident"]):
-		if String(job["kind"]) != "incident" or String(job["status"]) not in ["queued", "active"]:
-			continue
-		var job_id := String(job["id"])
-		var actor_id := _scheduler.restrict_to_for(job_id)
-		var previously_activated := String(job["status"]) == "active" or not actor_id.is_empty()
-		if previously_activated and not _find_colonist(actor_id).is_empty():
-			_incidents.adopt(job_id, actor_id)
-		else:
-			_finish_job(job_id, "cancel_job")
+	_incidents.reconcile_after_load(_scheduler.queue.view_jobs_of_kinds(["incident"]), _scheduler.restrict_to_for,
+		func(actor_id: String) -> bool: return not _find_colonist(actor_id).is_empty())
 
 ## Re-applies the viewer's incident configuration after a decode (always built
 ## disabled), and reserves actor ordinals past the restored roster.

@@ -780,7 +780,7 @@ one.
     `test_text_pseudo_locale.gd` collects scenario labels. This follows A15's rule that content
     labels are text keys.
 
-#### A16b — Scenario roster, calendar and incident list · `todo` · after A16
+#### A16b — Scenario roster, calendar and incident list · `review (antonelmejor50-hub/a16b-scenario-roster-calendar-and)` · after A16
 
 - **Goal:** the three scenario fields A16 deferred (ADR 053, "Consequences"):
   - a starting roster: the colonist count, and optionally per-colonist definitions;
@@ -800,6 +800,15 @@ one.
 - **Non-goals:** win/lose conditions (A17); a campaign; new setup steps.
 - **Note:** `world_state.gd` is at 800 of 800 lines (since A5). Make room first, by moving code out
   rather than raising the cap.
+- **Done in this branch:** optional `roster` `{count, colonists?[{labour}]}`, `calendar` (a whole
+  calendar document) and `incidents` (non-empty id list) fields in `scenarios.schema.json`,
+  cross-checked by `ContentRegistry._check_scenario_start()`; `ScenarioBuilder` passes them to
+  `WorldState` at construction through the new `core/world/world_setup.gd`. Room was made by moving
+  the startup content checks to `WorldSetup.startup_tables()` and the after-load incident
+  reconciliation to `IncidentScheduler.reconcile_after_load()` (`world_state.gd` 790 → 783; it was
+  790, not 800, on `main`). `test_scenario_start.gd`; [ADR 057](../decisions/057-scenario-start-fields.md).
+  The start fields are not saved (a loaded world runs on `calendar.json` and every incident).
+  See `docs/orca/handoffs/A16b.md`.
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

@@ -49,6 +49,8 @@ var _insert_event: Callable
 var _next_sequence: Callable
 var _priority: int
 var _enabled: bool
+## The incidents.json ids the daily draw considers (a scenario's list, ADR 057); [] is every one.
+var _enabled_ids: Array[String] = []
 
 var _last_processed_day: int = 0
 var _next_actor_ordinal: int = 1
@@ -68,7 +70,7 @@ func _init(world_seed: int, content_registry, append_colonist: Callable, remove_
 		map_width: int, map_height: int, passable_for_faction: Callable, is_bare_tile: Callable,
 		get_regions: Callable, submit_job: Callable, get_job: Callable, retire_job: Callable,
 		set_work_progress: Callable, day_of_tick: Callable, insert_event: Callable, next_sequence: Callable,
-		priority: int, enabled: bool = false) -> void:
+		priority: int, enabled: bool = false, enabled_ids: Array[String] = []) -> void:
 	_content = content_registry
 	_random = RandomNumberGenerator.new()
 	_random.seed = world_seed + SEED_SALT
@@ -88,6 +90,7 @@ func _init(world_seed: int, content_registry, append_colonist: Callable, remove_
 	_next_sequence = next_sequence
 	_priority = priority
 	_enabled = enabled
+	_enabled_ids = enabled_ids.duplicate()
 
 func is_enabled() -> bool:
 	return _enabled
@@ -118,7 +121,7 @@ func advance(tick: int) -> void:
 		_last_processed_day = day
 		_run_daily_draw(day, tick)
 
-## Debug spawn_incident: bypasses min_day/cooldown/budget but records the cooldown. Returns the
+## Debug spawn_incident: bypasses min_day/cooldown/budget and the enabled list, but records the cooldown. Returns the
 ## proposed actor ids (each enters the world when its job activates).
 func force_spawn(incident_id: String, tick: int) -> Array:
 	if not _enabled:
@@ -194,6 +197,22 @@ func on_job_finished(job_id: String) -> void:
 func adopt(job_id: String, actor_id: String) -> void:
 	_actor_by_job[job_id] = actor_id
 
+## After a load: re-associates each live incident job in `jobs` with its actor, or retires it. A
+## queued job with a restrict_to_for() was activated (paused by a flee). actor_exists: (actor_id) -> bool.
+func reconcile_after_load(jobs: Array, restrict_to_for: Callable, actor_exists: Callable) -> void:
+	for job: Dictionary in jobs:
+		var status: String = job["status"]
+		if job["kind"] != JOB_KIND or status not in ["queued", "active"]:
+			continue
+		var job_id: String = job["id"]
+		var actor_id: String = restrict_to_for.call(job_id)
+		var previously_activated := status == "active" or not actor_id.is_empty()
+		var actor_present: bool = actor_exists.call(actor_id)
+		if previously_activated and actor_present:
+			adopt(job_id, actor_id)
+		else:
+			_retire_job.call(job_id)
+
 ## The spawn tile is still bare and passable for the actor's faction (rechecked before spawning).
 func _spawn_tile_still_valid(actor: Dictionary) -> bool:
 	var tile := Vector2i(int(actor["x"]), int(actor["y"]))
@@ -208,6 +227,8 @@ func _run_daily_draw(day: int, tick: int) -> void:
 	var remaining_budget := DAILY_BUDGET_POINTS
 	for entry in _content.list("incidents"):
 		var incident_id := String(entry["id"])
+		if not _enabled_ids.is_empty() and not _enabled_ids.has(incident_id):
+			continue
 		if int(entry.get("min_day", 0)) > day:
 			continue
 		if int(_cooldown_until_day.get(incident_id, 0)) > day:
