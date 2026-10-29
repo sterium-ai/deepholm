@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v5",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v6",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
+  "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
   "$defs": {
     "tile": {
       "type": "object",
@@ -286,12 +286,27 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["id", "x", "y", "width", "height"],
+      "description": "A stockpile has no kind/crop; a farm zone (F1, ADR 059) has both.",
+      "dependentRequired": { "kind": ["crop"], "crop": ["kind"] },
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "x": { "type": "integer", "minimum": 0 },
         "y": { "type": "integer", "minimum": 0 },
         "width": { "type": "integer", "minimum": 1 },
-        "height": { "type": "integer", "minimum": 1 }
+        "height": { "type": "integer", "minimum": 1 },
+        "kind": { "const": "farm" },
+        "crop": { "type": "string", "minLength": 1, "description": "A crops.json id of the session's content." }
+      }
+    },
+    "crop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "crop", "growth"],
+      "description": "FarmSystem's growth record of one sown tile (F1, ADR 059); one per target.",
+      "properties": {
+        "target": { "$ref": "#/$defs/tile" },
+        "crop": { "type": "string", "minLength": 1, "description": "A crops.json id of the session's content." },
+        "growth": { "type": "integer", "minimum": 0, "description": "In-window ticks grown; ripe at grow_days * day_length_ticks." }
       }
     },
     "route": {
@@ -384,7 +399,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 5 },
+    "schemaVersion": { "type": "integer", "const": 6 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -411,7 +426,7 @@
         "height": { "type": "integer", "minimum": 1 },
         "tiles": {
           "type": "array",
-          "items": { "type": "string", "enum": ["rock", "soil", "floor", "plowed_soil", "planted", "hazard", "tree", "water", "trench"] }
+          "items": { "type": "string", "enum": ["rock", "soil", "floor", "plowed_soil", "planted", "crop_grown", "crop_ripe", "hazard", "tree", "water", "trench"] }
         },
         "generatorVersion": { "type": "integer", "minimum": 1 }
       }
@@ -443,6 +458,10 @@
       "items": { "$ref": "#/$defs/zone" }
     },
     "nextZoneId": { "type": "integer", "minimum": 1 },
+    "crops": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/crop" }
+    },
     "workProgress": {
       "type": "array",
       "items": { "$ref": "#/$defs/workProgressEntry" }
@@ -632,7 +651,7 @@
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft", "chop", "haul", "forage", "till", "sow", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
           "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
           "priority": { "type": "integer", "enum": [0, 1, 2] },
           "target": { "$ref": "#/$defs/tile" },

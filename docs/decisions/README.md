@@ -67,6 +67,7 @@ all with one size rule.
 | [054](054-scenarios-as-content.md) | Scenarios as content |
 | [055](055-viewer-snapshot.md) | One read-only view snapshot per viewer refresh |
 | [057](057-scenario-start-fields.md) | Scenario start fields: roster, calendar, enabled incidents |
+| [059](059-crops-and-farm-zones.md) | Crops, growth stages, harvest and farm zones |
 | [060](060-calendar-months-and-years.md) | Calendar months and years derived from the day |
 
 ## Renumbered records (redirects)

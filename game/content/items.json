@@ -8,6 +8,7 @@
     {"id": "gold_coin", "kind": "valuable"},
     {"id": "flint", "kind": "material"},
     {"id": "coal", "kind": "material"},
-    {"id": "wood", "kind": "material"}
+    {"id": "wood", "kind": "material"},
+    {"id": "food", "kind": "food"}
   ]
 }

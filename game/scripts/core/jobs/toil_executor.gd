@@ -7,7 +7,6 @@ extends RefCounted
 ## "release_all". go_to owns re-routing (colonist-ai.md 3.5) through the injected
 ## route_search_factory; this module only steps the search object it returns.
 
-const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## Only for its STATUS_FOUND/STATUS_UNREACHABLE vocabulary; never constructed here.
 const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ToolFetchToilType = preload("res://scripts/core/jobs/tool_fetch_toil.gd")
@@ -621,16 +620,11 @@ func get_fetch_tool_excluded() -> Dictionary:
 func restore_fetch_tool_excluded(excluded: Dictionary) -> void:
 	_tool_fetch.restore_excluded(excluded)
 
+## job kind -> its jobs.json entry, from the session ContentRegistry (base bundle plus content
+## packs), so a pack's job kind runs like a base one (F1: a crop's own sow/harvest jobs).
 func _load_job_kinds() -> Dictionary:
-	var file := FileAccess.open(JOBS_CONTENT_PATH, FileAccess.READ)
-	if file == null:
-		return {}
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	file.close()
-	if typeof(parsed) != TYPE_DICTIONARY or typeof(parsed.get("jobs")) != TYPE_ARRAY:
-		return {}
 	var kinds: Dictionary = {}
-	for entry in parsed["jobs"]:
-		if typeof(entry) == TYPE_DICTIONARY and typeof(entry.get("kind")) == TYPE_STRING:
-			kinds[String(entry["kind"])] = entry
+	var registry: ContentRegistry = _content
+	for entry: Dictionary in registry.list("jobs"):
+		kinds[String(entry["kind"])] = entry.duplicate(true)
 	return kinds

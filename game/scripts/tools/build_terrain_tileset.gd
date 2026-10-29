@@ -51,7 +51,7 @@ func _init() -> void:
 	tile_set.add_source(_sprite_source("bed.png", Vector2i(16, 24)), 6)
 	tile_set.add_source(_sprite_source("door.png", Vector2i(16, 24)), 7)
 	tile_set.add_source(_sprite_source("berry_bush.png", Vector2i(16, 24)), 8)
-	tile_set.add_source(_grid_source("sprout.png", [Vector2i.ZERO]), 9)
+	tile_set.add_source(_grid_source("sprout.png", [Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0)]), 9) # crop stages (F1)
 	tile_set.add_source(_sprite_source("tree.png", Vector2i(32, 48)), 10)
 	# Resources: hazard cluster (0,0), stone (1,0), wood (2,0); 32x20 cells,
 	# low ground clutter centred on the tile (no origin correction).

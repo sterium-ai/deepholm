@@ -165,8 +165,16 @@ static func check_remove_object_command(world: WorldState, command: Dictionary) 
 static func check_zone_add_command(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	if (typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
-			or typeof(payload.get("width")) != TYPE_INT or typeof(payload.get("height")) != TYPE_INT):
+			or typeof(payload.get("width")) != TYPE_INT or typeof(payload.get("height")) != TYPE_INT
+			or typeof(payload.get("kind", "stockpile")) != TYPE_STRING or typeof(payload.get("crop", "")) != TYPE_STRING):
 		return {"reason": "invalid_payload", "params": {"detail": "zone_add_payload"}}
+	# F1: a farm zone names a crops.json id; a stockpile names none.
+	var zone_kind: String = payload.get("kind", "stockpile")
+	var crop: String = payload.get("crop", "")
+	if zone_kind not in ["stockpile", "farm"] or (zone_kind == "farm") == crop.is_empty():
+		return {"reason": "invalid_payload", "params": {"detail": "zone_add_payload"}}
+	if zone_kind == "farm" and world._content.get_entry("crops", crop).is_empty():
+		return {"reason": "invalid_payload", "params": {"detail": "unknown_crop", "crop": crop}}
 	var x: int = payload["x"]
 	var y: int = payload["y"]
 	var width: int = payload["width"]

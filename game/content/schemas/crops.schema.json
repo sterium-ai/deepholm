@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["crops"],
+  "properties": {
+    "crops": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "seed_item", "sow_job", "harvest_job", "window", "grow_days", "stages", "wither_days_after_window", "withered_tile"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "label": {"type": "string", "minLength": 1, "description": "A data/text key (for example \"crop.carrot\"), never player text: the viewer resolves it through TextTable (ADR 052)."},
+          "seed_item": {"type": "string", "minLength": 1, "description": "The items.json id a sow of this crop consumes."},
+          "sow_job": {"type": "string", "minLength": 1, "description": "The jobs.json kind that sows this crop: its effects consume seed_item and set the first stage (checked on load). A farm zone of this crop submits it."},
+          "harvest_job": {"type": "string", "minLength": 1, "description": "The jobs.json kind that harvests this crop: its effects require the last stage and yield the produce (checked on load). Submitted on every ripe tile of this crop."},
+          "window": {"type": "string", "minLength": 1, "description": "The calendar window id the crop grows in (and a farm zone sows in). A calendar without it (a scenario's) leaves the crop no season: it never grows and an unripe one withers."},
+          "grow_days": {"type": "integer", "minimum": 1, "description": "In-window days from sown to ripe."},
+          "stages": {
+            "type": "array",
+            "minItems": 2,
+            "description": "tiles.json ids from sown to ripe, reached at even fractions of grow_days; the first is the tile sow sets, the last the tile harvest requires.",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "wither_days_after_window": {"type": "integer", "minimum": 0, "description": "Days after the window's last day at which an unripe crop withers."},
+          "withered_tile": {"type": "string", "minLength": 1, "description": "The tiles.json id a withered crop leaves."}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

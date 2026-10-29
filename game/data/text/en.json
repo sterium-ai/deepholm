@@ -21,6 +21,7 @@
   "controls.tool_till": "Till",
   "controls.tool_sow": "Sow",
   "controls.tool_mine": "Mine",
+  "controls.tool_farm_zone": "Farm Zone",
   "controls.toggle_art": "Toggle Art",
 
   "incident.wildlife_wander": "Wildlife wanders in",
@@ -207,6 +208,7 @@
   "status.job.forage": "Foraging",
   "status.job.till": "Tilling",
   "status.job.sow": "Sowing",
+  "status.job.harvest": "Harvesting",
   "status.job.site_fetch": "Fetching materials",
   "status.job.site_work": "Building",
   "status.job.incident": "Visiting",
@@ -269,7 +271,8 @@
   "rejection.no_construction_site": "No construction site occupies this tile.",
   "rejection.remove_object_payload": "remove_object requires integer x and y.",
   "rejection.no_object_at_target": "Choose a tile that holds an object.",
-  "rejection.zone_add_payload": "zone_add requires integer x, y, width and height.",
+  "rejection.zone_add_payload": "zone_add requires integer x, y, width and height (and, for a farm zone, kind \"farm\" with a crop).",
+  "rejection.unknown_crop": "That crop is not declared in the content.",
   "rejection.zone_rect_invalid": "Choose a non-degenerate, in-bounds rectangle that does not overlap an existing zone.",
   "rejection.zone_remove_payload": "zone_remove requires a non-empty string id.",
   "rejection.unknown_zone": "Choose an existing zone id.",
@@ -306,11 +309,14 @@
   "tile.floor": "Floor",
   "tile.plowed_soil": "Plowed Soil",
   "tile.planted": "Planted",
+  "tile.crop_grown": "Growing Crop",
+  "tile.crop_ripe": "Ripe Crop",
   "tile.hazard": "Hazard",
   "tile.tree": "Tree",
   "tile.water": "Water",
   "tile.trench": "Trench",
   "calendar.window.sow": "sowing window",
   "calendar.date_label": "Day %d · month %d · year %d",
-  "calendar.date_window_label": "Day %d · month %d · year %d · %s"
+  "calendar.date_window_label": "Day %d · month %d · year %d · %s",
+  "crop.carrot": "Carrot"
 }

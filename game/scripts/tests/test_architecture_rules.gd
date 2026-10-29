@@ -204,7 +204,7 @@ func _run_and_verify(kind: String, seed_value: int, setup: Callable) -> void:
 	_verify_trace_against_toils(kind, toils, result["world"], result["statuses"], result["completed"])
 
 func _check_execution_trace() -> void:
-	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "haul", "site_fetch", "site_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
+	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "haul", "site_fetch", "site_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
 	for kind in expected_kinds:
 		_expect(_jobs_content.has(kind), "content/jobs.json must declare a \"%s\" job kind" % kind)
 	_expect(_jobs_content.size() == expected_kinds.size(),
@@ -243,6 +243,11 @@ func _check_execution_trace() -> void:
 		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
 		TestAccess.item_table(world).next_item_id = 2
 		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
+	# F1 (ADR 059): no command orders a harvest; FarmGiver submits one for a ripe crop tile,
+	# which FarmSystem picks up from the dirty-cell stream like a completed sow's tile.
+	_run_and_verify("harvest", 209501, func(world: WorldStateType) -> void:
+		TestAccess.set_tile(world, 5, 0, "crop_ripe")
+		TestAccess.tile_grid(world).mark_dirty(5, 0))
 	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
 	# -- this test proves only that the "incident" kind itself runs through

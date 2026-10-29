@@ -365,13 +365,25 @@ def berry_bush() -> Image.Image:
 
 
 def sprout() -> Image.Image:
-    img = new(16, 16)
+    """Crop stage decor, one 16x16 cell each (F1): sprout (0,0), grown (1,0), ripe (2,0)."""
+    img = new(48, 16)
     for cx in (4, 11):
         for cy in (5, 12):
             img.putpixel((cx, cy), LEAF_DARK)
             img.putpixel((cx, cy - 1), LEAF)
             img.putpixel((cx - 1, cy - 2), LEAF_LIGHT)
             img.putpixel((cx + 1, cy - 2), LEAF_LIGHT)
+    for cx in (20, 27):  # grown: taller leaf tufts
+        for cy in (6, 13):
+            rect(img, cx, cy - 3, cx, cy, LEAF_DARK)
+            for dx in (-2, -1, 1, 2):
+                img.putpixel((cx + dx, cy - 3 + abs(dx) - 1), LEAF if abs(dx) == 1 else LEAF_LIGHT)
+    for cx in (36, 43):  # ripe: full tufts over an orange root top
+        for cy in (6, 13):
+            rect(img, cx - 1, cy - 1, cx + 1, cy, hexc("e07b24"))
+            rect(img, cx, cy - 4, cx, cy - 2, LEAF_DARK)
+            for dx in (-2, -1, 1, 2):
+                img.putpixel((cx + dx, cy - 4 + abs(dx) - 1), LEAF if abs(dx) == 1 else LEAF_LIGHT)
     return img
 
 

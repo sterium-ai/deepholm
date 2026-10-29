@@ -135,10 +135,10 @@ func _check_jobs_content_file() -> void:
 		for toil in entry.get("toils", []):
 			_expect(ToilExecutorType.is_known_toil(String(toil)),
 				"%s declares unknown toil '%s'" % [kind, toil])
-	_expect(kinds.size() == 17 and kinds.has("dig") and kinds.has("mine") and kinds.has("chop") and kinds.has("forage") and kinds.has("till")
-			and kinds.has("sow") and kinds.has("haul") and kinds.has("site_fetch") and kinds.has("site_work") and kinds.has("eat_food") and kinds.has("drink_water") and kinds.has("sleep")
+	_expect(kinds.size() == 18 and kinds.has("dig") and kinds.has("mine") and kinds.has("chop") and kinds.has("forage") and kinds.has("till")
+			and kinds.has("sow") and kinds.has("harvest") and kinds.has("haul") and kinds.has("site_fetch") and kinds.has("site_work") and kinds.has("eat_food") and kinds.has("drink_water") and kinds.has("sleep")
 			and kinds.has("incident") and kinds.has("escape_trench") and kinds.has("flee") and kinds.has("rescue") and kinds.has("approach"),
-		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, haul, site_fetch, site_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
+		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, harvest, haul, site_fetch, site_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
 
 ## Two parallel corridors (y=0, y=2; x=0..9) with a tree at the far end of
 ## each row and a one-tile rock buffer (y=1) between them; everything else is

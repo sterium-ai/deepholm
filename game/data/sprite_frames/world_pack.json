@@ -599,8 +599,8 @@
    "source_id": 9,
    "name": "sprout",
    "cell_size": [
-    7,
-    8
+    10,
+    16
    ],
    "grounded_on": null,
    "tiles": [
@@ -620,6 +620,42 @@
       24,
       7,
       8
+     ]
+    },
+    {
+     "coords": [
+      1,
+      0
+     ],
+     "label": "crop grown (carrot leaves)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      68,
+      20,
+      9,
+      12
+     ]
+    },
+    {
+     "coords": [
+      2,
+      0
+     ],
+     "label": "crop ripe (carrot)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      82,
+      16,
+      10,
+      16
      ]
     }
    ]
@@ -1111,7 +1147,8 @@
    "sand": "no ground icon today (not in ITEM_ATLAS_MAP)",
    "gold_coin": "no ground icon today (not in ITEM_ATLAS_MAP)",
    "flint": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "coal": "no ground icon today (not in ITEM_ATLAS_MAP)"
+   "coal": "no ground icon today (not in ITEM_ATLAS_MAP)",
+   "food": "no ground icon today (not in ITEM_ATLAS_MAP); F1 harvest yield"
   }
  }
 }

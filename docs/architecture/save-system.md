@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 5` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 6` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -126,7 +126,9 @@ v3 records the content packs the save was made on (see "Content packs" below and
 scenario's calendar and incident list (see "Scenario start" below and
 [ADR 057](../decisions/057-scenario-start-fields.md)); v5 writes the compact wire
 encoding and saves each in-flight route search's accumulated costs (see "Wire encoding" and
-"Route searches" below and [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)).
+"Route searches" below and [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)); v6 adds
+farm zones and the crop growth records (see "Crops" below and
+[ADR 059](../decisions/059-crops-and-farm-zones.md)).
 
 **Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
 `JSON.stringify` of a write and unpacks it right after the parse of a read (after the
@@ -141,7 +143,7 @@ JSON Schema all see the plain state. Packed:
   visited tile in that order: the direction to its parent, `RouteSearch.NEIGHBOR_OFFSETS`'
   index; the start's bits are 0 and unused), `costBytes` (one float64 per visited tile in that
   order) and `frontierTiles` (int32 map tile indices in frontier order), all base64.
-- `entities`, `jobs` and `scheduling.waiting` become a record table: a first element
+- `entities`, `jobs`, `crops` (v6) and `scheduling.waiting` become a record table: a first element
   `{"$keys": [sorted keys]}`, then one row of values per record.
 
 The packer only packs what comes back exactly: a list of fewer than two records, a record with
@@ -149,6 +151,12 @@ other keys than the first one (kept as a plain object in the table), a route who
 is not one adjacent parent per visited tile, or a tile off the map stay plain, and the reader
 accepts the plain form of any of these fields. After a load the visited tiles of a search are
 in row-major order instead of discovery order; nothing depends on that order.
+
+**Crops.** A zone with `"kind": "farm"` carries its `crop` (a `crops.json` id); a stockpile
+carries neither. `crops` lists `FarmSystem`'s growth record of every sown tile,
+`[{target, crop, growth}]` in tile-key order, both validated against the session's crop ids.
+`FarmSystem.decode()` reconciles the records with the decoded tiles, so a sown tile always
+has one and nothing else does.
 
 **Content packs.** `contentPacks` is the saving world's `ContentRegistry.packs()` in load
 order, `[{id, version}]`, empty on the base bundle. `SaveIO.read()` and `write_atomic()` take
@@ -205,6 +213,10 @@ returns a new dictionary and never mutates its input. Steps today:
   map exactly as every v4 load did. The v1 to v4 fixtures all migrate exactly to
   `save_schema_v5_fixture.json` (the same session, written packed by
   `docs/orca/handoffs/A7-write-save.gd`).
+- **v5 → v6** (F1, ADR 059): adds `crops: []`; every v5 zone is already v6's stockpile
+  shape. A sown tile of a v5 save gets its record on decode, at its stage's threshold. The
+  v1 to v5 fixtures all migrate exactly to `save_schema_v6_fixture.json` (the same session,
+  written packed by `docs/orca/handoffs/F1-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -235,7 +247,7 @@ unexpected field. It then checks `schemaVersion`, `contentVersion`, `contentPack
 `tick`, `epoch` and `map`, and calls one validator per persisting module under
 `game/scripts/core/persistence/validators/`, in a fixed order so the first
 reported error is stable: `map_validator.gd`, `item_validator.gd`,
-`object_validator.gd`, `work_progress_validator.gd`, `giver_validator.gd`,
+`object_validator.gd`, `farm_validator.gd`, `work_progress_validator.gd`, `giver_validator.gd`,
 `calendar_validator.gd`, `tool_validator.gd`, `entity_validator.gd` and
 `scheduling_validator.gd`, with shared helpers in `save_check.gd`. An optional
 field is validated only when present.
@@ -258,7 +270,8 @@ fresh dig-find stream, and so on).
 is a v1 save and `pre_release_save_v27.json` a real save written before the
 reset; `game/scripts/tests/test_save_migration.gd` covers both, the empty
 chain, content renames and the optional fields. `test_save_route_continuation.gd` covers
-the saved route costs (see "Route searches").
+the saved route costs (see "Route searches"); `test_farm_zone.gd` saves and reloads a world
+mid-growth.
 
 **Route searches.** A route state (`rerouting`, `scheduling.pending.*.route`) is
 `{start, target, status, frontier, visited, cameFrom, cost?, path, expansions, resumeCalls}`;

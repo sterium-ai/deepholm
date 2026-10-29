@@ -92,7 +92,11 @@ SPEC = [
     {"source_id": 8, "name": "berry_bush", "kind": "sprite", "grounded_on": 16, "ceiling": CEILING_1X1, "tiles": [
         ((0, 0), "berry bush (red-fruit crop)", FARM, [80, 44, 16, 20], "sprite")]},
     {"source_id": 9, "name": "sprout", "kind": "sprite", "grounded_on": None, "ceiling": (16, 16), "tiles": [
-        ((0, 0), "sprout (seedling)", FARM, [48, 20, 16, 12], "sprite")]},
+        ((0, 0), "sprout (seedling)", FARM, [48, 20, 16, 12], "sprite"),
+        # F1 crop stages: the same carrot row as the sprout, two growth steps later.
+        ((1, 0), "crop grown (carrot leaves)", FARM, [64, 16, 16, 16], "sprite"),
+        ((2, 0), "crop ripe (carrot)", FARM, [80, 16, 16, 16], "sprite"),
+    ]},
     {"source_id": 10, "name": "tree", "kind": "sprite", "grounded_on": 16, "ceiling": CEILING_TREE, "tiles": [
         # Three sizes; map_view.gd picks one per tile by hash(seed, x, y).
         ((0, 0), "tree small", TREE_SMALL, [50, 52, 14, 28], "sprite"),
@@ -129,6 +133,7 @@ PLACEHOLDER = {
         "gold_coin": "no ground icon today (not in ITEM_ATLAS_MAP)",
         "flint": "no ground icon today (not in ITEM_ATLAS_MAP)",
         "coal": "no ground icon today (not in ITEM_ATLAS_MAP)",
+        "food": "no ground icon today (not in ITEM_ATLAS_MAP); F1 harvest yield",
     },
 }
 

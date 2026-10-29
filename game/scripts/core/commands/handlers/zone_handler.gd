@@ -1,7 +1,7 @@
 class_name ZoneHandler
 extends RefCounted
 
-## Stockpile zone commands: zone_add, zone_remove.
+## Zone commands: zone_add (a stockpile, or with {"kind": "farm", "crop"} a farm zone, F1), zone_remove.
 ## Invariant: removing a zone fails every active haul job whose reserved cell
 ## lay inside it, with a typed reason and no leaked reservation.
 
@@ -25,13 +25,14 @@ func _init(event_log: EventLogType, scheduler: AssignmentType, zone_table: ZoneT
 	_check = check
 	_terminate_haul_job_by_id = terminate_haul_job_by_id
 
-## Draws a rectangular stockpile zone.
+## Draws a rectangular stockpile or farm zone.
 func apply_zone_add_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_zone_add_command, command)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
-	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]))
+	var crop: String = payload.get("crop", "")
+	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]), crop)
 	var applied := _event_log.applied(command)
 	applied["zone_id"] = zone_id
 	return applied

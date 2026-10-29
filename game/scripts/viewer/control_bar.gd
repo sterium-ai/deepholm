@@ -12,7 +12,7 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StatusTextType = preload("res://scripts/viewer/status_text.gd")
 const TickDriverType = preload("res://scripts/viewer/tick_driver.gd")
 
-const TOOL_KEYS := ["dig", "chop", "forage", "cancel", "wall", "remove_object", "zone", "till", "sow", "mine"]
+const TOOL_KEYS := ["dig", "chop", "forage", "cancel", "wall", "remove_object", "zone", "till", "sow", "mine", "farm_zone"]
 
 var seed_input: LineEdit
 var active_seed_label: Label

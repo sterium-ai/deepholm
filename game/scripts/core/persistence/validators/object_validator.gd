@@ -103,12 +103,13 @@ static func _valid_material_entry(value) -> Dictionary:
 		return _fail("invalid constructionSites entry material quantity")
 	return {"ok": true}
 
-static func _valid_zones(value, map_width: int, map_height: int) -> Dictionary:
+## crop_ids: the session's crops.json ids, which a farm zone's "crop" must name (F1).
+static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid zones type")
 	var seen_ids := {}
 	for zone in (value as Array):
-		var zone_check := _valid_zone(zone, map_width, map_height)
+		var zone_check := _valid_zone(zone, map_width, map_height, crop_ids)
 		if not zone_check["ok"]:
 			return zone_check
 		var zone_id: String = (zone as Dictionary)["id"]
@@ -117,11 +118,17 @@ static func _valid_zones(value, map_width: int, map_height: int) -> Dictionary:
 		seen_ids[zone_id] = true
 	return {"ok": true}
 
-static func _valid_zone(value, map_width: int, map_height: int) -> Dictionary:
+## A stockpile is exactly {id, x, y, width, height}; a farm zone adds "kind": "farm" and a known "crop".
+static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid zone type")
 	var zone: Dictionary = value
-	var check := _require_fields(zone, ["id", "x", "y", "width", "height"], "zone")
+	var required := ["id", "x", "y", "width", "height"]
+	if zone.has("kind") or zone.has("crop"):
+		required.append_array(["kind", "crop"])
+		if not zone.has("kind") or zone["kind"] != "farm" or not zone.has("crop") or not crop_ids.has(zone["crop"]):
+			return _fail("invalid farm zone kind or crop")
+	var check := _require_fields(zone, required, "zone")
 	if not check["ok"]:
 		return check
 	if not _matches_id_pattern(zone["id"]):

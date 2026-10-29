@@ -8,6 +8,7 @@ extends RefCounted
 ## - v2 -> v3 (A13b, ADR 010 amendment 2): the save records its content packs.
 ## - v3 -> v4 (A16b, ADR 057): the scenario calendar and incident list are saved.
 ## - v4 -> v5 (A7, ADR 058): compact file encoding (SaveWire) and saved route-search costs.
+## - v5 -> v6 (F1, ADR 059): farm zones and the "crops" growth records.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -37,6 +38,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v3_to_v4(state)
 		4:
 			return _v4_to_v5(state)
+		5:
+			return _v5_to_v6(state)
 		_:
 			return {
 				"ok": false,
@@ -97,6 +100,17 @@ static func _v4_to_v5(state: Dictionary) -> Dictionary:
 		return {"ok": false, "code": "schema_error", "message": "v4 save has no map tiles"}
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 5
+	return {"ok": true, "state": migrated}
+
+## v5 -> v6 (F1, ADR 059): adds an empty "crops" list. Every v5 zone is a stockpile (no "kind"),
+## which is v6's stockpile shape; a v5 sown tile gets its growth record from
+## FarmSystem.decode()'s reconcile, starting at its stage's threshold.
+static func _v5_to_v6(state: Dictionary) -> Dictionary:
+	if state.has("crops"):
+		return {"ok": false, "code": "schema_error", "message": "v5 save already has crops"}
+	var migrated := state.duplicate(true)
+	migrated["crops"] = []
+	migrated["schemaVersion"] = 6
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

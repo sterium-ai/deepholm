@@ -420,6 +420,31 @@ the colonist/farm-order facts this needs are passed in as plain booleans rather 
 exact lead-day tick, so the alert fires at most once per window. This is a data change to add
 new windows (harvest, winter firewood).
 
+#### Crops and farm zones (F1, ADR 059)
+
+A crop is content (`content/crops.json`): its seed item, its own sow and harvest job kinds
+(`sow_job`/`harvest_job`, whose `jobs.json` effects consume that seed, set its first stage, and
+require its last stage), the calendar window it grows in, its
+`grow_days`, its stage tiles from sown to ripe (`planted` → `crop_grown` → `crop_ripe` for the
+one v1 crop, `carrot`), how many days after the window an unripe crop withers and the tile it
+withers to. `FarmSystem` (`core/farming/farm_system.gd`) keeps one growth record per sown tile;
+each tick inside the window a record grows by one tick and the tile shows the stage reached at
+even fractions of `grow_days` (about 4 days to ripe). Outside the window nothing grows; from
+the start of the day after `to + wither_days_after_window` (day 22 for `sow`) an unripe crop
+turns back into `plowed_soil`. A ripe crop never withers: it waits for its harvest.
+
+`harvest`, the carrot's harvest job, is a plain `jobs.json` kind (labour `farm`, ADR 051 effects): it requires
+`crop_ripe`, sets `plowed_soil` and leaves 2 `food` and 1 `seed` on the tile, which `HaulGiver`
+carries to a stockpile like any loose item. `FarmGiver` (`core/jobs/givers/farm_giver.gd`) is
+the job-giver, run from `FarmSystem.advance()` in `TickPipeline`'s `farming` phase (after the
+colonists move): a harvest on every ripe tile, wherever it was sown; and on each farm zone
+(`zone_add` with `kind: "farm"` and a crop) a `till` on soil, and — only while the crop's
+window is open — the zone crop's sow job on plowed soil, never more sows than units of that
+crop's seed on the ground. The ripe crop's own harvest job is what each ripe tile gets. Live
+till and crop jobs, the player's per-tile orders included, claim their tile, so no tile gets
+two. Per-tile `till`/`sow` orders are unchanged (`sow` is the carrot's sow job). Job toils come
+from the session `ContentRegistry`, so a content pack's crop jobs run like base ones.
+
 ### 3.8 Explainability (unchanged policy, extended vocabulary)
 
 Every colonist exposes `activity`, `job_id`, `toil`, `reason`, `remedy`. New reasons:

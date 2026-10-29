@@ -61,7 +61,7 @@ func _minimal_state_at_size(width: int, height: int) -> Dictionary:
 		},
 		"rng": {"seed": 1, "state": 0},
 		"items": {"nextId": 1, "list": []},
-		"objects": [], "zones": [], "nextZoneId": 1, "groundBerries": [],
+		"objects": [], "zones": [], "nextZoneId": 1, "crops": [], "groundBerries": [],
 		"workProgress": [], "pausedJobs": [], "toolItems": {"nextId": 1, "list": []},
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],

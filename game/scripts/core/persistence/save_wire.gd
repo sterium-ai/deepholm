@@ -15,7 +15,8 @@ extends RefCounted
 ##   direction to its parent, NEIGHBOR_OFFSETS' index), "costBytes" (one float64 per visited
 ##   tile, in that order) and "frontierTiles" (int32 map tile indices, in frontier order), all
 ##   base64. The start tile's 2 bits are written as 0 and never read.
-## - "entities", "jobs" and "scheduling.waiting" (lists of same-shaped records) become a table:
+## - "entities", "jobs", "crops" (F1, v6) and "scheduling.waiting" (lists of same-shaped records)
+##   become a table:
 ##   a first element {"$keys": [sorted keys]}, then one row [values in key order] per record. A
 ##   record with other keys stays a plain object in place, and so does a list of fewer than
 ##   two records; unpack() accepts plain objects anywhere after the header.
@@ -29,7 +30,7 @@ extends RefCounted
 const PACKED_ROUTE_FIELDS: Array[String] = ["box", "visitedBits", "cameFromDirs", "frontierTiles"]
 ## The header element of a record table; never a field of a real record.
 const TABLE_KEYS := "$keys"
-const RECORD_LISTS: Array[String] = ["entities", "jobs"]
+const RECORD_LISTS: Array[String] = ["entities", "jobs", "crops"]
 const PLAIN_ROUTE_FIELDS: Array[String] = ["visited", "cameFrom", "cost", "frontier"]
 ## Parent minus child, indexed by the 2-bit code; RouteSearch.NEIGHBOR_OFFSETS' order.
 const DIRECTIONS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]

@@ -18,6 +18,8 @@
       "effects": {"requires_tile": "soil", "set_tile": "plowed_soil"}},
     {"kind": "sow", "labour": "farm", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 20,
       "effects": {"requires_tile": "plowed_soil", "consumes": "seed", "set_tile": "planted"}},
+    {"kind": "harvest", "labour": "farm", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 30,
+      "effects": {"requires_tile": "crop_ripe", "set_tile": "plowed_soil", "yields": {"placement": "target", "always": ["food", "food", "seed"]}}},
     {"kind": "haul", "labour": "haul", "toils": ["reserve", "go_to", "pick_up", "go_to", "place", "release_all"], "priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40},
     {"kind": "site_fetch", "labour": "build", "toils": ["reserve", "go_to", "pick_up", "go_to", "deposit", "release_all"]},
     {"kind": "site_work", "labour": "build", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},

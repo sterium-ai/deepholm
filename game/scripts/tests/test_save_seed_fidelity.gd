@@ -243,7 +243,7 @@ func _assert_escaped_round_trip(state: Dictionary, key_spellings: Dictionary, la
 ## encoding stays exactly what the real codec would produce.
 func _build_minimal_state_text(state: Dictionary, key_spellings: Dictionary) -> String:
 	var order := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs",
-		"scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs",
+		"scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs",
 		"toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 	var parts := PackedStringArray()
 	for key in order:
@@ -276,7 +276,7 @@ func _minimal_state() -> Dictionary:
 		},
 		"rng": {"seed": 42, "state": 0},
 		"items": {"nextId": 1, "list": []},
-		"objects": [], "zones": [], "nextZoneId": 1, "groundBerries": [],
+		"objects": [], "zones": [], "nextZoneId": 1, "crops": [], "groundBerries": [],
 		"workProgress": [], "pausedJobs": [], "toolItems": {"nextId": 1, "list": []},
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],
