@@ -920,10 +920,36 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** drought and fertilise (later F1b), several crops shipped (only content-ready),
   animals, food processing, farm zone priorities/UI beyond painting the zone.
 
-### F2 — Workbench recipes and item groups · `todo` · Design: *pending*
+### F2 — Workbench recipes, craft labour and item groups · `todo` · after F1 (uses the same haul/yield patterns) · Design: closed 2026-10-29
 
-Questions: first recipes (planks? stone blocks?), queue vs. target counts, who crafts
-(labour), where output goes.
+- **Design (owner, 2026-10-29):** recipes are content (`recipes.json` + schema) on the existing
+  2×1 `workbench`. v1 recipes: **axe** (3 wood + 1 stone), **pick** (2 wood + 2 stone),
+  **planks** (1 wood → 2 planks), **stone blocks** (2 stone → 1 block); planks and blocks are
+  new `material` items (future build costs, not used by walls yet). Production is requested per
+  workbench in two ways that coexist: a **"keep N in stock" target** per recipe (craft while the
+  colony's stockpiled count is below N) and a **queue of orders** ("make X times"). A new labour
+  **`craft`** (in the labour table like the others) does the work; **materials are hauled to the
+  workbench** by haulers through the construction-site fetch mechanism (reuse `site_fetch`-style
+  reservations), then the crafter works at the bench. **Output appears on a tile adjacent to the
+  bench** and is hauled to a stockpile like harvest and berries. **Item groups** (`tool`,
+  `material`, `food`, `seed`) are declared in `items.json` for later stockpile filters (F5); no
+  filter UI in F2.
+- **Owned paths:** new `core/crafting/` module (recipe book, per-bench targets/queue, composed
+  into `WorldState` without growing `world_state.gd` — move code out if needed), a `CraftGiver`
+  in `core/jobs/givers/`, `content/recipes.json` + schema, `content/items.json` (planks, blocks,
+  groups), `content/jobs.json` (`craft_fetch`, `craft_work`), labour table content, commands +
+  handlers for setting targets/queue (`core/commands/handlers/`), persistence (bump + migration +
+  fixture; next free schema number at rebase time), viewer: a minimal workbench panel to set
+  targets/queue (reuse the panel pattern of A9), `docs/architecture/*.md`, an ADR (next free
+  number), tests, `docs/orca/handoffs/F2.md`.
+- **Acceptance:** headless scenario: one built workbench, 6 wood + 4 stone in a stockpile, one
+  colonist with `craft` enabled, target "keep 1 axe" and an order "planks ×2" → within 2 days an
+  axe and 4 planks are in the stockpile, materials consumed exactly per recipe, deterministic
+  `state_hash()`; the target re-triggers when the axe is taken by a colonist; a recipe whose
+  materials are missing waits without blocking the queue; save/load mid-craft continues
+  identically; replay reproduces it; suite green; `measure_core` budgets respected.
+- **Non-goals:** more workshops, production statistics/annual targets, stockpile filter UI (F5),
+  tool quality/durability, recipes needing skills (F3).
 
 ### F3 — Skills and XP per labour · `todo` · Design: *pending*
 
