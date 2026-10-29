@@ -310,5 +310,7 @@
   "tile.tree": "Tree",
   "tile.water": "Water",
   "tile.trench": "Trench",
-  "calendar.window.sow": "sowing window"
+  "calendar.window.sow": "sowing window",
+  "calendar.date_label": "Day %d · month %d · year %d",
+  "calendar.date_window_label": "Day %d · month %d · year %d · %s"
 }

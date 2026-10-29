@@ -67,6 +67,7 @@ all with one size rule.
 | [054](054-scenarios-as-content.md) | Scenarios as content |
 | [055](055-viewer-snapshot.md) | One read-only view snapshot per viewer refresh |
 | [057](057-scenario-start-fields.md) | Scenario start fields: roster, calendar, enabled incidents |
+| [056](056-calendar-months-and-years.md) | Calendar months and years derived from the day |
 
 ## Renumbered records (redirects)
 

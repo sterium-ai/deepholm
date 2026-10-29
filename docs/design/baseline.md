@@ -95,7 +95,7 @@ copied from it, and its name does not appear in this repository.
 
 | Baseline | Deepholm today | Status |
 | --- | --- | --- |
-| Months and years (the reference had no "day") | day = 2200 ticks; windows from content; month/year decided (3 days/month, 12 months) — F0 | partial — decided |
+| Months and years (the reference had no "day") | day = 2200 ticks; 3 days/month, 12 months/year derived from the day; windows by day or month range; viewer date line (F0, ADR 056) | done |
 | Tick-based need decay (the reference was frame-rate dependent, a bug) | done | done |
 
 ## 10. Saving
@@ -113,7 +113,7 @@ copied from it, and its name does not appear in this repository.
 
 ## Owner decisions still pending
 
-1. ~~Month/year on top of days~~ — **decided 2026-10-29: 3 days/month, 12 months/year** (task F0).
+1. ~~Month/year on top of days~~ — **decided 2026-10-29: 3 days/month, 12 months/year**; done in F0 (ADR 056).
 2. Starvation rule: slow periodic damage vs. direct death.
 3. Breakdowns: depression only, or also a "goes crazy" chance.
 

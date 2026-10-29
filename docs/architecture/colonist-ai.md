@@ -389,11 +389,13 @@ completion effect.
 
 ### 3.7 Calendar urgency
 
-`content/calendar.json`: `{day_length_ticks: int, windows: [{id, labour, from, to, boost,
-label}]}` (ADR 008). `day_length_ticks` is the tick count of one in-game day; `from`/`to` are
-1-indexed, inclusive day-of-year numbers (day 1 is spring day 1; no other season-length
-content exists yet, so later seasons are added by offsetting their windows' day numbers, not
-by changing the schema). `day_length_ticks` is **2200** (ADR 024: at x1, 2 ticks per second,
+`content/calendar.json`: `{day_length_ticks: int, days_per_month: int, months_per_year: int,
+windows: [{id, labour, from, to, boost, label}]}` (ADR 008, ADR 056). `day_length_ticks` is the
+tick count of one in-game day; `from`/`to` are 1-indexed, inclusive day numbers counted from the
+start of the game. A window may instead declare `from_month`/`to_month` (never both pairs):
+month `m` is days `(m - 1) * days_per_month + 1 .. m * days_per_month`, so the window matches
+exactly the ticks of that day range. A month is **3** days and a year **12** months (36 days);
+both default to 1 when absent. Windows do not repeat each year. `day_length_ticks` is **2200** (ADR 024: at x1, 2 ticks per second,
 a day takes about 18.3 real minutes, slow enough for needs decay — see below — to be
 survivable). The seeded window is `{id: "sow", labour: "farm", from: 1, to: 20, boost: 1,
 label: "sowing window"}`; `from`/`to` are day numbers, not ticks, so lengthening `day_length_ticks` changes how long a day takes without changing which day numbers
@@ -401,7 +403,11 @@ the sowing season spans.
 
 `CalendarService` (`game/scripts/core/calendar/calendar_service.gd`) is a plain, scene-
 independent core class that loads this content once and exposes pure queries: `day_of_tick(tick)`
-derives the day from `day_length_ticks` and the tick alone; `active_boost(labour, tick)` sums
+derives the day from `day_length_ticks` and the tick alone; `month_of_tick(tick)` and
+`year_of_tick(tick)` derive month and year from that day (nothing about them is stored or
+saved); `date_of_tick(tick)` returns `{day, month, year, window_label}` (the first open window's
+label, or `""`), which `WorldState.get_view_snapshot()` carries as `"date"` for the viewer's
+"day D · month M · year Y" line; `active_boost(labour, tick)` sums
 every window whose `labour` matches and whose `[from, to]` contains that day, returning 0 when
 none match — this is the "calendar boost" term in 3.2's effective-priority formula. The work
 table shows these active boosts.

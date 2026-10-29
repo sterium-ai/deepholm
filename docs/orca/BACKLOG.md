@@ -895,7 +895,7 @@ Order follows `../design/baseline.md` §"Suggested order". Each entry is a place
 the owner has answered its design questions in a chat session and the answers are written
 into the entry. Do not start an `F*` whose **Design** block says *pending*.
 
-### F0 — Calendar: months and years · `todo` · *parallel-safe (calendar + viewer date label)* · Design: closed 2026-10-29
+### F0 — Calendar: months and years · `review (antonelmejor50-hub/f0-calendar-months-and-years)` · *parallel-safe (calendar + viewer date label)* · Design: closed 2026-10-29
 
 - **Design (owner, 2026-10-29):** 3 days per month, 12 months per year (a year = 36 days of
   2,200 ticks). Day numbering stays as today (day N from the start); month and year are derived
@@ -909,6 +909,13 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   declared by months matches the same ticks as the equivalent day range; `state_hash()` unchanged
   on the R-plan scenarios; viewer shows the three values; suite green.
 - **Non-goals:** seasons as gameplay (temperature, drought), holidays, changing `day_length_ticks`.
+- **Scope extension (owner, 2026-10-29):** the date reaches the viewer through the A9 view
+  snapshot, not a new getter: `core/world/view_snapshot.gd` gains a `"date"` key computed by the
+  world's own `CalendarService`, and `world_state.gd` changes one existing line (the calendar is
+  passed in `get_view_snapshot()`'s `sources`; no line added, 789 lines). Also touched, flagged in
+  `handoffs/F0.md` for the owner: two text keys in `game/data/text/en.json` (ADR 052: no player
+  text in code) and `docs/architecture/warnings-baseline.txt` lowered by one (the gate's `-Update`).
+  ADR 056; evidence `docs/orca/handoffs/F0.md`.
 
 ### F1 — Crops: growth stages, harvest and farm zones · `todo` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29
 
