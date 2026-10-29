@@ -599,10 +599,11 @@ one.
   plain records drawn by one `_draw()` per layer (no node per actor) and skip colonists that did
   not change. The colonist panel keeps its rows; on a tick it recomposes the rows on screen plus at
   most 16 more in a rotating window, and after a command (a refresh at the same tick, also
-  while paused) every row; the work table compares the same rows. `TickDriver` runs at most 4 ticks
+  while paused) every row; rows scrolled into view are recomposed at once; the work table
+  compares the same rows. `TickDriver` runs at most 4 ticks
   per frame. The purity rule rejects `world._x` in the viewer and `boot.gd`, with a planted
-  read. `bench_viewer_refresh` at 1,000 actors: about 415 ms per tick on `main`, 3.6–4.0 ms
-  here. See `docs/orca/handoffs/A9.md`.
+  read. `bench_viewer_refresh` at 1,000 actors: about 415 ms per tick on `main`, 3.1–5.0 ms
+  here (mean per run; borderline against ≤ 4 ms, see the handoff). See `docs/orca/handoffs/A9.md`.
 
 #### A10 — Static typing gate for the core · `review (antonelmejor50-hub/a10-static-typing-gate-for)` · *parallel-safe*
 

@@ -262,6 +262,27 @@ func _check_rows_on_screen_refresh_every_tick() -> void:
 		_expect((panel._rows[id]["label"] as Label).text != "stale", "on-screen row %s is recomposed on a tick" % id)
 	_expect(_fresh_count(panel._list) <= ColonistPanelType.ROWS_PER_REFRESH + on_screen.size(),
 		"a tick refresh recomposes only the window and the on-screen rows")
+	# Review round 2: paused (no tick, no command), scrolling elsewhere must not show a
+	# line composed at an older tick.
+	var tick := world.get_tick()
+	for _i in 3:
+		await process_frame # let the list lay out its recomposed rows before measuring one
+	var far_row := panel._list.get_child(panel._roster.size() - 4) as Control
+	scroll.scroll_vertical = int(far_row.position.y)
+	for _i in 3:
+		await process_frame
+	var revealed: Array = panel._visible_ids().filter(func(id: String) -> bool: return not on_screen.has(id))
+	_expect(not revealed.is_empty(), "setup: scrolling reveals other rows")
+	_expect(world.get_tick() == tick, "setup: no tick while scrolling")
+	var older := 0
+	for id: String in revealed:
+		var label := panel._rows[id]["label"] as Label
+		if label.text == "stale":
+			older += 1
+		_expect(label.text == panel._line_for(TestAccess.find_colonist(world, id)),
+			"row %s scrolled into view while paused shows the current line" % id)
+		_expect(int(panel._composed_at.get(id, -1)) == tick, "row %s is marked composed at the current tick" % id)
+	_expect(older == 0, "no row scrolled into view while paused is left stale (%d stale)" % older)
 	scroll.queue_free()
 	await process_frame
 

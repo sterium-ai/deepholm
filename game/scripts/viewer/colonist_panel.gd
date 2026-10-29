@@ -66,10 +66,54 @@ var _roster: PackedStringArray = PackedStringArray()
 var _cursor: int = 0
 ## The tick of the last refresh (-1: none yet).
 var _last_tick: int = -1
+## colonist id -> the tick its line was last composed at. A row scrolled into view (or
+## revealed by a resize) that was composed at an older tick is recomposed at once, so
+## scrolling while paused never shows a stale line.
+var _composed_at: Dictionary = {}
+## The ScrollContainer whose scrolling and resizing this panel listens to.
+var _watched_scroll: ScrollContainer
 ## The snapshot the line being composed reads.
 var _snapshot: Dictionary = {}
 ## Tool item id -> kind, from _snapshot's tool_items.
 var _tool_kinds: Dictionary = {}
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_ENTER_TREE:
+		_watch_scroll_view.call_deferred()
+
+## Listens to the enclosing ScrollContainer: scrolling or resizing it brings rows into view.
+func _watch_scroll_view() -> void:
+	var scroll := _scroll_view()
+	if scroll == null or scroll == _watched_scroll:
+		return
+	_watched_scroll = scroll
+	# Deferred: the ScrollContainer moves its content in a deferred sort after the change.
+	scroll.get_v_scroll_bar().value_changed.connect(func(_value: float) -> void: refresh_rows_on_screen.call_deferred())
+	scroll.resized.connect(func() -> void: refresh_rows_on_screen.call_deferred())
+
+## Recomposes the rows on screen whose line is older than the world's current tick:
+## what scrolling or resizing reveals, while running or paused. A no-op when every row
+## on screen is current, so a scroll that reveals nothing new costs one visibility scan.
+func refresh_rows_on_screen() -> void:
+	if world == null or _list == null:
+		return
+	var tick := world.get_tick()
+	var stale: Array = _visible_ids().filter(func(id: String) -> bool:
+		return int(_composed_at.get(id, -1)) != tick and _rows.has(id))
+	if stale.is_empty():
+		return
+	var snapshot := world.get_view_snapshot(stale)
+	_use_snapshot(snapshot)
+	var buttons := _recruit_buttons(snapshot) if (snapshot["factions"] as Array).has("allies") else {}
+	var rows_created := false
+	for colonist_id: String in stale:
+		if (snapshot["details"] as Dictionary).has(colonist_id):
+			rows_created = _sync_row(colonist_id, _compose_line(snapshot["details"][colonist_id]),
+				String(buttons.get(colonist_id, "")), _on_recruit_pressed.bind(colonist_id)) or rows_created
+			_composed_at[colonist_id] = tick
+	_use_snapshot({})
+	if rows_created:
+		refresh() # a row gained or lost its Recruit button: let refresh() put the list back in order
 
 func setup(world_ref: WorldStateType, text_table: TextTableType) -> void:
 	world = world_ref
@@ -165,6 +209,7 @@ func refresh(snapshot: Dictionary = {}) -> void:
 	for colonist_id: String in due:
 		rows_created = _sync_row(colonist_id, _compose_line(detail_snapshot["details"][colonist_id]),
 			String(buttons.get(colonist_id, "")), _on_recruit_pressed.bind(colonist_id)) or rows_created
+		_composed_at[colonist_id] = tick
 	var offers: Array = (snapshot["pending_trade_offers"] as Array).duplicate()
 	offers.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return String(a["trader_id"]) < String(b["trader_id"]))
 	var trade_keys: Array[String] = []
@@ -202,6 +247,7 @@ func forget_rows() -> void:
 	_trade_keys = []
 	_cursor = 0
 	_last_tick = -1
+	_composed_at = {}
 
 ## Re-reads the id-sorted roster when the snapshot's ids or worker columns differ
 ## from the last ones read; true when they did. A different roster restarts the window.
@@ -262,6 +308,7 @@ func _drop_rows_not_in(keys: Array[String]) -> void:
 func _remove_row(key: String) -> void:
 	var row: Control = _rows[key]["row"]
 	_rows.erase(key)
+	_composed_at.erase(key)
 	_list.remove_child(row)
 	row.queue_free()
 
