@@ -3,13 +3,15 @@
 > **In short:** A scenario entry can now say how many colonists start (and give some of them
 > their own labour priorities), which calendar the world runs on, and which incidents can
 > happen. `ScenarioBuilder` hands these to `WorldState` when it is constructed, through a
-> small `WorldSetup` object. An entry that leaves them out (both shipped entries) builds
-> exactly the same world as before.
+> small `WorldSetup` object. The calendar and the incident list are saved (save schema v3,
+> which becomes v4 once A13b's v3 lands first), so a loaded world and a replay keep them. An
+> entry that leaves the fields out (both shipped entries) builds exactly the same world as
+> before.
 
 - **Status:** accepted
 - **Date:** 2026-10-29
 - **Scope:** content (three optional `scenarios.json` fields), simulation (one new
-  `WorldState` construction parameter)
+  `WorldState` construction parameter), persistence (save schema v3, `scenarioStart`)
 - **Extends:** ADR 054 (scenarios as content; this closes the three fields its
   "Consequences" deferred)
 - **Depends on:** ADR 008 (calendar), ADR 017 (incidents), ADR 020 (spawn clearing),
@@ -29,14 +31,14 @@ at 790 of its 800-line cap, so the parameters had to fit without growing it.
 
 | Field | Meaning |
 | --- | --- |
-| `roster` | `{count, colonists?}`. `count` replaces `mapgen.json`'s `colonist_count` for this world: it sets how many colonists spawn and sizes the spawn clearing and its food sources exactly as `colonist_count` does (`WorldGenerator.place_spawn()`). `colonists[i]`, when present, defines `colonist_i`: today only `{"labour": {kind: level}}`, written over the colonist's default labour table. Colonists past the list keep `actors.json`'s defaults. |
+| `roster` | `{count, colonists?}`. `count` replaces `mapgen.json`'s `colonist_count` for this world: it sets how many colonists spawn and sizes the spawn clearing's food sources exactly as `colonist_count` does (`WorldGenerator.place_spawn()`). It may not exceed the rectangular spawn clearing (`spawn_area_width` × `spawn_area_height`, 36 tiles today), because `place_spawn()` prefers that clearing whenever one exists and puts one colonist per tile. `colonists[i]`, when present, defines `colonist_i`: today only `{"labour": {kind: level}}`, written over the colonist's default labour table. Colonists past the list keep `actors.json`'s defaults. |
 | `calendar` | A whole calendar document (the shape of `calendar.schema.json`: `day_length_ticks` and `windows`), used instead of `calendar.json`. Its day length drives everything that reads the world's calendar: labour boosts, calendar alerts, needs' per-day rates and the incident day. |
 | `incidents` | A non-empty list of `incidents.json` ids. Only these enter the daily draw. Omitted means every incident, as before. "No incidents" stays `incidents_enabled: false`, which is still the master switch (callers and replays override it through `options.incidents_enabled`). |
 
 `ContentRegistry._check_scenario_start()` cross-checks them at load time, each failing typed and
 naming `scenarios.json`:
 
-- `schema_violation`: more `colonists` definitions than `count`; a labour that is not one of the
+- `schema_violation`: a `count` larger than the spawn clearing; more `colonists` definitions than `count`; a labour that is not one of the
   colonist's declared `worker.labours`, or a level that is not an integer within its
   `labour_min`..`labour_max` (the same rule as `set_labour`); a calendar window id listed twice;
   an incident listed twice. The schema also rejects a roster without `count`, a calendar without
@@ -61,19 +63,45 @@ naming `scenarios.json`:
     the list, as it already bypasses `min_day`, cooldowns and the budget.
 - `ScenarioBuilder.build()` passes `WorldSetup.from_scenario(scenario)` to the constructor.
   Setup steps then see the scenario roster (`per_colonist_objects` places one bed per colonist
-  of the scenario's roster).
+  of the scenario's roster). If the world spawned fewer colonists than the roster's `count` (a
+  spawn search that fell back past the rectangular clearing), the builder pushes an error and
+  returns `null`, as for an unknown scenario: a roster is never truncated silently.
 - To keep `world_state.gd` under its cap, two blocks moved out unchanged: the content startup
   checks (`WorldSetup.startup_tables()`: tool requirements, then the haul entry, the same
   messages in the same order) and the after-load incident reconciliation
   (`IncidentScheduler.reconcile_after_load()`, same statements; `WorldState` keeps a one-line
   delegator for `StateCodec`). `world_state.gd` goes from 790 to 783 lines.
 
+### Persistence: save schema v3
+
+The calendar and the incident list keep ruling the world after tick 0 (day length, boosts,
+alerts, needs' per-day rates, the incident draw), so they are save state. The roster is not:
+the saved entities already are the roster.
+
+- New required top-level field `scenarioStart`: `{"calendar": <calendar document> | null,
+  "enabledIncidents": [<incident id>, ...]}`. `null` is `calendar.json` and `[]` is every
+  incident, so a base-start world saves `{"calendar": null, "enabledIncidents": []}` and keeps
+  following the content files as before.
+- `WorldSetup.encode()`/`WorldSetup.decode()` convert it; `StateCodec.decode()` builds the world
+  from the decoded setup (the roster fields stay at the base start: the saved entities replace
+  the generated ones). A replay starts from a save, so it keeps them too.
+- `StateCodec.SCHEMA_VERSION` 2 → 3; `SaveMigrations` v2 → v3 adds the base start (exactly what a
+  v2 world ran on) and refuses a v2 state that already has the field;
+  `CalendarValidator._valid_scenario_start()` validates the shape;
+  `docs/architecture/contracts/game-state.schema.json` and `save-system.md` describe it; the
+  fixture `save_schema_v3_fixture.json` is the v1/v2 fixtures' session written at v3.
+- **Numbering:** A13b also bumps the schema (v2 → v3). Whichever lands second renumbers: when
+  A16b rebases onto A13b, this step becomes v3 → v4 and the fixture `save_schema_v4_fixture.json`.
+- `scenarioStart` is not in `state_hash()`, like the content files it replaces.
+
 ### Determinism
 
 Every new input is content, read at construction; no new RNG stream. A scenario that uses none of
 the fields takes exactly the old code paths: the shipped `new_game` and `debug` entries build
-byte-identical saves, event logs and 100 ticks of `state_hash()` (the A16 probe,
-`docs/orca/handoffs/A16-scenario_dump.gd`; see `docs/orca/handoffs/A16b.md`).
+identical event logs and 100 ticks of `state_hash()`, and saves that differ from `main`'s only by
+`schemaVersion` 3 and the added base-start `scenarioStart` (the A16 probe,
+`docs/orca/handoffs/A16-scenario_dump.gd`, compared by `A16b-compare_probe.py`; see
+`docs/orca/handoffs/A16b.md`).
 
 ## Alternatives considered
 
@@ -85,6 +113,9 @@ byte-identical saves, event logs and 100 ticks of `state_hash()` (the A16 probe,
 - **Replace `incidents_enabled` with the list.** Rejected for now: the switch is the override
   `DebugScenario.build()`, the replay log (`incidentsEnabled`) and the tests already use; a list
   on top of it changes none of them.
+- **Save the scenario id instead of the two values.** Rejected: the entry may come from a pack
+  that is not loaded next time, or change between versions, and the save would then silently run
+  on other rules; the values themselves keep a save self-contained.
 - **Add the parameters to `WorldState` directly.** Rejected by the size rule (ADR 048):
   `WorldSetup` keeps the start inputs in one typed place and leaves room in `world_state.gd`.
 
@@ -92,11 +123,11 @@ byte-identical saves, event logs and 100 ticks of `state_hash()` (the A16 probe,
 
 - A scenario can now be a small colony, a big one, a short-day or long-day world, or a quiet start
   with only peaceful visitors, as content only.
-- **Not persisted.** Like `incidents_enabled`, the start fields are construction inputs, not save
-  state. The roster survives a save (the colonists and their labour tables are entities), but a
-  loaded world, and a replay (which starts from a save), runs on `calendar.json` and every
-  incident. Persisting the scenario id (or the two fields) needs a save schema change and is
-  follow-up work, to be coordinated with A13b's schema v3.
+- The calendar and incident list are saved (schema v3); `incidents_enabled` is still not (the
+  boot layer re-applies it after a load, as before).
+- A roster larger than the spawn clearing is rejected rather than placed in a bigger clearing:
+  growing the clearing would change `WorldGenerator.place_spawn()`, which is at its frozen size
+  exception (870 lines).
 - Per-colonist definitions only carry labour levels. Names, traits or starting gear would be new
   definition fields with their own checks.
 - `ContentRegistry.COLONIST_COUNT` still mirrors `mapgen.json`'s default; it is the base start,
@@ -105,8 +136,8 @@ byte-identical saves, event logs and 100 ticks of `state_hash()` (the A16 probe,
 ## Acceptance criteria
 
 - [x] The affected canonical documents are updated: this ADR, `scenarios.schema.json` (the
-  contract), `extension-points.md` ("Scenario").
-- [x] Contracts, examples and tests: `scenarios.schema.json`,
-  `game/scripts/tests/test_scenario_start.gd`.
-- [x] Save/migration impact: none (no persisted field changes); the limitation above is recorded.
+  contract), `extension-points.md` ("Scenario"), `game-state.schema.json` and `save-system.md`.
+- [x] Contracts, examples and tests: `scenarios.schema.json`, `game-state.schema.json`,
+  `game/scripts/tests/test_scenario_start.gd`, `test_save_migration.gd`.
+- [x] Save/migration impact: schema v3 with its v2 → v3 migration and the v3 fixture.
 - [x] The source-of-truth index still points to `scenarios.schema.json`.

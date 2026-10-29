@@ -6,6 +6,7 @@ extends RefCounted
 ## SaveIO, never migrated. Steps since the reset:
 ## - v1 -> v2 (A5, ADR 053): terminal jobs leave the save.
 ## - v2 -> v3 (A13b, ADR 010 amendment 2): the save records its content packs.
+## - v3 -> v4 (A16b, ADR 057): the scenario calendar and incident list are saved.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -31,6 +32,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v1_to_v2(state)
 		2:
 			return _v2_to_v3(state)
+		3:
+			return _v3_to_v4(state)
 		_:
 			return {
 				"ok": false,
@@ -69,6 +72,17 @@ static func _v2_to_v3(state: Dictionary) -> Dictionary:
 		migrated["contentPacks"] = []
 	migrated = migrated.duplicate(true)
 	migrated["schemaVersion"] = 3
+	return {"ok": true, "state": migrated}
+
+## v3 -> v4 (A16b, ADR 057): adds "scenarioStart" as the base start, {"calendar": null,
+## "enabledIncidents": []}: a v3 world always ran on calendar.json and every incident, and so
+## does the migrated one. Nothing else changes.
+static func _v3_to_v4(state: Dictionary) -> Dictionary:
+	if state.has("scenarioStart"):
+		return {"ok": false, "code": "schema_error", "message": "v3 save already has scenarioStart"}
+	var migrated := state.duplicate(true)
+	migrated["scenarioStart"] = {"calendar": null, "enabledIncidents": []}
+	migrated["schemaVersion"] = 4
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

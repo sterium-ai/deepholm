@@ -244,7 +244,7 @@ func _assert_escaped_round_trip(state: Dictionary, key_spellings: Dictionary, la
 func _build_minimal_state_text(state: Dictionary, key_spellings: Dictionary) -> String:
 	var order := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs",
 		"scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs",
-		"toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
+		"toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 	var parts := PackedStringArray()
 	for key in order:
 		var key_text: String = key_spellings.get(key, JSON.stringify(key))
@@ -281,6 +281,7 @@ func _minimal_state() -> Dictionary:
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],
 		"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": 42, "state": 0}},
+		"scenarioStart": {"calendar": null, "enabledIncidents": []},
 	}
 
 func _sha256_hex(bytes: PackedByteArray) -> String:

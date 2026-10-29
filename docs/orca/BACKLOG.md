@@ -807,8 +807,17 @@ one.
   the startup content checks to `WorldSetup.startup_tables()` and the after-load incident
   reconciliation to `IncidentScheduler.reconcile_after_load()` (`world_state.gd` 790 → 783; it was
   790, not 800, on `main`). `test_scenario_start.gd`; [ADR 057](../decisions/057-scenario-start-fields.md).
-  The start fields are not saved (a loaded world runs on `calendar.json` and every incident).
   See `docs/orca/handoffs/A16b.md`.
+- **Owner (2026-10-29, after review round 1, in the A16b terminal):** scope extension to
+  persistence. "guardar y cargar pierde el calendario del escenario y el filtro de incidentes …:
+  persistelos con bump de esquema + migracion + fixture y tests de continuacion save/load y
+  replay", and for the roster "adapta la colocacion al numero pedido o rechazalo explicitamente,
+  con test de regresion". Done: save schema v3 with a required `scenarioStart` field
+  (`persistence/state_codec.gd`, `save_io.gd`, `save_migrations.gd`,
+  `validators/calendar_validator.gd`, `game-state.schema.json`, `save-system.md`, the v3 fixture
+  and the tests that hand-build current-schema states); a roster larger than the spawn clearing
+  is rejected at load and a short placement at build. A13b also bumps v2 → v3, so "your bump is
+  the next free number when you rebase (probably v4)".
 
 #### A17 — Story and quest layer: design ADR · `review (antonelmejor50-hub/a17-story-and-quest-layer)` · *parallel-safe (docs only)*
 

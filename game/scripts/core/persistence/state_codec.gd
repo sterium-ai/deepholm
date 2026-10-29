@@ -11,10 +11,12 @@ const RerouteType = preload("res://scripts/core/scheduling/measured_route.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
-## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2). Every later shape
-## change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 3
+## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2); v4 saves the scenario's
+## calendar and enabled incidents (A16b, ADR 057). Every later shape change bumps this and adds
+## a SaveMigrations step and a fixture.
+const SCHEMA_VERSION := 4
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -79,6 +81,8 @@ static func encode(world: WorldState) -> Dictionary:
 		"digFindRng": item_table["digFindRng"],
 		# ADR 044: pending area_order expansions, resumed at their next row-major tile.
 		"areaOrders": world._area_orders.encode(),
+		# ADR 057 (v3): the scenario calendar and incident list the world keeps running under.
+		"scenarioStart": world._setup.encode(),
 	}
 
 ## Reconstructs a WorldState that ticks identically to the one that produced state,
@@ -89,7 +93,11 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	var map: Dictionary = state["map"]
 	var width := int(map["width"])
 	var height := int(map["height"])
-	var world := WorldState.new(int(state["seed"]), 10, width, height, false, content)
+	# Built under the saved calendar and incident list (ADR 057); absent (a replay's older
+	# initial state) is the base start.
+	var scenario_start: Dictionary = state.get("scenarioStart", {})
+	var setup := WorldSetupType.decode(scenario_start)
+	var world := WorldState.new(int(state["seed"]), 10, width, height, false, content, setup)
 	# The constructor clamps size to the new-game 16..512 range; a saved map keeps its own size
 	# (e.g. a 3x2 fixture), set before the tiles or the row stride is wrong.
 	world._tile_grid.width = width

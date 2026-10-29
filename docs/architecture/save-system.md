@@ -97,14 +97,16 @@ typed result codes are:
 
 A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text.
-The state carries `schemaVersion: 3` (`StateCodec.SCHEMA_VERSION`) and is
+The state carries `schemaVersion: 4` (`StateCodec.SCHEMA_VERSION`) and is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
 [ADR 049](../decisions/049-save-schema-reset-v1.md)); v2 stops saving terminal
 jobs (see "Jobs" below and [ADR 053](../decisions/053-job-storage-retired-history.md));
 v3 records the content packs the save was made on (see "Content packs" below and
-[ADR 010](../decisions/010-content-registry.md), amendment 2).
+[ADR 010](../decisions/010-content-registry.md), amendment 2); v4 saves the
+scenario's calendar and incident list (see "Scenario start" below and
+[ADR 057](../decisions/057-scenario-start-fields.md)).
 
 **Content packs.** `contentPacks` is the saving world's `ContentRegistry.packs()` in load
 order, `[{id, version}]`, empty on the base bundle. `SaveIO.read()` and `write_atomic()` take
@@ -150,6 +152,12 @@ returns a new dictionary and never mutates its input. Steps today:
 - **v2 → v3** (A13b, ADR 010 amendment 2): inserts `contentPacks: []` after
   `contentVersion` (no v2 build loaded packs into a save session). The v1 and v2
   fixtures both migrate exactly to `save_schema_v3_fixture.json`.
+- **v3 → v4** (A16b, ADR 057): adds `scenarioStart` as the base start,
+  `{"calendar": null, "enabledIncidents": []}` (a v3 world always ran on
+  `calendar.json` and every incident); nothing else changes, and a v3 state that
+  already has the field is refused. The v1, v2 and v3 fixtures all migrate exactly
+  to `save_schema_v4_fixture.json` (the same session written at v4,
+  `docs/orca/handoffs/A16b-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -549,6 +557,21 @@ included in `state_hash()`:
 - `approachJobTargets` ([ADR 033](../decisions/033-hostile-approach.md)):
   `{jobId, kind, actorId}` (an actor target) or `{jobId, kind, tile}` (an
   object target) per `approach` job (`ApproachGiver.restore_job_targets()`).
+
+## Scenario start
+
+The top-level `scenarioStart` field (v4, [ADR 057](../decisions/057-scenario-start-fields.md))
+is the part of a scenario's start that keeps ruling the world after tick 0:
+`calendar` is `null` (the world runs on `content/calendar.json`) or the scenario's
+own calendar document (`day_length_ticks` and `windows`, the shape of
+`calendar.schema.json`); `enabledIncidents` lists the `incidents.json` ids the daily
+incident draw considers, `[]` meaning every incident. `StateCodec.encode()` writes
+`WorldSetup.encode()`, and `decode()` builds the world from `WorldSetup.decode()`,
+so a loaded world, and a replay (which starts from a save), keeps the scenario's day
+length, boosts and incident list. `CalendarValidator._valid_scenario_start()` checks
+the shape (unique window ids, incident ids in the id pattern, listed once). The
+scenario roster is not part of it: the saved entities are the roster. The field is
+not in `state_hash()`, like the content it replaces.
 
 ## Calendar alerts
 

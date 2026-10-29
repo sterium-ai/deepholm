@@ -15,7 +15,7 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Always written by StateCodec.encode().
-const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
+const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
 const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders"]
@@ -225,6 +225,7 @@ static func _validate_state(state: Dictionary, content: ContentRegistryType = nu
 		func() -> Dictionary: return SchedulingValidator._valid_scheduling(state["scheduling"], w, h),
 		func() -> Dictionary: return SchedulingValidator._valid_rng(state["rng"]),
 		func() -> Dictionary: return CalendarValidator._valid_incident_scheduler(state.get("incidentScheduler")),
+		func() -> Dictionary: return CalendarValidator._valid_scenario_start(state.get("scenarioStart")),
 		func() -> Dictionary: return _optional(state, "digFindRng", func(v: Variant) -> Dictionary: return ItemValidator._valid_dig_find_rng(v)),
 	]
 	for check in checks:

@@ -395,6 +395,7 @@ func _minimal_state_at_size(width: int, height: int, seed_value: int) -> Diction
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],
 		"incidentScheduler": {"cooldownUntilDay": {}, "lastProcessedDay": 1, "rng": {"seed": seed_value, "state": 0}},
+		"scenarioStart": {"calendar": null, "enabledIncidents": []},
 	}
 
 ## A save whose tiles array does not have width*height entries

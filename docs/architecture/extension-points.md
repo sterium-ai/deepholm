@@ -246,8 +246,9 @@ boundaries and are not a separate extension point.
     (`game/scripts/core/world/world_setup.gd`): `roster` `{count, colonists?}` replaces
     `mapgen.json`'s `colonist_count` and may give `colonist_i` its own `labour` levels;
     `calendar` is a whole calendar document used instead of `calendar.json`; `incidents` is the
-    non-empty list of `incidents.json` ids the daily draw considers (omitted: all). They are not
-    saved: a loaded world runs on `calendar.json` and every incident.
+    non-empty list of `incidents.json` ids the daily draw considers (omitted: all). A roster may
+    not exceed the spawn clearing (`spawn_area_width` × `spawn_area_height`). The calendar and
+    the incident list are saved (`scenarioStart`, save schema v3), so a loaded world keeps them.
 
   `ContentRegistry` loads `scenarios` as an optional collection kind, so a content pack may add
   or override a scenario. It checks that each step carries exactly the fields

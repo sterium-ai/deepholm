@@ -635,7 +635,10 @@ func _check_scenarios(raw_by_kind: Dictionary) -> Dictionary:
 			return start_check
 	return {"ok": true}
 
-## A16b (ADR 057): a scenario's start fields. The roster defines no more colonists than its count,
+## A16b (ADR 057): a scenario's start fields. The roster fits the rectangular spawn clearing
+## (mapgen.json's spawn_area_width x spawn_area_height): WorldGenerator.place_spawn() prefers
+## that clearing whenever one exists and places at most one colonist per tile of it. The roster
+## defines no more colonists than its count,
 ## each with declared worker labours at levels inside the colonist's labour_min..labour_max; the
 ## calendar's window ids are unique and each names a declared labour; every enabled incident is an
 ## incidents.json id, listed once.
@@ -650,6 +653,12 @@ func _check_scenario_start(scenario: Dictionary, raw_by_kind: Dictionary) -> Dic
 	var roster: Dictionary = scenario.get("roster", {})
 	var definitions: Array = roster.get("colonists", [])
 	var count: int = roster.get("count", 0)
+	var mapgen: Dictionary = raw_by_kind["mapgen"]
+	var clearing_width: int = mapgen["spawn_area_width"]
+	var clearing_height: int = mapgen["spawn_area_height"]
+	var capacity := clearing_width * clearing_height
+	if count > capacity:
+		return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s roster of %d does not fit the %d-tile spawn clearing" % [where, count, capacity]}
 	if definitions.size() > count:
 		return {"ok": false, "code": ERROR_SCHEMA_VIOLATION, "message": "%s defines %d colonists for a roster of %d" % [where, definitions.size(), count]}
 	for definition: Dictionary in definitions:

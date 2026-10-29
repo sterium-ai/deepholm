@@ -5,7 +5,9 @@ extends RefCounted
 ## startup tables every world needs, and a new world's start fields from one scenarios.json
 ## entry (the starting roster, the calendar document and the enabled-incident list). Pure data
 ## with no WorldState reference; a default WorldSetup is the base start (mapgen.json's colonist
-## count, calendar.json, every incident). A decoded world is always built from the default.
+## count, calendar.json, every incident). The calendar and the incident list keep ruling the
+## world after the start, so they are saved (the "scenarioStart" field, schema v3) and a decoded
+## world is built from them; the roster is not, because the saved entities already are it.
 
 const ContentTablesType = preload("res://scripts/core/content/content_tables.gd")
 
@@ -45,6 +47,24 @@ func seeding_mapgen(mapgen: Dictionary) -> Dictionary:
 
 func calendar_document(content: ContentRegistry) -> Dictionary:
 	return calendar if not calendar.is_empty() else content.document("calendar")
+
+## The saved "scenarioStart" field: {"calendar": the scenario calendar, or null for calendar.json,
+## "enabledIncidents": the ids, [] for every incident}.
+func encode() -> Dictionary:
+	var saved_calendar: Variant = null
+	if not calendar.is_empty():
+		saved_calendar = calendar.duplicate(true)
+	return {"calendar": saved_calendar, "enabledIncidents": enabled_incidents.duplicate()}
+
+## The setup a saved world continues under (SaveIO validated the field's shape); {} is the base start.
+static func decode(field: Dictionary) -> WorldSetup:
+	var setup := WorldSetup.new()
+	var saved_calendar: Variant = field.get("calendar")
+	if saved_calendar is Dictionary:
+		setup.calendar = saved_calendar
+	for incident_id: String in (field.get("enabledIncidents", []) as Array):
+		setup.enabled_incidents.append(incident_id)
+	return setup
 
 ## The content tables WorldState._init() checks before building the work engine.
 class StartupTables:

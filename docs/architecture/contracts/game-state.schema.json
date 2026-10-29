@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v3",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v4",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"],
+  "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
   "$defs": {
     "tile": {
       "type": "object",
@@ -150,6 +150,49 @@
         "kind": { "type": "string", "enum": ["actor", "object"] },
         "actorId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "tile": { "$ref": "#/$defs/tile" }
+      }
+    },
+    "scenarioStart": {
+      "description": "ADR 057 (v3): the scenario start a world keeps running under. calendar is null (content/calendar.json) or the scenario's calendar document; enabledIncidents lists the incident ids the daily draw considers, [] meaning every incident.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["calendar", "enabledIncidents"],
+      "properties": {
+        "calendar": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["day_length_ticks", "windows"],
+              "properties": {
+                "day_length_ticks": { "type": "integer", "minimum": 1 },
+                "windows": {
+                  "type": "array",
+                  "description": "Window ids are unique.",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["id", "labour", "from", "to", "boost", "label"],
+                    "properties": {
+                      "id": { "type": "string", "minLength": 1 },
+                      "labour": { "type": "string", "minLength": 1 },
+                      "from": { "type": "integer", "minimum": 1 },
+                      "to": { "type": "integer", "minimum": 1 },
+                      "boost": { "type": "integer" },
+                      "label": { "type": "string", "minLength": 1 }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "enabledIncidents": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
+        }
       }
     },
     "calendarAlerts": {
@@ -340,7 +383,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 3 },
+    "schemaVersion": { "type": "integer", "const": 4 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -432,6 +475,7 @@
       "items": { "$ref": "#/$defs/approachJobTargetEntry" }
     },
     "calendarAlerts": { "$ref": "#/$defs/calendarAlerts" },
+    "scenarioStart": { "$ref": "#/$defs/scenarioStart" },
     "toolFetchExcluded": {
       "type": "array",
       "items": { "$ref": "#/$defs/toolFetchExcludedEntry" }
