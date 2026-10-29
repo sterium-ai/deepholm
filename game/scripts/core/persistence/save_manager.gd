@@ -10,9 +10,13 @@ extends RefCounted
 ## load_best() tries the slots newest-first until one validates and reports every rejected
 ## candidate in trial order. The last-known-good pointer only advances to a strictly newer
 ## validated save. Migrations live in SaveIO.read()/save_migrations.gd, not here.
+## Reads are checked against the session ContentRegistry given at construction (A13b): a slot
+## made on other content packs is skipped with content_packs_mismatch. A write is checked
+## against the registry of the world it encodes.
 
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
+const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 
 const DEFAULT_SAVE_DIR := "user://saves"
 const MANUAL_FILE := "manual.json"
@@ -21,15 +25,18 @@ const MANUAL_SLOT := "manual"
 
 var _save_dir: String
 var _last_known_good: Variant = null
+## The session registry; null until first needed when none was given (then the base bundle).
+var _content: ContentRegistryType
 
-func _init(save_dir: String = DEFAULT_SAVE_DIR) -> void:
+func _init(save_dir: String = DEFAULT_SAVE_DIR, content: ContentRegistryType = null) -> void:
 	_save_dir = save_dir
+	_content = content
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_save_dir))
 
 func save_manual(world: WorldState, epoch: int = 0) -> Dictionary:
 	var state: Dictionary = StateCodecType.encode(world)
 	state["epoch"] = epoch
-	var result: Dictionary = SaveIOType.write_atomic(_manual_path(), state)
+	var result: Dictionary = SaveIOType.write_atomic(_manual_path(), state, Callable(), Callable(), StateCodecType.content_of(world))
 	if result.get("ok", false):
 		_advance_last_known_good(MANUAL_SLOT, _manual_path(), epoch, int(state["tick"]))
 	return result
@@ -40,7 +47,7 @@ func save_autosave(world: WorldState, epoch: int = 0) -> Dictionary:
 	state["epoch"] = epoch
 	var index := _pick_autosave_slot()
 	var path := _autosave_path(index)
-	var result: Dictionary = SaveIOType.write_atomic(path, state)
+	var result: Dictionary = SaveIOType.write_atomic(path, state, Callable(), Callable(), StateCodecType.content_of(world))
 	if result.get("ok", false):
 		_advance_last_known_good(_autosave_slot_name(index), path, epoch, int(state["tick"]))
 	return result
@@ -51,7 +58,7 @@ func load_best() -> Dictionary:
 	var ordered := _order_candidates_newest_first()
 	var skipped: Array[Dictionary] = []
 	for candidate in ordered:
-		var result: Dictionary = SaveIOType.read(candidate["file"])
+		var result: Dictionary = SaveIOType.read(candidate["file"], get_content())
 		if result.get("ok", false):
 			var state: Dictionary = result["state"]
 			var epoch := int(state.get("epoch", 0))
@@ -65,6 +72,12 @@ func load_best() -> Dictionary:
 			"code": result.get("code", "unknown"), "message": result.get("message", ""),
 		})
 	return {"ok": false, "skipped": skipped}
+
+## The session registry loads are checked against; a loaded state decodes on it.
+func get_content() -> ContentRegistryType:
+	if _content == null:
+		_content = ContentRegistryType.new()
+	return _content
 
 ## Null until something validated; then {"slot", "file", "epoch", "tick"} of the newest seen.
 func get_last_known_good():

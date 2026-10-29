@@ -134,7 +134,8 @@ static func _valid_assignment_entry(value, map_width: int, map_height: int) -> D
 		return path_check
 	return {"ok": true}
 
-static func _valid_jobs(value, map_width: int, map_height: int) -> Dictionary:
+## job_kinds: jobs.json's kinds from the session registry (SaveIO.content_rules()).
+static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array[String]) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid jobs type")
 	var job_required := ["id", "kind", "status", "priority", "target", "reason", "remedy", "blockingJobId",
@@ -152,7 +153,7 @@ static func _valid_jobs(value, map_width: int, map_height: int) -> Dictionary:
 				return _fail_missing("missing job field '%s'" % key)
 		if not _matches_id_pattern(job["id"]):
 			return _fail("invalid job id")
-		if not (job["kind"] is String) or not ["dig", "site_fetch", "site_work", "craft", "chop", "haul", "forage", "till", "sow", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"].has(job["kind"]):
+		if not (job["kind"] is String) or not job_kinds.has(job["kind"]):
 			return _fail("invalid job kind")
 		if not (job["status"] is String) or not ["queued", "active", "completed", "failed", "cancelled"].has(job["status"]):
 			return _fail("invalid job status")

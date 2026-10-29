@@ -11,17 +11,23 @@ const FORMAT := "deepholm-save"
 const PRE_RELEASE_FORMAT := "deepholm-save-v1"
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
+const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
+const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Always written by StateCodec.encode().
-const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
+const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
 const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders"]
 
-static func write_atomic(path: String, state: Dictionary, before_rename: Callable = Callable(), after_temp_write: Callable = Callable()) -> Dictionary:
-	var file_name := path.get_file()
+## Every entry point takes the session's ContentRegistry (A13b, ADR 010 amendment 2): its
+## version, packs and tile/job/need ids are what a save is checked against. null builds the
+## base bundle, as WorldState does.
+static func write_atomic(path: String, state: Dictionary, before_rename: Callable = Callable(), after_temp_write: Callable = Callable(),
+		content: ContentRegistryType = null) -> Dictionary:
 	var temporary := path + ".tmp"
-	var validation := _validate_state(state)
+	var registry := _session(content)
+	var validation := _validate_state(state, registry)
 	if not validation["ok"]:
 		_remove_temporary(temporary)
 		return _error(validation["code"], validation["message"], path)
@@ -54,7 +60,7 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		after_temp_write.call(temporary)
 
 	# Read the candidate back: catches truncation and storage failures before the target changes.
-	var verified := _read_and_verify(temporary)
+	var verified := _read_and_verify(temporary, registry)
 	if not verified["ok"]:
 		_remove_temporary(temporary)
 		return _error(verified["code"], verified["message"], path)
@@ -68,13 +74,16 @@ static func write_atomic(path: String, state: Dictionary, before_rename: Callabl
 		return _error(rename_result["code"], rename_result["message"], path)
 	return {"ok": true, "code": "ok", "message": "save written", "file": path}
 
-static func read(path: String) -> Dictionary:
-	var result := _read_and_verify(path)
+static func read(path: String, content: ContentRegistryType = null) -> Dictionary:
+	var result := _read_and_verify(path, _session(content))
 	if not result["ok"]:
-		return _error(result["code"], result["message"], path)
+		var failed := _error(result["code"], result["message"], path)
+		if result.has("reason"):
+			failed["reason"] = result["reason"]
+		return failed
 	return {"ok": true, "code": "ok", "message": "save loaded", "file": path, "state": result["state"]}
 
-static func _read_and_verify(path: String) -> Dictionary:
+static func _read_and_verify(path: String, registry: ContentRegistryType) -> Dictionary:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return {"ok": false, "code": "read_failed", "message": "could not open save", "file": path}
@@ -132,7 +141,7 @@ static func _read_and_verify(path: String) -> Dictionary:
 		state = migrated["state"]
 	# Another content bundle gets one chance through a registered rename
 	# (SaveMigrations.resolve_content_version()), otherwise it is rejected, never loaded stale.
-	var current_content_version := StateCodecType.content_version()
+	var current_content_version := registry.version()
 	var content_version_value: Variant = state.get("contentVersion")
 	if content_version_value is String and String(content_version_value) != current_content_version:
 		var resolved := SaveMigrationsType.resolve_content_version(state, current_content_version)
@@ -141,7 +150,12 @@ static func _read_and_verify(path: String) -> Dictionary:
 				"message": "save content version '%s' does not match current content version '%s'" % [content_version_value, current_content_version],
 				"file": path}
 		state = resolved["state"]
-	var validation := _validate_state(state)
+	# Before the shape check: a save on a missing pack names the pack, not one of its tiles.
+	var packs_check := check_content_packs((state as Dictionary).get("contentPacks"), registry.packs())
+	if not packs_check["ok"]:
+		packs_check["file"] = path
+		return packs_check
+	var validation := _validate_state(state, registry)
 	if not validation["ok"]:
 		return {"ok": false, "code": validation["code"], "message": validation["message"], "file": path}
 	return {"ok": true, "state": state}
@@ -155,7 +169,13 @@ static func _coerce_ints(state: Dictionary) -> void:
 ## integrity hash already matched (a tampered-but-rehashed file must still fit the shape).
 ## Each module's validator (validators/*.gd) checks what that module persists; the order
 ## below is the order the checks run in, so the first error reported is stable.
-static func _validate_state(state: Dictionary) -> Dictionary:
+## content null checks against the base bundle (headless tests call it that way).
+static func _validate_state(state: Dictionary, content: ContentRegistryType = null) -> Dictionary:
+	var rules := content_rules(_session(content))
+	var tile_ids: Array[String] = rules["tiles"]
+	var job_kinds: Array[String] = rules["jobKinds"]
+	var need_kinds: Array[String] = rules["needs"]
+	var max_world_size: int = rules["maxWorldSize"]
 	if not _keys_allowed(state, TOP_LEVEL_FIELDS + OPTIONAL_TOP_LEVEL_FIELDS):
 		return _fail("unexpected top-level field")
 	for key in TOP_LEVEL_FIELDS:
@@ -165,13 +185,16 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 		return _fail("schemaVersion does not match current schema")
 	if not (state["contentVersion"] is String) or str(state["contentVersion"]).is_empty():
 		return _fail("invalid contentVersion")
+	var packs_shape := _valid_content_packs(state["contentPacks"])
+	if not packs_shape["ok"]:
+		return packs_shape
 	if not _is_int(state["seed"]):
 		return _fail("invalid seed type")
 	if not _is_int_min(state["tick"], 0):
 		return _fail("invalid tick type or value")
 	if not _is_int_min(state["epoch"], 0):
 		return _fail("invalid epoch type or value")
-	var map_check := MapValidator._valid_map(state["map"])
+	var map_check := MapValidator._valid_map(state["map"], tile_ids, max_world_size)
 	if not map_check["ok"]:
 		return map_check
 	var w := int(state["map"]["width"])
@@ -196,9 +219,9 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 		func() -> Dictionary: return ToolValidator._valid_tool_fetch_excluded(state.get("toolFetchExcluded"), state.get("toolItems")),
 		func() -> Dictionary: return ToolValidator._valid_tool_items(state.get("toolItems"), w, h),
 		func() -> Dictionary: return ToolValidator._valid_tool_reservations(state.get("toolReservations"), state.get("toolItems")),
-		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"], w, h),
+		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"], w, h, need_kinds),
 		func() -> Dictionary: return ItemValidator._valid_inventory(state["inventory"]),
-		func() -> Dictionary: return SchedulingValidator._valid_jobs(state["jobs"], w, h),
+		func() -> Dictionary: return SchedulingValidator._valid_jobs(state["jobs"], w, h, job_kinds),
 		func() -> Dictionary: return SchedulingValidator._valid_scheduling(state["scheduling"], w, h),
 		func() -> Dictionary: return SchedulingValidator._valid_rng(state["rng"]),
 		func() -> Dictionary: return CalendarValidator._valid_incident_scheduler(state.get("incidentScheduler")),
@@ -209,6 +232,84 @@ static func _validate_state(state: Dictionary) -> Dictionary:
 		if not result["ok"]:
 			return result
 	return {"ok": true}
+
+## The content-defined whitelists a save is validated against, read from the registry so a
+## pack's tiles, job kinds and needs are valid in a save made on that pack.
+static func content_rules(registry: ContentRegistryType) -> Dictionary:
+	return {
+		"tiles": _ids(registry, "tiles"),
+		"jobKinds": _ids(registry, "jobs"),
+		"needs": _ids(registry, "needs"),
+		# A saved map keeps its exact size on load, so only WorldGenerator's upper bound applies.
+		"maxWorldSize": int(registry.document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE)),
+	}
+
+static func _ids(registry: ContentRegistryType, kind: String) -> Array[String]:
+	var id_field: String = ContentRegistryType.ID_FIELD_BY_KIND[kind]
+	var ids: Array[String] = []
+	for entry: Dictionary in registry.list(kind):
+		var id: String = entry[id_field]
+		ids.append(id)
+	return ids
+
+## "contentPacks": the ordered [{id, version}] of ContentRegistry.packs() the save was made on.
+static func _valid_content_packs(value: Variant) -> Dictionary:
+	if not (value is Array):
+		return _fail("invalid contentPacks type")
+	var seen: Dictionary = {}
+	for item: Variant in value:
+		if not (item is Dictionary):
+			return _fail("invalid contentPacks entry type")
+		var pack: Dictionary = item
+		var check := _require_fields(pack, ["id", "version"], "contentPacks entry")
+		if not check["ok"]:
+			return check
+		for key: String in ["id", "version"]:
+			if not (pack[key] is String) or (pack[key] as String).is_empty():
+				return _fail("invalid contentPacks entry %s" % key)
+		if seen.has(pack["id"]):
+			return _fail("duplicate contentPacks id '%s'" % pack["id"])
+		seen[pack["id"]] = true
+	return {"ok": true}
+
+## {"ok": true} only when saved lists exactly the loaded packs, same versions, same order;
+## otherwise content_packs_mismatch with "reason" missing, version, unexpected or order. A
+## malformed list fails as _validate_state() would. ReplayLog checks its start state here too.
+static func check_content_packs(saved: Variant, loaded: Array) -> Dictionary:
+	if saved == null:
+		return _fail_missing("missing required field 'contentPacks'")
+	var shape := _valid_content_packs(saved)
+	if not shape["ok"]:
+		return shape
+	# Both lists are {id: String, version: String}: saved passed the shape check above and
+	# loaded is ContentRegistry.packs().
+	var loaded_ids: Array[String] = []
+	var loaded_versions: Dictionary = {}
+	for pack: Dictionary in loaded:
+		var loaded_id: String = pack["id"]
+		loaded_ids.append(loaded_id)
+		loaded_versions[loaded_id] = pack["version"]
+	var saved_ids: Array[String] = []
+	for pack: Dictionary in saved:
+		var id: String = pack["id"]
+		var version: String = pack["version"]
+		if not loaded_versions.has(id):
+			return _packs_mismatch("missing", "save needs content pack '%s' (version '%s'), which is not loaded" % [id, version])
+		if loaded_versions[id] != version:
+			return _packs_mismatch("version", "save was made with content pack '%s' version '%s', this session loads version '%s'" % [id, version, loaded_versions[id]])
+		saved_ids.append(id)
+	for loaded_id in loaded_ids:
+		if not saved_ids.has(loaded_id):
+			return _packs_mismatch("unexpected", "this session loads content pack '%s', which the save was not made with" % loaded_id)
+	if saved_ids != loaded_ids:
+		return _packs_mismatch("order", "save lists its content packs in another order than this session loads them")
+	return {"ok": true}
+
+static func _packs_mismatch(reason: String, message: String) -> Dictionary:
+	return {"ok": false, "code": "content_packs_mismatch", "reason": reason, "message": message}
+
+static func _session(content: ContentRegistryType) -> ContentRegistryType:
+	return content if content != null else ContentRegistryType.new()
 
 ## An optional top-level field is checked only when present (see OPTIONAL_TOP_LEVEL_FIELDS).
 static func _optional(state: Dictionary, key: String, check: Callable) -> Dictionary:

@@ -59,6 +59,7 @@
   "save.reason.save_from_newer_version": "from a newer version of the game",
   "save.reason.unsupported_pre_release_save": "from an unsupported pre-release version",
   "save.reason.content_version_mismatch": "made with different game content",
+  "save.reason.content_packs_mismatch": "made with different content packs",
   "save.reason.rename_failed": "incomplete",
 
   "save.write_reason.write_failed": "the save file could not be written",

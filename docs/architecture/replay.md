@@ -46,8 +46,11 @@
    has compared every recorded checkpoint, and `replay()` checks that count again at the end.
 2. Refuse with `content_version_mismatch` or `generator_version_mismatch` when the running
    build differs from the recording. A replay across content versions cannot be expected to
-   match.
-3. Build the world with `WorldState.from_save_state(start)` and `enable_incidents()` when the
+   match. `replay(after_tick, content)` takes the session registry and first refuses, with
+   the save's `content_packs_mismatch`, a start state whose `contentPacks` differ from it
+   (A13b); `tools/replay.ps1` passes none, so it replays on the base bundle only.
+3. Build the world with `StateCodec.decode(start, content)` (what `WorldState.from_save_state()`
+   does, plus the session registry) and `enable_incidents()` when the
    recording had incidents on. `decode()` always builds with incidents off, as for a Load.
 4. For each tick *T*, from the start tick to the last tick: compare the checkpoint for *T* if
    one was recorded, apply the commands recorded at *T* in order, then `tick()`.

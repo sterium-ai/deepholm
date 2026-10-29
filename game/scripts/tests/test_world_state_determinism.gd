@@ -51,7 +51,7 @@ func _minimal_state_at_size(width: int, height: int) -> Dictionary:
 	tiles.fill("soil")
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
-		"seed": 1, "tick": 0, "epoch": 0,
+		"contentPacks": [], "seed": 1, "tick": 0, "epoch": 0,
 		"map": {"width": width, "height": height, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {

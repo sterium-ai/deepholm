@@ -37,7 +37,7 @@ var final_hash: int = 0
 ## A new log whose first checkpoint is `world` as it stands now.
 static func begin(world: WorldState, interval: int, with_incidents: bool) -> ReplayLog:
 	var started := ReplayLog.new()
-	started.content_version = StateCodec.content_version()
+	started.content_version = StateCodec.content_version(StateCodec.content_of(world))
 	started.generator_version = world.get_generator_version()
 	started.world_seed = world.get_seed()
 	started.incidents_enabled = with_incidents
@@ -74,21 +74,29 @@ func checkpoint_index() -> Dictionary[int, int]:
 		by_tick[tick] = state_hash
 	return by_tick
 
-## Replays this log headless; after_tick(world, tick) runs before each checkpoint compare.
-## {"ok": false, "code"} is content_version_mismatch, generator_version_mismatch or diverged
-## (with "tick", "last_matching_tick", "kind" and expected/actual).
-func replay(after_tick: Callable = Callable()) -> Dictionary:
-	var invalid := validate()
+## Replays this log headless on content (the session registry; null: the base bundle), which
+## must load exactly the packs initial_state records; after_tick(world, tick) runs before each
+## checkpoint compare. {"ok": false, "code"} is content_packs_mismatch (with "reason"),
+## content_version_mismatch, generator_version_mismatch or diverged (with "tick",
+## "last_matching_tick", "kind" and expected/actual).
+func replay(after_tick: Callable = Callable(), content: ContentRegistry = null) -> Dictionary:
+	var registry := content if content != null else ContentRegistry.new()
+	# Before validate(): a start state on a missing pack names the pack, not one of its tiles.
+	var packs := SaveIO.check_content_packs(initial_state.get("contentPacks"), registry.packs())
+	if packs.get("code") == "content_packs_mismatch":
+		return packs
+	var invalid := validate(registry)
 	if invalid != "":
 		return _invalid(invalid)
-	var running_content := StateCodec.content_version()
+	var running_content := registry.version()
 	if content_version != running_content:
 		return {"ok": false, "code": "content_version_mismatch",
 			"message": "recorded with content %s, running %s" % [content_version, running_content]}
 	if generator_version != WorldGenerator.GENERATOR_VERSION:
 		return {"ok": false, "code": "generator_version_mismatch",
 			"message": "recorded with generator %d, running %d" % [generator_version, WorldGenerator.GENERATOR_VERSION]}
-	var world := WorldState.from_save_state(initial_state.duplicate(true))
+	# StateCodec.decode() directly: WorldState.from_save_state() cannot carry the registry.
+	var world := StateCodec.decode(initial_state.duplicate(true), registry)
 	if incidents_enabled:
 		world.enable_incidents()
 	var expected := checkpoint_index()
@@ -132,13 +140,14 @@ static func _diverged(kind: String, tick: int, last_matching: int, expected: int
 		"expected": expected, "actual": actual}
 
 ## "" when well formed (initial_state passes SaveIO's schema check, checkpoints on the grid,
-## command ticks non-decreasing in [start_tick, end_tick]), else what is wrong.
-func validate() -> String:
+## command ticks non-decreasing in [start_tick, end_tick]), else what is wrong. initial_state is
+## checked against content's whitelists (null: the base bundle).
+func validate(content: ContentRegistry = null) -> String:
 	if checkpoint_interval < 1 or end_tick < start_tick:
 		return "checkpointInterval must be >= 1 and endTick >= startTick"
 	if typeof(initial_state.get("schemaVersion")) != TYPE_INT or initial_state["schemaVersion"] != StateCodec.SCHEMA_VERSION:
 		return "initialState must be a save state of schemaVersion %d, found %s" % [StateCodec.SCHEMA_VERSION, str(initial_state.get("schemaVersion"))]
-	var snapshot := SaveIO._validate_state(initial_state)
+	var snapshot := SaveIO._validate_state(initial_state, content)
 	if not snapshot.get("ok", false):
 		return "initialState is not a valid save state (%s: %s)" % [str(snapshot.get("code")), str(snapshot.get("message"))]
 	var last_tick := start_tick
@@ -179,7 +188,8 @@ func to_dict() -> Dictionary:
 	}
 
 ## {"ok": true, "log": ReplayLog} or {"ok": false, "code": "invalid_replay", "message": String}.
-static func from_dict(data: Dictionary) -> Dictionary:
+## content is the registry validate() checks initial_state against (null: the base bundle).
+static func from_dict(data: Dictionary, content: ContentRegistry = null) -> Dictionary:
 	if data.get("format") != FORMAT:
 		return _invalid("not a %s file" % FORMAT)
 	if _whole(data.get("formatVersion")) != FORMAT_VERSION:
@@ -230,7 +240,7 @@ static func from_dict(data: Dictionary) -> Dictionary:
 		if tick == null or state_hash == null:
 			return _invalid("checkpoints[%d] tick and hash must be whole numbers, found %s" % [i, str(entry)])
 		replay_log.checkpoints.append({"tick": tick, "hash": state_hash})
-	var invalid := replay_log.validate()
+	var invalid := replay_log.validate(content)
 	if invalid != "":
 		return _invalid(invalid)
 	return {"ok": true, "log": replay_log}

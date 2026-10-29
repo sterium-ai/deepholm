@@ -107,7 +107,7 @@ static func session_content() -> ContentRegistryType:
 func _ready() -> void:
 	tick_driver = TickDriverType.new(world)
 	add_child(tick_driver)
-	save_manager = SaveManagerType.new()
+	save_manager = SaveManagerType.new(SaveManagerType.DEFAULT_SAVE_DIR, session_content())
 	autosave_trigger = AutosaveTriggerType.new(world, save_manager)
 	add_child(autosave_trigger)
 	# Wired unconditionally, not only when the UI builds below: autosave must

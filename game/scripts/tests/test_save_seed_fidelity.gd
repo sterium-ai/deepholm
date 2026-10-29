@@ -242,7 +242,7 @@ func _assert_escaped_round_trip(state: Dictionary, key_spellings: Dictionary, la
 ## spelling). Every value still goes through `JSON.stringify()` so its own
 ## encoding stays exactly what the real codec would produce.
 func _build_minimal_state_text(state: Dictionary, key_spellings: Dictionary) -> String:
-	var order := ["schemaVersion", "contentVersion", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs",
+	var order := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs",
 		"scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs",
 		"toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler"]
 	var parts := PackedStringArray()
@@ -266,7 +266,7 @@ func _build_minimal_state_text(state: Dictionary, key_spellings: Dictionary) -> 
 func _minimal_state() -> Dictionary:
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
-		"seed": 42, "tick": 0, "epoch": 0,
+		"contentPacks": [], "seed": 42, "tick": 0, "epoch": 0,
 		"map": {"width": 1, "height": 1, "tiles": ["soil"], "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {

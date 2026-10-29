@@ -114,3 +114,48 @@ version}` entries, ready to be recorded in a save.
 instead of receiving the session one. A loaded save and an A11 replay
 (`ReplayLog` → `WorldState.from_save_state()` → `StateCodec.decode()`) therefore rebuild the
 world on the base bundle. Task A13b in `docs/orca/BACKLOG.md` covers all of this.
+
+## Amendment 2: content packs in saves (A13b, 2026-10-29)
+
+**The save records its packs (schema v3).** `StateCodec.encode()` writes `contentPacks`, the
+world's `ContentRegistry.packs()` in load order as plain `{id, version}` entries, right after
+`contentVersion` (an empty list on the base bundle). `contentVersion` is now the world's own
+registry version, not a fresh read of the bundle on disk. The field is required; a malformed
+list (not an array, an entry that is not `{id, version}` of non-empty strings, a duplicate id)
+is `schema_error`, a missing one `no_migration_available`. The v2 -> v3 migration inserts an
+empty list: before v3 `boot.gd` applied no pack roots, so every v2 save was made on the base
+bundle alone. Fixture: `tests/fixtures/save_schema_v3_fixture.json` (the R14/A5 session,
+written by `docs/orca/handoffs/A13b-write-save.gd`); the v1 and v2 fixtures migrate to it
+exactly.
+
+**Exact match, never repair.** `SaveIO.read()` compares the saved list with the session's
+`packs()` after migration and the content-version check, before the shape check (so a missing
+pack is named, rather than one of its tiles being reported as unknown). Any difference fails
+with `content_packs_mismatch` and a `reason`: `missing` (a saved pack is not loaded), `version`
+(loaded with another version), `unexpected` (the session loads a pack the save was not made on)
+or `order` (same packs, another order: a later root wins overrides, so order is part of the
+bundle). The state is never handed back, and `SaveManager.load_best()` reports the slot as
+skipped with that code. There is no automatic repair or remap onto other packs.
+
+**Whitelists from the registry.** `SaveIO._validate_state()` reads the map tile ids, job kinds,
+need kinds and the `max_world_size` cap from the session registry (`SaveIO.content_rules()`);
+the per-module validators take them as parameters and keep no literals. A pack's tile is valid
+in a save made on that pack and a `schema_error` against the base bundle. The job whitelist is
+exactly `jobs.json`'s kinds, so the old literal's `craft` (no job of that kind exists) is gone.
+
+**The session registry is passed, not rebuilt.** `SaveIO.read()`/`write_atomic()`,
+`StateCodec.decode()` and `StateCodec.content_version()` take an optional registry; null builds
+the base bundle, as `WorldState._init()` does. `SaveManager` takes the session registry at
+construction (`boot.gd` passes `session_content()`) and checks reads against it; a write is
+checked against the registry of the world being saved (`StateCodec.content_of()`).
+`SaveWiring.load_best()` decodes on the manager's registry. `ReplayLog.replay()`,
+`validate()` and `from_dict()` take the registry too: `replay()` refuses a start state whose
+packs differ with the same `content_packs_mismatch`, then decodes through `StateCodec.decode()`
+directly, because `WorldState.from_save_state()` has no registry parameter. The debug scenario
+already received the session registry (A16), and `WorldState` already builds its
+`CalendarService` from the registry's `calendar` document; `SaveMigrations` builds no registry.
+
+**Not done here.** `tools/replay.ps1` and `CommandRecorder.read_file()` still replay on the
+base bundle (they take no pack list), so a replay recorded on packs is refused there with a
+typed error (`content_packs_mismatch`, or `invalid_replay` when its start state holds a pack id
+the base whitelists reject); neither file is in A13b's owned paths.

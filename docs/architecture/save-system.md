@@ -86,20 +86,34 @@ typed result codes are:
 - `no_migration_available` — `schemaVersion` is missing, or the save is older
   than the current schema and no migration step covers it.
 - `save_from_newer_version` — the save was produced by a newer schema than this build.
-- `content_version_mismatch` — the save's `contentVersion` does not match the content bundle
-  currently on disk and no registered content rename resolves it (see "Schema version,
+- `content_version_mismatch` — the save's `contentVersion` does not match the session's
+  content bundle and no registered content rename resolves it (see "Schema version,
   pre-release saves and migration" below).
+- `content_packs_mismatch` — the save's `contentPacks` is not exactly the session's
+  `ContentRegistry.packs()`; `reason` is `missing`, `version`, `unexpected` or `order` (see
+  "Content packs" below).
 
 ## Schema version, pre-release saves and migration
 
 A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text.
-The state carries `schemaVersion: 2` (`StateCodec.SCHEMA_VERSION`) and is
+The state carries `schemaVersion: 3` (`StateCodec.SCHEMA_VERSION`) and is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
 [ADR 049](../decisions/049-save-schema-reset-v1.md)); v2 stops saving terminal
-jobs (see "Jobs" below and [ADR 053](../decisions/053-job-storage-retired-history.md)).
+jobs (see "Jobs" below and [ADR 053](../decisions/053-job-storage-retired-history.md));
+v3 records the content packs the save was made on (see "Content packs" below and
+[ADR 010](../decisions/010-content-registry.md), amendment 2).
+
+**Content packs.** `contentPacks` is the saving world's `ContentRegistry.packs()` in load
+order, `[{id, version}]`, empty on the base bundle. `SaveIO.read()` and `write_atomic()` take
+the session registry (null builds the base bundle); `SaveManager` holds it from construction
+(`boot.gd` passes `session_content()`) and `SaveWiring.load_best()` decodes on it. A save loads
+only when its list equals the session's exactly, same versions in the same order; otherwise it
+is rejected with `content_packs_mismatch` and never repaired onto other packs. The tile, job
+and need whitelists and the map size cap are read from the same registry
+(`SaveIO.content_rules()`), so a pack's ids are valid in a save made on that pack.
 
 **Jobs.** `jobs` lists the open (queued or active) jobs only, in submission
 order. A completed, failed or cancelled job leaves `JobQueue`'s live list at
@@ -122,8 +136,8 @@ looking for a loadable slot.
 malformed envelope, then a newer `schemaVersion` (before the integrity hash,
 so a newer producer always gets `save_from_newer_version`), then checks the
 integrity hash, restores exact 64-bit integers (see "Seed fidelity"),
-migrates an older `schemaVersion`, resolves a content rename if needed, and
-runs `_validate_state()`. A rejected save's state is never returned.
+migrates an older `schemaVersion`, resolves a content rename if needed, checks
+`contentPacks` against the session's packs, and runs `_validate_state()`. A rejected save's state is never returned.
 
 **Migration chain.** `SaveMigrations.migrate()`
 (`game/scripts/core/persistence/save_migrations.gd`) chains single-version
@@ -133,6 +147,9 @@ returns a new dictionary and never mutates its input. Steps today:
 - **v1 → v2** (A5, ADR 053): drops every completed/failed/cancelled entry from
   `jobs`; nothing else changes. `save_schema_v1_fixture.json` migrates exactly
   to `save_schema_v2_fixture.json` (the same session written at v2).
+- **v2 → v3** (A13b, ADR 010 amendment 2): inserts `contentPacks: []` after
+  `contentVersion` (no v2 build loaded packs into a save session). The v1 and v2
+  fixtures both migrate exactly to `save_schema_v3_fixture.json`.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -144,10 +161,9 @@ N+1 (the recipe in the class doc):
 3. Add `game/scripts/tests/fixtures/save_schema_vN+1_fixture.json`.
 4. Add a test that the vN fixture loads through `SaveIO.read()` as vN+1.
 
-**Content renames.** Every save records `contentVersion`
-(`StateCodec.content_version()`, read from `content/manifest.json`'s `version`
-through `ContentRegistry.version()`), and `_read_and_verify()` compares it to
-the bundle on disk. A mismatch gets one chance through a remap registered for
+**Content renames.** Every save records `contentVersion` (the saving world's
+`ContentRegistry.version()`, `content/manifest.json`'s `version`), and
+`_read_and_verify()` compares it to the session registry's. A mismatch gets one chance through a remap registered for
 the save's exact stored `contentVersion`
 (`SaveMigrations.register_content_rename()`/`unregister_content_rename()`/
 `resolve_content_version()`); the remap returns a new state with renamed
@@ -160,7 +176,7 @@ wrong-typed one is left for `_validate_state()` to report.
 **Validation.** `SaveIO._validate_state()` mirrors the JSON Schema. It first
 checks the top-level keys: `TOP_LEVEL_FIELDS` must all be present,
 `OPTIONAL_TOP_LEVEL_FIELDS` may be present, and anything else is rejected as an
-unexpected field. It then checks `schemaVersion`, `contentVersion`, `seed`,
+unexpected field. It then checks `schemaVersion`, `contentVersion`, `contentPacks`, `seed`,
 `tick`, `epoch` and `map`, and calls one validator per persisting module under
 `game/scripts/core/persistence/validators/`, in a fixed order so the first
 reported error is stable: `map_validator.gd`, `item_validator.gd`,

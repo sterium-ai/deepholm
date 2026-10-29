@@ -94,7 +94,7 @@ func _base_state() -> Dictionary:
 	}
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
-		"seed": 1, "tick": 0, "epoch": 0,
+		"contentPacks": [], "seed": 1, "tick": 0, "epoch": 0,
 		"map": {
 			"width": MAP_WIDTH, "height": MAP_HEIGHT,
 			"tiles": _flat_soil_tiles(), "generatorVersion": WorldGeneratorType.GENERATOR_VERSION,
