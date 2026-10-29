@@ -32,6 +32,7 @@ const FRAME_DELTA := 1.0 / 60.0
 const MAX_ROUTE_TICKS := 300
 const DISPLACEMENT_EPSILON := 0.0001
 const DISPLACEMENT_TOLERANCE_PX := 1.0
+const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
 
 var _failed := false
 
@@ -102,7 +103,7 @@ func _check_glide(dx: int, dy: int, expected_facing: String, expect_flip: bool, 
 	TestAccess.colonists(world)[0]["y"] = 5 + dy
 	sprites.refresh()
 
-	var sprite: AnimatedSprite2D = sprites._sprites["colonist_0"]
+	var sprite: SpriteRecordType = sprites._sprites["colonist_0"]
 	var previous := Vector2(5, 5)
 	var current := Vector2(5 + dx, 5 + dy)
 
@@ -140,7 +141,7 @@ func _check_snap_on_large_jump() -> void:
 	sprites.refresh()
 	sprites.advance(driver.seconds_per_tick())
 
-	var sprite: AnimatedSprite2D = sprites._sprites["colonist_0"]
+	var sprite: SpriteRecordType = sprites._sprites["colonist_0"]
 	_expect(sprite.position.is_equal_approx(Vector2(10, 2) * TILE_SIZE + SPRITE_POSITION_OFFSET),
 		"a >1-tile jump must snap immediately, with no glide")
 	var state: Dictionary = sprites._motion["colonist_0"]
@@ -173,7 +174,7 @@ func _check_paused_freezes_t() -> void:
 	sprites.refresh()
 	sprites.advance(driver.seconds_per_tick() * 0.5)
 
-	var sprite: AnimatedSprite2D = sprites._sprites["colonist_0"]
+	var sprite: SpriteRecordType = sprites._sprites["colonist_0"]
 	var frozen_position: Vector2 = sprite.position
 	var frozen_frame: int = sprite.frame
 
@@ -215,7 +216,7 @@ func _check_trapped_marker_visibility() -> void:
 	TestAccess.colonists(world)[0]["trapped"] = {"tile": Vector2i(4, 4), "ticksRemaining": 40, "fromTile": Vector2i(3, 4)}
 	var sprites := ColonistSpritesType.new()
 	sprites.set_world(world)
-	var marker: Sprite2D = sprites._trapped_markers["colonist_0"]
+	var marker: SpriteRecordType = sprites._trapped_markers["colonist_0"]
 	_expect(marker.visible, "a trapped colonist must show the actor-atlas warning marker")
 	TestAccess.colonists(world)[0]["trapped"] = null
 	sprites.refresh()
@@ -274,7 +275,7 @@ func _drive_and_sample(world: WorldStateType, sprites: ColonistSpritesType, colo
 		sprites.refresh()
 		for _f in frames_per_tick:
 			sprites.advance(FRAME_DELTA)
-			var pos: Vector2 = (sprites._sprites[colonist_id] as AnimatedSprite2D).position
+			var pos: Vector2 = (sprites._sprites[colonist_id] as SpriteRecordType).position
 			samples.append({"frame": frame_index, "tick": world.get_tick(), "x": pos.x, "y": pos.y})
 			frame_index += 1
 		var colonist: Dictionary = TestAccess.find_colonist(world, colonist_id)

@@ -21,7 +21,7 @@ const ContentRegistryType = preload("res://scripts/core/content/content_registry
 const ContentTablesType = preload("res://scripts/core/content/content_tables.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
-const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const ViewSnapshotType = preload("res://scripts/core/world/view_snapshot.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 const PassabilityType = preload("res://scripts/core/map/passability.gd")
@@ -435,6 +435,8 @@ func get_room_at(x: int, y: int) -> Dictionary: return _tile_grid.get_room_at(x,
 func get_events(types: Array = []) -> Array[Dictionary]: return _event_log.get_events(types)
 func get_events_since(sequence: int, types: Array = []) -> Dictionary: return _event_log.get_events_since(sequence, types)
 func get_spawn_clearing() -> Dictionary: return _spawn_clearing.duplicate()
+## The content bundle's read-only entries of `kind` (ContentRegistry.list()), for the viewer's menus.
+func get_content_list(kind: String) -> Array: return _content.list(kind)
 ## Test-only: the simulation stream's seed/state, to compare with a pristine same-seed RNG.
 func get_simulation_random_state() -> Dictionary: return {"seed": _random.seed, "state": _random.state}
 ## The one authoritative movement rule for a tile and its object; faction_id (F3) only matters for a door.
@@ -487,23 +489,20 @@ func _finish_job(job_id: String, status: String) -> Dictionary:
 
 ## Read-only view (A5) of the live actors get_colonists() copies, for core readers; never mutated.
 func _worker_view() -> Array: return _colonists.filter(func(a: Dictionary) -> bool: return ActorTableType.has_component(a, "worker", _content))
-## A thin filter over the actor table (ADR 012): every actor with a worker component.
+## A thin filter over the actor table (ADR 012): copies (with the ADR 037 "carrying" view) of every worker actor.
 func get_colonists() -> Array[Dictionary]:
 	var copy: Array[Dictionary] = []
-	for actor in _colonists:
-		if ActorTableType.has_component(actor, "worker", _content):
-			var entry: Dictionary = actor.duplicate(true)
-			entry["carrying"] = _carrying_view(actor)
-			copy.append(entry)
+	for actor: Dictionary in _worker_view():
+		copy.append(ViewSnapshotType.actor_copy(actor))
 	return copy
-
-## ADR 037: the single-slot "carrying" view of "hands" for the viewer; exists only on
-## get_colonists()' copies, never persisted or hashed.
-func _carrying_view(actor: Dictionary) -> Variant:
-	if not InventoryType.is_carrying(actor):
-		return null
-	var first: Dictionary = InventoryType.hands_snapshot(actor)[0]
-	return {"kind": first["kind"], "count": first["count"]}
+## A9 (ADR 055): the viewer's one read-only snapshot per refresh (view_snapshot.gd), with the full
+## record of only the `detail_ids` workers, in place of its several deep-copying getters.
+func get_view_snapshot(detail_ids: Array = []) -> Dictionary:
+	return ViewSnapshotType.build(_clock.tick, _colonists, _content, {"job_kinds": _scheduler.queue.get_job_kinds(),
+		"need_status": _needs_system.need_status, "get_job": get_job, "need_job_id": get_active_need_job_id,
+		"rescue_reason": get_colonist_rescue_reason}, {"assignments": get_assignments(), "queued_job_summary":
+		get_queued_job_summary(), "tool_items": get_tool_items(), "items": get_items(), "construction_sites":
+		get_construction_sites(), "zones": get_zones(), "pending_trade_offers": get_pending_trade_offers()}, detail_ids)
 
 ## The tool-handover overlay only mutates detached duplicates; a non-empty `kinds` keeps only those kinds, costing
 ## only the jobs returned (B1). Retained terminal jobs (A5) are listed unless `retired` is false (state_hash()).
@@ -514,10 +513,10 @@ func get_jobs(kinds: Array = [], retired: bool = true) -> Array[Dictionary]:
 		ToolHandoverType.apply(job, assignments, _toils)
 	return jobs
 
-## One job as get_jobs() shows it ({} when unknown).
-func get_job(job_id: String) -> Dictionary:
+## One job as get_jobs() shows it ({} when unknown). A caller reading many jobs passes one get_assignments() copy.
+func get_job(job_id: String, assignments: Dictionary = {}) -> Dictionary:
 	var job := _scheduler.queue.get_job(job_id)
-	ToolHandoverType.apply(job, _scheduler.get_assignments(), _toils)
+	ToolHandoverType.apply(job, assignments if not assignments.is_empty() else _scheduler.get_assignments(), _toils)
 	return job
 
 ## CombatGiver's flee-destination check: true when (x, y) is already another job's "tile:" target.

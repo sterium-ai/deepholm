@@ -33,13 +33,23 @@ static var _incident_events: Array[Dictionary] = []
 ## its reason clears -- the same replace-not-append pattern
 ## rejected_tiles_text() already uses. Presentation-only: no
 ## simulation rule lives here, it only reads WorldState's existing getters.
-static func need_alerts_text(world: WorldStateType, text_table: TextTableType) -> String:
+## `snapshot` is this tick's WorldState.get_view_snapshot() (A9); {} takes a fresh one.
+static func need_alerts_text(world: WorldStateType, text_table: TextTableType, snapshot: Dictionary = {}) -> String:
+	if snapshot.is_empty():
+		snapshot = world.get_view_snapshot()
 	var lines: Array[String] = []
-	var colonists := world.get_colonists()
-	colonists.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["id"] < b["id"])
-	for colonist in colonists:
-		var colonist_id: String = colonist["id"]
-		var reason := world.get_colonist_need_reason(colonist_id)
+	var need_reasons: Dictionary = snapshot["need_reasons"]
+	var ids: Array = snapshot["ids"]
+	var worker: Array = snapshot["worker"]
+	# Only the colonists with a reason, id-sorted: not a walk over the whole roster.
+	var flagged := PackedStringArray()
+	for colonist_id: String in need_reasons:
+		var row := ids.find(colonist_id) if String(need_reasons[colonist_id]) != "" else -1
+		if row >= 0 and worker[row] == 1:
+			flagged.append(colonist_id)
+	flagged.sort()
+	for colonist_id in flagged:
+		var reason := String(need_reasons[colonist_id])
 		var label_key := ""
 		var kind := ""
 		if reason.begins_with(NEED_UNMET_PREFIX):

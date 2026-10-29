@@ -19,7 +19,10 @@ extends SceneTree
 ##    doc comments) plus the read-only surface. tick() is included alongside
 ##    apply() because it is WorldState's other declared mutator and
 ##    scripts/viewer/tick_driver.gd calls it to advance the simulation once
-##    per frame;
+##    per frame; and (A9) neither a viewer script nor boot.gd reads or writes a
+##    private member of a world (`world._x`, `new_world._x`, ...): private
+##    state is reached through a public getter or a command, and a planted
+##    `world._x` read must be caught;
 ## 4) TestAccess (core/world/test_access.gd, R15) is a test-only seam: no other
 ##    script under game/scripts outside tests/ names it.
 
@@ -30,6 +33,7 @@ const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WORLD_STATE_PATH := "res://scripts/core/world_state.gd"
 const TICK_PIPELINE_PATH := "res://scripts/core/world/tick_pipeline.gd"
 const VIEWER_DIR := "res://scripts/viewer"
+const BOOT_PATH := "res://scripts/boot.gd"
 const SCRIPTS_DIR := "res://scripts"
 const TESTS_DIR := "res://scripts/tests"
 const TEST_ACCESS_PATH := "res://scripts/core/world/test_access.gd"
@@ -437,8 +441,6 @@ func _check_drop_tool_in_vocabulary() -> void:
 # --- 3) viewer purity ---------------------------------------------------------
 
 func _check_viewer_purity() -> void:
-	var call_re := RegEx.new()
-	call_re.compile("\\bworld\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
 	var dir := DirAccess.open(VIEWER_DIR)
 	_expect(dir != null, "could not open %s" % VIEWER_DIR)
 	if dir == null:
@@ -450,14 +452,44 @@ func _check_viewer_purity() -> void:
 		if not dir.current_is_dir() and file_name.ends_with(".gd"):
 			scanned += 1
 			var source := _read_text(VIEWER_DIR + "/" + file_name)
-			for m in call_re.search_all(source):
-				var method := m.get_string(1)
-				var ok := method.begins_with("get_") or method in ["apply", "tick", "get_events"]
-				_expect(ok, "%s calls world.%s(), which is not a get_* getter, apply(), get_events() or tick()"
-					% [file_name, method])
+			for violation in _viewer_call_violations(source) + _private_world_access(source):
+				_fail("%s: %s" % [file_name, violation])
 		file_name = dir.get_next()
 	dir.list_dir_end()
 	_expect(scanned > 0, "viewer purity scan must actually inspect at least one script")
+	for violation in _private_world_access(_read_text(BOOT_PATH)):
+		_fail("boot.gd: %s" % violation)
+	# The scan must catch what it forbids: a planted private read and write, and a
+	# planted non-getter call, each produce a violation; public API does not.
+	var planted := "var tiles = world._tiles\nnew_world._items[\"x\"] = 1\nworld.free_tile(1, 2)\n"
+	_expect(_private_world_access(planted).size() == 2,
+		"purity scan must flag a planted world._x read and write, got %s" % [_private_world_access(planted)])
+	_expect(_viewer_call_violations(planted).size() == 1,
+		"purity scan must flag a planted world.free_tile() call, got %s" % [_viewer_call_violations(planted)])
+	var clean := "var n = world.get_tick()\nworld.apply(cmd)\nvar s = world.get_view_snapshot()\n_world_label.text = \"\"\n"
+	_expect(_private_world_access(clean).is_empty() and _viewer_call_violations(clean).is_empty(),
+		"purity scan must accept public getters, apply() and unrelated _names")
+
+## Calls on a world beyond a get_* getter, apply(), get_events() or tick().
+func _viewer_call_violations(source: String) -> Array[String]:
+	var call_re := RegEx.new()
+	call_re.compile("\\bworld\\.([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+	var found: Array[String] = []
+	for m in call_re.search_all(source):
+		var method := m.get_string(1)
+		if not (method.begins_with("get_") or method in ["apply", "tick", "get_events"]):
+			found.append("calls world.%s(), which is not a get_* getter, apply(), get_events() or tick()" % method)
+	return found
+
+## Reads or writes of a private member (leading underscore) through any
+## variable whose name contains "world" (world, new_world, world_ref, ...).
+func _private_world_access(source: String) -> Array[String]:
+	var field_re := RegEx.new()
+	field_re.compile("\\b([A-Za-z_]*world[A-Za-z0-9_]*)\\.(_[A-Za-z0-9_]+)")
+	var found: Array[String] = []
+	for m in field_re.search_all(source):
+		found.append("touches %s.%s, a private WorldState member; use a public getter or a command" % [m.get_string(1), m.get_string(2)])
+	return found
 
 # --- 4) TestAccess stays test-only ------------------------------------------------
 

@@ -574,7 +574,7 @@ one.
 - **Non-goals:** hierarchical pathfinding (only if A8's numbers are not enough).
 - **Coordination approved by the owner (2026-10-28, in the A8 terminal):** the owner's note held existing tests frozen while R15 was in flight; asked whether A8 could change the routing/determinism tests it necessarily breaks, the owner answered "Actualizar tests existentes ya", then confirmed R15 had landed (`691c25e`) and asked for a rebase and "the affected routing/determinism tests updated with the minimal change and the ADR quoted". Those tests, including R15's shared builders under `game/scripts/tests/support/`, are "affected tests" here; the list and the reason per test are in `docs/orca/handoffs/A8.md`.
 
-#### A9 — Viewer at 1,000 actors · `todo` · after A5/A6
+#### A9 — Viewer at 1,000 actors · `review (antonelmejor50-hub/a9-viewer-at-1-000)` · after A5/A6
 
 - **Goal:** the viewer reads one read-only snapshot per tick instead of several deep-copying
   getters. Actors are drawn batched (one `MultiMeshInstance2D` or one `_draw()` per layer
@@ -587,6 +587,23 @@ one.
 - **Acceptance:** `bench_viewer_refresh` (headless refresh of 1,000 actors) ≤ 4 ms per tick;
   purity test fails on a planted `world._x` read; manual run shows the same screen.
 - **Non-goals:** new art or UI features.
+- **Entry vs `main` at start (2026-10-28):** of the "six known reads" only two were left, both
+  `world._content.list(...)` (`control_bar.gd`, `order_input.gd`); R15 had moved the test ones
+  to `TestAccess` and A16 had removed `debug_scenario.gd`'s `world._items` write.
+  `world_state.gd` was at 800/800 lines, so the owner's note had the snapshot built in a
+  composed module rather than raising the cap: `game/scripts/core/world/view_snapshot.gd`
+  (new), with `get_colonists()`' copy code moved into it.
+- **Done in this branch:** `WorldState.get_view_snapshot(detail_ids)` (ADR 055): read-only
+  per-actor columns plus full records only for the colonist panel's window of rows; `boot.gd`
+  takes one per refresh and hands it to every panel and layer. Colonist and actor sprites are
+  plain records drawn by one `_draw()` per layer (no node per actor) and skip colonists that did
+  not change. The colonist panel keeps its rows; on a tick it recomposes the rows on screen plus at
+  most 4 more in a rotating window (every row up to 16 colonists), and after a command (a refresh at the same tick, also
+  while paused) every row; rows scrolled into view are recomposed at once; the work table
+  compares the same rows. `TickDriver` runs at most 4 ticks
+  per frame. The purity rule rejects `world._x` in the viewer and `boot.gd`, with a planted
+  read. `bench_viewer_refresh` at 1,000 actors: about 415 ms per tick on `main`, about 3.2 ms
+  here (2.9–3.6 ms mean per run with the UI laid out; p95 4.1–4.5 ms). See `docs/orca/handoffs/A9.md`.
 
 #### A10 — Static typing gate for the core · `review (antonelmejor50-hub/a10-static-typing-gate-for)` · *parallel-safe*
 

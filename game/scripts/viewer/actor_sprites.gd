@@ -10,23 +10,32 @@ extends Node2D
 ## its tile changed, "idle" otherwise; side sheets face right and are flipped
 ## after a step left. The frame comes from advance()'s own clock, which stands
 ## still while the TickDriver is paused, never from autoplay.
+##
+## A9: no node per actor. Each actor is a SpriteRecord (sprite_record.gd) and
+## this node's one _draw() paints them all; refresh() reads the
+## WorldState.get_view_snapshot() it is given.
 
 const TILE_SIZE := 16.0
 const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
+const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
 
 ## Art key for an actor: its content kind, except a wolf-def actor of the
 ## raiders faction (content/incidents.json raider_incursion), drawn as a raider.
 static func art_key(actor: Dictionary) -> String:
-	if String(actor.get("kind", "")) == "wolf" and String(actor.get("factionId", "")) == "raiders":
+	return art_key_of(String(actor.get("kind", "")), String(actor.get("factionId", "")))
+
+## art_key() from the snapshot's kinds and factions columns.
+static func art_key_of(kind: String, faction_id: String) -> String:
+	if kind == "wolf" and faction_id == "raiders":
 		return "raider"
-	return String(actor.get("kind", ""))
+	return kind
 
 var world
 var _tick_driver
 var _frames: Dictionary = {}
 ## art key -> animation -> feet row.
 var _feet: Dictionary = {}
-## actor id -> {sprite, key, tile, moved, flip_h, elapsed}
+## actor id -> {sprite: SpriteRecord, key, tile, moved, flip_h, elapsed}
 var _actors: Dictionary = {}
 
 ## `frames` is pack_assets.gd's actor_frames() (map_view.gd passes the one
@@ -51,8 +60,6 @@ func set_visible_for_art(enabled: bool) -> void:
 
 func set_world(world_ref) -> void:
 	world = world_ref
-	for state: Dictionary in _actors.values():
-		(state["sprite"] as AnimatedSprite2D).queue_free()
 	_actors.clear()
 	refresh()
 
@@ -67,28 +74,37 @@ func advance(delta: float) -> void:
 		if running:
 			state["elapsed"] = float(state["elapsed"]) + delta
 		_apply(state)
+	if running and not _actors.is_empty():
+		queue_redraw()
 
-func refresh() -> void:
+## `snapshot` is this tick's WorldState.get_view_snapshot(); {} takes a fresh one.
+func refresh(snapshot: Dictionary = {}) -> void:
 	if world == null or _frames.is_empty():
 		return
-	var colonist_ids := {}
-	for colonist in world.get_colonists():
-		colonist_ids[String(colonist["id"])] = true
+	if snapshot.is_empty():
+		snapshot = world.get_view_snapshot()
+	var ids: Array = snapshot["ids"]
+	var worker: Array = snapshot["worker"]
+	var hp: Array = snapshot["hp"]
+	var kinds: Array = snapshot["kinds"]
+	var factions: Array = snapshot["factions"]
+	var xs: Array = snapshot["x"]
+	var ys: Array = snapshot["y"]
 	var seen := {}
-	for actor in world.get_actors_with_health():
-		var actor_id := String(actor["id"])
-		var key := art_key(actor)
-		if colonist_ids.has(actor_id) or not _frames.has(key):
+	# The actors with a health component that are not colonists (colonist_sprites.gd draws those).
+	for row in (ids.size() if worker.has(0) else 0):
+		if worker[row] == 1 or hp[row] < 0:
+			continue
+		var actor_id: String = ids[row]
+		var key := art_key_of(kinds[row], factions[row])
+		if not _frames.has(key):
 			continue
 		seen[actor_id] = true
-		var tile := Vector2i(int(actor["x"]), int(actor["y"]))
+		var tile := Vector2i(xs[row], ys[row])
 		var state: Dictionary = _actors.get(actor_id, {})
 		if state.is_empty():
-			var sprite := AnimatedSprite2D.new()
+			var sprite := SpriteRecordType.new()
 			sprite.sprite_frames = _frames[key]
-			sprite.centered = false
-			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-			add_child(sprite)
 			state = {"sprite": sprite, "key": key, "tile": tile, "moved": false, "flip_h": false, "elapsed": 0.0}
 			_actors[actor_id] = state
 		else:
@@ -100,16 +116,14 @@ func refresh() -> void:
 		_apply(state)
 	for actor_id in _actors.keys():
 		if not seen.has(actor_id):
-			(_actors[actor_id]["sprite"] as AnimatedSprite2D).queue_free()
 			_actors.erase(actor_id)
+	queue_redraw()
 
 func _apply(state: Dictionary) -> void:
-	var sprite: AnimatedSprite2D = state["sprite"]
+	var sprite: SpriteRecordType = state["sprite"]
 	var animation := "walk" if bool(state["moved"]) else "idle"
 	if sprite.animation != animation:
 		sprite.animation = animation
-	if sprite.is_playing():
-		sprite.stop()
 	var frames: SpriteFrames = sprite.sprite_frames
 	var count := frames.get_frame_count(animation)
 	sprite.frame = posmod(int(floor(float(state["elapsed"]) * frames.get_animation_speed(animation))), count)
@@ -119,6 +133,10 @@ func _apply(state: Dictionary) -> void:
 	var tile := Vector2(state["tile"])
 	sprite.position = tile * TILE_SIZE + Vector2(TILE_SIZE / 2.0 - frame_size.x / 2.0, TILE_SIZE - feet)
 
+func _draw() -> void:
+	for state: Dictionary in _actors.values():
+		(state["sprite"] as SpriteRecordType).draw(self)
+
 ## The drawn sprite of an actor id (tests), or null.
-func sprite_for(actor_id: String) -> AnimatedSprite2D:
+func sprite_for(actor_id: String) -> SpriteRecordType:
 	return _actors.get(actor_id, {}).get("sprite", null)

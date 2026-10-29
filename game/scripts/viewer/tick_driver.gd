@@ -12,6 +12,11 @@ signal ticked
 enum Speed { PAUSED, X1, X2, X3 }
 
 const BASE_TICKS_PER_SECOND := 2.0
+## A9: at most this many ticks per rendered frame. After a long frame (a hitch, a
+## window drag, a slow refresh at 1,000 actors) the backlog beyond it is dropped
+## rather than run, so one slow frame cannot snowball into ever longer catch-up
+## frames; the simulation then runs slower than the chosen speed, never faster.
+const MAX_TICKS_PER_FRAME := 4
 
 var world: WorldStateType
 ## Paused by default: every world this driver ever attaches to -- the default boot
@@ -30,10 +35,14 @@ func _process(delta: float) -> void:
 	if multiplier <= 0.0:
 		return
 	_accumulator += delta * BASE_TICKS_PER_SECOND * multiplier
-	while _accumulator >= 1.0:
+	var ticks := 0
+	while _accumulator >= 1.0 and ticks < MAX_TICKS_PER_FRAME:
 		_accumulator -= 1.0
+		ticks += 1
 		world.tick()
 		ticked.emit()
+	if ticks == MAX_TICKS_PER_FRAME:
+		_accumulator -= floorf(_accumulator)
 
 func set_speed(new_speed: int) -> void:
 	speed = new_speed
