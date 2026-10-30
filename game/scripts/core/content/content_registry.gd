@@ -51,6 +51,7 @@ const PACK_OVERRIDES_FIELD := "overrides"
 
 const ContentJsonType = preload("res://scripts/core/content/content_json.gd")
 const CropContentType = preload("res://scripts/core/farming/crop_content.gd")
+const RecipeBookType = preload("res://scripts/core/crafting/recipe_book.gd")
 
 ## For the static is_known_toil() check only; never drives a ToilExecutor.
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
@@ -100,7 +101,7 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 
 	var crafting_error: Array[String] = _check_crafting_content(raw_by_kind)
 	if not crafting_error.is_empty():
-		_fail(ERROR_DANGLING_REFERENCE, crafting_error[1], crafting_error[0])
+		_fail(crafting_error[2] if crafting_error.size() > 2 else ERROR_DANGLING_REFERENCE, crafting_error[1], crafting_error[0])
 		return
 
 	var actor_tunables_check := _check_actor_component_tunables(raw_by_kind)
@@ -609,7 +610,9 @@ func _check_job_effects(raw_by_kind: Dictionary) -> Array[String]:
 	return []
 
 ## F2 (ADR 061): an item's kind must be one of items.json's declared groups, and a recipe's
-## bench must be an object kind and its inputs/outputs item ids. [file, message], or [].
+## bench must be an object kind and its inputs/outputs item ids ([file, message], reported as
+## dangling_reference); an item listed twice on one side or a quantity over
+## RecipeBook.MAX_COUNT is [file, message, schema_violation]. [] when all hold.
 func _check_crafting_content(raw_by_kind: Dictionary) -> Array[String]:
 	var items_document: Dictionary = raw_by_kind["items"]
 	var groups: Array = items_document.get("groups", [])
@@ -631,10 +634,16 @@ func _check_crafting_content(raw_by_kind: Dictionary) -> Array[String]:
 		if not known_objects.has(bench):
 			return ["recipes.json", "recipe '%s' bench '%s' names an unknown object kind" % [recipe_id, bench]]
 		for field: String in ["inputs", "outputs"]:
+			var seen: Dictionary = {}
 			for stack: Dictionary in (recipe[field] as Array):
 				var stack_item: String = stack["item"]
+				var quantity: int = stack["quantity"]
 				if not known_items.has(stack_item):
 					return ["recipes.json", "recipe '%s' %s names an unknown item id '%s'" % [recipe_id, field, stack_item]]
+				if seen.has(stack_item) or quantity > RecipeBookType.MAX_COUNT:
+					return ["recipes.json", "recipe '%s' %s: item '%s' twice or over %d" % [recipe_id, field, stack_item, RecipeBookType.MAX_COUNT],
+						ERROR_SCHEMA_VIOLATION]
+				seen[stack_item] = true
 	return []
 
 ## ADR 012: every actor's declared components validate their tunables, including cross-field

@@ -2,7 +2,12 @@ class_name RecipeBook
 extends RefCounted
 
 ## content/recipes.json (F2, ADR 061), read-only: recipes by id in id order, and the object
-## kinds that are benches. ContentRegistry already checked every item id and bench kind.
+## kinds that are benches. ContentRegistry already checked every item id and bench kind, that
+## no recipe lists an item twice on one side, and every quantity against MAX_COUNT.
+
+## The one cap on a recipe quantity, a target or order count and a saved held quantity, so a
+## recipe the registry accepts can always be saved (CraftingValidator, CraftingSystem).
+const MAX_COUNT := 999
 
 var _recipes: Dictionary = {}
 var _ids: Array[String] = []

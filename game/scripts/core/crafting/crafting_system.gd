@@ -29,7 +29,7 @@ const PassabilityType = preload("res://scripts/core/map/passability.gd")
 ## craft_fetch's deposit target id: BILL_PREFIX + "x,y" of the bench origin.
 const BILL_PREFIX := "bench:"
 const COMMAND_TYPES: Array[String] = ["craft_set_target", "craft_add_order", "craft_cancel_order"]
-const MAX_COUNT := 999
+const MAX_COUNT := RecipeBookType.MAX_COUNT
 const NO_BENCH := Vector2i(-1, -1)
 
 var recipes: RecipeBookType
@@ -238,6 +238,7 @@ func deposit_into(id: String, item: String, count: int) -> int:
 		if stack["item"] == item:
 			var held: int = stack["quantity"]
 			stack["quantity"] = held + accepted
+			break # one entry per item: ContentRegistry refuses a recipe listing an item twice
 	return accepted
 
 ## A craft_fetch pick_up takes only what its bill still needs, minus what hands hold; -1
@@ -255,21 +256,36 @@ func pick_up_count(job: Dictionary, colonist: Dictionary) -> int:
 
 # --- stock -------------------------------------------------------------------
 
-## The colony's stock of kind: loose items (stockpiled or waiting to be hauled), what hands
-## carry, and tools not held by anyone. A tool taken by a colonist leaves the stock.
+## The colony's stockpiled count of kind (the design's "keep N in stock"): loose units on a
+## stockpile tile and tools stocked in one, plus units a haul is taking to a stockpile right
+## now (a loose item named by an unblocked haul job, or what a colonist on a haul job
+## carries), so an output waiting for its hauler is not crafted twice. A tool a colonist holds,
+## a tool lying outside a stockpile and an item no haul can reach do not count.
 func stock_count(kind: String) -> int:
 	var total := 0
+	var hauling: Dictionary = {}
+	for job: Dictionary in _scheduler.queue.view_jobs_of_kinds(["haul"]):
+		var reason: String = job["reason"]
+		if job["status"] in ["queued", "active"] and reason.is_empty():
+			hauling[job["item_id"]] = true
 	for item: Dictionary in _item_table.items.values():
-		if item["kind"] == kind:
+		var x: int = item["x"]
+		var y: int = item["y"]
+		var stocked: bool = _is_in_any_zone.call(x, y)
+		if item["kind"] == kind and (stocked or hauling.has(item["id"])):
 			var count: int = item["count"]
 			total += count
+	var assignments := _scheduler.get_assignments()
 	for actor: Dictionary in (_get_colonists.call() as Array):
-		total += InventoryType.count_of_kind(actor, kind)
+		var assignment: Dictionary = assignments.get(actor["id"], {})
+		var job_id: String = assignment.get("job_id", "")
+		if _scheduler.queue.view_job(job_id).get("kind", "") == "haul":
+			total += InventoryType.count_of_kind(actor, kind)
 	var is_tool: bool = _is_tool_kind.call(kind)
 	if is_tool:
 		for tool_item: Dictionary in (_get_tool_items.call() as Array):
 			var location: Dictionary = tool_item["location"]
-			if tool_item["kind"] == kind and location.get("type", "") != "held":
+			if tool_item["kind"] == kind and location.get("type", "") == "stockpile":
 				total += 1
 	return total
 

@@ -6,7 +6,7 @@ extends SaveCheck
 ## nextOrderId}; bill is null or {recipe, orderId, held: [{item, quantity}]}. Recipe and item
 ## ids are checked for shape only, like every other content id in a save.
 
-const MAX_COUNT := 999
+const MAX_COUNT := preload("res://scripts/core/crafting/recipe_book.gd").MAX_COUNT
 
 static func _valid_crafting(value: Variant, map_width: int, map_height: int) -> Dictionary:
 	if not (value is Dictionary):

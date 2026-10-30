@@ -19,6 +19,9 @@ const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
+const RecipeBookType = preload("res://scripts/core/crafting/recipe_book.gd")
+const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
+const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const BENCH := Vector2i(10, 5)
@@ -26,6 +29,7 @@ const DAY_TICKS := 2200
 const CRAFTER := "colonist_0"
 const HAULER := "colonist_1"
 const CONTENT_FIXTURE_DIR := "user://test-crafting-content-fixture"
+const HELD_SAVE_PATH := "user://test-crafting-held-cap.json"
 
 var _failed := false
 var _next_command := 0
@@ -34,11 +38,14 @@ func _init() -> void:
 	var world := _check_acceptance_axe_and_planks_within_two_days()
 	_check_target_retriggers_when_the_axe_is_taken(world)
 	_check_missing_inputs_wait_without_blocking_the_queue()
+	_check_target_ignores_an_unreachable_loose_axe()
+	_check_target_does_not_recraft_output_waiting_for_its_hauler()
 	_check_save_load_mid_fetch_and_mid_craft_continue_identically()
 	_check_recorded_session_replays()
 	_check_commands_are_validated_and_preview_agrees()
 	_check_cancel_order_and_removed_bench_drop_held_inputs()
 	_check_content_registry_rejects_bad_recipes_and_groups()
+	_check_recipe_and_save_quantity_caps_agree()
 	if _failed:
 		quit(1)
 		return
@@ -213,6 +220,41 @@ func _check_missing_inputs_wait_without_blocking_the_queue() -> void:
 	_expect(_stockpiled_tools(world, "pick") == 1, "once its inputs are stocked, the waiting pick order must be crafted")
 	_expect((_bench(world)["orders"] as Array).is_empty(), "the pick order must be used up")
 
+## Design (F2): a target counts the colony's *stockpiled* units. A loose axe no colonist can
+## reach (walled in by rock, its haul blocked) is not in stock, so "keep 1 axe" still makes one.
+func _check_target_ignores_an_unreachable_loose_axe() -> void:
+	var world := _world(610007, 3, 1)
+	var walled := Vector2i(25, 15)
+	for dy in range(-1, 2):
+		for dx in range(-1, 2):
+			if dx != 0 or dy != 0:
+				TestAccess.set_tile(world, walled.x + dx, walled.y + dy, WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(world).reset_cells()
+	Scenarios.add_stock(world, "axe", 1, walled.x, walled.y)
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	for _i in DAY_TICKS:
+		world.tick()
+		if _stockpiled_tools(world, "axe") >= 1:
+			break
+	_expect(_stockpiled_tools(world, "axe") == 1, "an unreachable loose axe is not stock: the keep-1 target must craft one")
+	_expect(_total(world, "wood") == 0 and _total(world, "stone") == 0, "exactly one axe's inputs must be spent")
+
+## Design (F2): output lying next to the bench while its haul is under way counts as stock, so
+## "keep 2 planks" makes one batch (1 wood -> 2 planks), not one per tick until it is hauled.
+func _check_target_does_not_recraft_output_waiting_for_its_hauler() -> void:
+	var world := _world(610008, 5, 0)
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 2})
+	var stocked_at := -1
+	for _i in 2 * DAY_TICKS:
+		world.tick()
+		if stocked_at < 0 and _stockpiled(world, "planks") >= 2:
+			stocked_at = world.get_tick()
+		if stocked_at >= 0 and world.get_tick() >= stocked_at + 600:
+			break
+	_expect(stocked_at >= 0, "the keep-2 planks target must stock its planks")
+	_expect(_total(world, "planks") == 2 and _stockpiled(world, "planks") == 2, "exactly one batch of planks: %d made" % _total(world, "planks"))
+	_expect(_total(world, "wood") == 4, "exactly one wood must be spent, %d left" % _total(world, "wood"))
+
 ## Acceptance (F2): "save/load mid-craft continues identically" -- once while a craft_fetch
 ## carries an input to the bench, once while craft_work is under way.
 func _check_save_load_mid_fetch_and_mid_craft_continue_identically() -> void:
@@ -257,13 +299,21 @@ func _check_recorded_session_replays() -> void:
 	recorder.start(world, 100, false)
 	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
 	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 2})
+	var cancelled := false
 	for _i in 1500:
 		world.tick()
 		recorder.observe_tick(world)
-		if world.get_tick() == 700 and not (_bench(world)["orders"] as Array).is_empty():
+		if not cancelled and world.get_tick() >= 300 and not (_bench(world)["orders"] as Array).is_empty():
 			_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "order_id": "order_1"})
+			cancelled = true
 	var recording := recorder.stop()
-	_expect(recording.commands.size() >= 2, "the craft commands must be recorded")
+	_expect(cancelled, "the session must really cancel the planks order mid-run")
+	var types: Array[String] = []
+	for entry: Dictionary in recording.commands:
+		if bool(entry["ok"]):
+			types.append(String(entry["command"]["type"]))
+	_expect(types.has("craft_set_target") and types.has("craft_add_order") and types.has("craft_cancel_order"),
+		"the target, the order and the cancellation must all be recorded as accepted: %s" % [types])
 	var result := recording.replay()
 	_expect(bool(result.get("ok", false)), "the recorded crafting session must replay every checkpoint: %s" % [result])
 
@@ -332,10 +382,17 @@ func _check_content_registry_rejects_bad_recipes_and_groups() -> void:
 	var base := ContentRegistryType.new()
 	_expect(base.is_valid(), "the shipped content must load: %s" % base.get_error())
 	_expect(base.list("recipes").size() == 4, "the base bundle ships four recipes")
+	var dangling := ContentRegistryType.ERROR_DANGLING_REFERENCE
+	var violation := ContentRegistryType.ERROR_SCHEMA_VIOLATION
+	var axe_inputs := "[{\"item\": \"wood\", \"quantity\": 3}, {\"item\": \"stone\", \"quantity\": 1}]"
+	var too_many := "\"item\": \"wood\", \"quantity\": %d" % (RecipeBookType.MAX_COUNT + 1)
 	var cases := {
-		"recipes.json": ["\"item\": \"planks\", \"quantity\": 2", "\"item\": \"plank\", \"quantity\": 2", "unknown item id 'plank'"],
-		"recipes.json#bench": ["\"bench\": \"workbench\", \"inputs\": [{\"item\": \"stone\", \"quantity\": 2}]", "\"bench\": \"anvil\", \"inputs\": [{\"item\": \"stone\", \"quantity\": 2}]", "bench 'anvil' names an unknown object kind"],
-		"items.json": ["\"id\": \"coal\", \"kind\": \"material\"", "\"id\": \"coal\", \"kind\": \"fuel\"", "undeclared group"],
+		"recipes.json": ["\"item\": \"planks\", \"quantity\": 2", "\"item\": \"plank\", \"quantity\": 2", "unknown item id 'plank'", dangling],
+		"recipes.json#bench": ["\"bench\": \"workbench\", \"inputs\": [{\"item\": \"stone\", \"quantity\": 2}]", "\"bench\": \"anvil\", \"inputs\": [{\"item\": \"stone\", \"quantity\": 2}]", "bench 'anvil' names an unknown object kind", dangling],
+		# Two wood entries: each delivery would be credited to both (the reviewer's 2 -> 4 refund).
+		"recipes.json#duplicate": [axe_inputs, "[{\"item\": \"wood\", \"quantity\": 1}, {\"item\": \"wood\", \"quantity\": 1}]", "item 'wood' twice or over", violation],
+		"recipes.json#quantity": ["\"item\": \"wood\", \"quantity\": 3", too_many, "item 'wood' twice or over", violation],
+		"items.json": ["\"id\": \"coal\", \"kind\": \"material\"", "\"id\": \"coal\", \"kind\": \"fuel\"", "undeclared group", dangling],
 	}
 	for key: String in cases:
 		var file := key.split("#")[0]
@@ -343,8 +400,37 @@ func _check_content_registry_rejects_bad_recipes_and_groups() -> void:
 		var registry := ContentRegistryType.new(CONTENT_FIXTURE_DIR)
 		_expect(not registry.is_valid(), "%s: the edited bundle must be rejected" % key)
 		var error: Dictionary = registry.get_error()
-		_expect(String(error.get("code", "")) == ContentRegistryType.ERROR_DANGLING_REFERENCE and String(error.get("message", "")).contains(cases[key][2]),
-			"%s: expected a dangling_reference naming %s, got %s" % [key, cases[key][2], error])
+		_expect(String(error.get("code", "")) == String(cases[key][3]) and String(error.get("message", "")).contains(cases[key][2]),
+			"%s: expected %s naming %s, got %s" % [key, cases[key][3], cases[key][2], error])
+	_write_fixture("recipes.json", "\"item\": \"wood\", \"quantity\": 3", "\"item\": \"wood\", \"quantity\": %d" % RecipeBookType.MAX_COUNT)
+	var at_cap := ContentRegistryType.new(CONTENT_FIXTURE_DIR)
+	_expect(at_cap.is_valid(), "a recipe quantity of exactly MAX_COUNT must load: %s" % at_cap.get_error())
+
+## The recipe cap is the save cap: a bill holding MAX_COUNT units of an input (what the largest
+## recipe the registry accepts can hold) is written and read back through SaveIO; one more is
+## refused by the save validator.
+func _check_recipe_and_save_quantity_caps_agree() -> void:
+	var world := _world(610009, 3, 1)
+	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	for _i in DAY_TICKS:
+		world.tick()
+		if not (_bench(world)["bill"] as Dictionary).is_empty():
+			break
+	for held: int in [RecipeBookType.MAX_COUNT, RecipeBookType.MAX_COUNT + 1]:
+		var state := StateCodecType.encode(world)
+		var bench: Dictionary = state["crafting"]["benches"][0]
+		_expect(bench["bill"] != null, "the axe bill must be open before the save")
+		if bench["bill"] == null:
+			return
+		bench["bill"]["held"] = [{"item": "wood", "quantity": held}]
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(HELD_SAVE_PATH))
+		var written := SaveIOType.write_atomic(HELD_SAVE_PATH, state)
+		var read := SaveIOType.read(HELD_SAVE_PATH) if bool(written.get("ok", false)) else written
+		if held == RecipeBookType.MAX_COUNT:
+			_expect(bool(read.get("ok", false)), "a bill holding MAX_COUNT units must save and load: %s" % [read])
+		else:
+			_expect(not bool(read.get("ok", false)), "a bill holding more than MAX_COUNT units must be refused: %s" % [read])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(HELD_SAVE_PATH))
 
 ## Copies res://content to CONTENT_FIXTURE_DIR with one text replacement in `file`.
 func _write_fixture(file: String, find: String, replace: String) -> void:

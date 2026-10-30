@@ -42,7 +42,10 @@ the F2 entry).
   (`ContentRegistry.OPTIONAL_COLLECTION_KINDS`), so an older content root without the file
   still loads (with no recipes). `ContentRegistry._check_crafting_content()` rejects, as
   `dangling_reference`, a recipe whose bench is not an object kind or whose input/output is
-  not an item id.
+  not an item id; and, as `schema_violation`, a recipe listing an item twice in its inputs (or
+  outputs) or a quantity above `RecipeBook.MAX_COUNT` (999). That one constant also caps target
+  and order counts and a saved bill's held quantity (`CraftingValidator`), so every recipe the
+  registry accepts can be saved.
 - `content/items.json` gains `planks` and `stone_blocks` (kind `material`) and a top-level
   `groups` list. **An item's `kind` is its group**: the existing field already carried
   `tool`/`material`/`seed`, so no second field was added. When `groups` is declared, an item
@@ -77,10 +80,13 @@ Rules, run once a tick by `update_bills()` before any job is submitted:
    named by a live site_fetch/craft_fetch job, and not already claimed by another bench's
    bill. A recipe whose inputs are missing is skipped, so it never blocks the orders behind it.
 
-"Stock" (for targets) counts the recipe's first output: loose units anywhere, units in hands
-and tool items not held by a colonist. A tool taken by a colonist leaves the stock, which is
-what re-triggers a target; an output still waiting to be hauled counts, so it is never made
-twice.
+"Stock" (for targets) is the design's *stockpiled* count of the recipe's first output: loose
+units on a stockpile tile and tool items stocked in a stockpile, plus units a haul is taking to
+a stockpile right now (a loose item named by a queued or active haul job that is not blocked,
+or what a colonist on a haul job carries). The haul term keeps an output waiting for its hauler
+from being made twice; a blocked haul (an item no colonist can reach, or no free stockpile cell)
+does not count, so an unreachable item never suppresses its target. A tool held by a colonist
+or lying outside a stockpile leaves the stock, which is what re-triggers a target.
 
 ### Jobs: `CraftGiver` and the shared fetch mechanism
 
