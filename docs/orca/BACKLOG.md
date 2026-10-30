@@ -1102,7 +1102,56 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   (one discovered layer must not slow the tick measurably when empty).
 - **Non-goals:** cave-ins/supports (F4b), smelting, deep-only metal, fog of war.
 
-### F5 — Stockpile filters, remaining labours, happiness/thoughts · `todo` · Design: *pending*
+### F5a — Stockpile filters and priorities · `todo` · after F2 (item groups) · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** a stockpile zone accepts a set of **item groups** (F2's
+  `tool`, `material`, `food`, `seed`, plus `ore` when F4 lands) and has a **priority 1–3**.
+  Haulers take each item to the nearest valid stockpile of the highest priority; an item lying
+  in a stockpile that no longer accepts it (filter changed) is moved out to a valid one. Default
+  for a new stockpile: all groups, priority 2 (today's behaviour).
+- **Owned paths:** `core/objects/zone_table.gd` (filter + priority per stockpile), the haul
+  giver and destination choice (`core/jobs/givers/*`, minimal), commands/handlers to set
+  filter/priority, persistence (bump + migration + fixture), viewer stockpile panel (reuse the
+  workbench panel pattern), tests, an ADR, `docs/orca/handoffs/F5a.md`.
+- **Acceptance:** headless: two stockpiles (A: food only, priority 3; B: all, priority 1), a
+  harvested food item and a wood item on the ground → food goes to A, wood to B; switching A
+  to "materials only" moves the food to B within a day; deterministic `state_hash()`; save/load
+  and replay identical; suite green.
+- **Non-goals:** per-item filters, stack limits, hauling priorities beyond the stockpile one.
+
+### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** two new labours in the table, **`cook`** and **`heal`**
+  (`heal` is only the labour entry and skill slot now; its jobs come with F8). Cooking: a **2×1
+  kitchen** object (build cost in content) with recipes through F2's machinery: raw food
+  (harvest/berries) → **meal** (a `food` item that satisfies more hunger, value in content).
+  Carpenter/blacksmith/mason etc. are **not** labours: they are workbench recipes under `craft`.
+- **Owned paths:** labour table content, `content/objects.json` (kitchen), `content/recipes.json`
+  (meal), `content/items.json` (meal, satiety), `core/actors/needs_system.gd` (eat prefers meals),
+  `core/crafting/` only through content/recipe hooks (no new crafting code unless the kitchen
+  needs a second bench kind), tests, `docs/orca/handoffs/F5b.md`.
+- **Acceptance:** headless: a kitchen, raw food in a stockpile, a cook with the labour enabled
+  and target "keep 2 meals" → meals appear and a hungry colonist eats a meal before raw food;
+  deterministic; save/load/replay identical; suite green.
+- **Non-goals:** spoilage, meal quality, cooking skill effects beyond F3's speed.
+
+### F5c — Happiness from a thought table · `todo` · after F5b · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** a content **thought table** (`thoughts.json`): each thought
+  has an id, weight (±), duration in days and a repeat rule; triggers are events the core
+  already emits or needs states (ate a meal +, ate raw food 0, hungry −, slept on the ground −,
+  slept in a bed +, harvested +, crafted +, a colonist of the colony died −, …). Happiness per
+  colonist = 50 + sum of active thoughts, clamped 0–100, and the sum decays as thoughts expire.
+  Shown in the colonist panel with the active thoughts. **Consequences are F5d**; owner decision
+  (2026-10-30): when they come, **depression only** (stops working, wanders until recovered) —
+  no "goes crazy" crises.
+- **Owned paths:** new `core/actors/thoughts.gd` (component), `content/thoughts.json` + schema,
+  hooks where the triggering events are emitted (minimal, listed), persistence (bump +
+  migration + fixture), viewer colonist panel, tests, an ADR, `docs/orca/handoffs/F5c.md`.
+- **Acceptance:** headless: a colonist who eats a meal and sleeps in a bed reaches > 60 within
+  two days; one who starves and sleeps on the ground drops < 40; thoughts expire on schedule;
+  deterministic; save/load/replay identical; suite green.
+- **Non-goals:** depression/breakdowns (F5d), relations, room-quality thoughts (F9).
 
 ### F6 — Farm/forest/pasture zones, animals · `todo` · Design: *pending*
 

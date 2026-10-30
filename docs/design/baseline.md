@@ -115,7 +115,7 @@ copied from it, and its name does not appear in this repository.
 
 1. ~~Month/year on top of days~~ — **decided 2026-10-29: 3 days/month, 12 months/year**; done in F0 (ADR 060).
 2. Starvation rule: slow periodic damage vs. direct death.
-3. Breakdowns: depression only, or also a "goes crazy" chance.
+3. ~~Breakdowns~~ — **decided 2026-10-30: depression only** (F5d); no "goes crazy" chance.
 
 ## Suggested order to close the minimum
 
