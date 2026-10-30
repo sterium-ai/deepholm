@@ -7,6 +7,8 @@ extends RefCounted
 ## on_passability_changed() keeps each tile's last open/door state (_cell_state): when it is
 ## unchanged (a bed placed, soil tilled) only bed membership updates (A2); otherwise the rooms
 ## around the tile are re-flooded.
+## Covers the surface layer (z = 0) only: a tile on any other layer has no region until L3
+## builds one map per layer (ADR 045 §4).
 
 const RegionMapType = preload("res://scripts/core/map/regions.gd")
 
@@ -69,7 +71,7 @@ func _init(width: int, height: int, passable: Callable, is_door: Callable, has_b
 		for x in width:
 			var id := _inner.region_id(x, y)
 			if id != 0 and not seeds.has(id):
-				seeds[id] = Vector2i(x, y)
+				seeds[id] = Vector3i(x, y, TileGrid.SURFACE)
 	for id in seeds:
 		_rebuild_area(id, seeds[id])
 
@@ -79,10 +81,10 @@ func get_room_at(x: int, y: int) -> Dictionary:
 	var id := _inner.region_id(x, y)
 	if id == 0 or not bool(_enclosed_by_area.get(id, false)) or int(_door_count_by_area.get(id, 0)) < 1:
 		return {}
-	var tiles: Array[Vector2i] = _tiles_by_area[id]
+	var tiles: Array[Vector3i] = _tiles_by_area[id]
 	var has_stockpile := false
 	for tile in tiles:
-		if bool(_is_stockpile.call(tile.x, tile.y)):
+		if bool(_is_stockpile.call(tile)):
 			has_stockpile = true
 			break
 	return {
@@ -99,7 +101,7 @@ func on_passability_changed(x: int, y: int) -> void:
 	if state == _cell_state[index] and (area == 0 or _bed_tiles_by_area.has(area)):
 		if area != 0:
 			var beds: Dictionary = _bed_tiles_by_area[area]
-			if bool(_has_bed.call(x, y)):
+			if bool(_has_bed.call(Vector3i(x, y, TileGrid.SURFACE))):
 				beds[index] = true
 			else:
 				beds.erase(index)
@@ -118,7 +120,7 @@ func on_passability_changed(x: int, y: int) -> void:
 ## each mapped to a tile the caller can reseed a flood from.
 func _neighbourhood_ids(x: int, y: int) -> Dictionary:
 	var found: Dictionary = {}
-	for tile in [Vector2i(x, y), Vector2i(x, y - 1), Vector2i(x - 1, y), Vector2i(x + 1, y), Vector2i(x, y + 1)]:
+	for tile in [Vector3i(x, y, TileGrid.SURFACE), Vector3i(x, y - 1, TileGrid.SURFACE), Vector3i(x - 1, y, TileGrid.SURFACE), Vector3i(x + 1, y, TileGrid.SURFACE), Vector3i(x, y + 1, TileGrid.SURFACE)]:
 		if not _in_bounds(tile.x, tile.y):
 			continue
 		var id := _inner.region_id(tile.x, tile.y)
@@ -134,18 +136,18 @@ func _clear_area(id: int) -> void:
 
 ## Flood confined to _inner's id: each door on the boundary counts once; a member next to the
 ## map edge clears `enclosed`. Members are listed in flood order, seed first.
-func _rebuild_area(id: int, seed: Vector2i) -> void:
+func _rebuild_area(id: int, seed: Vector3i) -> void:
 	_clear_area(id)
 	_epoch += 1
-	var tiles: Array[Vector2i] = [seed]
+	var tiles: Array[Vector3i] = [seed]
 	var doors: Dictionary = {}
 	var beds: Dictionary = {}
 	var enclosed := true
-	var frontier: Array[Vector2i] = [seed]
+	var frontier: Array[Vector3i] = [seed]
 	_member_epoch[_index(seed.x, seed.y)] = _epoch
 	while not frontier.is_empty():
-		var current: Vector2i = frontier.pop_back()
-		if bool(_has_bed.call(current.x, current.y)):
+		var current: Vector3i = frontier.pop_back()
+		if bool(_has_bed.call(current)):
 			beds[_index(current.x, current.y)] = true
 		for direction in 4:
 			var neighbour := current + _OFFSETS[direction]
@@ -166,7 +168,7 @@ func _rebuild_area(id: int, seed: Vector2i) -> void:
 	_enclosed_by_area[id] = enclosed
 
 ## Up, left, right, down: RegionMap's _orthogonal() order.
-const _OFFSETS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]
+const _OFFSETS: Array[Vector3i] = [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]
 
 func _index(x: int, y: int) -> int:
 	return TileGrid.flat_index(x, y, _width)
