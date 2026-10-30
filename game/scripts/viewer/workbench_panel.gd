@@ -122,13 +122,13 @@ func _on_target_step(bench: Dictionary, recipe_id: String, step: int) -> void:
 	for live in world.get_crafting_benches():
 		if _key(live) == _key(bench):
 			current = int((live["targets"] as Dictionary).get(recipe_id, 0))
-	_command("craft_set_target", {"x": int(bench["x"]), "y": int(bench["y"]), "recipe": recipe_id, "count": maxi(0, current + step)})
+	_command("craft_set_target", {"x": int(bench["x"]), "y": int(bench["y"]), "z": int(bench["z"]), "recipe": recipe_id, "count": maxi(0, current + step)})
 
 func _on_order(bench: Dictionary, recipe_id: String) -> void:
-	_command("craft_add_order", {"x": int(bench["x"]), "y": int(bench["y"]), "recipe": recipe_id, "count": 1})
+	_command("craft_add_order", {"x": int(bench["x"]), "y": int(bench["y"]), "z": int(bench["z"]), "recipe": recipe_id, "count": 1})
 
 func _on_cancel_next(bench: Dictionary) -> void:
 	for live in world.get_crafting_benches():
 		if _key(live) == _key(bench) and not (live["orders"] as Array).is_empty():
-			_command("craft_cancel_order", {"x": int(bench["x"]), "y": int(bench["y"]), "order_id": String(live["orders"][0]["id"])})
+			_command("craft_cancel_order", {"x": int(bench["x"]), "y": int(bench["y"]), "z": int(bench["z"]), "order_id": String(live["orders"][0]["id"])})
 			return

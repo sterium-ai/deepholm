@@ -446,7 +446,7 @@ func _compose_line(colonist: Dictionary) -> String:
 	if not hands_text.is_empty():
 		line += "\n  %s" % _text_table.format("status.hands_label", [hands_text])
 	if not status["idle"]:
-		var target: Vector2i = status["target"]
+		var target: Vector3i = status["target"]
 		line += "\n  %s" % _text_table.format("status.target_label", [target.x, target.y])
 		if status["route_length"] >= 0:
 			line += "\n  %s" % _text_table.format("status.route_length_label", [status["route_length"]])
