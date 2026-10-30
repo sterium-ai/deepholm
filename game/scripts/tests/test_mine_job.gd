@@ -49,14 +49,14 @@ func _build_world(seed_value: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	return world
 
 ## mine's own target check (world_state.gd's _check_mine_target_command()) must reject a
 ## non-rock tile as invalid_target, mirroring chop's own tree-only rule.
 func _check_invalid_target_on_non_rock_tile() -> void:
 	var world := _build_world(352001)
-	var result := Scenarios.command(world, "mine_wrong_tile", "mine", {"x": 5, "y": 0, "priority": 1})
+	var result := Scenarios.command(world, "mine_wrong_tile", "mine", {"x": 5, "y": 0, "z": 0, "priority": 1})
 	_expect(not result.get("ok", true), "mine on a non-rock (floor) tile must be rejected")
 	_expect(String(result.get("rejection", {}).get("reason", "")) == "invalid_target",
 		"mine on a non-rock tile must be rejected invalid_target, got %s" % result.get("rejection"))
@@ -68,7 +68,7 @@ func _check_invalid_target_on_non_rock_tile() -> void:
 func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 	var world := _build_world(352002)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_ROCK)
-	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": 2, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "mine submission on a rock tile must be accepted even with no pick anywhere")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -91,13 +91,13 @@ func _check_blocked_no_tool_on_rock_with_no_pick() -> void:
 ## tile is genuinely crossable by a standalone route search (not just individually "passable").
 func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 	var world := _build_world(352003)
-	var target := Vector2i(5, 0)
+	var target := Vector3i(5, 0, 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_ROCK)
-	var untouched_rock := Vector2i(15, 15)
+	var untouched_rock := Vector3i(15, 15, 0)
 	TestAccess.set_tile(world, untouched_rock.x, untouched_rock.y, WorldStateType.TILE_ROCK)
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var submitted := Scenarios.command(world, "mine_1", "mine", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "mine submission on a rock tile with a reachable pick must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -132,9 +132,9 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 
 	# A standalone bounded route search must actually cross the freshly mined tile, not merely
 	# report it individually passable.
-	var route := RouteSearchType.new(Vector2i(target.x - 1, target.y), Vector2i(target.x + 1, target.y),
-		func(tile: Vector2i) -> bool: return bool(world.passability(tile.x, tile.y)["passable"]),
-		Vector2i.ZERO, Vector2i(MAP_SIZE - 1, MAP_SIZE - 1))
+	var route := RouteSearchType.new(Vector3i(target.x - 1, target.y, 0), Vector3i(target.x + 1, target.y, 0),
+		func(tile: Vector3i) -> bool: return bool(world.passability(tile.x, tile.y)["passable"]),
+		Vector3i.ZERO, Vector3i(MAP_SIZE - 1, MAP_SIZE - 1, 0))
 	var route_status := route.get_status()
 	while route_status == RouteSearchType.STATUS_SEARCHING:
 		route_status = route.resume()
@@ -144,7 +144,7 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 
 	# Now haul the stone item into a stockpile zone through the ordinary, unmodified generic
 	# haul job kind (WorldState auto-submits one haul job per unreserved ground item every tick).
-	var zone_result := Scenarios.command(world, "zone_setup", "zone_add", {"x": 12, "y": 0, "width": 2, "height": 2})
+	var zone_result := Scenarios.command(world, "zone_setup", "zone_add", {"x": 12, "y": 0, "z": 0, "width": 2, "height": 2})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
 	var zone: Dictionary = TestAccess.zone_table(world).zones[String(zone_result["zone_id"])]
 
@@ -171,13 +171,13 @@ func _check_full_order_completes_and_stone_hauls_into_zone() -> void:
 ## producing a second stone -- and must not leave its tile reservation behind once terminal.
 func _check_overlapping_mine_orders_produce_one_stone() -> void:
 	var world := _build_world(352004)
-	var target := Vector2i(2, 0)
+	var target := Vector3i(2, 0, 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_ROCK)
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var mine_1 := Scenarios.command(world, "mine_dup_1", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var mine_1 := Scenarios.command(world, "mine_dup_1", "mine", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(mine_1.get("ok", false), "first mine submission on a rock tile must be accepted")
-	var mine_2 := Scenarios.command(world, "mine_dup_2", "mine", {"x": target.x, "y": target.y, "priority": 1})
+	var mine_2 := Scenarios.command(world, "mine_dup_2", "mine", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(mine_2.get("ok", false), "second mine submission for the same rock tile must also be accepted")
 
 	var job_ids := [String(mine_1["job_id"]), String(mine_2["job_id"])]

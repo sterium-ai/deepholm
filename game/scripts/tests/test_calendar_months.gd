@@ -181,7 +181,7 @@ func _check_month_window_through_world_ticks() -> void:
 			world.apply({"actor": "test", "command_id": "zero_farm_%s" % colonist["id"], "tick": world.get_tick(),
 				"type": "set_labour", "payload": {"colonist": colonist["id"], "kind": "farm", "level": 0}})
 		TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
-		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "z": 0, "kind": "seed", "count": 1}
 		TestAccess.item_table(world).next_item_id = 2
 		var boosts: Array[int] = []
 		for _i in 170:

@@ -108,14 +108,14 @@ func _build_combined_world(seed_value: int) -> WorldStateType:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
 	TestAccess.item_table(world).ground_berries["4_1"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
-	_apply(world, "zone_setup", "zone_add", {"x": 30, "y": 0, "width": 1, "height": 1})
+	_apply(world, "zone_setup", "zone_add", {"x": 30, "y": 0, "z": 0, "width": 1, "height": 1})
 	return world
 
 ## Drives a freshly built combined world up to the moment all three pieces of
@@ -127,7 +127,7 @@ func _build_combined_world(seed_value: int) -> WorldStateType:
 ## step is either a fixed tick count or a budgeted loop over an observable
 ## condition, so the same seed always reaches the same tick.
 func _prime_combined_scenario(world: WorldStateType, seed_value: int) -> void:
-	var dig_result := _apply(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
+	var dig_result := _apply(world, "dig_1", "dig", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	var dig_job_id: String = String(dig_result.get("job_id", ""))
 
 	var work_started := false
@@ -246,12 +246,12 @@ func _build_haul_only_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
 	TestAccess.item_table(world).ground_berries["4_1"] = 1
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
-	_apply(world, "zone_setup", "zone_add", {"x": 10, "y": 0, "width": 1, "height": 1})
+	_apply(world, "zone_setup", "zone_add", {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1})
 	return world
 
 ## A haul job has no `work` toil (content/jobs.json), so is_interruptible_toil
@@ -408,7 +408,7 @@ func _check_rest_interrupt_completes_sleep_while_carrying_wood(seed_value: int) 
 	if _failed:
 		return
 	var world := _build_haul_only_world(seed_value)
-	_apply(world, "place_bed", "place_object", {"x": 0, "y": 5, "kind": "bed"})
+	_apply(world, "place_bed", "place_object", {"x": 0, "y": 5, "z": 0, "kind": "bed"})
 
 	var boundary_reached := false
 	var haul_job_id := ""

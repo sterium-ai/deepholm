@@ -50,14 +50,14 @@ func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({
-		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "hands": [],
 	})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "z": 0, "kind": item_kind, "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 5, "y": 5, "width": 1, "height": 1},
+		"type": "zone_add", "payload": {"x": 5, "y": 5, "z": 0, "width": 1, "height": 1},
 	})
 	_expect(zone_result.get("ok", false), "zone_add setup must succeed")
 
@@ -155,7 +155,7 @@ func _check_no_tool_reason() -> void:
 	var world := WorldStateType.new(274)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TREE)
-	_expect(_command(world, "chop", "chop", {"x": 1, "y": 0}).get("ok", false), "chop accepted without tool")
+	_expect(_command(world, "chop", "chop", {"x": 1, "y": 0, "z": 0}).get("ok", false), "chop accepted without tool")
 	var panel := _panel(world)
 	var seen := false
 	for _i in 40:
@@ -176,18 +176,18 @@ func _check_handover_reason() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 10, 9, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
-	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_a"), "moving the axe into colonist_a's hand must succeed")
 
-	_expect(_command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(_command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush A placement must be accepted")
-	_expect(_command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(_command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush B placement must be accepted")
-	var forage_a := _command(world, "forage_a", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage_a := _command(world, "forage_a", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_a.get("ok", false), "forage_a submission must be accepted")
 	var forage_a_id := String(forage_a.get("job_id", ""))
 
@@ -207,7 +207,7 @@ func _check_handover_reason() -> void:
 			break
 	_expect(colonist_a_busy, "colonist_a must be busy on forage_a before chop_b (and its axe reservation) ever exists")
 
-	var chop_b := _command(world, "chop_b", "chop", {"x": 10, "y": 9, "priority": 1})
+	var chop_b := _command(world, "chop_b", "chop", {"x": 10, "y": 9, "z": 0, "priority": 1})
 	_expect(chop_b.get("ok", false), "chop_b submission must be accepted")
 	var chop_b_id := String(chop_b.get("job_id", ""))
 
@@ -225,7 +225,7 @@ func _check_handover_reason() -> void:
 					# colonist_a's own next dispatched job -- submitted only
 					# now, so a third job is never queued while colonist_b
 					# waits -- is what makes its first toil drop_tool.
-					var forage_b := _command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
+					var forage_b := _command(world, "forage_b", "forage", {"x": 3, "y": 0, "z": 0, "priority": 1})
 					_expect(forage_b.get("ok", false), "forage_b must be accepted right as forage_a completes")
 		var chop_job := Scenarios.find_job(world, chop_b_id)
 		if String(chop_job.get("reason", "")) == "waiting_for_tool_handover":

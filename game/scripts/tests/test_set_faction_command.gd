@@ -130,7 +130,7 @@ func _check_set_faction_persists_for_non_worker_actor() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(10, 10)
-	var wolf := ActorTableType.spawn("wolf", 2, 2, TestAccess.content(world), "wolf_test")
+	var wolf := ActorTableType.spawn("wolf", Vector3i(2, 2, 0), TestAccess.content(world), "wolf_test")
 	TestAccess.colonists(world).append(wolf)
 	var result := _set_faction_command(world, "set_wolf_faction", "wolf_test", "wildlife")
 	_expect(result.get("ok", false), "a valid set_faction on a non-worker actor must be accepted")
@@ -159,7 +159,7 @@ func _check_chopped_item_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(8, 10)
-	TestAccess.item_table(world).spawn_item("wood", 5, 5)
+	TestAccess.item_table(world).spawn_item("wood", Vector3i(5, 5, 0))
 	var items := world.get_items()
 	_expect(items.size() == 1 and items[0]["faction_id"] == "colony",
 		"a chopped wood item must default to faction_id 'colony'")
@@ -171,6 +171,6 @@ func _check_foraged_berries_faction_is_colony() -> void:
 	if _failed:
 		return
 	var world := WorldStateType.new(9, 10)
-	TestAccess.item_table(world).spawn_berries_item(6, 6)
+	TestAccess.item_table(world).spawn_berries_item(Vector3i(6, 6, 0))
 	_expect(world.get_ground_berries_faction_id(6, 6) == "colony",
 		"foraged berries must default to faction_id 'colony'")

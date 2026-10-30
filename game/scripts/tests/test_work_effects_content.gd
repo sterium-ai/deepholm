@@ -87,26 +87,26 @@ func _check_new_kind_from_content_only() -> void:
 
 	# quarry at (3, 3): rock with a bush on it; its north neighbour is rock, so the first
 	# passable non-trench neighbour (N, W, E, S) is the west one, (2, 3).
-	var target := Vector2i(3, 3)
+	var target := Vector3i(3, 3, 0)
 	grid.tiles[grid.tile_index(3, 3)] = WorldStateType.TILE_ROCK
 	grid.tiles[grid.tile_index(3, 2)] = WorldStateType.TILE_ROCK
-	objects.set_object(3, 3, "berry_bush")
+	objects.set_object(Vector3i(3, 3, 0), "berry_bush")
 	var quarry: Dictionary = items.work_effects("quarry")
 	_expect(not quarry.is_empty(), "ItemTable must expose the fixture kind's effects block")
 	var refusal: Dictionary = ToilBindingsType.apply_work_effects(quarry, "job_7", "quarry", target, grid, objects, items)
 	_expect(refusal.is_empty(), "quarry on rock must apply, got %s" % refusal)
 	_expect(grid.get_tile(3, 3) == WorldStateType.TILE_FLOOR, "quarry must turn rock into floor, got %s" % grid.get_tile(3, 3))
-	_expect(objects.get_object(3, 3) == "", "quarry must clear the object on its tile")
-	var kinds_at := _kinds_at(items, Vector2i(2, 3))
+	_expect(objects.get_object(Vector3i(3, 3, 0)) == "", "quarry must clear the object on its tile")
+	var kinds_at := _kinds_at(items, Vector3i(2, 3, 0))
 	_expect(kinds_at == ["stone", "flint"], "quarry's always yields land adjacent, in list order, got %s" % [items.get_items()])
 	_expect(items.items.size() == 2, "only the two always yields exist before the find resolves, got %s" % [items.get_items()])
-	_expect(items.pending_dig_finds == [{"job_id": "job_7", "kind": "quarry", "x": 3, "y": 3}],
+	_expect(items.pending_dig_finds == [{"job_id": "job_7", "kind": "quarry", "x": 3, "y": 3, "z": 0}],
 		"quarry must stage one find of its own kind, got %s" % [items.pending_dig_finds])
 	var rng_state := rng.state
 	items.resolve_dig_finds()
 	_expect(rng.state != rng_state, "resolving the find must draw from the find stream")
 	_expect(items.pending_dig_finds.is_empty(), "resolve_dig_finds() must drain the staged find")
-	_expect(_kinds_at(items, Vector2i(2, 3)) == ["stone", "flint", "coal"], "quarry's find (coal, weight 100) lands adjacent, got %s" % [items.get_items()])
+	_expect(_kinds_at(items, Vector3i(2, 3, 0)) == ["stone", "flint", "coal"], "quarry's find (coal, weight 100) lands adjacent, got %s" % [items.get_items()])
 
 	# A second quarry on the same tile finds floor: refused, nothing changes.
 	var before: Array = items.get_items()
@@ -116,16 +116,16 @@ func _check_new_kind_from_content_only() -> void:
 
 	# press at (6, 6): consumes one seed; without one it is refused and the tile stays floor.
 	var press: Dictionary = items.work_effects("press")
-	var press_at := Vector2i(6, 6)
+	var press_at := Vector3i(6, 6, 0)
 	refusal = ToilBindingsType.apply_work_effects(press, "job_9", "press", press_at, grid, objects, items)
 	_expect(refusal == {"reason": "blocked_missing_input", "remedy": "resubmit_order"}, "a press with no seed must be refused blocked_missing_input, got %s" % refusal)
 	_expect(grid.get_tile(6, 6) == WorldStateType.TILE_FLOOR, "a refused press must leave the tile")
-	items.place_new_ground_item("seed", 2, 0, 0)
+	items.place_new_ground_item("seed", 2, Vector3i(0, 0, 0))
 	refusal = ToilBindingsType.apply_work_effects(press, "job_10", "press", press_at, grid, objects, items)
 	_expect(refusal.is_empty(), "a press with a seed on the ground must apply, got %s" % refusal)
 	_expect(grid.get_tile(6, 6) == WorldStateType.TILE_PLANTED, "press must plant its tile")
-	_expect(items.get_ground_berries(6, 6) == 2, "press yields two ground berries at its target, got %d" % items.get_ground_berries(6, 6))
-	_expect(_kinds_at(items, Vector2i(0, 0)) == ["seed"] and int(items.get_items().filter(func(i: Dictionary) -> bool: return i["kind"] == "seed")[0]["count"]) == 1,
+	_expect(items.get_ground_berries(Vector3i(6, 6, 0)) == 2, "press yields two ground berries at its target, got %d" % items.get_ground_berries(Vector3i(6, 6, 0)))
+	_expect(_kinds_at(items, Vector3i(0, 0, 0)) == ["seed"] and int(items.get_items().filter(func(i: Dictionary) -> bool: return i["kind"] == "seed")[0]["count"]) == 1,
 		"press must consume exactly one seed, got %s" % [items.get_items()])
 	_expect(items.pending_dig_finds.is_empty(), "a kind without a find_table stages no find")
 
@@ -161,7 +161,7 @@ func _check_effects_cross_checks() -> void:
 		_expect(String(error.get("message", "")).contains(String(case["mentions"])), "%s must mention '%s', got %s" % [case["name"], case["mentions"], error])
 
 ## Item kinds on tile, in id order.
-func _kinds_at(items, tile: Vector2i) -> Array:
+func _kinds_at(items, tile: Vector3i) -> Array:
 	var kinds: Array = []
 	for item in items.get_items():
 		if int(item["x"]) == tile.x and int(item["y"]) == tile.y:

@@ -267,7 +267,7 @@ func _minimal_state() -> Dictionary:
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
 		"contentPacks": [], "seed": 42, "tick": 0, "epoch": 0,
-		"map": {"width": 1, "height": 1, "tiles": ["soil"], "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
+		"map": {"width": 1, "height": 1, "layerCount": 1, "tiles": ["soil"], "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {
 			"nextJobId": 1, "jobSequence": 0, "jobTick": 0, "queueEventSequence": -1,

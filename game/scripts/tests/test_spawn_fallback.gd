@@ -29,7 +29,7 @@ extends SceneTree
 const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 
-const NEI4: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+const NEI4: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0)]
 const TILE_SOIL := "soil"
 const TILE_ROCK := "rock"
 const TILE_WATER := "water"
@@ -84,8 +84,8 @@ func _check_water_and_bush_at_old_anchor() -> void:
 	map[6 * width + 13] = TILE_WATER # adjacent to the pocket's own left edge
 	map[5 * width + 22] = TILE_SOIL # a one-tile arm hosting the reachable bush
 	map[7 * width + 22] = TILE_TREE # adjacent to the pocket's own right edge
-	var water_tiles: Array[Vector2i] = [Vector2i(2, 2), Vector2i(13, 6)]
-	var berry_bush_tiles: Array[Vector2i] = [Vector2i(3, 2), Vector2i(22, 5)]
+	var water_tiles: Array[Vector3i] = [Vector3i(2, 2, 0), Vector3i(13, 6, 0)]
+	var berry_bush_tiles: Array[Vector3i] = [Vector3i(3, 2, 0), Vector3i(22, 5, 0)]
 	var mapgen := _base_mapgen()
 	mapgen["spawn_area_x"] = 2
 	mapgen["spawn_area_y"] = 2
@@ -101,7 +101,7 @@ func _check_water_and_bush_at_old_anchor() -> void:
 	var clearing: Dictionary = placement["clearing"]
 	_expect(int(clearing["water_steps"]) != -1 and int(clearing["food_steps"]) != -1 and int(clearing["tree_steps"]) != -1,
 		"water-and-bush-at-old-anchor: a resourced pocket elsewhere must be found reachable, not merely repaired with honest -1s")
-	for pos: Vector2i in placement["colonist_positions"]:
+	for pos: Vector3i in placement["colonist_positions"]:
 		_expect(pos.x >= 14 and pos.x < 22 and pos.y >= 4 and pos.y < 10,
 			"water-and-bush-at-old-anchor: colonist position %s must land in the real soil pocket, not near the hostile old anchor" % pos)
 	_expect(map[2 * width + 2] == TILE_WATER, "water-and-bush-at-old-anchor: the old anchor's own water tile must survive untouched")
@@ -123,8 +123,8 @@ func _check_unreachable_resources_reported_honestly() -> void:
 	for y in range(4, 10):
 		for x in range(4, 10):
 			map[y * width + x] = TILE_SOIL
-	var water_tiles: Array[Vector2i] = []
-	var berry_bush_tiles: Array[Vector2i] = []
+	var water_tiles: Array[Vector3i] = []
+	var berry_bush_tiles: Array[Vector3i] = []
 	var mapgen := _base_mapgen()
 	mapgen["spawn_area_width"] = 6
 	mapgen["spawn_area_height"] = 6
@@ -157,8 +157,8 @@ func _check_insufficient_land_cells_still_places_three() -> void:
 	map[5 * width + 7] = TILE_WATER
 	map[4 * width + 4] = TILE_TREE
 	map[4 * width + 5] = TILE_SOIL # hosts the reachable bush, adjacent to the component
-	var water_tiles: Array[Vector2i] = [Vector2i(7, 5)]
-	var berry_bush_tiles: Array[Vector2i] = [Vector2i(5, 4)]
+	var water_tiles: Array[Vector3i] = [Vector3i(7, 5, 0)]
+	var berry_bush_tiles: Array[Vector3i] = [Vector3i(5, 4, 0)]
 	var mapgen := _base_mapgen()
 	mapgen["spawn_area_width"] = 6
 	mapgen["spawn_area_height"] = 6
@@ -170,8 +170,8 @@ func _check_insufficient_land_cells_still_places_three() -> void:
 	var placement := WorldGeneratorType.place_spawn(random, map, width, height, mapgen, water_tiles, berry_bush_tiles, 3)
 	_expect_valid_placement(placement, map, width, height, water_tiles, "insufficient-land-cells")
 	var colonist_positions: Array = placement["colonist_positions"]
-	var expected := [Vector2i(4, 5), Vector2i(5, 5), Vector2i(6, 5)]
-	for pos: Vector2i in colonist_positions:
+	var expected := [Vector3i(4, 5, 0), Vector3i(5, 5, 0), Vector3i(6, 5, 0)]
+	for pos: Vector3i in colonist_positions:
 		_expect(expected.has(pos), "insufficient-land-cells: colonist position %s must be one of the only 3 connected land tiles" % pos)
 	_expect(map[7 + 5 * width] == TILE_WATER, "insufficient-land-cells: the adjacent water tile must survive untouched")
 	var clearing: Dictionary = placement["clearing"]
@@ -199,8 +199,8 @@ func _check_single_shared_bush_reported_insufficient() -> void:
 	map[3 * width + 5] = TILE_WATER
 	map[3 * width + 10] = TILE_TREE
 	map[9 * width + 10] = TILE_SOIL # hosts the one and only bush
-	var water_tiles: Array[Vector2i] = [Vector2i(5, 3)]
-	var berry_bush_tiles: Array[Vector2i] = [Vector2i(10, 9)]
+	var water_tiles: Array[Vector3i] = [Vector3i(5, 3, 0)]
+	var berry_bush_tiles: Array[Vector3i] = [Vector3i(10, 9, 0)]
 	var mapgen := _base_mapgen()
 	mapgen["spawn_area_width"] = 6
 	mapgen["spawn_area_height"] = 6
@@ -270,8 +270,8 @@ func _check_isolated_rock_does_not_satisfy_outcrop_reachability() -> void:
 	map[7 * width + 7] = TILE_SOIL # hosts bush 2
 	map[7 * width + 6] = TILE_SOIL # hosts bush 3
 	map[4 * width + 11] = TILE_ROCK # isolated 1-tile stub, below outcrop_min_size, close to the cluster
-	var water_tiles: Array[Vector2i] = [Vector2i(5, 5)]
-	var berry_bush_tiles: Array[Vector2i] = [Vector2i(7, 3), Vector2i(7, 7), Vector2i(6, 7)]
+	var water_tiles: Array[Vector3i] = [Vector3i(5, 5, 0)]
+	var berry_bush_tiles: Array[Vector3i] = [Vector3i(7, 3, 0), Vector3i(7, 7, 0), Vector3i(6, 7, 0)]
 	var mapgen := _base_mapgen()
 	mapgen["spawn_area_width"] = 4
 	mapgen["spawn_area_height"] = 3
@@ -312,25 +312,25 @@ func _check_isolated_rock_does_not_satisfy_outcrop_reachability() -> void:
 ## pool entry also connected and safe for a starting tool/bed ("tool
 ## accessibility"), and every one of the map's own original water tiles still
 ## water afterward (the river is never bulldozed by any tier).
-func _expect_valid_placement(placement: Dictionary, map: Array[String], width: int, height: int, water_tiles: Array[Vector2i], label: String) -> void:
+func _expect_valid_placement(placement: Dictionary, map: Array[String], width: int, height: int, water_tiles: Array[Vector3i], label: String) -> void:
 	var colonist_positions: Array = placement["colonist_positions"]
 	_expect(colonist_positions.size() == 3, "%s: must place exactly 3 colonists, got %d" % [label, colonist_positions.size()])
-	for pos: Vector2i in colonist_positions:
+	for pos: Vector3i in colonist_positions:
 		_expect(map[pos.y * width + pos.x] == TILE_FLOOR, "%s: colonist position %s must be real floor, not water/rock/hazard" % [label, pos])
 	var clearing: Dictionary = placement["clearing"]
 	var land_tiles: Array = clearing.get("land_tiles", [])
-	for pos: Vector2i in land_tiles:
+	for pos: Vector3i in land_tiles:
 		_expect(map[pos.y * width + pos.x] == TILE_FLOOR, "%s: reserved tool/bed tile %s must be real floor, not water" % [label, pos])
 	if colonist_positions.size() > 1:
 		var component := _flood_fill(map, width, height, colonist_positions[0])
-		for pos: Vector2i in colonist_positions:
+		for pos: Vector3i in colonist_positions:
 			_expect(component.has(pos.y * width + pos.x), "%s: colonist position %s must be in the same connected land clearing as the others (same-bank connectivity)" % [label, pos])
-		for pos: Vector2i in land_tiles:
+		for pos: Vector3i in land_tiles:
 			_expect(component.has(pos.y * width + pos.x), "%s: reserved tool/bed tile %s must connect to the colonists' own clearing (tool accessibility)" % [label, pos])
-	for pos: Vector2i in water_tiles:
+	for pos: Vector3i in water_tiles:
 		_expect(map[pos.y * width + pos.x] == TILE_WATER, "%s: original water tile %s must survive untouched by every fallback tier" % [label, pos])
 
-func _flood_fill(map: Array[String], width: int, height: int, start: Vector2i) -> Dictionary:
+func _flood_fill(map: Array[String], width: int, height: int, start: Vector3i) -> Dictionary:
 	var visited: Dictionary = {}
 	var start_index := start.y * width + start.x
 	visited[start_index] = true

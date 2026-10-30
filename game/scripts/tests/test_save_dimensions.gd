@@ -13,7 +13,7 @@ const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 
 const TARGET := "user://test-save-dimensions.json"
-const NEI4: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+const NEI4: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0)]
 
 var _failed := false
 
@@ -60,11 +60,11 @@ func _prepared_world(width: int, height: int, seed_value: int) -> WorldStateType
 	var colonists := world.get_colonists()
 	_expect(not colonists.is_empty(), "a %dx%d world must spawn at least one colonist" % [width, height])
 	world.spawn_ground_tool_item("pick", 0, 0)
-	var far_target := _nearest_soil_tile(world, Vector2i(width - 1, height - 1))
-	_expect(far_target != Vector2i(-1, -1), "a soil tile must exist near the far corner of a %dx%d world" % [width, height])
+	var far_target := _nearest_soil_tile(world, Vector3i(width - 1, height - 1, 0))
+	_expect(far_target != Vector3i(-1, -1, 0), "a soil tile must exist near the far corner of a %dx%d world" % [width, height])
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "dig_far_corner", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": far_target.x, "y": far_target.y, "priority": 1},
+		"type": "dig", "payload": {"x": far_target.x, "y": far_target.y, "z": 0, "priority": 1},
 	})
 	_expect(result.get("ok", false), "the far-corner dig command must be accepted (%dx%d): %s" % [width, height, result])
 	for _i in 5:
@@ -133,7 +133,7 @@ func _check_continuation_equivalence(width: int, height: int, seed_value: int) -
 ## (254,254), never touching the river's own water tiles anywhere else on the
 ## map) so the far coordinate itself is always exercised, never weakened to
 ## whichever corner happened to be reachable.
-const FAR_EDGE_TARGET := Vector2i(254, 254)
+const FAR_EDGE_TARGET := Vector3i(254, 254, 0)
 const FAR_EDGE_MIN_COORD := 200
 const FAR_EDGE_SEARCH_RADIUS := 30
 const FAR_EDGE_TICK_BUDGET := 6000
@@ -143,19 +143,19 @@ func _check_far_edge_order_completes() -> void:
 	_expect(not world.get_colonists().is_empty(), "a 256x256 world must spawn at least one colonist")
 	if world.get_colonists().is_empty():
 		return
-	var origin := Vector2i(int(world.get_colonists()[0]["x"]), int(world.get_colonists()[0]["y"]))
+	var origin := Vector3i(int(world.get_colonists()[0]["x"]), int(world.get_colonists()[0]["y"]), 0)
 	_carve_land_corridor(world, origin, FAR_EDGE_TARGET)
 	var reachable := _reachable_from(world, origin)
 	var target := _nearest_reachable_soil_tile(world, FAR_EDGE_TARGET, reachable)
-	_expect(target != Vector2i(-1, -1), "a real-route-reachable soil tile must exist near (254, 254) once the corridor is carved")
-	if target == Vector2i(-1, -1):
+	_expect(target != Vector3i(-1, -1, 0), "a real-route-reachable soil tile must exist near (254, 254) once the corridor is carved")
+	if target == Vector3i(-1, -1, 0):
 		return
 	_expect(target.x >= FAR_EDGE_MIN_COORD and target.y >= FAR_EDGE_MIN_COORD,
 		"the far-edge dig target must sit near the world's actual far boundary (254/255), got %s" % target)
 	world.spawn_ground_tool_item("pick", target.x, target.y)
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "far_edge_dig", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": target.x, "y": target.y, "priority": 1},
+		"type": "dig", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1},
 	})
 	_expect(result.get("ok", false), "a dig order near the far boundary must be accepted: %s" % result)
 
@@ -191,7 +191,7 @@ func _check_far_edge_order_completes() -> void:
 			var route = colonist.get("route")
 			if route != null:
 				for tile in (route.get("path", []) as Array):
-					var t: Vector2i = tile
+					var t: Vector3i = tile
 					_expect(t.x >= 0 and t.x < width and t.y >= 0 and t.y < height,
 						"a far-edge route tile must stay within the map's own bounds, got %s" % t)
 			if int(colonist["x"]) == target.x and int(colonist["y"]) == target.y and colonist.get("work") != null:
@@ -236,7 +236,7 @@ func _check_far_edge_order_completes() -> void:
 ## river included) is untouched; this exists only to guarantee the far-edge
 ## coordinate itself stays reachable regardless of where the river happened
 ## to land for this seed.
-func _carve_land_corridor(world: WorldStateType, from: Vector2i, to: Vector2i) -> void:
+func _carve_land_corridor(world: WorldStateType, from: Vector3i, to: Vector3i) -> void:
 	var x := from.x
 	var y := from.y
 	_clear_land_tile(world, x, y)
@@ -260,18 +260,18 @@ func _clear_land_tile(world: WorldStateType, x: int, y: int) -> void:
 ## (4-connected, never Chebyshev/Euclidean) -- the same real-movement rule the
 ## far-edge check above uses to pick a target that is not stranded across the
 ## river from the colonist's own shore.
-func _reachable_from(world: WorldStateType, origin: Vector2i) -> Dictionary:
+func _reachable_from(world: WorldStateType, origin: Vector3i) -> Dictionary:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
 	var visited: Dictionary = {}
-	var queue: Array[Vector2i] = [origin]
+	var queue: Array[Vector3i] = [origin]
 	visited[origin.y * width + origin.x] = true
 	var head := 0
 	while head < queue.size():
-		var current: Vector2i = queue[head]
+		var current: Vector3i = queue[head]
 		head += 1
 		for offset in NEI4:
-			var next: Vector2i = current + offset
+			var next: Vector3i = current + offset
 			if next.x < 0 or next.x >= width or next.y < 0 or next.y >= height:
 				continue
 			var index := next.y * width + next.x
@@ -281,7 +281,7 @@ func _reachable_from(world: WorldStateType, origin: Vector2i) -> Dictionary:
 			queue.append(next)
 	return visited
 
-func _nearest_reachable_soil_tile(world: WorldStateType, origin: Vector2i, reachable: Dictionary) -> Vector2i:
+func _nearest_reachable_soil_tile(world: WorldStateType, origin: Vector3i, reachable: Dictionary) -> Vector3i:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
 	for radius in range(0, FAR_EDGE_SEARCH_RADIUS + 1):
@@ -294,10 +294,10 @@ func _nearest_reachable_soil_tile(world: WorldStateType, origin: Vector2i, reach
 				if maxi(absi(x - origin.x), absi(y - origin.y)) != radius:
 					continue
 				if world.get_tile(x, y) == "soil" and reachable.has(y * width + x):
-					return Vector2i(x, y)
-	return Vector2i(-1, -1)
+					return Vector3i(x, y, 0)
+	return Vector3i(-1, -1, 0)
 
-func _nearest_soil_tile(world: WorldStateType, origin: Vector2i) -> Vector2i:
+func _nearest_soil_tile(world: WorldStateType, origin: Vector3i) -> Vector3i:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
 	for radius in range(0, FAR_EDGE_SEARCH_RADIUS + 1):
@@ -310,8 +310,8 @@ func _nearest_soil_tile(world: WorldStateType, origin: Vector2i) -> Vector2i:
 				if maxi(absi(x - origin.x), absi(y - origin.y)) != radius:
 					continue
 				if world.get_tile(x, y) == "soil":
-					return Vector2i(x, y)
-	return Vector2i(-1, -1)
+					return Vector3i(x, y, 0)
+	return Vector3i(-1, -1, 0)
 
 ## File-backed round trip: exercises the actual
 ## SaveIO.write_atomic()/read() file pipeline, not just StateCodec.encode()/
@@ -381,7 +381,7 @@ func _minimal_state_at_size(width: int, height: int, seed_value: int) -> Diction
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
 		"contentPacks": [], "seed": seed_value, "tick": 0, "epoch": 0,
-		"map": {"width": width, "height": height, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
+		"map": {"width": width, "height": height, "layerCount": 1, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {
 			"nextJobId": 1, "jobSequence": 0, "jobTick": 0, "queueEventSequence": -1,
@@ -445,7 +445,7 @@ func _check_rejects_out_of_bounds_zone() -> void:
 	_expect(SaveIOType.write_atomic(TARGET, good)["ok"], "a valid state must save so this check has something to protect")
 	var bad := StateCodecType.encode(WorldStateType.new(326, 10, 48, 48))
 	bad = bad.duplicate(true)
-	bad["zones"] = [{"id": "zone_oob", "x": 40, "y": 40, "width": 20, "height": 20}]
+	bad["zones"] = [{"id": "zone_oob", "x": 40, "y": 40, "z": 0, "width": 20, "height": 20}]
 	var result := SaveIOType.write_atomic(TARGET, bad)
 	_expect(not result["ok"], "a zone rectangle extending past the map bounds must be rejected")
 	_expect(result.get("code", "") == "schema_error", "an out-of-bounds zone must be a typed schema_error")
@@ -476,7 +476,7 @@ func _check_small_map_service_bounds_and_east_edge_trader_spawn() -> void:
 	var loaded := StateCodecType.decode(state)
 	_expect(loaded.get_map_width() == width and loaded.get_map_height() == height,
 		"an 8x8 saved map must decode at its own exact size")
-	_expect(TestAccess.need_giver_bounds_max(loaded) == Vector2i(width - 1, height - 1),
+	_expect(TestAccess.need_giver_bounds_max(loaded) == Vector3i(width - 1, height - 1, 0),
 		"NeedGiver's bounds must be rebuilt at the saved map's own dimensions, not the constructor's 16x16 clamp (got %s)" % [TestAccess.need_giver_bounds_max(loaded)])
 	_expect(TestAccess.incident_map_width(loaded) == width and TestAccess.incident_map_height(loaded) == height,
 		"IncidentScheduler's map dimensions must be rebuilt at the saved map's own size, not the constructor's 16x16 clamp (got %dx%d)" % [TestAccess.incident_map_width(loaded), TestAccess.incident_map_height(loaded)])
@@ -506,4 +506,4 @@ func _check_small_map_service_bounds_and_east_edge_trader_spawn() -> void:
 	_expect(int(actor["x"]) == width - 1,
 		"the trader must spawn on the map's own real east edge (x=%d), not the constructor's clamped x=15 (got x=%d)" % [width - 1, int(actor["x"])])
 	_expect(int(actor["x"]) < width and int(actor["y"]) < height,
-		"the trader's spawn tile must stay within the 8x8 map's real bounds (got %s)" % [Vector2i(int(actor["x"]), int(actor["y"]))])
+		"the trader's spawn tile must stay within the 8x8 map's real bounds (got %s)" % [TileGrid.tile_of(actor)])

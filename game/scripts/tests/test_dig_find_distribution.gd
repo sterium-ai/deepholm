@@ -60,7 +60,7 @@ func _build_world(seed_value: int) -> WorldType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 0, "build": 3, "craft": 3, "cook": 3}})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
@@ -81,7 +81,7 @@ func _check_find_distribution() -> void:
 
 	for i in DIG_COUNT:
 		var world := _build_world(BASE_SEED + i)
-		var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
+		var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "z": 0, "priority": 1})
 		_expect(result["ok"], "dig %d must be accepted: %s" % [i, result])
 		if not result["ok"]:
 			return
@@ -121,30 +121,30 @@ func _check_placement_rules() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_FLOOR)
 
 	# All four neighbours open: row-major order (north, west, east, south) picks north.
-	var picked := TestAccess.item_table(world).dig_item_placement(5, 5)
-	_expect(picked == Vector2i(5, 4), "an open north neighbour must win, got %s" % [picked])
+	var picked := TestAccess.item_table(world).dig_item_placement(Vector3i(5, 5, 0))
+	_expect(picked == Vector3i(5, 4, 0), "an open north neighbour must win, got %s" % [picked])
 
 	# North blocked by an impassable tile (rock): west wins next.
 	TestAccess.set_tile(world, 5, 4, WorldType.TILE_ROCK)
-	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
-	_expect(picked == Vector2i(4, 5), "with north impassable, west must win, got %s" % [picked])
+	picked = TestAccess.item_table(world).dig_item_placement(Vector3i(5, 5, 0))
+	_expect(picked == Vector3i(4, 5, 0), "with north impassable, west must win, got %s" % [picked])
 
 	# North+west blocked -- west is a trench tile specifically (passable but
 	# excluded by kind, not by impassability): east wins.
 	TestAccess.set_tile(world, 4, 5, WorldType.TILE_TRENCH)
-	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
-	_expect(picked == Vector2i(6, 5),
+	picked = TestAccess.item_table(world).dig_item_placement(Vector3i(5, 5, 0))
+	_expect(picked == Vector3i(6, 5, 0),
 		"a passable trench neighbour must still be excluded, east must win, got %s" % [picked])
 
 	# North+west+east blocked: south wins.
 	TestAccess.set_tile(world, 6, 5, WorldType.TILE_ROCK)
-	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
-	_expect(picked == Vector2i(5, 6), "with only south open, south must win, got %s" % [picked])
+	picked = TestAccess.item_table(world).dig_item_placement(Vector3i(5, 5, 0))
+	_expect(picked == Vector3i(5, 6, 0), "with only south open, south must win, got %s" % [picked])
 
 	# All four neighbours blocked: falls back to the dug tile itself.
 	TestAccess.set_tile(world, 5, 6, WorldType.TILE_ROCK)
-	picked = TestAccess.item_table(world).dig_item_placement(5, 5)
-	_expect(picked == Vector2i(5, 5),
+	picked = TestAccess.item_table(world).dig_item_placement(Vector3i(5, 5, 0))
+	_expect(picked == Vector3i(5, 5, 0),
 		"with every neighbour blocked, placement must fall back to the tile itself, got %s" % [picked])
 
 ## End-to-end wiring check: a real dig completion (through world.tick(), not
@@ -152,7 +152,7 @@ func _check_placement_rules() -> void:
 ## computed coordinate, never inside the trench, and exactly once.
 func _check_single_completion_placement() -> void:
 	var world := _build_world(20260923)
-	var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "priority": 1})
+	var result := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(result["ok"], "single-completion dig must be accepted: %s" % [result])
 	if not result["ok"]:
 		return
@@ -170,11 +170,11 @@ func _check_single_completion_placement() -> void:
 	# (1, 0)'s only qualifying neighbour: north (1, -1) is off the map, so
 	# west (0, 0) -- floor, passable, non-trench, and vacated once the
 	# colonist steps onto (1, 0) itself to work -- wins under the row-major rule.
-	var expected_at := Vector2i(0, 0)
+	var expected_at := Vector3i(0, 0, 0)
 	var items := world.get_items()
 	var sand_count := 0
 	for item in items:
-		var at := Vector2i(int(item["x"]), int(item["y"]))
+		var at := TileGrid.tile_of(item)
 		_expect(at == expected_at,
 			"item '%s' must land at the computed placement %s, got %s" % [item["kind"], expected_at, at])
 		_expect(world.get_tile(at.x, at.y) != WorldType.TILE_TRENCH,
@@ -239,8 +239,8 @@ func _check_simultaneous_resolution_order() -> void:
 	# job_5 appended before job_2: the order a colonist array iterated out of
 	# job-id order would produce, not ascending job-id order.
 	TestAccess.item_table(world).pending_dig_finds = [
-		{"job_id": "job_5", "kind": "dig", "x": 9, "y": 9},
-		{"job_id": "job_2", "kind": "dig", "x": 1, "y": 0},
+		{"job_id": "job_5", "kind": "dig", "x": 9, "y": 9, "z": 0},
+		{"job_id": "job_2", "kind": "dig", "x": 1, "y": 0, "z": 0},
 	]
 	TestAccess.item_table(world).resolve_dig_finds()
 
@@ -259,7 +259,7 @@ func _check_simultaneous_resolution_order() -> void:
 	if not expected_kind_job5.is_empty():
 		var found := false
 		for item in items:
-			if Vector2i(int(item["x"]), int(item["y"])) == Vector2i(9, 8) and String(item["kind"]) == expected_kind_job5:
+			if TileGrid.tile_of(item) == Vector3i(9, 8, 0) and String(item["kind"]) == expected_kind_job5:
 				found = true
 		_expect(found, "job_5's find '%s' must land at its own placement (9, 8)" % expected_kind_job5)
 

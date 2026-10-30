@@ -73,7 +73,7 @@ func _accept_trade(world: WorldStateType, command_id: String, trader_id: String)
 ## invariant `build` already resolves its own stockpiled item through).
 func _add_zone(world: WorldStateType, command_id: String, x: int, y: int, width: int, height: int) -> String:
 	var result := world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": x, "y": y, "width": width, "height": height}})
+		"type": "zone_add", "payload": {"x": x, "y": y, "z": 0, "width": width, "height": height}})
 	_expect(result.get("ok", false), "zone_add must be accepted: %s" % result)
 	return String(result.get("zone_id", ""))
 
@@ -175,7 +175,7 @@ func _check_accept_trade_swaps_items_and_trader_leaves() -> void:
 	# accept_trade now draws only from _find_available_build_item()'s own
 	# zone/reservation invariant, never a bare ground item outside a zone.
 	_add_zone(world, "zone_1", 4, 4, 2, 2)
-	TestAccess.item_table(world).items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "kind": want_item, "count": 1}
+	TestAccess.item_table(world).items["stock_want"] = {"id": "stock_want", "x": 5, "y": 5, "z": 0, "kind": want_item, "count": 1}
 	var trader_ref := TestAccess.find_colonist(world, trader_id)
 	_expect(_inventory_kinds(trader_ref).has(give_item), "the trader must carry give_item before the trade")
 	_expect(not _inventory_kinds(trader_ref).has(want_item), "the trader must not carry want_item before the trade")
@@ -215,7 +215,7 @@ func _check_accept_trade_requires_stockpiled_item_not_carried() -> void:
 	var want_item := String(offer.get("want_item", ""))
 	# No zone, no ground item: want_item exists only in a colonist's carrying
 	# slot, mid-haul -- never an eligible stockpiled item.
-	TestAccess.colonists(world).append({"id": "carrier_1", "kind": "colonist", "x": 3, "y": 3,
+	TestAccess.colonists(world).append({"id": "carrier_1", "kind": "colonist", "x": 3, "y": 3, "z": 0,
 		"route": null, "work": null, "carrying": {"kind": want_item, "count": 1}})
 	var result := _accept_trade(world, "accept_carry", trader_id)
 	_expect(not result.get("ok", true), "accept_trade must reject when want_item is only carried, not stockpiled")

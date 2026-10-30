@@ -229,7 +229,7 @@ func _expect_overlay(overlay, world, label: String) -> void:
 	var wrong := 0
 	for y in world.get_map_height():
 		for x in world.get_map_width():
-			var expected: Color = DesignationOverlayType.fill_color(int(counts.get(Vector2i(x, y), 0)))
+			var expected: Color = DesignationOverlayType.fill_color(int(counts.get(Vector3i(x, y, 0), 0)))
 			if not _same_rgba8(image.get_pixel(x, y), expected):
 				wrong += 1
 	_expect(wrong == 0, "%s: %d overlay pixels must match the pending jobs" % [label, wrong])
@@ -284,11 +284,11 @@ func _scan_cancel_command(world, tile: Vector2i) -> Dictionary:
 	var site: Dictionary = world.get_construction_site(tile.x, tile.y)
 	if not site.is_empty():
 		command["type"] = "cancel_site"
-		command["payload"] = {"x": int(site["origin"].x), "y": int(site["origin"].y)}
+		command["payload"] = {"x": int(site["origin"].x), "y": int(site["origin"].y), "z": 0}
 		return command
 	var best := {}
 	for job in world.get_jobs():
-		if job["status"] not in ["queued", "active"] or OrderInputType._order_tile(job) != tile:
+		if job["status"] not in ["queued", "active"] or OrderInputType._order_tile(job) != Vector3i(tile.x, tile.y, 0):
 			continue
 		if best.is_empty() or AreaOrders.cancel_before(job, best):
 			best = job
@@ -302,8 +302,8 @@ func _check_stockpile_cells() -> void:
 	var world := WorldStateType.new(4242, 10, 64, 64)
 	var view := MapViewType.new()
 	view.set_world(world)
-	_apply(world, "zone_add", {"x": 20, "y": 20, "width": 6, "height": 4})
-	_apply(world, "zone_add", {"x": 2, "y": 40, "width": 3, "height": 3})
+	_apply(world, "zone_add", {"x": 20, "y": 20, "z": 0, "width": 6, "height": 4})
+	_apply(world, "zone_add", {"x": 2, "y": 40, "z": 0, "width": 3, "height": 3})
 	# The map draws from the view snapshot of its last refresh() (A9, ADR 055); these
 	# commands bypassed the map, so refresh it as boot.gd does after every command.
 	view.refresh()
@@ -327,7 +327,7 @@ func _apply(world, type: String, payload: Dictionary) -> Dictionary:
 func _rect(world, type: String, origin: Vector2i, size: Vector2i) -> void:
 	for y in range(origin.y, origin.y + size.y):
 		for x in range(origin.x, origin.x + size.x):
-			_apply(world, type, {"x": x, "y": y, "priority": 1})
+			_apply(world, type, {"x": x, "y": y, "z": 0, "priority": 1})
 
 func _mouse(view, tile: Vector2i, pressed: bool) -> void:
 	var event := InputEventMouseButton.new()

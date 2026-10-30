@@ -91,8 +91,8 @@ func _run() -> void:
 	var place_target := _find_tile(world, "floor", place_excluded)
 	# Instant placement remains a test/debug command, never a toolbar tool.
 	var place_wall: Dictionary = {"actor": "test", "command_id": "fixture_wall", "tick": world.get_tick(),
-		"type": "place_object", "payload": {"x": place_target.x, "y": place_target.y, "kind": "wooden_wall"}}
-	_expect(place_wall["type"] == "place_object" and place_wall["payload"] == {"x": place_target.x, "y": place_target.y, "kind": "wooden_wall"},
+		"type": "place_object", "payload": {"x": place_target.x, "y": place_target.y, "z": 0, "kind": "wooden_wall"}}
+	_expect(place_wall["type"] == "place_object" and place_wall["payload"] == {"x": place_target.x, "y": place_target.y, "z": 0, "kind": "wooden_wall"},
 		"debug fixture must use the explicit place_object command")
 	var place_result: Dictionary = world.apply(place_wall)
 	_expect(place_result.get("ok", false), "a place_object command on an empty floor tile must be accepted")
@@ -105,7 +105,7 @@ func _run() -> void:
 		"place_object on an already-occupied tile must be rejected as invalid_target")
 
 	var remove_object: Dictionary = boot_node._command_for_tile(BootType.Tool.REMOVE_OBJECT, place_target)
-	_expect(remove_object["type"] == "remove_object" and remove_object["payload"] == {"x": place_target.x, "y": place_target.y},
+	_expect(remove_object["type"] == "remove_object" and remove_object["payload"] == {"x": place_target.x, "y": place_target.y, "z": 0},
 		"remove-object tool must build a remove_object command")
 	var remove_result: Dictionary = world.apply(remove_object)
 	_expect(remove_result.get("ok", false), "a remove_object command on a placed object must be accepted")
@@ -156,14 +156,14 @@ func _run() -> void:
 	# on rock), and Cancel resolves a pending build by its construction site,
 	# not by the wood tile its scheduler target names.
 	var stock_tile := place_target
-	TestAccess.item_table(world).items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["ui_build_wood"] = {"id": "ui_build_wood", "x": stock_tile.x, "y": stock_tile.y, "z": 0, "kind": "wood", "count": 1}
 	_expect(world.apply({"actor": "test", "command_id": "ui_build_zone", "tick": world.get_tick(), "type": "zone_add",
-		"payload": {"x": stock_tile.x, "y": stock_tile.y, "width": 1, "height": 1}}).get("ok", false),
+		"payload": {"x": stock_tile.x, "y": stock_tile.y, "z": 0, "width": 1, "height": 1}}).get("ok", false),
 		"a stockpile zone over the build wood must be accepted")
 	var build_site := _find_open_floor_tile(world, [stock_tile])
 	_expect(build_site.x >= 0, "the boot world must offer an open floor tile for a build site")
 	var bed_command: Dictionary = boot_node._command_for_tile(BootType.Tool.BUILD_BED, build_site)
-	_expect(bed_command.get("type") == "build" and bed_command.get("payload") == {"kind": "bed", "x": build_site.x, "y": build_site.y},
+	_expect(bed_command.get("type") == "build" and bed_command.get("payload") == {"kind": "bed", "x": build_site.x, "y": build_site.y, "z": 0},
 		"the Build Bed tool must build a build command for kind bed")
 	boot_node._select_tool(BootType.Tool.WALL)
 	var build_preview_tiles: Array[Vector2i] = [build_site, rock]
@@ -196,7 +196,7 @@ func _run() -> void:
 	var raider_tile := _find_passable_soil_tile(world, [soil, queued_target, rect_soil_a, rect_soil_b, rect_soil_c])
 	var raider_dig: Dictionary = {
 		"actor": "player", "command_id": "raider_dig", "tick": world.get_tick(), "type": "dig",
-		"payload": {"x": raider_tile.x, "y": raider_tile.y, "assignee": raider_id},
+		"payload": {"x": raider_tile.x, "y": raider_tile.y, "z": 0, "assignee": raider_id},
 	}
 	var raider_dig_result: Dictionary = world.apply(raider_dig)
 	_expect(not raider_dig_result.get("ok", true)
@@ -273,7 +273,7 @@ func _check_wall_gesture(boot) -> void:
 	TestAccess.tile_grid(enclosed).tiles.fill("floor")
 	TestAccess.colonists(enclosed).clear()
 	TestAccess.object_table(enclosed).objects.clear()
-	TestAccess.colonists(enclosed).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5,
+	TestAccess.colonists(enclosed).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	boot._replace_world(enclosed)
 	var sides: Array[Vector2i] = [Vector2i(4, 7), Vector2i(5, 7), Vector2i(6, 7), Vector2i(7, 7),
@@ -300,7 +300,7 @@ func _mouse_button(view, tile: Vector2i, pressed: bool) -> void:
 func _jobs_targeting(world, tile: Vector2i) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for job in world.get_jobs():
-		if job["target"] == tile:
+		if job["target"] == Vector3i(tile.x, tile.y, 0):
 			result.append(job)
 	return result
 

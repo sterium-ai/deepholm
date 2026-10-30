@@ -52,23 +52,23 @@ func _build_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
 	TestAccess.set_tile(world, 4, 0, WorldType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	world.spawn_ground_tool_item("axe", 3, 0)
 	return world
 
-func _dig_target() -> Vector2i:
-	return Vector2i(2, 0)
+func _dig_target() -> Vector3i:
+	return Vector3i(2, 0, 0)
 
-func _chop_target() -> Vector2i:
-	return Vector2i(4, 0)
+func _chop_target() -> Vector3i:
+	return Vector3i(4, 0, 0)
 
 func _submit_orders(world: WorldType) -> void:
 	var dig := _dig_target()
 	var chop := _chop_target()
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": dig.x, "y": dig.y, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": dig.x, "y": dig.y, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "dig order must be accepted")
-	var chop_result := Scenarios.command(world, "chop_1", "chop", {"x": chop.x, "y": chop.y, "priority": 1})
+	var chop_result := Scenarios.command(world, "chop_1", "chop", {"x": chop.x, "y": chop.y, "z": 0, "priority": 1})
 	_expect(chop_result["ok"], "chop order must be accepted")
 
 func _jobs_done(world: WorldType) -> bool:
@@ -84,13 +84,13 @@ func _jobs_done(world: WorldType) -> bool:
 ## trim in its "chosen" loop). TILE_TRENCH is included since a colonist digs
 ## soil while standing on it (ADR 026): the tile flips to trench under the
 ## colonist's own feet on dig's completing tick.
-func _tile_ok(world: WorldType, pos: Vector2i) -> bool:
+func _tile_ok(world: WorldType, pos: Vector3i) -> bool:
 	return world.get_tile(pos.x, pos.y) in [WorldType.TILE_FLOOR, WorldType.TILE_SOIL, WorldType.TILE_TRENCH]
 
 ## ADR 026: dig always spawns a sand item on the nearest adjacent passable,
 ## non-trench tile to its target (or the target itself when no such neighbour
 ## exists).
-func _has_sand_near(world: WorldType, target: Vector2i) -> bool:
+func _has_sand_near(world: WorldType, target: Vector3i) -> bool:
 	for item in world.get_items():
 		if String(item["kind"]) == "sand" and maxi(absi(int(item["x"]) - target.x), absi(int(item["y"]) - target.y)) <= 1:
 			return true
@@ -105,15 +105,15 @@ func _check_walk_and_work_trace() -> void:
 	var chop := _chop_target()
 	var previous: Dictionary = {}
 	for colonist in world.get_colonists():
-		previous[colonist["id"]] = Vector2i(colonist["x"], colonist["y"])
+		previous[colonist["id"]] = TileGrid.tile_of(colonist)
 	var ticks := 0
 	while not _jobs_done(world) and ticks < MAX_TICKS:
 		world.tick()
 		ticks += 1
 		for colonist in world.get_colonists():
 			var id: String = colonist["id"]
-			var pos := Vector2i(colonist["x"], colonist["y"])
-			var prev: Vector2i = previous[id]
+			var pos := TileGrid.tile_of(colonist)
+			var prev: Vector3i = previous[id]
 			var delta := (pos - prev).abs()
 			_expect(delta.x + delta.y <= 1,
 				"colonist %s jumped from %s to %s at tick %d" % [id, prev, pos, world.get_tick()])
@@ -188,7 +188,7 @@ func _build_interrupt_world(seed_value: int) -> WorldType:
 	# StateCodec._encode_needs()'s sorted wire order: JSON.stringify()-based
 	# hashing is key-order sensitive, so a hand-built colonist and one that
 	# round-tripped through save/load must agree on it to ever hash equal.
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
 	TestAccess.item_table(world).ground_berries["5_0"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
@@ -204,7 +204,7 @@ func _build_interrupt_world(seed_value: int) -> WorldType:
 ## preserved rather than reset.
 func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() -> void:
 	var world := _build_interrupt_world(555001)
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
 
@@ -275,7 +275,7 @@ func _check_critical_need_interrupts_work_and_resumes_with_preserved_progress() 
 	_expect(world.get_colonist_need_reason("colonist_0") == "",
 		"the critical hunger must have been satisfied by the interrupt's need job")
 	_expect(world.get_tile(3, 0) == WorldType.TILE_TRENCH, "the dig target must become trench")
-	_expect(_has_sand_near(world, Vector2i(3, 0)), "the dig target must leave a sand item on or adjacent to the trench")
+	_expect(_has_sand_near(world, Vector3i(3, 0, 0)), "the dig target must leave a sand item on or adjacent to the trench")
 	_expect(not TestAccess.progress_table(world).progress.has("3_0"), "work_progress for a finished tile must be cleared")
 
 ## The same critical need does not interrupt a
@@ -287,12 +287,12 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	Scenarios.isolate_need(world, "food")
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result: Dictionary = world.apply({"actor": "test", "command_id": "zone1", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 5, "y": 1, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 5, "y": 1, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result["ok"], "haul destination zone_add must be accepted")
 
 	var walking := false
@@ -331,7 +331,7 @@ func _check_critical_need_does_not_interrupt_pick_up() -> void:
 ## work-progress persistence.
 func _check_paused_job_and_work_progress_round_trip() -> void:
 	var world := _build_interrupt_world(555004)
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 
 	var ticks := 0
@@ -384,10 +384,10 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 	TestAccess.tile_grid(live).tiles.fill(WorldType.TILE_FLOOR)
 	TestAccess.set_tile(live, 3, 0, WorldType.TILE_SOIL)
 	TestAccess.colonists(live).clear()
-	TestAccess.colonists(live).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(live).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
 	live.spawn_ground_tool_item("pick", 0, 0)
-	var dig_result := Scenarios.command(live, "dig_1", "dig", {"x": 3, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(live, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result["job_id"])
 
@@ -425,7 +425,7 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 		"identically advancing the source and its post-interrupt restore must keep matching state_hash()")
 	_expect(live.get_tile(3, 0) == WorldType.TILE_TRENCH and restored.get_tile(3, 0) == WorldType.TILE_TRENCH,
 		"both the source and its post-interrupt restore must finish the resumed dig job")
-	_expect(_has_sand_near(live, Vector2i(3, 0)) and _has_sand_near(restored, Vector2i(3, 0)),
+	_expect(_has_sand_near(live, Vector3i(3, 0, 0)) and _has_sand_near(restored, Vector3i(3, 0, 0)),
 		"both the source and its post-interrupt restore must leave a sand item on or adjacent to the trench")
 
 ## Two dig orders queued for the same soil tile, with a single colonist
@@ -439,15 +439,15 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 	var world := WorldType.new(358001)
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_FLOOR)
-	var target := Vector2i(2, 0)
+	var target := Vector3i(2, 0, 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var dig_1 := Scenarios.command(world, "dig_dup_1", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	var dig_1 := Scenarios.command(world, "dig_dup_1", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(dig_1["ok"], "first dig submission on a soil tile must be accepted")
-	var dig_2 := Scenarios.command(world, "dig_dup_2", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	var dig_2 := Scenarios.command(world, "dig_dup_2", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(dig_2["ok"], "second dig submission for the same soil tile must also be accepted")
 
 	var job_ids := [String(dig_1["job_id"]), String(dig_2["job_id"])]
@@ -498,7 +498,7 @@ func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 ## spawning a second sand item or consuming a second find roll.
 func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> void:
 	var world := _build_interrupt_world(358002)
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result["job_id"])
 
@@ -529,7 +529,7 @@ func _check_paused_dig_whose_target_changes_fails_without_double_reward() -> voi
 	# Stand in for a second dig job completing on this same tile while colonist_0's job sits
 	# paused: exactly the effect world_state.gd's own "dig" branch would have produced.
 	TestAccess.set_tile(world, 3, 0, WorldType.TILE_TRENCH)
-	TestAccess.item_table(world).spawn_item("sand", 4, 0)
+	TestAccess.item_table(world).spawn_item("sand", Vector3i(4, 0, 0))
 
 	TestAccess.needs_system(world).resume_interrupted_job("colonist_0")
 	_expect(TestAccess.needs_system(world).paused_jobs.is_empty(), "_resume_interrupted_job() must clear the paused job bookkeeping")

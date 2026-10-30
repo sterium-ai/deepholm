@@ -38,10 +38,10 @@ func _build_world() -> WorldType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 2, "y": 10, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 2, "y": 10, "z": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 2, 10)
 	world.apply({"actor": "test", "command_id": "dig", "tick": world.get_tick(), "type": "dig",
-		"payload": {"x": 20, "y": 10, "priority": 1}})
+		"payload": {"x": 20, "y": 10, "z": 0, "priority": 1}})
 	return world
 
 ## Ticks until the colonist stands on (4,10), walls (5,10) (and, with_chair,
@@ -57,12 +57,12 @@ func _advance_to_mid_reroute(world: WorldType, with_chair: bool) -> bool:
 		var colonist := world.get_colonists()[0]
 		if colonist["x"] == 4 and colonist["y"] == 10:
 			for y in WALL_BOTTOM_Y + 1:
-				TestAccess.object_table(world).set_object(5, y, "wooden_wall")
+				TestAccess.object_table(world).set_object(Vector3i(5, y, 0), "wooden_wall")
 			if with_chair:
-				TestAccess.object_table(world).set_object(4, 11, "chair")
+				TestAccess.object_table(world).set_object(Vector3i(4, 11, 0), "chair")
 			world.tick()
 			if with_chair:
-				TestAccess.object_table(world).set_object(4, 11, "")
+				TestAccess.object_table(world).set_object(Vector3i(4, 11, 0), "")
 			var route = world.get_colonists()[0].get("route")
 			return route != null and route.get("rerouting") != null and route["rerouting"]["status"] == "searching"
 	return false

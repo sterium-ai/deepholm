@@ -47,7 +47,7 @@ func _check_recorder_survives_dispose() -> void:
 	recorder.start(world, 10)
 	for i in TICKS:
 		world.apply({"actor": "player", "command_id": "dispose_%d" % i, "tick": world.get_tick(), "type": "dig",
-			"payload": {"x": i % SIZE, "y": 1, "priority": 1}})
+			"payload": {"x": i % SIZE, "y": 1, "z": 0, "priority": 1}})
 		world.tick()
 		recorder.observe_tick(world)
 	world.dispose()

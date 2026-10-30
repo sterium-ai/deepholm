@@ -102,7 +102,7 @@ func _check_spawned_components_match_declarations() -> void:
 			"content/actors.json's '%s' must declare exactly %s, got %s"
 				% [def_id, declared, definition.get("components")])
 
-		var actor := ActorTableType.spawn(def_id, 1, 2, registry, "%s_test" % def_id)
+		var actor := ActorTableType.spawn(def_id, Vector3i(1, 2, 0), registry, "%s_test" % def_id)
 		_expect(String(actor.get("id", "")) == "%s_test" % def_id, "spawn() must set the given id")
 		_expect(String(actor.get("kind", "")) == def_id, "spawn() must set kind to the def_id")
 		_expect(int(actor.get("x", -1)) == 1 and int(actor.get("y", -1)) == 2,
@@ -128,11 +128,11 @@ func _check_spawned_components_match_declarations() -> void:
 ## (ActorTable._spawn_colonist()'s own literal field order). ADR 062 (F3) adds
 ## "skills" right after "labourTable": every worker labour at {level 0, xp 0}.
 func _check_colonist_shape_is_unchanged(registry: ContentRegistryType) -> void:
-	var colonist := ActorTableType.spawn("colonist", 3, 4, registry, "colonist_shape_test")
-	var expected_keys := ["id", "kind", "x", "y", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "carrying",
+	var colonist := ActorTableType.spawn("colonist", Vector3i(3, 4, 0), registry, "colonist_shape_test")
+	var expected_keys := ["id", "kind", "x", "y", "z", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "carrying",
 		"held_tool", "health"]
 	_expect(colonist.keys() == expected_keys,
-		"spawn('colonist') must produce exactly the pre-F2 key set/order plus 'skills' and a trailing 'health', got %s" % [colonist.keys()])
+		"spawn('colonist') must produce exactly the pre-F2 key set/order plus L2's 'z', F3's 'skills' and a trailing 'health', got %s" % [colonist.keys()])
 	var labours: Array = registry.get_entry("actors", "colonist")["tunables"]["worker"]["labours"]
 	_expect((colonist["skills"] as Dictionary).keys() == labours,
 		"spawn('colonist') must track every worker labour's skill in declared order, got %s" % [colonist["skills"].keys()])
@@ -167,7 +167,7 @@ func _check_colonist_shape_is_unchanged(registry: ContentRegistryType) -> void:
 func _check_wolf_and_trader_component_state(registry: ContentRegistryType) -> void:
 	var wolf_def := registry.get_entry("actors", "wolf")
 	var wolf_tunables: Dictionary = wolf_def.get("tunables", {})
-	var wolf := ActorTableType.spawn("wolf", 5, 6, registry, "wolf_test")
+	var wolf := ActorTableType.spawn("wolf", Vector3i(5, 6, 0), registry, "wolf_test")
 
 	var wolf_health = ActorTableType.get_component(wolf, "health", registry)
 	_expect(wolf_health is Dictionary, "get_component(wolf, 'health') must return a Dictionary")
@@ -195,7 +195,7 @@ func _check_wolf_and_trader_component_state(registry: ContentRegistryType) -> vo
 
 	var trader_def := registry.get_entry("actors", "trader")
 	var trader_tunables: Dictionary = trader_def.get("tunables", {})
-	var trader := ActorTableType.spawn("trader", 7, 8, registry, "trader_test")
+	var trader := ActorTableType.spawn("trader", Vector3i(7, 8, 0), registry, "trader_test")
 
 	var trader_health = ActorTableType.get_component(trader, "health", registry)
 	_expect(trader_health is Dictionary, "get_component(trader, 'health') must return a Dictionary")
@@ -342,7 +342,7 @@ func _check_colonist_spawns_at_full_health_regardless_of_hp_tunable() -> void:
 	_expect(registry.is_valid(), "a colonist health.hp below health.maxHp must still construct, got %s" % registry.get_error())
 	if not registry.is_valid():
 		return
-	var colonist := ActorTableType.spawn("colonist", 0, 0, registry, "partial_hp_test")
+	var colonist := ActorTableType.spawn("colonist", Vector3i(0, 0, 0), registry, "partial_hp_test")
 	_expect(colonist["health"] == {"hp": 100, "maxHp": 100, "dead": false},
 		"a spawned colonist must start at hp == maxHp even when content declares a lower 'hp' tunable, got %s" % [colonist["health"]])
 

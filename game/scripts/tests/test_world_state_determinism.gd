@@ -52,7 +52,7 @@ func _minimal_state_at_size(width: int, height: int) -> Dictionary:
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
 		"contentPacks": [], "seed": 1, "tick": 0, "epoch": 0,
-		"map": {"width": width, "height": height, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
+		"map": {"width": width, "height": height, "layerCount": 1, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {
 			"nextJobId": 1, "jobSequence": 0, "jobTick": 0, "queueEventSequence": -1,
@@ -101,7 +101,7 @@ func _check_initialization() -> void:
 
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH:
-			if world.get_tile(x, y) == WorldStateType.TILE_TREE and TestAccess.passability(world).is_passable(Vector2i(x, y)) > 0.0:
+			if world.get_tile(x, y) == WorldStateType.TILE_TREE and TestAccess.passability(world).is_passable(Vector3i(x, y, 0)) > 0.0:
 				_fail("tree tile (%d,%d) must not be passable" % [x, y])
 				return
 
@@ -251,7 +251,7 @@ func _check_rejections() -> void:
 
 func _job_command(world: WorldStateType, command_id: String, kind: String, target: Vector2i) -> Dictionary:
 	return world.apply({"actor": "colonist_0", "command_id": command_id, "tick": world.get_tick(),
-		"type": kind, "payload": {"x": target.x, "y": target.y}})
+		"type": kind, "payload": {"x": target.x, "y": target.y, "z": 0}})
 
 func _check_dig_and_chop_targets() -> void:
 	if _failed:
@@ -447,7 +447,10 @@ func _check_incident_replay_determinism() -> void:
 ## - Ground berries entering state_hash() ("ground_berries", ADR 047).
 ## - Colonist "skills" (ADR 062, F3): seeded starting levels that also scale every work
 ##   toil's duration and decide which colonist a job goes to.
-const PRE_INCIDENT_BASELINE_HASH := 3266324817
+## - The tile layer (L2, ADR 045 §5): "z" beside every hashed x/y, Vector3i job targets and the
+##   tile grid's layer_count; 3266324817 became the value below, and the pre-L2 shape of the
+##   same snapshot still hashes to 3266324817 (docs/orca/handoffs/L2-hash_projection.gd).
+const PRE_INCIDENT_BASELINE_HASH := 0  # L2-REHASH
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if _failed:

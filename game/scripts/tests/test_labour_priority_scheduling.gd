@@ -78,17 +78,17 @@ func _check_labour_priority_ordering() -> void:
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
 	var workers: Array[Dictionary] = [
-		{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 1, "chop": 4}},
-		{"id": "b", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 4, "chop": 1}},
+		{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 1, "chop": 4}},
+		{"id": "b", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 4, "chop": 1}},
 	]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(20, 20)
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(20, 20, 0)
 	var tick_number := 0
 
-	var d1 := String(scheduler.submit(Vector2i(1, 0), 1, 0, "dig")["job_id"])
-	var d2 := String(scheduler.submit(Vector2i(2, 0), 1, 0, "dig")["job_id"])
-	var d3 := String(scheduler.submit(Vector2i(3, 0), 1, 0, "dig")["job_id"])
-	var c1 := String(scheduler.submit(Vector2i(4, 0), 1, 0, "chop")["job_id"])
+	var d1 := String(scheduler.submit(Vector3i(1, 0, 0), 1, 0, "dig")["job_id"])
+	var d2 := String(scheduler.submit(Vector3i(2, 0, 0), 1, 0, "dig")["job_id"])
+	var d3 := String(scheduler.submit(Vector3i(3, 0, 0), 1, 0, "dig")["job_id"])
+	var c1 := String(scheduler.submit(Vector3i(4, 0, 0), 1, 0, "chop")["job_id"])
 
 	tick_number = _settle(scheduler, workers, passable, bounds, get_labour, no_boost, tick_number)
 	var assignments := scheduler.get_assignments()
@@ -108,10 +108,10 @@ func _check_labour_priority_ordering() -> void:
 
 	scheduler.finish(d2, "complete_job")
 	scheduler.finish(d3, "complete_job")
-	var d4 := String(scheduler.submit(Vector2i(5, 0), 1, tick_number, "dig")["job_id"])
-	var c2 := String(scheduler.submit(Vector2i(6, 0), 1, tick_number, "chop")["job_id"])
-	var c3 := String(scheduler.submit(Vector2i(7, 0), 1, tick_number, "chop")["job_id"])
-	var c4 := String(scheduler.submit(Vector2i(8, 0), 1, tick_number, "chop")["job_id"])
+	var d4 := String(scheduler.submit(Vector3i(5, 0, 0), 1, tick_number, "dig")["job_id"])
+	var c2 := String(scheduler.submit(Vector3i(6, 0, 0), 1, tick_number, "chop")["job_id"])
+	var c3 := String(scheduler.submit(Vector3i(7, 0, 0), 1, tick_number, "chop")["job_id"])
+	var c4 := String(scheduler.submit(Vector3i(8, 0, 0), 1, tick_number, "chop")["job_id"])
 
 	tick_number = _settle(scheduler, workers, passable, bounds, get_labour, no_boost, tick_number)
 	assignments = scheduler.get_assignments()
@@ -134,12 +134,12 @@ func _check_labour_priority_ordering() -> void:
 ## global_assignment.gd's cursor-driven batching -- so a single tick() call is
 ## not always enough), bounded generously since these fixtures are tiny
 ## (distances under 10 tiles, no obstacles). Returns the last tick_number used.
-func _settle(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector2i,
+func _settle(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector3i,
 		get_labour: Callable, get_boost: Callable, start_tick: int) -> int:
 	var tick_number := start_tick
 	for i in 10:
 		tick_number += 1
-		scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, get_boost)
+		scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, get_boost)
 		var assignments := scheduler.get_assignments()
 		if assignments.size() >= workers.size():
 			break
@@ -156,11 +156,11 @@ func _check_labour_disabled_reason() -> void:
 		"set_labour to 0 must be accepted")
 
 	var dig_result := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted even though mine is disabled")
 	var dig_id := String(dig_result.get("job_id", ""))
 	var chop_result := world.apply({"actor": "test", "command_id": "chop_1", "tick": world.get_tick(),
-		"type": "chop", "payload": {"x": 0, "y": 1, "priority": 1}})
+		"type": "chop", "payload": {"x": 0, "y": 1, "z": 0, "priority": 1}})
 	_expect(chop_result.get("ok", false), "chop submission must be accepted")
 	var chop_id := String(chop_result.get("job_id", ""))
 
@@ -197,9 +197,9 @@ func _check_haul_unaffected_by_labour_disabled() -> void:
 	_expect(_set_labour(world, "off_mine", colonist_id, "mine", 0).get("ok", false),
 		"set_labour to 0 must be accepted")
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 3, "y": 3, "width": 2, "height": 2}})
+		"type": "zone_add", "payload": {"x": 3, "y": 3, "z": 0, "width": 2, "height": 2}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	TestAccess.item_table(world).items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_test"] = {"id": "item_wood_test", "x": 0, "y": 2, "z": 0, "kind": "wood", "count": 1}
 
 	world.tick()
 	var haul_jobs: Array[Dictionary] = []
@@ -226,9 +226,9 @@ func _check_calendar_boost_orders_dig_first_inside_window() -> void:
 	var inside := _single_colonist_world(3)
 	TestAccess.set_calendar(inside, boosted_calendar)
 	var chop_inside := inside.apply({"actor": "test", "command_id": "chop_1", "tick": inside.get_tick(),
-		"type": "chop", "payload": {"x": 0, "y": 1, "priority": 1}})
+		"type": "chop", "payload": {"x": 0, "y": 1, "z": 0, "priority": 1}})
 	var dig_inside := inside.apply({"actor": "test", "command_id": "dig_1", "tick": inside.get_tick(),
-		"type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(chop_inside.get("ok", false) and dig_inside.get("ok", false), "orders must be accepted")
 	# Both jobs become candidates for the sole idle colonist; a two-candidate
 	# batch takes one scheduler tick per candidate to route-search (see
@@ -249,9 +249,9 @@ func _check_calendar_boost_orders_dig_first_inside_window() -> void:
 	for i in 10:
 		outside.tick()
 	var chop_outside := outside.apply({"actor": "test", "command_id": "chop_1", "tick": outside.get_tick(),
-		"type": "chop", "payload": {"x": 0, "y": 1, "priority": 1}})
+		"type": "chop", "payload": {"x": 0, "y": 1, "z": 0, "priority": 1}})
 	var dig_outside := outside.apply({"actor": "test", "command_id": "dig_1", "tick": outside.get_tick(),
-		"type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(chop_outside.get("ok", false) and dig_outside.get("ok", false), "orders must be accepted")
 	outside.tick()
 	outside.tick()
@@ -273,9 +273,9 @@ func _check_replay_determinism() -> void:
 		{"actor": "player", "command_id": "labour_1", "tick": 0, "type": "set_labour",
 			"payload": {"colonist": colonist_id, "kind": "chop", "level": 1}},
 		{"actor": "test", "command_id": "dig_1", "tick": 0, "type": "dig",
-			"payload": {"x": 1, "y": 0, "priority": 1}},
+			"payload": {"x": 1, "y": 0, "z": 0, "priority": 1}},
 		{"actor": "test", "command_id": "chop_1", "tick": 0, "type": "chop",
-			"payload": {"x": 0, "y": 1, "priority": 1}},
+			"payload": {"x": 0, "y": 1, "z": 0, "priority": 1}},
 	]
 	for command in commands:
 		var first_result := first.apply(command)
@@ -306,7 +306,7 @@ func _check_committed_need_job_precedes_work_with_labour_and_calendar_boost() ->
 	# tick the way an adjacent source would.
 	TestAccess.set_tile(world, 0, 10, WorldStateType.TILE_WATER)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _default_labour_table()})
 	TestAccess.set_calendar(world, CalendarServiceType.new("", {
@@ -314,7 +314,7 @@ func _check_committed_need_job_precedes_work_with_labour_and_calendar_boost() ->
 		"windows": [{"id": "test_mine_boost", "labour": "mine", "from": 1, "to": 1, "boost": 10, "label": "test"}],
 	}))
 	var dig_result := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": 1, "y": 0, "priority": 2}})
+		"type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 2}})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
 	var dig_id := String(dig_result["job_id"])
 
@@ -336,13 +336,13 @@ func _check_negative_calendar_boost_stays_eligible() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var negative_boost := Callable(self, "_fixed_negative_boost")
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}}]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(20, 20)
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}]
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(20, 20, 0)
 	# NORMAL priority (1), default labour level 3, boost -3: bracket = 1 + (-3)
 	# + 4 - 3 = -1, a real negative score, not the sentinel the old
 	# bracket-as-eligibility check used to treat as "labour disabled".
-	var job_id := String(scheduler.submit(Vector2i(3, 0), 1, 0, "dig")["job_id"])
+	var job_id := String(scheduler.submit(Vector3i(3, 0, 0), 1, 0, "dig")["job_id"])
 	var tick_number := _settle(scheduler, workers, passable, bounds, get_labour, negative_boost, 0)
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == job_id,
 		"a negative calendar boost must not be treated as labour-disabled: the job must still activate")
@@ -362,14 +362,14 @@ func _check_negative_calendar_boost_during_pending_route() -> void:
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var dynamic_boost := Callable(self, "_dynamic_boost")
 	_dynamic_boost_value = 5
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}}]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(130, 0)
-	var job_id := String(scheduler.submit(Vector2i(100, 0), 1, 0, "dig")["job_id"])
-	scheduler.tick(1, workers, passable, Vector2i.ZERO, bounds, get_labour, dynamic_boost)
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}]
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(130, 0, 0)
+	var job_id := String(scheduler.submit(Vector3i(100, 0, 0), 1, 0, "dig")["job_id"])
+	scheduler.tick(1, workers, passable, Vector3i.ZERO, bounds, get_labour, dynamic_boost)
 	_expect(TestAccess.assignment_pending(scheduler).has("a"), "a distant target must leave a route batch pending across ticks")
 	_dynamic_boost_value = -5
-	scheduler.tick(2, workers, passable, Vector2i.ZERO, bounds, get_labour, dynamic_boost)
+	scheduler.tick(2, workers, passable, Vector3i.ZERO, bounds, get_labour, dynamic_boost)
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == job_id,
 		"a negative calendar boost discovered mid-route must not cause an eligible candidate to be dropped")
 
@@ -402,14 +402,14 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	TestAccess.set_tile(only_enabled_searching, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.set_tile(only_enabled_searching, 0, 1, WorldStateType.TILE_WATER)
 	TestAccess.colonists(only_enabled_searching).clear()
-	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 3)})
-	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(only_enabled_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_a := only_enabled_searching.apply({"actor": "test", "command_id": "dig_1",
-		"tick": only_enabled_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"tick": only_enabled_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(dig_a.get("ok", false), "dig submission must be accepted")
 	only_enabled_searching.tick()
 	_expect(TestAccess.need_giver(only_enabled_searching).searching_colonist_ids().has("colonist_0"),
@@ -422,14 +422,14 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	TestAccess.set_tile(all_searching, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.set_tile(all_searching, 0, 1, WorldStateType.TILE_WATER)
 	TestAccess.colonists(all_searching).clear()
-	TestAccess.colonists(all_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(all_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
-	TestAccess.colonists(all_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(all_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 10, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_b := all_searching.apply({"actor": "test", "command_id": "dig_1",
-		"tick": all_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"tick": all_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(dig_b.get("ok", false), "dig submission must be accepted")
 	all_searching.tick()
 	_expect(TestAccess.need_giver(all_searching).searching_colonist_ids().size() == 2,
@@ -443,14 +443,14 @@ func _check_labour_disabled_reason_accounts_for_searching_colonists() -> void:
 	TestAccess.set_tile(reenable_while_searching, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.set_tile(reenable_while_searching, 0, 1, WorldStateType.TILE_WATER)
 	TestAccess.colonists(reenable_while_searching).clear()
-	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
-	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10,
+	TestAccess.colonists(reenable_while_searching).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0,
 		"route": null, "work": null, "needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": _labour_table_with("mine", 0)})
 	var dig_c := reenable_while_searching.apply({"actor": "test", "command_id": "dig_1",
-		"tick": reenable_while_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "priority": 1}})
+		"tick": reenable_while_searching.get_tick(), "type": "dig", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1}})
 	_expect(dig_c.get("ok", false), "dig submission must be accepted")
 	reenable_while_searching.tick()
 	_expect(String(_find_job(reenable_while_searching, String(dig_c["job_id"]))["reason"]) == "labour_disabled",
@@ -486,19 +486,19 @@ func _check_labour_disabled_reservation_no_flapping_and_unblocks_once() -> void:
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
 	var workers: Array[Dictionary] = [
-		{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}},
-		{"id": "b", "kind": "colonist", "x": 5, "y": 0, "labourTable": {"mine": 3, "chop": 3}},
+		{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}},
+		{"id": "b", "kind": "colonist", "x": 5, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}},
 	]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(20, 20)
-	var target := Vector2i(1, 0)
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(20, 20, 0)
+	var target := Vector3i(1, 0, 0)
 	var first := String(scheduler.submit(target, 1, 0, "dig")["job_id"])
 	var tick_number := _settle(scheduler, [workers[0]], passable, bounds, get_labour, no_boost, 0)
 	_expect(scheduler.queue.get_job(first)["status"] == "active", "first dig job must activate and reserve its target")
 
 	var second := String(scheduler.submit(target, 1, tick_number, "dig")["job_id"])
 	tick_number += 1
-	scheduler.tick(tick_number, [workers[1]], passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+	scheduler.tick(tick_number, [workers[1]], passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 	_expect(String(scheduler.queue.get_job(second)["reason"]) == "blocked_target_reserved",
 		"a competing target must block the second job before labour is ever considered")
 
@@ -507,7 +507,7 @@ func _check_labour_disabled_reservation_no_flapping_and_unblocks_once() -> void:
 	var events_before := -1
 	for i in 5:
 		tick_number += 1
-		scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+		scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 		var reason := String(scheduler.queue.get_job(second)["reason"])
 		_expect(reason == "labour_disabled",
 			"once every colonist's mine is off, the reservation-blocked job must settle on labour_disabled, got %s" % reason)
@@ -519,7 +519,7 @@ func _check_labour_disabled_reservation_no_flapping_and_unblocks_once() -> void:
 
 	workers[1]["labourTable"]["mine"] = 3
 	tick_number += 1
-	scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+	scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 	var unblocked_events := 0
 	for event in scheduler.queue.get_events():
 		if event["type"] == "job_unblocked" and event["entity_id"] == second:
@@ -543,15 +543,15 @@ func _check_committed_need_outside_scan_window_still_wins() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}}]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(60, 5)
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}]
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(60, 5, 0)
 
 	# Fill exactly JOB_EVALUATION_BUDGET (32) entries so the need job below
 	# lands one past the worker's own scan window.
 	for i in range(SchedulerType.JOB_EVALUATION_BUDGET):
-		scheduler.submit(Vector2i(i + 1, 0), 1, 0, "dig")
-	var need_job_id := String(scheduler.submit(Vector2i(0, 1), 1, 0, "dig", "a")["job_id"])
+		scheduler.submit(Vector3i(i + 1, 0, 0), 1, 0, "dig")
+	var need_job_id := String(scheduler.submit(Vector3i(0, 1, 0), 1, 0, "dig", "a")["job_id"])
 
 	_settle_with_needs(scheduler, workers, passable, bounds, get_labour, no_boost, 0, {"a": need_job_id})
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == need_job_id,
@@ -567,22 +567,22 @@ func _check_committed_need_with_reserved_target_blocks_other_work() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
-	var target := Vector2i(1, 0)
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(20, 20)
+	var target := Vector3i(1, 0, 0)
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(20, 20, 0)
 
-	var other_owner: Dictionary = {"id": "b", "kind": "colonist", "x": 5, "y": 0, "labourTable": {"mine": 3, "chop": 3}}
+	var other_owner: Dictionary = {"id": "b", "kind": "colonist", "x": 5, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}
 	scheduler.submit(target, 1, 0, "dig")
 	_settle(scheduler, [other_owner], passable, bounds, get_labour, no_boost, 0)
 	_expect(not String(scheduler.get_assignments().get("b", {}).get("job_id", "")).is_empty(),
 		"setup: the other job must activate and reserve the shared target first")
 
 	var need_job_id := String(scheduler.submit(target, 1, 1, "dig", "a")["job_id"])
-	var filler_job_id := String(scheduler.submit(Vector2i(2, 0), 1, 1, "dig")["job_id"])
-	var worker_a: Dictionary = {"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}}
+	var filler_job_id := String(scheduler.submit(Vector3i(2, 0, 0), 1, 1, "dig")["job_id"])
+	var worker_a: Dictionary = {"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}
 
 	for i in range(5):
-		scheduler.tick(2 + i, [worker_a], passable, Vector2i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
+		scheduler.tick(2 + i, [worker_a], passable, Vector3i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
 		_expect(not scheduler.get_assignments().has("a"),
 			"the worker must stay idle while its own committed need is blocked_target_reserved, got tick %d" % (2 + i))
 
@@ -601,24 +601,24 @@ func _check_committed_need_discards_stale_pending_work_batch() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3, "chop": 3}}]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(130, 5)
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3, "chop": 3}}]
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(130, 5, 0)
 
-	var work_job_id := String(scheduler.submit(Vector2i(100, 0), 1, 0, "dig")["job_id"])
-	scheduler.tick(1, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+	var work_job_id := String(scheduler.submit(Vector3i(100, 0, 0), 1, 0, "dig")["job_id"])
+	scheduler.tick(1, workers, passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 	_expect(TestAccess.assignment_pending(scheduler).has("a"), "a distant target must leave a route batch pending across ticks")
 	_expect(_pending_has_job(scheduler, "a", work_job_id), "the pending batch must be for the ordinary work job")
 
-	var need_job_id := String(scheduler.submit(Vector2i(0, 1), 1, 1, "dig", "a")["job_id"])
-	scheduler.tick(2, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
+	var need_job_id := String(scheduler.submit(Vector3i(0, 1, 0), 1, 1, "dig", "a")["job_id"])
+	scheduler.tick(2, workers, passable, Vector3i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
 	_expect(not _pending_has_job(scheduler, "a", work_job_id),
 		"a stale ordinary-work route batch must be discarded the instant a need commits for the same worker")
 
 	var tick_number := 2
 	for i in range(10):
 		tick_number += 1
-		scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
+		scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, no_boost, [], {"a": need_job_id})
 		if scheduler.get_assignments().has("a"):
 			break
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == need_job_id,
@@ -640,11 +640,11 @@ func _check_committed_need_beats_boosted_interrupted_work() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var boost_mine := Callable(self, "_boost_mine_only")
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 1, "chop": 3}}]
-	var passable := func(_tile: Vector2i) -> bool: return true
-	var bounds := Vector2i(20, 20)
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 1, "chop": 3}}]
+	var passable := func(_tile: Vector3i) -> bool: return true
+	var bounds := Vector3i(20, 20, 0)
 
-	var work_job_id := String(scheduler.submit(Vector2i(1, 0), 2, 0, "dig")["job_id"])
+	var work_job_id := String(scheduler.submit(Vector3i(1, 0, 0), 2, 0, "dig")["job_id"])
 	var tick_number := _settle(scheduler, workers, passable, bounds, get_labour, boost_mine, 0)
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == work_job_id,
 		"setup: the heavily boosted work job must activate first")
@@ -654,11 +654,11 @@ func _check_committed_need_beats_boosted_interrupted_work() -> void:
 	# A different kind (unmapped by _dig_or_chop_labour, so labour "") stands
 	# in for a need job: it gets none of "dig"'s labour/calendar bonus, so a
 	# win here can only come from committed_needs' own exclusivity.
-	var need_job_id := String(scheduler.submit(Vector2i(0, 1), 1, tick_number, "drink_water", "a")["job_id"])
+	var need_job_id := String(scheduler.submit(Vector3i(0, 1, 0), 1, tick_number, "drink_water", "a")["job_id"])
 
 	for i in range(10):
 		tick_number += 1
-		scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, boost_mine, [], {"a": need_job_id})
+		scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, boost_mine, [], {"a": need_job_id})
 		if scheduler.get_assignments().has("a"):
 			break
 	_expect(String(scheduler.get_assignments().get("a", {}).get("job_id", "")) == need_job_id,
@@ -678,15 +678,15 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	var get_labour := Callable(self, "_dig_or_chop_labour")
 	var no_boost := Callable(self, "_no_boost")
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "labourTable": {"mine": 3}}]
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "labourTable": {"mine": 3}}]
 	# A wall column entirely separates the colonist from the target: the route
 	# search must flood-fill its whole reachable side (more than one tick's
 	# STEP_BUDGET=64 expansions) before concluding unreachable.
-	var wall_passable := func(tile: Vector2i) -> bool: return tile.x != 10
-	var bounds := Vector2i(20, 20)
+	var wall_passable := func(tile: Vector3i) -> bool: return tile.x != 10
+	var bounds := Vector3i(20, 20, 0)
 
-	var job_id := String(scheduler.submit(Vector2i(20, 0), 1, 0, "dig")["job_id"])
-	scheduler.tick(1, workers, wall_passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+	var job_id := String(scheduler.submit(Vector3i(20, 0, 0), 1, 0, "dig")["job_id"])
+	scheduler.tick(1, workers, wall_passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 	_expect(TestAccess.assignment_pending(scheduler).has("a"), "an unreachable target across a wall must leave a route batch pending")
 
 	workers[0]["labourTable"]["mine"] = 0
@@ -694,7 +694,7 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 	var concluded := false
 	for i in range(20):
 		tick_number += 1
-		scheduler.tick(tick_number, workers, wall_passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+		scheduler.tick(tick_number, workers, wall_passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 		_expect(String(scheduler.queue.get_job(job_id)["reason"]) == "labour_disabled",
 			"a globally disabled job's reason must hold through its own failing route search, got tick %d" % tick_number)
 		if not TestAccess.assignment_pending(scheduler).has("a"):
@@ -705,7 +705,7 @@ func _check_labour_disabled_reason_survives_failed_route_search() -> void:
 
 	workers[0]["labourTable"]["mine"] = 3
 	tick_number += 1
-	scheduler.tick(tick_number, workers, wall_passable, Vector2i.ZERO, bounds, get_labour, no_boost)
+	scheduler.tick(tick_number, workers, wall_passable, Vector3i.ZERO, bounds, get_labour, no_boost)
 	_expect(String(scheduler.queue.get_job(job_id)["reason"]) != "labour_disabled",
 		"re-enabling labour must clear the reason on the next scan")
 	var unblocked := 0
@@ -812,17 +812,17 @@ func _events_for_job(world: WorldStateType, event_type: String, job_id: String) 
 func _haul_backoff_world(seed_value: int) -> WorldStateType:
 	var world := _needs_isolated_world(seed_value)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
-	TestAccess.item_table(world).items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_wood_backoff"] = {"id": "item_wood_backoff", "x": 0, "y": 2, "z": 0, "kind": "wood", "count": 1}
 	return world
 
-func _settle_with_needs(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector2i,
+func _settle_with_needs(scheduler: SchedulerType, workers: Array[Dictionary], passable: Callable, bounds: Vector3i,
 		get_labour: Callable, get_boost: Callable, start_tick: int, committed_needs: Dictionary) -> int:
 	var tick_number := start_tick
 	for i in 10:
 		tick_number += 1
-		scheduler.tick(tick_number, workers, passable, Vector2i.ZERO, bounds, get_labour, get_boost, [], committed_needs)
+		scheduler.tick(tick_number, workers, passable, Vector3i.ZERO, bounds, get_labour, get_boost, [], committed_needs)
 		var assignments := scheduler.get_assignments()
 		if assignments.size() >= workers.size():
 			break
@@ -867,7 +867,7 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	world.spawn_ground_tool_item("axe", 0, 0)
@@ -880,6 +880,6 @@ func _deterministic_world(seed_value: int) -> WorldStateType:
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_SOIL)
 	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	return world

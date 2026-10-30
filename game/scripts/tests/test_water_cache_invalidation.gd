@@ -21,8 +21,8 @@ extends SceneTree
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
 const SEED := 918001
-const WATER_TILE := Vector2i(5, 5)
-const COLONIST_START := Vector2i(0, 5)
+const WATER_TILE := Vector3i(5, 5, 0)
+const COLONIST_START := Vector3i(0, 5, 0)
 const FORAGE_TICK_BUDGET := 200
 
 var _failed := false
@@ -51,7 +51,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.set_tile(world, WATER_TILE.x, WATER_TILE.y, WorldStateType.TILE_WATER)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": COLONIST_START.x, "y": COLONIST_START.y, "z": 0, "route": null, "work": null, "carrying": null})
 
 	# Force the water-tile cache to build before the mutation below, so this
 	# proves the cache is kept in sync, not merely lazily rebuilt fresh every
@@ -69,18 +69,18 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	# exercised regardless of how the object got there.
 	var place_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "place_bush_on_water", "tick": world.get_tick(),
-		"type": "place_object", "payload": {"x": WATER_TILE.x, "y": WATER_TILE.y, "kind": "berry_bush"},
+		"type": "place_object", "payload": {"x": WATER_TILE.x, "y": WATER_TILE.y, "z": 0, "kind": "berry_bush"},
 	})
 	_expect(not place_result.get("ok", false)
 			and String(place_result.get("rejection", {}).get("reason", "")) == "invalid_target",
 		"place_object must reject a berry_bush on a water tile with invalid_target: %s" % place_result)
 	_expect(world.get_object(WATER_TILE.x, WATER_TILE.y).is_empty(),
 		"a rejected place_object must leave the water tile empty")
-	TestAccess.object_table(world).set_object(WATER_TILE.x, WATER_TILE.y, "berry_bush")
+	TestAccess.object_table(world).set_object(Vector3i(WATER_TILE.x, WATER_TILE.y, 0), "berry_bush")
 
 	var forage_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "forage_water_bush", "tick": world.get_tick(),
-		"type": "forage", "payload": {"x": WATER_TILE.x, "y": WATER_TILE.y, "priority": 1, "assignee": "colonist_0"},
+		"type": "forage", "payload": {"x": WATER_TILE.x, "y": WATER_TILE.y, "z": 0, "priority": 1, "assignee": "colonist_0"},
 	})
 	_expect(forage_result.get("ok", false), "forage must accept the water-tile bush as its target: %s" % forage_result)
 
@@ -97,7 +97,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	_expect(world.get_tile(WATER_TILE.x, WATER_TILE.y) == WorldStateType.TILE_FLOOR,
 		"forage must convert the water tile to floor exactly like any other forage target")
 
-	var live_candidates: Array[Vector2i] = TestAccess.needs_system(world).need_source_candidates("water")
+	var live_candidates: Array[Vector3i] = TestAccess.needs_system(world).need_source_candidates("water")
 	_expect(not live_candidates.has(WATER_TILE),
 		"the live world's water-tile cache must stop offering a tile that is no longer water once forage converts it to floor")
 
@@ -108,7 +108,7 @@ func _check_cache_updates_when_forage_clears_water_tile() -> void:
 	# side effect) is what keeps them in sync.
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	var restored_candidates: Array[Vector2i] = TestAccess.needs_system(restored).need_source_candidates("water")
+	var restored_candidates: Array[Vector3i] = TestAccess.needs_system(restored).need_source_candidates("water")
 	_expect(not restored_candidates.has(WATER_TILE),
 		"a freshly decoded world must never offer the former water tile either")
 	_expect(live_candidates == restored_candidates,

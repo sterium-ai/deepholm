@@ -63,7 +63,7 @@ func _init() -> void:
 	# keeps exercising the real wall crop rather than switching targets.
 	var build_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "build_wall", "tick": world.get_tick(),
-		"type": "place_object", "payload": {"x": build_target.x, "y": build_target.y, "kind": "wooden_wall"},
+		"type": "place_object", "payload": {"x": build_target.x, "y": build_target.y, "z": 0, "kind": "wooden_wall"},
 	})
 	_expect(build_result.get("ok", false), "place_object on a free floor tile must be accepted: %s" % build_result)
 	_expect(world.get_object(build_target.x, build_target.y) == "wooden_wall", "a committed place_object must place the object on the world")
@@ -101,7 +101,7 @@ func _give_starting_tools(world: WorldStateType) -> void:
 func _run_job_to_completion(world: WorldStateType, job_type: String, target: Vector2i) -> void:
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "%s_%d_%d" % [job_type, target.x, target.y], "tick": world.get_tick(),
-		"type": job_type, "payload": {"x": target.x, "y": target.y, "priority": 1},
+		"type": job_type, "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1},
 	})
 	_expect(result.get("ok", false), "%s command must be accepted: %s" % [job_type, result])
 	var start_kind := world.get_tile(target.x, target.y)
@@ -209,10 +209,10 @@ func _finish() -> void:
 func _check_ground_item_counts() -> void:
 	var world := WorldStateType.new(SEED_A, 10)
 	TestAccess.item_table(world).items.clear()
-	TestAccess.item_table(world).items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "kind": "wood", "count": 2}
-	TestAccess.item_table(world).items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "kind": "wood", "count": 3}
-	TestAccess.item_table(world).items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "kind": "stone", "count": 4}
-	TestAccess.item_table(world).items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "kind": "stone", "count": 7}
+	TestAccess.item_table(world).items["wood_a"] = {"id": "wood_a", "x": 2, "y": 3, "z": 0, "kind": "wood", "count": 2}
+	TestAccess.item_table(world).items["wood_b"] = {"id": "wood_b", "x": 2, "y": 3, "z": 0, "kind": "wood", "count": 3}
+	TestAccess.item_table(world).items["stone_a"] = {"id": "stone_a", "x": 2, "y": 3, "z": 0, "kind": "stone", "count": 4}
+	TestAccess.item_table(world).items["stone_b"] = {"id": "stone_b", "x": 4, "y": 3, "z": 0, "kind": "stone", "count": 7}
 	TestAccess.colonists(world)[0]["carrying"] = {"id": "cargo", "kind": "stone", "count": 9}
 	var view := MapViewType.new()
 	view.set_world(world)

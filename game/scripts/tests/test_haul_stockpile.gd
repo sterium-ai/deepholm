@@ -34,10 +34,10 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "hands": []}
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0, "route": null, "work": null, "hands": []}
 
 func _place_wood_item(world: WorldStateType, item_id: String, x: int, y: int) -> void:
-	TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": x, "y": y, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": x, "y": y, "z": 0, "kind": "wood", "count": 1}
 
 func _apply(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:
 	var result := world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
@@ -46,7 +46,7 @@ func _apply(world: WorldStateType, command_id: String, type: String, payload: Di
 	return result
 
 func _add_zone(world: WorldStateType, command_id: String, x: int, y: int, width: int, height: int) -> String:
-	return String(_apply(world, command_id, "zone_add", {"x": x, "y": y, "width": width, "height": height}).get("zone_id", ""))
+	return String(_apply(world, command_id, "zone_add", {"x": x, "y": y, "z": 0, "width": width, "height": height}).get("zone_id", ""))
 
 func _haul_job_key(job: Dictionary) -> String:
 	return "item:%s" % String(job.get("item_id", ""))
@@ -89,10 +89,10 @@ func _check_two_of_three_items_reach_a_two_cell_zone() -> void:
 		world.tick()
 		_assert_no_orphaned_reservations(world, "two-of-three settling")
 
-	var zone_cells: Dictionary = {Vector2i(20, 0): true, Vector2i(20, 1): true}
+	var zone_cells: Dictionary = {Vector3i(20, 0, 0): true, Vector3i(20, 1, 0): true}
 	var items_in_zone := 0
 	for item in world.get_items():
-		if zone_cells.has(Vector2i(int(item["x"]), int(item["y"]))):
+		if zone_cells.has(TileGrid.tile_of(item)):
 			items_in_zone += 1
 	_expect(items_in_zone == 2, "exactly two items must reach the two-cell zone (got %d)" % items_in_zone)
 
@@ -150,8 +150,8 @@ func _check_cancel_mid_carry_drops_item_and_rehauls_later() -> void:
 	var mid_carry := world.get_colonists()[0]
 	_expect(InventoryType.is_carrying(mid_carry), "colonist must be carrying the item before cancelling")
 	_expect(mid_carry.get("route") != null, "colonist must still be mid-walk to the cell before cancelling")
-	var drop_tile := Vector2i(int(mid_carry["x"]), int(mid_carry["y"]))
-	_expect(drop_tile != Vector2i(0, 0) and drop_tile != Vector2i(0, 10),
+	var drop_tile := TileGrid.tile_of(mid_carry)
+	_expect(drop_tile != Vector3i(0, 0, 0) and drop_tile != Vector3i(0, 10, 0),
 		"setup must catch the colonist strictly between the item's tile and the cell (got %s)" % [drop_tile])
 
 	_apply(world, "cancel_haul", "cancel_job", {"job_id": job_id})
@@ -235,7 +235,7 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	TestAccess.set_tile(world, 7, 5, WorldStateType.TILE_SOIL)
 	world.spawn_ground_tool_item("pick", 5, 5)
 
-	var dig_result := _apply(world, "dig_other", "dig", {"x": 7, "y": 5, "priority": 1})
+	var dig_result := _apply(world, "dig_other", "dig", {"x": 7, "y": 5, "z": 0, "priority": 1})
 	var dig_job_id := String(dig_result.get("job_id", ""))
 	var dig_activated_tick := -1
 	var dig_completed := false

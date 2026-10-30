@@ -59,7 +59,7 @@ func _world(far_worker: bool = false) -> WorldType:
 			TestAccess.tile_grid(world).tiles[(WorldType.MAP_HEIGHT - 1) * WorldType.MAP_WIDTH + x] = WorldType.TILE_SOIL
 	TestAccess.colonists(world).clear()
 	for i in 8:
-		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5})
+		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i * 2, "y": 5, "z": 0})
 	if far_worker:
 		TestAccess.colonists(world)[7]["x"] = 0
 		TestAccess.colonists(world)[7]["y"] = WorldType.MAP_HEIGHT - 1
@@ -76,8 +76,8 @@ func _command(world: WorldType, kind: String, payload: Dictionary) -> Dictionary
 	return world.apply({"actor": "test", "command_id": "%s_%d" % [kind, world.get_events().size()],
 		"tick": world.get_tick(), "type": kind, "payload": payload})
 
-func _submit(world: WorldType, target: Vector2i, priority: int, submitted: Dictionary) -> void:
-	var result := _command(world, "dig", {"x": target.x, "y": target.y, "priority": priority})
+func _submit(world: WorldType, target: Vector3i, priority: int, submitted: Dictionary) -> void:
+	var result := _command(world, "dig", {"x": target.x, "y": target.y, "z": 0, "priority": priority})
 	_expect(result["ok"], "load order must be accepted")
 	if result["ok"]:
 		submitted[result["job_id"]] = world.get_tick()
@@ -101,7 +101,7 @@ func _run_load() -> Dictionary:
 	var saw_partial := false
 	var saw_full_evaluation_budget := false
 	for i in 200:
-		_submit(world, Vector2i(i % 20, i / 20), i % 3, submitted)
+		_submit(world, Vector3i(i % 20, i / 20, 0), i % 3, submitted)
 	for step in range(1, ARRIVAL_TICKS + MAX_WAIT + 1):
 		# Controlled one-tick execution fixture: completing each active job frees its reservations.
 		for job in world.get_jobs():
@@ -112,9 +112,9 @@ func _run_load() -> Dictionary:
 			for job in world.get_jobs():
 				if job["status"] == "queued":
 					queued_targets[job["target"]] = true
-			var arrival_target := Vector2i(-1, -1)
+			var arrival_target := Vector3i(-1, -1, 0)
 			for i in 200:
-				var target := Vector2i(i % 20, i / 20)
+				var target := Vector3i(i % 20, i / 20, 0)
 				if not queued_targets.has(target):
 					arrival_target = target
 					break
@@ -170,7 +170,7 @@ func _check_labour_mix_still_meets_bound() -> void:
 	var started: Dictionary = {}
 	var max_wait := 0
 	for i in 200:
-		_submit(world, Vector2i(i % 20, i / 20), i % 3, submitted)
+		_submit(world, Vector3i(i % 20, i / 20, 0), i % 3, submitted)
 	for step in range(1, ARRIVAL_TICKS + MAX_WAIT + 1):
 		for job in world.get_jobs():
 			if job["status"] == "active":
@@ -180,9 +180,9 @@ func _check_labour_mix_still_meets_bound() -> void:
 			for job in world.get_jobs():
 				if job["status"] == "queued":
 					queued_targets[job["target"]] = true
-			var arrival_target := Vector2i(-1, -1)
+			var arrival_target := Vector3i(-1, -1, 0)
 			for i in 200:
-				var target := Vector2i(i % 20, i / 20)
+				var target := Vector3i(i % 20, i / 20, 0)
 				if not queued_targets.has(target):
 					arrival_target = target
 					break
@@ -203,14 +203,14 @@ func _check_aging() -> void:
 	var world := _world()
 	TestAccess.colonists(world).resize(1)
 	var submitted: Dictionary = {}
-	_submit(world, Vector2i(19, 9), 0, submitted)
+	_submit(world, Vector3i(19, 9, 0), 0, submitted)
 	var low_id: String = submitted.keys()[0]
 	var low_started := false
 	for step in MAX_WAIT:
 		for job in world.get_jobs():
 			if job["status"] == "active":
 				_command(world, "complete_job", {"job_id": job["id"]})
-		_submit(world, Vector2i(0, 5), 2, submitted)
+		_submit(world, Vector3i(0, 5, 0), 2, submitted)
 		world.tick()
 		_check_metrics(world)
 		for job in world.get_jobs():
@@ -224,32 +224,32 @@ func _check_partial_routes_and_cancel() -> void:
 	var random := RandomNumberGenerator.new()
 	random.seed = 47
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
-	var workers: Array[Dictionary] = [{"id": "worker", "kind": "colonist", "x": 0, "y": 0}]
-	var passable := func(tile: Vector2i) -> bool: return tile.y == 0
-	var job_id: String = scheduler.submit(Vector2i(130, 0), 1, 0)["job_id"]
-	scheduler.tick(1, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
+	var workers: Array[Dictionary] = [{"id": "worker", "kind": "colonist", "x": 0, "y": 0, "z": 0}]
+	var passable := func(tile: Vector3i) -> bool: return tile.y == 0
+	var job_id: String = scheduler.submit(Vector3i(130, 0, 0), 1, 0)["job_id"]
+	scheduler.tick(1, workers, passable, Vector3i.ZERO, Vector3i(130, 0, 0))
 	_expect(TestAccess.assignment_pending(scheduler).has("worker"), "first route slice must leave a pending request")
 	if not TestAccess.assignment_pending(scheduler).has("worker"):
 		return
 	var route: RefCounted = TestAccess.assignment_pending(scheduler)["worker"]["route"]
 	_expect(scheduler.queue.get_job(job_id)["status"] == "queued", "partial route must not activate work")
 	_expect(scheduler.get_metrics()["worker"]["route_steps"] == 64, "first slice must expand 64 tiles")
-	scheduler.tick(2, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
+	scheduler.tick(2, workers, passable, Vector3i.ZERO, Vector3i(130, 0, 0))
 	_expect(TestAccess.assignment_pending(scheduler).has("worker"), "second route slice must remain pending")
 	if not TestAccess.assignment_pending(scheduler).has("worker"):
 		return
 	_expect(TestAccess.assignment_pending(scheduler)["worker"]["route"] == route, "route identity must persist between ticks")
 	_expect(scheduler.get_metrics()["worker"]["job_evaluations"] == 0, "pending evaluation must not restart")
-	scheduler.tick(3, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
+	scheduler.tick(3, workers, passable, Vector3i.ZERO, Vector3i(130, 0, 0))
 	_expect(scheduler.queue.get_job(job_id)["status"] == "active", "third slice must finish retained search")
 	_expect(scheduler.get_metrics()["worker"]["route_steps"] == 2, "third slice must expand only the final two tiles")
 	scheduler.finish(job_id, "cancel_job")
 	_expect(scheduler.queue.get_reservations().is_empty(), "cancel must release target")
-	var second: String = scheduler.submit(Vector2i(130, 0), 1, 3)["job_id"]
-	scheduler.tick(4, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
+	var second: String = scheduler.submit(Vector3i(130, 0, 0), 1, 3)["job_id"]
+	scheduler.tick(4, workers, passable, Vector3i.ZERO, Vector3i(130, 0, 0))
 	scheduler.finish(second, "cancel_job")
 	_expect(TestAccess.assignment_pending(scheduler).is_empty(), "cancel must discard pending route")
-	scheduler.tick(5, workers, passable, Vector2i.ZERO, Vector2i(130, 0))
+	scheduler.tick(5, workers, passable, Vector3i.ZERO, Vector3i(130, 0, 0))
 	_expect(scheduler.get_assignments().is_empty(), "cancelled search must never activate")
 
 func _check_global_matching() -> void:
@@ -257,9 +257,9 @@ func _check_global_matching() -> void:
 	random.seed = 47
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
 	# First worker is far away: a per-worker grab loop would take the wrong pair.
-	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0}, {"id": "b", "kind": "colonist", "x": 9, "y": 0}]
-	var job_id: String = scheduler.submit(Vector2i(9, 0), 1, 0)["job_id"]
-	scheduler.tick(1, workers, func(_tile: Vector2i) -> bool: return true, Vector2i.ZERO, Vector2i(9, 0))
+	var workers: Array[Dictionary] = [{"id": "a", "kind": "colonist", "x": 0, "y": 0, "z": 0}, {"id": "b", "kind": "colonist", "x": 9, "y": 0, "z": 0}]
+	var job_id: String = scheduler.submit(Vector3i(9, 0, 0), 1, 0)["job_id"]
+	scheduler.tick(1, workers, func(_tile: Vector3i) -> bool: return true, Vector3i.ZERO, Vector3i(9, 0, 0))
 	_expect(scheduler.get_assignments().has("b"), "global matching must choose the closer worker regardless of ID order")
 	if not scheduler.get_assignments().has("b"):
 		return
@@ -270,11 +270,11 @@ func _check_blocked_prefix() -> void:
 	var world := _world()
 	TestAccess.colonists(world).resize(2)
 	var submitted: Dictionary = {}
-	_submit(world, Vector2i(0, 5), 2, submitted)
+	_submit(world, Vector3i(0, 5, 0), 2, submitted)
 	world.tick() # Keep this assignment active to reserve the shared target.
 	for i in 40:
-		_submit(world, Vector2i(0, 5), 2, submitted)
-	_submit(world, Vector2i(2, 5), 0, submitted)
+		_submit(world, Vector3i(0, 5, 0), 2, submitted)
+	_submit(world, Vector3i(2, 5, 0), 0, submitted)
 	var last_id: String = submitted.keys().back()
 	for i in 5:
 		world.tick()
@@ -292,7 +292,7 @@ func _check_blocked_prefix() -> void:
 func _check_enclosed_unreachable_zero_expansions() -> void:
 	var world := _world()
 	TestAccess.tile_grid(world).tiles[30 * WorldType.MAP_WIDTH + 30] = WorldType.TILE_SOIL
-	var target := Vector2i(30, 30)
+	var target := Vector3i(30, 30, 0)
 	var submitted: Dictionary = {}
 	_submit(world, target, 2, submitted)
 	var job_id: String = submitted.keys()[0]
@@ -311,18 +311,18 @@ func _check_route_cost_changes_choice() -> void:
 	var random := RandomNumberGenerator.new()
 	random.seed = 47
 	var scheduler := SchedulerType.new(random, ContentRegistryType.new())
-	var workers: Array[Dictionary] = [{"id": "worker", "kind": "colonist", "x": 0, "y": 0}]
-	var passable := func(tile: Vector2i) -> bool: return tile.x != 1 or tile.y >= 3
-	var near_id: String = scheduler.submit(Vector2i(2, 0), 1, 0)["job_id"]
-	var quick_id: String = scheduler.submit(Vector2i(0, 4), 1, 0)["job_id"]
-	scheduler.tick(1, workers, passable, Vector2i.ZERO, Vector2i(3, 4))
+	var workers: Array[Dictionary] = [{"id": "worker", "kind": "colonist", "x": 0, "y": 0, "z": 0}]
+	var passable := func(tile: Vector3i) -> bool: return tile.x != 1 or tile.y >= 3
+	var near_id: String = scheduler.submit(Vector3i(2, 0, 0), 1, 0)["job_id"]
+	var quick_id: String = scheduler.submit(Vector3i(0, 4, 0), 1, 0)["job_id"]
+	scheduler.tick(1, workers, passable, Vector3i.ZERO, Vector3i(3, 4, 0))
 	_expect(scheduler.get_assignments().is_empty(), "retain first result until the second candidate is evaluated")
 	var snapshot := scheduler.snapshot()
 	_expect(snapshot["pending"].has("worker"), "evaluation batch must remain pending")
 	if not snapshot["pending"].has("worker"):
 		return
 	_expect(snapshot["pending"]["worker"]["cursor"] == 1, "partial evaluation cursor must persist")
-	scheduler.tick(2, workers, passable, Vector2i.ZERO, Vector2i(3, 4))
+	scheduler.tick(2, workers, passable, Vector3i.ZERO, Vector3i(3, 4, 0))
 	var assignments := scheduler.get_assignments()
 	_expect(assignments.has("worker"), "completed batch must assign a worker")
 	if assignments.has("worker"):

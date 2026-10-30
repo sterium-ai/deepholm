@@ -139,7 +139,7 @@ func _run() -> void:
 	_expect(reloaded_jobs.size() == jobs_before, "job/order count must be identical after a real Save/Load round trip")
 	var found_far_job := false
 	for job in reloaded_jobs:
-		if job["target"] == far_tile and job["kind"] == "dig":
+		if job["target"] == Vector3i(far_tile.x, far_tile.y, 0) and job["kind"] == "dig":
 			found_far_job = true
 	_expect(far_tile == Vector2i(-1, -1) or found_far_job, "the far-corner dig order must still exist after a real Save/Load round trip")
 

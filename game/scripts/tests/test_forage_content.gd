@@ -112,8 +112,8 @@ func _build_world(seed_value: int) -> WorldType:
 	for x in range(0, 5):
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
-	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 4, "y": 0, "kind": "berry_bush"})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 4, "y": 0, "z": 0, "kind": "berry_bush"})
 	_expect(place_result["ok"], "placing the berry_bush fixture object must be accepted")
 	return world
 
@@ -123,17 +123,17 @@ func _build_world(seed_value: int) -> WorldType:
 ## and ground berries at that tile increments by one.
 func _check_forage_walk_and_work() -> void:
 	var world := _build_world(2020918)
-	var bush := Vector2i(4, 0)
+	var bush := Vector3i(4, 0, 0)
 	_expect(world.get_object(bush.x, bush.y) == "berry_bush", "fixture must place a berry_bush at the target")
 	var passability := world.passability(bush.x, bush.y)
 	_expect(passability["passable"] == false, "a berry_bush tile must be impassable")
 
 	# Foraging a tile with no berry_bush must be rejected invalid_target.
-	var bad_result := Scenarios.command(world, "forage_bad", "forage", {"x": 0, "y": 0, "priority": 1})
+	var bad_result := Scenarios.command(world, "forage_bad", "forage", {"x": 0, "y": 0, "z": 0, "priority": 1})
 	_expect(not bad_result["ok"] and bad_result["rejection"]["reason"] == "invalid_target",
 		"forage against a non-berry_bush tile must be rejected invalid_target")
 
-	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "z": 0, "priority": 1})
 	_expect(forage_result["ok"], "forage order against a berry_bush must be accepted")
 
 	var ticks := 0
@@ -156,8 +156,8 @@ func _check_forage_walk_and_work() -> void:
 ## by a completed forage job.
 func _check_forage_save_round_trip() -> void:
 	var world := _build_world(3030918)
-	var bush := Vector2i(4, 0)
-	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "priority": 1})
+	var bush := Vector3i(4, 0, 0)
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": bush.x, "y": bush.y, "z": 0, "priority": 1})
 	_expect(forage_result["ok"], "forage order against a berry_bush must be accepted")
 
 	var ticks := 0

@@ -140,8 +140,8 @@ func _check_duplicate_item_id_is_schema_error(expected: Dictionary) -> void:
 	state["items"] = {
 		"nextId": 2,
 		"list": [
-			{"id": "item_1", "x": 1, "y": 1, "kind": "wood", "count": 1, "factionId": "colony"},
-			{"id": "item_1", "x": 2, "y": 2, "kind": "wood", "count": 1, "factionId": "colony"},
+			{"id": "item_1", "x": 1, "y": 1, "z": 0, "kind": "wood", "count": 1, "factionId": "colony"},
+			{"id": "item_1", "x": 2, "y": 2, "z": 0, "kind": "wood", "count": 1, "factionId": "colony"},
 		],
 	}
 	var round_tripped = JSON.parse_string(JSON.stringify(state))
@@ -204,15 +204,15 @@ func _check_missing_nested_field_is_migration_error(expected: Dictionary) -> voi
 	var envelope: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(TARGET))
 
 	var entity_state: Dictionary = envelope["state"].duplicate(true)
-	entity_state["entities"].append({"id": "forged-colonist", "kind": "colonist", "x": 0, "y": 0, "needs": {"hunger": 10, "health": 10}})
+	entity_state["entities"].append({"id": "forged-colonist", "kind": "colonist", "x": 0, "y": 0, "z": 0, "needs": {"hunger": 10, "health": 10}})
 	_expect_migration_error_for_mutated_state(expected, entity_state, "entity needs missing 'sleep'")
 
 	var pending_state: Dictionary = envelope["state"].duplicate(true)
 	pending_state["scheduling"]["pending"]["forged-worker"] = {
-		"candidates": [], "cursor": 0, "found": [], "start": {"x": 0, "y": 0},
+		"candidates": [], "cursor": 0, "found": [], "start": {"x": 0, "y": 0, "z": 0},
 		"route": {
-			"start": {"x": 0, "y": 0}, "target": {"x": 1, "y": 1}, "status": "searching",
-			"frontier": [], "visited": [], "cameFrom": [{"child": {"x": 1, "y": 1}}],
+			"start": {"x": 0, "y": 0, "z": 0}, "target": {"x": 1, "y": 1, "z": 0}, "status": "searching",
+			"frontier": [], "visited": [], "cameFrom": [{"child": {"x": 1, "y": 1, "z": 0}}],
 			"path": [], "expansions": 0, "resumeCalls": 0
 		}
 	}

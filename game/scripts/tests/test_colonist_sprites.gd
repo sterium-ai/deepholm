@@ -75,7 +75,7 @@ func _build_world(colonist_x: int, colonist_y: int) -> WorldStateType:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({
-		"id": "colonist_0", "kind": "colonist", "x": colonist_x, "y": colonist_y,
+		"id": "colonist_0", "kind": "colonist", "x": colonist_x, "y": colonist_y, "z": 0,
 		"route": null, "work": null, "carrying": null,
 	})
 	return world
@@ -195,8 +195,8 @@ func _check_snap_on_new_game() -> void:
 	var world_b := WorldStateType.new(2, 10)
 	TestAccess.tile_grid(world_b).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world_b).clear()
-	TestAccess.colonists(world_b).append({"id": "colonist_1", "kind": "colonist", "x": 7, "y": 7, "route": null, "work": null, "carrying": null})
-	TestAccess.colonists(world_b).append({"id": "colonist_2", "kind": "colonist", "x": 9, "y": 1, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world_b).append({"id": "colonist_1", "kind": "colonist", "x": 7, "y": 7, "z": 0, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world_b).append({"id": "colonist_2", "kind": "colonist", "x": 9, "y": 1, "z": 0, "route": null, "work": null, "carrying": null})
 
 	var sprites := ColonistSpritesType.new()
 	sprites.set_world(world_a)
@@ -230,9 +230,9 @@ func _check_trapped_marker_visibility() -> void:
 ## the walk below is the whole story, no fetch_tool leg first).
 func _build_straight_route_world() -> WorldStateType:
 	var world := _build_world(0, 5)
-	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 11, "y": 5, "kind": "berry_bush"})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 11, "y": 5, "z": 0, "kind": "berry_bush"})
 	_expect(place_result["ok"], "straight-route fixture: placing the berry_bush must be accepted")
-	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 11, "y": 5, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 11, "y": 5, "z": 0, "priority": 1})
 	_expect(forage_result["ok"], "straight-route fixture: forage order must be accepted")
 	return world
 
@@ -248,10 +248,10 @@ func _build_l_route_world() -> WorldStateType:
 	for y in range(0, 7):
 		TestAccess.set_tile(world, 5, y, WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
-	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
+	var place_result := Scenarios.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "z": 0, "kind": "berry_bush"})
 	_expect(place_result["ok"], "L-route fixture: placing the berry_bush must be accepted")
-	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 5, "y": 6, "priority": 1})
+	var forage_result := Scenarios.command(world, "forage_1", "forage", {"x": 5, "y": 6, "z": 0, "priority": 1})
 	_expect(forage_result["ok"], "L-route fixture: forage order must be accepted")
 	return world
 
@@ -276,7 +276,7 @@ func _drive_and_sample(world: WorldStateType, sprites: ColonistSpritesType, colo
 		for _f in frames_per_tick:
 			sprites.advance(FRAME_DELTA)
 			var pos: Vector2 = (sprites._sprites[colonist_id] as SpriteRecordType).position
-			samples.append({"frame": frame_index, "tick": world.get_tick(), "x": pos.x, "y": pos.y})
+			samples.append({"frame": frame_index, "tick": world.get_tick(), "x": pos.x, "y": pos.y, "z": 0})
 			frame_index += 1
 		var colonist: Dictionary = TestAccess.find_colonist(world, colonist_id)
 		if settle_ticks_left < 0 and colonist["route"] == null and colonist.get("work") != null:
