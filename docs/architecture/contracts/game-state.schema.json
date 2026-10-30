@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v7",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. v7 (ADR 061) adds crafting, the workbench targets, orders and bills; a v6 state is migrated with no configured bench {benches: [], nextOrderId: 1}. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v8",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. v7 (ADR 061) adds crafting, the workbench targets, orders and bills; a v6 state is migrated with no configured bench {benches: [], nextOrderId: 1}. v8 (ADR 062) adds entities[].skills, a colonist's level and XP per labour; a v7 state is migrated by giving every colonist each labour of its labourTable at level 0, XP 0. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
@@ -35,7 +35,16 @@
       "required": ["kind", "count"],
       "properties": {
         "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
-        "count": { "type": "integer", "minimum": 1, "maximum": 4 }
+        "count": { "type": "integer", "minimum": 1, "maximum": 6 }
+      }
+    },
+    "skillRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "xp"],
+      "properties": {
+        "level": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "xp": { "type": "integer", "minimum": 0 }
       }
     },
     "object": {
@@ -399,7 +408,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 7 },
+    "schemaVersion": { "type": "integer", "const": 8 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -635,6 +644,21 @@
               "cook": { "type": "integer", "minimum": 0, "maximum": 4 }
             }
           },
+          "skills": {
+            "description": "F3 (ADR 062, schema v8): skill level and XP per labour, on every colonist the game spawns, seeds or migrates (optional like heldTool: a worker without it works untracked). level is 0..len(skills.json xp_to_next); xp is the progress inside that level, below xp_to_next[level] (0 at the top level).",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],
+            "properties": {
+              "mine": { "$ref": "#/$defs/skillRecord" },
+              "chop": { "$ref": "#/$defs/skillRecord" },
+              "farm": { "$ref": "#/$defs/skillRecord" },
+              "haul": { "$ref": "#/$defs/skillRecord" },
+              "build": { "$ref": "#/$defs/skillRecord" },
+              "craft": { "$ref": "#/$defs/skillRecord" },
+              "cook": { "$ref": "#/$defs/skillRecord" }
+            }
+          },
           "route": {
             "anyOf": [
               { "type": "null" },
@@ -648,8 +672,9 @@
             ]
           },
           "hands": {
+            "description": "ADR 037; the summed counts stay within 4 plus one per skills.json carry_bonus_every levels of the colonist's carry_labour skill (F3, ADR 062).",
             "type": "array",
-            "maxItems": 4,
+            "maxItems": 6,
             "items": { "$ref": "#/$defs/handsEntry" }
           },
           "heldTool": { "type": "string", "pattern": "^[a-z0-9_-]*$" },

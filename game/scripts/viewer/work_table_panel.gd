@@ -49,6 +49,11 @@ extends Control
 ## Labour levels change only through set_labour, and this table's own clicks
 ## refresh their row at once; a rebuild (the roster changed) or a refresh() called
 ## without a snapshot reads every row.
+##
+## Skills (F3, ADR 062): under each cell's priority button, the colonist's skill level in
+## that labour and a bar of its XP toward the next level, both read from the snapshot's
+## "skills" key ({id: {labour: {level, xp, next}}}); the bar is full at the top level
+## ("next" 0). Updated in place like the buttons, only when a row's skills changed.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
@@ -82,6 +87,11 @@ var _header_labels: Dictionary = {}
 var _known_colonist_ids: Array[String] = []
 ## colonist id -> the labourTable its row's cells last showed.
 var _shown_tables: Dictionary = {}
+## Skill level Labels and XP ProgressBars keyed like _cell_buttons, and colonist id -> the
+## snapshot "skills" row they last showed.
+var _skill_labels: Dictionary = {}
+var _xp_bars: Dictionary = {}
+var _shown_skills: Dictionary = {}
 ## The ids/worker columns _known_colonist_ids was last read from.
 var _seen_ids: Array = []
 var _seen_worker: Array = []
@@ -125,13 +135,12 @@ func refresh(snapshot: Dictionary = {}) -> void:
 		snapshot = world.get_view_snapshot(_known_colonist_ids)
 	var ids := _colonist_ids(snapshot)
 	if ids != _known_colonist_ids:
-		var details: Dictionary = snapshot["details"]
-		if details.size() < ids.size():
-			details = world.get_view_snapshot(ids)["details"]
-		_rebuild_grid(ids, details)
+		if (snapshot["details"] as Dictionary).size() < ids.size():
+			snapshot = world.get_view_snapshot(ids)
+		_rebuild_grid(ids, snapshot["details"], snapshot["skills"])
 		_known_colonist_ids = ids
 	else:
-		_update_grid_values(snapshot["details"])
+		_update_grid_values(snapshot["details"], snapshot["skills"])
 	_update_banner()
 
 func cell_count() -> int:
@@ -161,12 +170,15 @@ func _colonist_ids(snapshot: Dictionary) -> Array[String]:
 ## from refresh() when the colonist id set has actually changed (a colonist
 ## added or removed) -- never on an ordinary tick-driven refresh, so a
 ## button the player is mid-press on is never torn down underneath them.
-func _rebuild_grid(ids: Array[String], details: Dictionary) -> void:
+func _rebuild_grid(ids: Array[String], details: Dictionary, skills: Dictionary) -> void:
 	for child in _grid.get_children():
 		child.queue_free()
 	_cell_buttons.clear()
 	_header_labels.clear()
 	_shown_tables.clear()
+	_skill_labels.clear()
+	_xp_bars.clear()
+	_shown_skills.clear()
 
 	var corner := Label.new()
 	corner.text = _text_table.get_string("work_table.colonist_header")
@@ -183,24 +195,47 @@ func _rebuild_grid(ids: Array[String], details: Dictionary) -> void:
 		_grid.add_child(id_label)
 		var labour_table: Dictionary = (details.get(colonist_id, {}) as Dictionary).get("labourTable", {})
 		_shown_tables[colonist_id] = labour_table
+		var skill_row: Dictionary = skills.get(colonist_id, {})
+		_shown_skills[colonist_id] = skill_row
 		for labour in LABOUR_KINDS:
 			var level := int(labour_table.get(labour, 0))
+			var column := VBoxContainer.new()
 			var cell := Button.new()
 			cell.text = _level_text(level)
 			cell.custom_minimum_size = CELL_MIN_SIZE
 			cell.pressed.connect(_on_cell_pressed.bind(colonist_id, labour))
-			_grid.add_child(cell)
-			_cell_buttons[_cell_key(colonist_id, labour)] = cell
+			column.add_child(cell)
+			var skill_line := HBoxContainer.new()
+			var skill_label := Label.new()
+			var xp_bar := ProgressBar.new()
+			xp_bar.show_percentage = false
+			xp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			skill_line.add_child(skill_label)
+			skill_line.add_child(xp_bar)
+			column.add_child(skill_line)
+			_grid.add_child(column)
+			var key := _cell_key(colonist_id, labour)
+			_cell_buttons[key] = cell
+			_skill_labels[key] = skill_label
+			_xp_bars[key] = xp_bar
+			_show_skill(key, skill_row.get(labour, {}))
 
 ## Updates every already-built cell/header's displayed text in place, without
 ## touching a single Button/Label node's identity -- the counterpart to
 ## _rebuild_grid() for the common case (colonist set unchanged). `details` is the
 ## snapshot's full records: only those colonists' rows are compared.
-func _update_grid_values(details: Dictionary) -> void:
+func _update_grid_values(details: Dictionary, skills: Dictionary) -> void:
 	for labour in LABOUR_KINDS:
 		var header: Label = _header_labels.get(labour)
 		if header != null:
 			header.text = _column_header_text(labour)
+	for colonist_id: String in skills:
+		var skill_row: Dictionary = skills[colonist_id]
+		if not _shown_skills.has(colonist_id) or _shown_skills[colonist_id] == skill_row:
+			continue
+		_shown_skills[colonist_id] = skill_row
+		for labour in LABOUR_KINDS:
+			_show_skill(_cell_key(colonist_id, labour), skill_row.get(labour, {}))
 	for colonist_id: String in details:
 		var labour_table: Dictionary = (details[colonist_id] as Dictionary).get("labourTable", {})
 		if _shown_tables.get(colonist_id) == labour_table:
@@ -210,6 +245,26 @@ func _update_grid_values(details: Dictionary) -> void:
 			var cell: Button = _cell_buttons.get(_cell_key(colonist_id, labour))
 			if cell != null:
 				cell.text = _level_text(int(labour_table.get(labour, 0)))
+
+## The skill level (a bare number) and the XP bar of one cell; `progress` is one labour of
+## the snapshot's "skills" row ({} draws level 0 and an empty bar).
+func _show_skill(key: String, progress: Dictionary) -> void:
+	var skill_label: Label = _skill_labels.get(key)
+	var xp_bar: ProgressBar = _xp_bars.get(key)
+	if skill_label == null or xp_bar == null:
+		return
+	skill_label.text = str(int(progress.get("level", 0)))
+	var next := int(progress.get("next", 0))
+	xp_bar.max_value = maxi(next, 1)
+	xp_bar.value = int(progress.get("xp", 0)) if next > 0 else (1 if not progress.is_empty() else 0)
+
+func skill_text(colonist_id: String, labour: String) -> String:
+	var skill_label: Label = _skill_labels.get(_cell_key(colonist_id, labour))
+	return skill_label.text if skill_label != null else ""
+
+func xp_bar_ratio(colonist_id: String, labour: String) -> float:
+	var xp_bar: ProgressBar = _xp_bars.get(_cell_key(colonist_id, labour))
+	return xp_bar.ratio if xp_bar != null else -1.0
 
 func _column_header_text(labour: String) -> String:
 	var text: String = _text_table.get_string("work_table.labour.%s" % labour)

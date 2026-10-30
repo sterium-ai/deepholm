@@ -2,7 +2,7 @@ class_name EntityCodec
 extends RefCounted
 
 ## StateCodec's "entities" encoding: each actor record and its components (needs, labour
-## table, route, work, hands, trapped, combat, health, inventory), JSON-safe both ways.
+## table, skills, route, work, hands, trapped, combat, health, inventory), JSON-safe both ways.
 
 ## Invariant: a component field is emitted only when the live dict carries it (the per-kind
 ## shape ActorTable.spawn() produces), never a colonist-shaped default; "work"/"route" ride
@@ -24,6 +24,9 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 			entity["needsAccumulator"] = _encode_needs(colonist["needsAccumulator"])
 		if colonist.has("labourTable"):
 			entity["labourTable"] = _encode_labour_table(colonist["labourTable"])
+		if colonist.has("skills"):
+			var skills: Dictionary = colonist["skills"]
+			entity["skills"] = _encode_skills(skills)
 		if colonist.has("work"):
 			entity["work"] = _encode_work_field(colonist["work"])
 		if colonist.has("hands"):
@@ -61,6 +64,10 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 			colonist["needsAccumulator"] = _decode_needs(entity["needsAccumulator"])
 		if entity.has("labourTable"):
 			colonist["labourTable"] = _decode_labour_table(entity["labourTable"])
+		var entity_fields: Dictionary = entity
+		if entity_fields.has("skills"):
+			var saved_skills: Dictionary = entity_fields["skills"]
+			colonist["skills"] = _encode_skills(saved_skills)
 		if entity.has("work"):
 			colonist["work"] = _decode_work_field(entity["work"])
 		if entity.has("hands"):
@@ -140,6 +147,18 @@ static func _encode_labour_table(labour_table: Dictionary) -> Dictionary:
 	keys.sort()
 	for key in keys:
 		encoded[key] = int(labour_table[key])
+	return encoded
+
+## labour -> {"level", "xp"} (F3, ADR 062), sorted, ints; the same shape both ways.
+static func _encode_skills(skills: Dictionary) -> Dictionary:
+	var encoded: Dictionary = {}
+	var keys := skills.keys()
+	keys.sort()
+	for key: String in keys:
+		var record: Dictionary = skills[key]
+		var level: int = record["level"]
+		var xp: int = record["xp"]
+		encoded[key] = {"level": level, "xp": xp}
 	return encoded
 
 static func _decode_labour_table(labour_table: Dictionary) -> Dictionary:

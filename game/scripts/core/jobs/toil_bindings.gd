@@ -81,6 +81,8 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 	_object_table = object_table
 	_passability = passability
 	_construction = construction
+	# F3 (ADR 062): builders a finished site completes earn XP like every toil completion.
+	_construction.complete_builder = _complete_job
 	_trench = trench
 	_needs_system = needs_system
 	_reroutes = reroutes
@@ -322,7 +324,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 	var kind := String(_construction.site_fetch_picked_kind.get(job_id, ""))
 	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
 	if (InventoryType.count_of_kind(colonist, kind) >= _construction.site_table.remaining(site, kind)
-			or InventoryType.free_capacity(colonist) <= 0):
+			or InventoryType.free_capacity(colonist, _toils.hands_capacity(colonist)) <= 0):
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
 	var next_id := _construction.next_site_fetch_source(colonist, job, kind, current)
@@ -354,8 +356,18 @@ func _toil_on_toil_fail(job_id: String, reason: String) -> void:
 	_finish_job.call(job_id, "fail_job")
 	_need_giver_resolve_job.call(job_id)
 
+## Every toil-driven completion: once finish() accepts it, the completing colonist (looked up
+## before finish() clears the assignment) earns the kind's XP (F3, ADR 062).
+func _complete_job(job_id: String) -> void:
+	var colonist: Dictionary = _find_job_colonist.call(job_id)
+	var job: Dictionary = _scheduler.queue.get_job(job_id)
+	var kind: String = job.get("kind", "")
+	var result: Dictionary = _finish_job.call(job_id, "complete_job")
+	if result.get("ok", false) and not colonist.is_empty():
+		_toils.award_job_xp(colonist, kind)
+
 func _toil_on_place_success(job_id: String) -> void:
-	_finish_job.call(job_id, "complete_job")
+	_complete_job(job_id)
 
 ## Chained delivery: leftover hands (of the kind just delivered) retarget the same job at
 ## the next reachable short sibling site; with none, they are dropped before completing.
@@ -374,7 +386,7 @@ func _toil_on_deposit_success(job_id: String) -> void:
 			_scheduler.queue.retarget_site_fetch_site(job_id, next_site["origin"])
 			return
 		drop_carried_item_from(colonist)
-	_finish_job.call(job_id, "complete_job")
+	_complete_job(job_id)
 
 ## Applies the kind's completion effect, then finishes the job: its jobs.json effects block
 ## (apply_work_effects(), ADR 051), else the owning system's rule below. A tile check re-runs
@@ -418,7 +430,7 @@ func _toil_on_work_complete(job_id: String) -> void:
 		_tile_grid.mark_dirty(target.x, target.y)
 		_tile_grid.get_regions().on_passability_changed(target.x, target.y)
 		_tile_grid.get_rooms().on_passability_changed(target.x, target.y)
-	_finish_job.call(job_id, "complete_job")
+	_complete_job(job_id)
 	resolve_giver_association(job_id, kind)
 
 ## A jobs.json effects block applied at target in its fixed order (ADR 051): the tile check,
@@ -467,7 +479,7 @@ func _toil_on_consume_success(job_id: String) -> void:
 	var colonist: Dictionary = _find_job_colonist.call(job_id)
 	if not colonist.is_empty():
 		_needs_system.apply_need_effect(colonist, job)
-	_finish_job.call(job_id, "complete_job")
+	_complete_job(job_id)
 	_need_giver_resolve_job.call(job_id)
 
 ## requeue, not suspend: the job keeps its own restrict_to, so any eligible colonist may

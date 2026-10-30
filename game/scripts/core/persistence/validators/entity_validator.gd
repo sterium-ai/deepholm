@@ -4,6 +4,7 @@ extends SaveCheck
 ## Save validation for what ActorTable persists: "entities" and their components.
 
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
 
 ## Entity kind -> the component fields it must carry (the schema's per-kind if/then, i.e.
 ## what ActorTable.spawn() builds for that kind).
@@ -53,6 +54,43 @@ static func _valid_labour_table(value) -> Dictionary:
 	for kind in labour_kinds:
 		if not _is_int(value[kind]) or int(value[kind]) < 0 or int(value[kind]) > 4:
 			return _fail("invalid entity labourTable level '%s'" % kind)
+	return {"ok": true}
+
+## skills (F3, ADR 062): exactly the labourTable's 7 kinds, each {"level": 0..top, "xp"}, the XP
+## below that level's xp_to_next (0 at the top level). Optional like heldTool: every colonist
+## the game spawns, seeds or migrates carries it; a worker without it works untracked.
+static func _valid_skills(value: Variant, skill_rules: Dictionary) -> Dictionary:
+	if not (value is Dictionary):
+		return _fail("invalid entity skills type")
+	var skills: Dictionary = value
+	var labour_kinds := ["mine", "chop", "farm", "haul", "build", "craft", "cook"]
+	if not _keys_allowed(skills, labour_kinds):
+		return _fail("unexpected entity skills field")
+	var check := _require_fields(skills, labour_kinds, "entity skills")
+	if not check["ok"]:
+		return check
+	var thresholds: Array = skill_rules.get("xp_to_next", [])
+	for kind: String in labour_kinds:
+		if not (skills[kind] is Dictionary):
+			return _fail("invalid entity skills record '%s'" % kind)
+		var record: Dictionary = skills[kind]
+		if not _keys_allowed(record, ["level", "xp"]):
+			return _fail("invalid entity skills record '%s'" % kind)
+		var record_check := _require_fields(record, ["level", "xp"], "entity skills record")
+		if not record_check["ok"]:
+			return record_check
+		if not (record["level"] is int) or not (record["xp"] is int):
+			return _fail("invalid entity skills record '%s'" % kind)
+		var level: int = record["level"]
+		var xp: int = record["xp"]
+		if level < 0 or level > thresholds.size():
+			return _fail("invalid entity skills level '%s'" % kind)
+		var xp_cap := 0
+		if level < thresholds.size():
+			var needed: int = thresholds[level]
+			xp_cap = needed - 1
+		if xp < 0 or xp > xp_cap:
+			return _fail("invalid entity skills xp '%s'" % kind)
 	return {"ok": true}
 
 ## "trapped" is validated for every kind (anyone can fall into a trench).
@@ -129,8 +167,9 @@ static func _valid_entity_inventory(value) -> Dictionary:
 		return _fail("invalid entity inventory capacity")
 	return {"ok": true}
 
-## At most one entry per kind, each count >= 1, total <= ActorInventory.HANDS_CAPACITY.
-static func _valid_entity_hands(value) -> Dictionary:
+## At most one entry per kind, each count >= 1, total <= `capacity` (ActorInventory.HANDS_CAPACITY
+## plus the entity's carry-skill bonus, F3/ADR 062).
+static func _valid_entity_hands(value, capacity: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entity hands type")
 	var hands: Array = value
@@ -151,25 +190,28 @@ static func _valid_entity_hands(value) -> Dictionary:
 			return _fail("duplicate entity hands entry kind")
 		seen_kinds[entry["kind"]] = true
 		total += int(entry["count"])
-	if total > InventoryType.HANDS_CAPACITY:
+	if total > capacity:
 		return _fail("entity hands total count exceeds capacity")
 	return {"ok": true}
 
-## need_kinds: needs.json's kinds from the session registry (SaveIO.content_rules()).
-static func _valid_entities(value, map_width: int, map_height: int, need_kinds: Array[String]) -> Dictionary:
+## need_kinds: needs.json's kinds, skill_rules: skills.json, both from the session registry
+## (SaveIO.content_rules()).
+static func _valid_entities(value, map_width: int, map_height: int, need_kinds: Array[String],
+		skill_rules: Dictionary = {}) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entities type")
 	for entity in value:
-		var entity_check := _valid_entity(entity, map_width, map_height, need_kinds)
+		var entity_check := _valid_entity(entity, map_width, map_height, need_kinds, skill_rules)
 		if not entity_check["ok"]:
 			return entity_check
 	return {"ok": true}
 
-static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Array[String]) -> Dictionary:
+static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Array[String],
+		skill_rules: Dictionary = {}) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity type")
 	var entity: Dictionary = value
-	if not _keys_allowed(entity, ["id", "kind", "x", "y", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor"]):
+	if not _keys_allowed(entity, ["id", "kind", "x", "y", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor"]):
 		return _fail("unexpected entity field")
 	if (not entity.has("id") or not entity.has("kind") or not entity.has("x") or not entity.has("y")
 			or not entity.has("factionId") or not entity.has("health") or not entity.has("route") or not entity.has("trapped")):
@@ -195,6 +237,10 @@ static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Ar
 		var labour_table_check := _valid_labour_table(entity["labourTable"])
 		if not labour_table_check["ok"]:
 			return labour_table_check
+	if entity.has("skills"):
+		var skills_check := _valid_skills(entity["skills"], skill_rules)
+		if not skills_check["ok"]:
+			return skills_check
 	var route_check := _valid_entity_route(entity["route"], map_width, map_height)
 	if not route_check["ok"]:
 		return route_check
@@ -206,7 +252,10 @@ static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Ar
 		if not work_check["ok"]:
 			return work_check
 	if entity.has("hands"):
-		var hands_check := _valid_entity_hands(entity["hands"])
+		var capacity := InventoryType.HANDS_CAPACITY
+		if entity.has("skills"):
+			capacity = SkillsType.hands_capacity(skill_rules, entity, InventoryType.HANDS_CAPACITY)
+		var hands_check := _valid_entity_hands(entity["hands"], capacity)
 		if not hands_check["ok"]:
 			return hands_check
 	if entity.has("heldTool") and (not (entity["heldTool"] is String) or not _matches_optional_id_pattern(entity["heldTool"])):

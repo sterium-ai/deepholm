@@ -14,6 +14,7 @@ const InventoryType = preload("res://scripts/core/actors/components/inventory.gd
 const CombatType = preload("res://scripts/core/actors/components/combat.gd")
 const WildType = preload("res://scripts/core/actors/components/wild.gd")
 const VisitorType = preload("res://scripts/core/actors/components/visitor.gd")
+const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
 
 ## The closed component vocabulary content_registry.gd's _check_references() enforces.
 const COMPONENT_NAMES: Array[String] = [
@@ -60,6 +61,7 @@ static func spawn(def_id: String, x: int, y: int, registry, id: String) -> Dicti
 static func _spawn_colonist(x: int, y: int, id: String, tunables: Dictionary, registry) -> Dictionary:
 	var worker_tunables: Dictionary = tunables.get("worker", {})
 	var health_tunables: Dictionary = tunables.get("health", {})
+	var labours: Array = worker_tunables.get("labours", [])
 	return {
 		"id": id,
 		"kind": "colonist",
@@ -68,6 +70,8 @@ static func _spawn_colonist(x: int, y: int, id: String, tunables: Dictionary, re
 		"needs": NeedsType.build_full_needs(registry),
 		"needsAccumulator": NeedsType.build_full_accumulator(registry),
 		"labourTable": WorkerType.default_labour_table(worker_tunables),
+		# F3 (ADR 062): every worker labour at level 0; WorldSeeding seeds a new world's start.
+		"skills": SkillsType.build_zero(labours),
 		"route": null,
 		"work": null,
 		"carrying": null,

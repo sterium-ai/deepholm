@@ -5,13 +5,15 @@ extends SceneTree
 ## - EventLog: get_events() is sorted by (tick, system_priority, entity_id, sequence) and
 ##   every sequence is unique.
 ## - Inventory (ADR 037): hands hold at most one entry per kind, every count >= 1, and the
-##   total never exceeds HANDS_CAPACITY, on every tick.
+##   total never exceeds HANDS_CAPACITY plus the colonist's haul-skill bonus (ADR 062), on
+##   every tick.
 ## - Persistence: events are runtime-only and the retired-job history is neither persisted
 ##   nor hashed, so a save/load round trip keeps state_hash(), re-encodes to the same save,
 ##   starts with an empty event log and keeps the event sequence counter moving forward.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
 
 const SEED := 4242
 const SIZE := 48
@@ -77,8 +79,9 @@ func _check_hands(world: WorldStateType) -> void:
 				_fail("tick %d: %s holds two %s entries" % [world.get_tick(), colonist["id"], kind])
 			kinds[kind] = true
 			total += count
-		if total > InventoryType.HANDS_CAPACITY:
-			_fail("tick %d: %s holds %d units, above HANDS_CAPACITY" % [world.get_tick(), colonist["id"], total])
+		var capacity := SkillsType.hands_capacity(SkillsType.rules(TestAccess.content(world)), colonist, InventoryType.HANDS_CAPACITY)
+		if total > capacity:
+			_fail("tick %d: %s holds %d units, above its hands capacity %d" % [world.get_tick(), colonist["id"], total, capacity])
 
 func _event_key(event: Dictionary) -> Array:
 	return [int(event["tick"]), int(event["system_priority"]), String(event["entity_id"]), int(event["sequence"])]

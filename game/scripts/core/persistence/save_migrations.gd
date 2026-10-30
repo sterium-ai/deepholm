@@ -10,6 +10,7 @@ extends RefCounted
 ## - v4 -> v5 (A7, ADR 058): compact file encoding (SaveWire) and saved route-search costs.
 ## - v5 -> v6 (F1, ADR 059): farm zones and the "crops" growth records.
 ## - v6 -> v7 (F2, ADR 061): workbench targets, orders and bills ("crafting").
+## - v7 -> v8 (F3, ADR 062): every colonist saves its skills.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -43,6 +44,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v5_to_v6(state)
 		6:
 			return _v6_to_v7(state)
+		7:
+			return _v7_to_v8(state)
 		_:
 			return {
 				"ok": false,
@@ -124,6 +127,27 @@ static func _v6_to_v7(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["crafting"] = {"benches": [], "nextOrderId": 1}
 	migrated["schemaVersion"] = 7
+	return {"ok": true, "state": migrated}
+
+## v7 -> v8 (F3, ADR 062): every colonist entity gains "skills", each of its labourTable's
+## labours at level 0 with 0 XP: a v7 colonist had no skills, and starting levels are seeded
+## only when a world is created. Other kinds have no worker component and gain nothing.
+static func _v7_to_v8(state: Dictionary) -> Dictionary:
+	if not (state.get("entities") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v7 save has no entities array"}
+	var migrated := state.duplicate(true)
+	for entity: Variant in migrated["entities"]:
+		if not (entity is Dictionary) or (entity as Dictionary).get("kind") != "colonist":
+			continue
+		if (entity as Dictionary).has("skills"):
+			return {"ok": false, "code": "schema_error", "message": "v7 save already has entity skills"}
+		var skills: Dictionary = {}
+		var labours: Array = ((entity as Dictionary).get("labourTable", {}) as Dictionary).keys()
+		labours.sort()
+		for labour: Variant in labours:
+			skills[labour] = {"level": 0, "xp": 0}
+		entity["skills"] = skills
+	migrated["schemaVersion"] = 8
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

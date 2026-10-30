@@ -70,6 +70,7 @@ all with one size rule.
 | [059](059-crops-and-farm-zones.md) | Crops, growth stages, harvest and farm zones |
 | [060](060-calendar-months-and-years.md) | Calendar months and years derived from the day |
 | [061](061-workbench-recipes-and-craft-labour.md) | Workbench recipes, the craft labour and item groups |
+| [062](062-skills-and-xp-per-labour.md) | Skills and XP per labour |
 
 ## Renumbered records (redirects)
 

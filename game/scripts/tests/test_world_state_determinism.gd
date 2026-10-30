@@ -445,7 +445,9 @@ func _check_incident_replay_determinism() -> void:
 ##   "approach_job_targets" (ADR 033), the colonist "hands" list (ADR 037) and
 ##   "construction_sites" (ADR 040).
 ## - Ground berries entering state_hash() ("ground_berries", ADR 047).
-const PRE_INCIDENT_BASELINE_HASH := 2193816304
+## - Colonist "skills" (ADR 062, F3): seeded starting levels that also scale every work
+##   toil's duration and decide which colonist a job goes to.
+const PRE_INCIDENT_BASELINE_HASH := 3266324817
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if _failed:

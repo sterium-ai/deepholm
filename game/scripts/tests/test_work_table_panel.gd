@@ -28,6 +28,7 @@ var _failed := false
 func _init() -> void:
 	_check_grid_matches_colonists_and_labour_kinds()
 	_check_cell_activation_cycles_level_via_set_labour()
+	_check_cells_show_skill_level_and_xp_bar()
 	_check_calendar_boost_reflected_in_column_header()
 	_check_banner_shows_most_recent_calendar_alert()
 	_check_banner_hides_once_acknowledged()
@@ -110,6 +111,28 @@ func _check_cell_activation_cycles_level_via_set_labour() -> void:
 		var expected_text := "Off" if expected_level == 0 else str(expected_level)
 		_expect(displayed == expected_text,
 			"the cell must display '%s' after cycling to level %d, got '%s'" % [expected_text, expected_level, displayed])
+
+## F3 (ADR 062): under each priority button the cell shows the colonist's skill level in that
+## labour and an XP bar toward the next level, read from the view snapshot's "skills"; a change
+## of XP reaches the bar on the next refresh, and the top level shows a full bar.
+func _check_cells_show_skill_level_and_xp_bar() -> void:
+	var world := WorldStateType.new(10001)
+	var panel := _panel_for(world)
+	var colonist_id := String(world.get_colonists()[0]["id"])
+	var live := TestAccess.find_colonist(world, colonist_id)
+	for labour in WorldStateType.LABOUR_KINDS:
+		_expect(panel.skill_text(colonist_id, labour) == str(int(live["skills"][labour]["level"])),
+			"the %s cell must show the seeded skill level %d, got '%s'" % [labour, live["skills"][labour]["level"], panel.skill_text(colonist_id, labour)])
+	var thresholds: Array = TestAccess.content(world).document("skills")["xp_to_next"]
+	var chop_level := int(live["skills"]["chop"]["level"])
+	var next := int(thresholds[chop_level])
+	live["skills"]["chop"]["xp"] = next / 2
+	live["skills"]["mine"] = {"level": thresholds.size(), "xp": 0}
+	panel.refresh(world.get_view_snapshot([colonist_id]))
+	_expect(absf(panel.xp_bar_ratio(colonist_id, "chop") - float(next / 2) / float(next)) < 0.001,
+		"the chop XP bar must show %d / %d, got ratio %.3f" % [next / 2, next, panel.xp_bar_ratio(colonist_id, "chop")])
+	_expect(panel.skill_text(colonist_id, "mine") == str(thresholds.size()) and is_equal_approx(panel.xp_bar_ratio(colonist_id, "mine"), 1.0),
+		"a top-level skill must show level %d and a full bar" % thresholds.size())
 
 ## A fresh WorldState's default calendar content boosts "farm" by +1 for the
 ## whole seeded sowing window (spring days 1-20, which covers tick 0); the
