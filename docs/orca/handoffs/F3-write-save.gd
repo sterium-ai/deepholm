@@ -1,12 +1,13 @@
 extends SceneTree
 
-## F3 evidence (same session as R14-, A5-, A13b-, A16b- and A7-write-save.gd): writes one real save
+## F3 evidence (same session as R14-, A5-, A13b-, A16b-, A7- and F1-write-save.gd): writes one real save
 ## envelope from a short deterministic session, through the running build's own
 ## StateCodec.encode() and SaveIO.write_atomic(). Run from the repo root:
 ##   godot --headless --path game --script ../docs/orca/handoffs/F3-write-save.gd -- <absolute-output-path>
-## On the F3 branch it produced game/scripts/tests/fixtures/save_schema_v6_fixture.json (schema
-## v6: colonists carry seeded skills, so they work at other speeds than in the older fixtures).
-## A7-, A16b-, A13b-, A5- and R14-write-save.gd produced save_schema_v5 to v1_fixture.json.
+## On the F3 branch it produced game/scripts/tests/fixtures/save_schema_v7_fixture.json (schema
+## v7, provisional until F2 lands: colonists carry seeded skills, so they work at other speeds
+## than in the older fixtures). F1-, A7-, A16b-, A13b-, A5- and R14-write-save.gd produced
+## save_schema_v6 to v1_fixture.json.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")

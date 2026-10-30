@@ -645,7 +645,7 @@
             }
           },
           "skills": {
-            "description": "F3 (ADR 062, schema v6): skill level and XP per labour, on every colonist the game spawns, seeds or migrates (optional like heldTool: a worker without it works untracked). level is 0..len(skills.json xp_to_next); xp is the progress inside that level, below xp_to_next[level] (0 at the top level).",
+            "description": "F3 (ADR 062, schema v7): skill level and XP per labour, on every colonist the game spawns, seeds or migrates (optional like heldTool: a worker without it works untracked). level is 0..len(skills.json xp_to_next); xp is the progress inside that level, below xp_to_next[level] (0 at the top level).",
             "type": "object",
             "additionalProperties": false,
             "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],

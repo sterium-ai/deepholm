@@ -5,14 +5,14 @@
 > colonist works faster (70 % speed at level 0, 160 % at level 10), a good hauler carries one
 > more item every 5 levels, and when several free colonists could take a job the most skilled
 > one gets it. A new world gives each colonist two strong labours and weak ones elsewhere,
-> drawn from the world seed. Skills are saved (save schema v6).
+> drawn from the world seed. Skills are saved (save schema v7, provisional: see item 8).
 
 - **Status:** accepted
 - **Date:** 2026-10-30
 - **Scope:** content (`game/content/skills.json` and its schema, the scenario roster's
   `skills`), simulation (the skills component, the work toil's duration, hands capacity, the
   scheduler's batching pick, XP at job completion, world seeding, the view snapshot),
-  persistence (schema v6), presentation (the work table)
+  persistence (schema v7, provisional), presentation (the work table)
 - **Extends:** [ADR 004](004-global-assignment-fairness-policy.md) (global assignment),
   [ADR 012](012-actors-and-components.md) (actors and components),
   [ADR 037](037-hands-multi-unit-carrying.md) (hands), [ADR 055](055-viewer-snapshot.md)
@@ -53,8 +53,9 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
    major_max: 6, minor_min: 0, minor_max: 2}`. The schema types each `by_kind` value as an
    integer >= 0 by listing every job kind of `jobs.json` (the loader's schema subset checks
    values only through named properties), so a bad or unknown override fails content loading;
-   a job kind added later needs a schema line before it can be overridden. A bundle without the file (a test fixture) has
-   empty rules: base speed, no XP, no bonus, no seeding.
+   a job kind added later (in `jobs.json` or by a content pack) earns `default` until a
+   schema line names it. A bundle without the file (a test fixture) has empty rules: base
+   speed, no XP, no bonus, no seeding.
 2. **State.** A worker carries `skills`, `{labour: {level, xp}}` for its declared labours;
    `xp` is the progress inside the current level and restarts at 0 on a level up (the
    remainder carries over); the top level keeps `xp` 0. `ActorTable.spawn("colonist")` builds
@@ -97,14 +98,17 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
    scenario roster entry's `skills` (`{labour: level}`, levels 0–10, checked by the schema)
    then overrides those labours with XP 0. A decoded world is never reseeded. Colonists spawned
    later (an incident's migrant) start at 0.
-8. **Save, schema v6.** Each colonist entity has `skills` (sorted labours, `{level, xp}`
-   ints); it is in `state_hash()` with the rest of the actor. `SaveMigrations._v5_to_v6()`
-   gives each colonist of a v5 save every labour of its `labourTable` at level 0, XP 0 (a v5
-   colonist had no skills; seeding happens only at world creation). The validator checks a
+8. **Save, schema v7 (provisional).** F1 took v6 (ADR 059). F3 takes v7 while F2's bump
+   (also planned as v7) has not landed. If F2 merges first, this step becomes v7 → v8, with
+   its migration arm, the fixture name and the contract's `const` renumbered. Each colonist
+   entity has `skills` (sorted labours, `{level, xp}` ints); it is in `state_hash()` with the
+   rest of the actor. `SaveMigrations._v6_to_v7()` gives each colonist of a v6 save every
+   labour of its `labourTable` at level 0, XP 0 (a v6 colonist had no skills; seeding happens
+   only at world creation). The validator checks a
    colonist's `skills`: exactly the 7 labours, level 0..top, `0 <= xp < xp_to_next[level]`
    (0 at the top). The field is optional, like `heldTool`: every colonist the game spawns, seeds
    or migrates carries it, and a worker without it (a hand-built test actor) works untracked
-   (invariant of item 3). Fixture `save_schema_v6_fixture.json`, written by
+   (invariant of item 3). Fixture `save_schema_v7_fixture.json`, written by
    `docs/orca/handoffs/F3-write-save.gd`.
 9. **Viewer.** `get_view_snapshot()` adds `skills`, `{detailed id: {labour: {level, xp,
    next}}}` from `ActorSkills.progress()` with the world's rules; the work table shows, under
@@ -116,8 +120,8 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
   tests that counted work ticks on seeded colonists were updated (the handoff report lists
   them); hand-built test colonists without `skills` keep the old timing.
 - `state_hash()` of every scenario changes (new persisted field and seeded levels).
-- Saves are schema v6. When F1 (v6) and F2 (v7) land first, this bump moves to the next free
-  number at rebase, with its migration arm renumbered.
+- Saves are schema v7 (F1 is v6). If F2 lands first, this bump moves to v8 at rebase, with
+  its migration arm renumbered.
 
 ## Limitations
 
@@ -125,7 +129,7 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
   builder adds one progress per tick at every level. Build XP is one `site_work` award per
   builder per site, plus one per `site_fetch` delivery.
 - No skill-up event or message; XP gained by an interrupted job is earned only at completion.
-- Migrated (v5) colonists start at level 0 in every labour.
+- Migrated (v6 and older) colonists start at level 0 in every labour.
 
 ## Alternatives considered
 
