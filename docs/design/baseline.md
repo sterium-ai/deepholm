@@ -61,8 +61,8 @@ copied from it, and its name does not appear in this repository.
 | Baseline | Deepholm today | Status |
 | --- | --- | --- |
 | Farm zone: plow → fertilize → sow (several crops) → growth stages → harvest; planting season; drought | till/sow per tile, sowing window; no growth, no harvest, no zone | partial |
-| Forest reserve zone: saplings planted and grown | — | missing |
-| Pasture zone with animals (eggs, milk, meat) | — | missing |
+| Forest reserve zone: saplings planted and grown | — | missing → F6a (design closed 2026-10-30) |
+| Pasture zone with animals (eggs, milk, meat) | — | missing → wild fauna ecosystem + hunting first (F6b, design closed 2026-10-30); pasture deferred to F6c |
 | Food processing (flour, bread, stew, cheese, drinks) | — | missing |
 
 ## 6. Combat and threats
@@ -114,7 +114,7 @@ copied from it, and its name does not appear in this repository.
 ## Owner decisions still pending
 
 1. ~~Month/year on top of days~~ — **decided 2026-10-29: 3 days/month, 12 months/year**; done in F0 (ADR 060).
-2. Starvation rule: slow periodic damage vs. direct death.
+2. Starvation rule: slow periodic damage vs. direct death — asked 2026-10-30, owner gave no preference yet; proposed default: slow periodic damage once health exists (F6b/F8).
 3. ~~Breakdowns~~ — **decided 2026-10-30: depression only** (F5d); no "goes crazy" chance.
 
 ## Suggested order to close the minimum
