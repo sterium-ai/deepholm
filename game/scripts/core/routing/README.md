@@ -12,8 +12,8 @@ not schedule, prioritize, or share budget across colonists.
 
 ## Inputs and per-request state
 
-Construct with `start: Vector2i`, `target: Vector2i`, a deterministic
-`cost_fn(tile: Vector2i) -> Variant`, an inclusive `bounds_min`/
+Construct with `start: Vector3i`, `target: Vector3i`, a deterministic
+`cost_fn(tile: Vector3i) -> Variant`, an inclusive `bounds_min`/
 `bounds_max` rectangle and, optionally, `reachable(from, target) -> bool`
 (the region check, below) and `min_cost` (the heuristic weight, default
 `MIN_TILE_COST = 1.0`). `cost_fn` must not mutate anything and encodes the
@@ -154,8 +154,8 @@ never keeps consuming budget on later calls.
 ## Example
 
 ```gdscript
-var cost_fn := func(tile: Vector2i) -> int: return map_movement_cost(tile) # 0 = impassable
-var search := RouteSearch.new(start, target, cost_fn, Vector2i.ZERO, Vector2i(map_width - 1, map_height - 1))
+var cost_fn := func(tile: Vector3i) -> int: return map_movement_cost(tile) # 0 = impassable
+var search := RouteSearch.new(start, target, cost_fn, Vector3i.ZERO, Vector3i(map_width - 1, map_height - 1, layer_count - 1))
 var status := search.resume() # STATUS_FOUND, STATUS_UNREACHABLE, or STATUS_SEARCHING
 while status == RouteSearch.STATUS_SEARCHING:
 	status = search.resume() # call again next tick with the same instance
