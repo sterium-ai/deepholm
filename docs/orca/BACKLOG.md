@@ -999,7 +999,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** more workshops, production statistics/annual targets, stockpile filter UI (F5),
   tool quality/durability, recipes needing skills (F3).
 
-### F3 — Skills and XP per labour · `todo` · after F1/F2 (touches the scheduler's pick and work speed) · Design: closed 2026-10-30
+### F3 — Skills and XP per labour · `review` (branch `antonelmejor50-hub/f3-skills-and-xp-per`) · after F1/F2 (touches the scheduler's pick and work speed) · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** every colonist has a skill level 0–10 per labour. **XP is
   earned per completed job** of that labour (amount per job kind in content; default 1); level
@@ -1018,12 +1018,19 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   + migration + fixture; next free number), viewer labour table rows (skill + XP bar), an ADR
   (next free number), tests, `docs/orca/handoffs/F3.md`.
 - **Acceptance:** headless: two colonists, one at chop 8 and one at chop 0, one tree order →
-  the level-8 colonist is picked and finishes in ~62 % of the level-0 time; completing jobs
+  the level-8 colonist is picked and its work toil lasts ~49 % of the level-0 time (owner,
+  2026-10-30: the 70 → 160 % curve stays, so "~62 %" became 70/142 ≈ 49 %); completing jobs
   raises XP and crosses the first threshold after the content-defined count; a level-5 hauler
   carries one more item than a level-0 one; starting skills for seed 42 are identical across
   runs and saves; save/load mid-XP continues identically; replay reproduces; existing scheduler
   tests either unchanged or updated with the ADR quoted (skill ties = old behaviour); suite green.
 - **Non-goals:** passions/traits, skill decay, learning from others, UI beyond the labour table.
+- **Scope extension (owner, 2026-10-30):** `core/jobs/toil_bindings.gd` (XP is earned where a
+  toil completes a job; it already reads hands capacity), `core/world/view_snapshot.gd` (a
+  `"skills"` key {id: {labour: {level, xp, next}}} so the viewer draws the XP bar without
+  reading content, ADR 055) and `core/worldgen/world_seeding.gd` in place of
+  `world/scenario_builder.gd` (colonists are created and the A16b roster applied there).
+  ADR 062; evidence `docs/orca/handoffs/F3.md`.
 
 ### L1 — `TileGrid` as the only index owner · `review (antonelmejor50-hub/l1-tilegrid-as-the-only)` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2
 

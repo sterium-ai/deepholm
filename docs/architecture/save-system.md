@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 7` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 8` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -129,7 +129,9 @@ encoding and saves each in-flight route search's accumulated costs (see "Wire en
 "Route searches" below and [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)); v6 adds
 farm zones and the crop growth records (see "Crops" below and
 [ADR 059](../decisions/059-crops-and-farm-zones.md)); v7 saves the workbench targets, orders and
-bills (see "Workbenches" below and [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)).
+bills (see "Workbenches" below and [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)); v8 saves every
+colonist's skills (see "Colonist needs, the labour table and skills" below and
+[ADR 062](../decisions/062-skills-and-xp-per-labour.md)).
 
 **Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
 `JSON.stringify` of a write and unpacks it right after the parse of a read (after the
@@ -223,6 +225,13 @@ returns a new dictionary and never mutates its input. Steps today:
   v6 state that already has the field is refused. The v1 to v6 fixtures all migrate exactly to
   `save_schema_v7_fixture.json` (the same session, written packed by
   `docs/orca/handoffs/F2-write-save.gd`).
+- **v7 → v8** (F3, ADR 062): every colonist entity gains `skills`, each labour of its
+  `labourTable` at `{level: 0, xp: 0}` (starting skills are seeded only when a world is
+  created); nothing else changes, and a v7 colonist that already has the field is refused.
+  The v1 to v7 fixtures all migrate exactly to the v7 fixture's session with those zero
+  skills; `save_schema_v8_fixture.json` is the same session written by this build
+  (`docs/orca/handoffs/F3-write-save.gd`), whose colonists have seeded skills and so work at
+  other speeds: it loads and re-encodes unchanged.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -464,9 +473,10 @@ tile). A chop job's completion creates one wood item with a fresh id
 (`ItemTable.spawn_item()`, with the work effect from `jobs.json`, ADR 051).
 
 A colonist's `hands` field ([ADR 037](../decisions/037-hands-multi-unit-carrying.md))
-is an array of at most 4 `{kind, count}` entries, one per distinct kind held,
+is an array of `{kind, count}` entries, one per distinct kind held,
 every `count >= 1`, with the sum of counts never exceeding 4
-(`ActorInventory.HANDS_CAPACITY`). A `hands` entry carries no item id and no
+(`ActorInventory.HANDS_CAPACITY`) plus one per 5 levels of the colonist's `haul` skill
+(`skills.json` `carry_labour`/`carry_bonus_every`, ADR 062). A `hands` entry carries no item id and no
 ground position: a `pick_up` may merge units from several ground items of the
 same kind into one entry, and `place()` mints a fresh ground item id per entry
 it deposits (the toils are described in
@@ -532,7 +542,7 @@ remedy, blockingJobId, itemId, cell, retryAt, backoffTicks, site?}`
 All job fields, `site` included, reach `state_hash()`'s `"jobs"` entry through
 `get_jobs()`, so jobs serving different sites hash differently.
 
-## Colonist needs and the labour table
+## Colonist needs, the labour table and skills
 
 A colonist's (and a wolf's) `needs` field is `{food, water, rest}`, every
 value an integer 0-100 that decays at its content-declared rate
@@ -543,7 +553,13 @@ value an integer 0-100 that decays at its content-declared rate
 accumulators. A colonist also carries a `labourTable`, a fixed
 `{mine, chop, farm, haul, build, craft, cook}` map of integers 0-4 (a
 priority level, 0 disables that labour kind), editable via the `set_labour`
-command and all-3 for a freshly spawned colonist.
+command and all-3 for a freshly spawned colonist. Since v8 a colonist also
+carries `skills` ([ADR 062](../decisions/062-skills-and-xp-per-labour.md)): the same seven
+labours, each `{level, xp}` with `level` 0-10 (the length of `skills.json`'s `xp_to_next`) and
+`xp` the progress inside that level (`0 <= xp < xp_to_next[level]`, 0 at level 10). A new
+world seeds the levels from its seed; completed jobs raise them; nothing lowers them. The
+field is optional in the validator, like `heldTool`: every colonist the game spawns, seeds or
+migrates has it, and a worker without it (a hand-built test actor) works untracked.
 
 ## Critical-need interrupts and tile work progress
 

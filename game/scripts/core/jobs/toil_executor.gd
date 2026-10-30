@@ -13,6 +13,7 @@ const ToolFetchToilType = preload("res://scripts/core/jobs/tool_fetch_toil.gd")
 const ToolDropToilType = preload("res://scripts/core/jobs/tool_drop_toil.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
+const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
 
 const TOIL_RESERVE := "reserve"
 const TOIL_GO_TO := "go_to"
@@ -58,6 +59,8 @@ var _content
 var _job_kinds: Dictionary = {}
 var _move_ticks_per_tile: int
 var _work_ticks: Dictionary
+## content/skills.json (F3, ADR 062): the work toil's speed, hands capacity and job XP.
+var _skill_rules: Dictionary
 var _passability: Callable
 var _job_lookup: Callable
 var _item_lookup: Callable
@@ -134,6 +137,7 @@ func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callab
 	_site_exists = site_exists
 	_site_deposit = site_deposit
 	_job_kinds = _load_job_kinds()
+	_skill_rules = SkillsType.rules(content_registry as ContentRegistry)
 	_tool_fetch = ToolFetchToilType.new(_job_kinds, get_tool_items, get_tool_item, tool_reservation_of,
 		reserve_tool, release_tool, pick_up_tool, drop_tool_ground, get_colonists,
 		advance_go_to, _record)
@@ -157,6 +161,14 @@ func get_toils(kind: String) -> Array:
 
 func get_labour(kind: String) -> String:
 	return String(_job_kinds.get(kind, {}).get("labour", ""))
+
+## ADR 037's HANDS_CAPACITY plus the colonist's carry-skill bonus (F3, ADR 062).
+func hands_capacity(colonist: Dictionary) -> int:
+	return SkillsType.hands_capacity(_skill_rules, colonist, InventoryType.HANDS_CAPACITY)
+
+## F3 (ADR 062): the XP colonist earns for completing a job of `kind`, in the kind's labour.
+func award_job_xp(colonist: Dictionary, kind: String) -> void:
+	SkillsType.award(_skill_rules, colonist, get_labour(kind), SkillsType.xp_for_kind(_skill_rules, kind))
 
 static func is_known_toil(name: String) -> bool:
 	return name in VOCABULARY
@@ -184,16 +196,19 @@ func start_assignment(colonist: Dictionary, job_id: String, path: Array, on_arri
 		"rerouting": null,
 	}
 
-## work toil: fixed duration per kind, resumed from stored progress after an interrupt
-## (colonist-ai.md 3.6). A kind without work ticks (haul) is a no-op: colonist.work stays
-## null and the caller drives the next toil.
+## work toil: the kind's duration scaled by the colonist's skill in its labour (F3, ADR 062),
+## resumed from stored progress after an interrupt (colonist-ai.md 3.6; the stored remainder is
+## not rescaled). A kind without work ticks (haul) is a no-op: colonist.work stays null and the
+## caller drives the next toil.
 func start_work(colonist: Dictionary, job_id: String) -> void:
 	_record(TOIL_GO_TO, "complete")
 	var job: Dictionary = _job_lookup.call(job_id)
 	if not _work_ticks.has(job["kind"]):
 		return
 	_record(TOIL_WORK, "enter")
-	var ticks_remaining: int = int(_work_ticks[job["kind"]])
+	var kind: String = job["kind"]
+	var base_ticks: int = _work_ticks[kind]
+	var ticks_remaining := SkillsType.work_ticks_for(_skill_rules, colonist, get_labour(kind), base_ticks)
 	if _work_progress_get.is_valid():
 		var stored: Variant = _work_progress_get.call(_work_target(job), job_id)
 		if stored != null:
@@ -343,7 +358,7 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 	var item_tile := Vector2i(int(item["x"]), int(item["y"]))
 	if TileGrid.chebyshev(colonist_tile, item_tile) > 1:
 		return {"ok": false, "reason": REASON_ITEM_OUT_OF_REACH}
-	var hands_free := InventoryType.free_capacity(colonist)
+	var hands_free := InventoryType.free_capacity(colonist, hands_capacity(colonist))
 	if hands_free <= 0:
 		return {"ok": false, "reason": REASON_HANDS_FULL}
 	var requested: int = int(item["count"]) if count < 0 else count

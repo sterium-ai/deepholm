@@ -125,13 +125,20 @@ func _check_spawned_components_match_declarations() -> void:
 ## inert for a colonist the way inventory/combat still are. ADR 024 adds
 ## one more: "needsAccumulator", the sibling of "needs" holding each
 ## kind's deterministic per-day decay carry, inserted right after "needs"
-## (ActorTable._spawn_colonist()'s own literal field order).
+## (ActorTable._spawn_colonist()'s own literal field order). ADR 062 (F3) adds
+## "skills" right after "labourTable": every worker labour at {level 0, xp 0}.
 func _check_colonist_shape_is_unchanged(registry: ContentRegistryType) -> void:
 	var colonist := ActorTableType.spawn("colonist", 3, 4, registry, "colonist_shape_test")
-	var expected_keys := ["id", "kind", "x", "y", "needs", "needsAccumulator", "labourTable", "route", "work", "carrying",
+	var expected_keys := ["id", "kind", "x", "y", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "carrying",
 		"held_tool", "health"]
 	_expect(colonist.keys() == expected_keys,
-		"spawn('colonist') must produce exactly the pre-F2 key set/order plus a trailing 'health', got %s" % [colonist.keys()])
+		"spawn('colonist') must produce exactly the pre-F2 key set/order plus 'skills' and a trailing 'health', got %s" % [colonist.keys()])
+	var labours: Array = registry.get_entry("actors", "colonist")["tunables"]["worker"]["labours"]
+	_expect((colonist["skills"] as Dictionary).keys() == labours,
+		"spawn('colonist') must track every worker labour's skill in declared order, got %s" % [colonist["skills"].keys()])
+	for labour: String in labours:
+		_expect(JSON.stringify(colonist["skills"][labour]) == JSON.stringify({"level": 0, "xp": 0}),
+			"a spawned colonist's %s skill must be level 0 with 0 XP" % labour)
 	_expect(colonist["held_tool"] == "" and colonist["route"] == null
 			and colonist["work"] == null and colonist["carrying"] == null,
 		"spawn('colonist') must default route/work/carrying to null and held_tool to ''")

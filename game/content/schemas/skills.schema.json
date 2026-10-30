@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Skills and XP per labour (F3, ADR 062). Every worker labour has a skill level 0..N, N = the length of xp_to_next.",
+  "type": "object",
+  "required": ["xp_to_next", "speed_percent_at_min", "speed_percent_at_max", "carry_labour", "carry_bonus_every", "xp_per_job", "starting"],
+  "properties": {
+    "xp_to_next": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "integer", "minimum": 1},
+      "description": "xp_to_next[L] is the XP a colonist at level L earns to reach level L + 1 (XP restarts at 0 on each level); its length is the top level."
+    },
+    "speed_percent_at_min": {"type": "integer", "minimum": 1, "description": "Work speed at level 0, in percent of a job's work_ticks rate."},
+    "speed_percent_at_max": {"type": "integer", "minimum": 1, "description": "Work speed at the top level; levels in between are linear (integer division)."},
+    "carry_labour": {"type": "string", "minLength": 1, "description": "The labour whose level raises hands capacity."},
+    "carry_bonus_every": {"type": "integer", "minimum": 1, "description": "One extra unit in the hands per this many levels of carry_labour."},
+    "xp_per_job": {
+      "type": "object",
+      "required": ["default", "by_kind"],
+      "properties": {
+        "default": {"type": "integer", "minimum": 0, "description": "XP for a completed job of a kind not listed in by_kind."},
+        "by_kind": {"type": "object", "description": "Job kind -> XP for one completed job of that kind (an integer >= 0)."}
+      },
+      "additionalProperties": false
+    },
+    "starting": {
+      "type": "object",
+      "description": "Seeded starting levels: major_count distinct labours at major_min..major_max, the rest at minor_min..minor_max (inclusive), drawn from the world seed.",
+      "required": ["major_count", "major_min", "major_max", "minor_min", "minor_max"],
+      "properties": {
+        "major_count": {"type": "integer", "minimum": 0},
+        "major_min": {"type": "integer", "minimum": 0},
+        "major_max": {"type": "integer", "minimum": 0},
+        "minor_min": {"type": "integer", "minimum": 0},
+        "minor_max": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

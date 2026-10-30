@@ -17,8 +17,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## calendar and enabled incidents (A16b, ADR 057); v5 saves route-search costs and SaveIO writes
 ## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059);
 ## v7 saves the workbench targets, orders and bills (F2, ADR 061).
+## v8 saves every colonist's skills (F3, ADR 062).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 7
+const SCHEMA_VERSION := 8
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.

@@ -223,6 +223,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 	var tile_ids: Array[String] = rules["tiles"]
 	var job_kinds: Array[String] = rules["jobKinds"]
 	var need_kinds: Array[String] = rules["needs"]
+	var skill_rules: Dictionary = rules["skills"]
 	var max_world_size: int = rules["maxWorldSize"]
 	if not _keys_allowed(state, TOP_LEVEL_FIELDS + OPTIONAL_TOP_LEVEL_FIELDS):
 		return _fail("unexpected top-level field")
@@ -270,7 +271,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return ToolValidator._valid_tool_fetch_excluded(state.get("toolFetchExcluded"), state.get("toolItems")),
 		func() -> Dictionary: return ToolValidator._valid_tool_items(state.get("toolItems"), w, h),
 		func() -> Dictionary: return ToolValidator._valid_tool_reservations(state.get("toolReservations"), state.get("toolItems")),
-		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"], w, h, need_kinds),
+		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"], w, h, need_kinds, skill_rules),
 		func() -> Dictionary: return ItemValidator._valid_inventory(state["inventory"]),
 		func() -> Dictionary: return SchedulingValidator._valid_jobs(state["jobs"], w, h, job_kinds),
 		func() -> Dictionary: return SchedulingValidator._valid_scheduling(state["scheduling"], w, h),
@@ -293,6 +294,8 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		"jobKinds": _ids(registry, "jobs"),
 		"needs": _ids(registry, "needs"),
 		"crops": _ids(registry, "crops"),
+		# F3 (ADR 062): skill levels and the carry bonus in a saved colonist's hands.
+		"skills": registry.document("skills").duplicate(true),
 		# A saved map keeps its exact size on load, so only WorldGenerator's upper bound applies.
 		"maxWorldSize": int(registry.document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE)),
 	}

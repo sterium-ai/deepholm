@@ -14,7 +14,7 @@ static func build(tunables: Dictionary) -> Dictionary:
 	return {"items": [], "tool": "", "capacity": int(tunables.get("capacity", 1))}
 
 ## ADR 037 "hands": a list of {"kind","count"}, at most one entry per kind, every count >= 1, the
-## total never above HANDS_CAPACITY. The single read/write point of a colonist's hands.
+## total never above HANDS_CAPACITY plus the carry-skill bonus (F3, ADR 062). The single read/write point of a colonist's hands.
 const HANDS_CAPACITY := 4
 
 ## True while actor holds at least one unit of anything.
@@ -35,12 +35,13 @@ static func count_of_kind(actor: Dictionary, kind: String) -> int:
 			return int(entry["count"])
 	return 0
 
-## How many more units of any kind the hands can take.
-static func free_capacity(actor: Dictionary) -> int:
+## How many more units of any kind the hands can take; capacity is HANDS_CAPACITY plus the
+## actor's carry-skill bonus (ToilExecutor.hands_capacity(), F3/ADR 062) where skills apply.
+static func free_capacity(actor: Dictionary, capacity: int = HANDS_CAPACITY) -> int:
 	var used := 0
 	for entry in (actor.get("hands", []) as Array):
 		used += int(entry["count"])
-	return HANDS_CAPACITY - used
+	return capacity - used
 
 ## Merges into a same-kind entry or appends one; callers never exceed free_capacity().
 static func add_to_hands(actor: Dictionary, kind: String, count: int) -> void:

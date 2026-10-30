@@ -1,0 +1,9 @@
+{
+  "xp_to_next": [10, 25, 45, 70, 100, 135, 175, 220, 270, 325],
+  "speed_percent_at_min": 70,
+  "speed_percent_at_max": 160,
+  "carry_labour": "haul",
+  "carry_bonus_every": 5,
+  "xp_per_job": {"default": 1, "by_kind": {}},
+  "starting": {"major_count": 2, "major_min": 3, "major_max": 6, "minor_min": 0, "minor_max": 2}
+}

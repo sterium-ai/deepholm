@@ -35,7 +35,16 @@
       "required": ["kind", "count"],
       "properties": {
         "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
-        "count": { "type": "integer", "minimum": 1, "maximum": 4 }
+        "count": { "type": "integer", "minimum": 1, "maximum": 6 }
+      }
+    },
+    "skillRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "xp"],
+      "properties": {
+        "level": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "xp": { "type": "integer", "minimum": 0 }
       }
     },
     "object": {
@@ -635,6 +644,21 @@
               "cook": { "type": "integer", "minimum": 0, "maximum": 4 }
             }
           },
+          "skills": {
+            "description": "F3 (ADR 062, schema v6): skill level and XP per labour, on every colonist the game spawns, seeds or migrates (optional like heldTool: a worker without it works untracked). level is 0..len(skills.json xp_to_next); xp is the progress inside that level, below xp_to_next[level] (0 at the top level).",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],
+            "properties": {
+              "mine": { "$ref": "#/$defs/skillRecord" },
+              "chop": { "$ref": "#/$defs/skillRecord" },
+              "farm": { "$ref": "#/$defs/skillRecord" },
+              "haul": { "$ref": "#/$defs/skillRecord" },
+              "build": { "$ref": "#/$defs/skillRecord" },
+              "craft": { "$ref": "#/$defs/skillRecord" },
+              "cook": { "$ref": "#/$defs/skillRecord" }
+            }
+          },
           "route": {
             "anyOf": [
               { "type": "null" },
@@ -648,8 +672,9 @@
             ]
           },
           "hands": {
+            "description": "ADR 037; the summed counts stay within 4 plus one per skills.json carry_bonus_every levels of the colonist's carry_labour skill (F3, ADR 062).",
             "type": "array",
-            "maxItems": 4,
+            "maxItems": 6,
             "items": { "$ref": "#/$defs/handsEntry" }
           },
           "heldTool": { "type": "string", "pattern": "^[a-z0-9_-]*$" },

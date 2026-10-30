@@ -6,6 +6,7 @@ const ToolMatchingType = preload("res://scripts/core/jobs/tool_matching.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WorkerType = preload("res://scripts/core/actors/components/worker.gd")
 const WaitingIndexType = preload("res://scripts/core/scheduling/waiting_index.gd")
+const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
 const JOB_EVALUATION_BUDGET := 32
 const PRIORITY_WEIGHT := 16
 const MAX_TRAVEL_PENALTY := 15
@@ -218,20 +219,23 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 		proposals.append_array(worker_proposals)
 		_cursors[worker] = (cursor + count) % _waiting.size()
 	proposals.sort_custom(_pair_before)
+	var proposals_by_job := _group_by_job(proposals)
 	var batches: Dictionary = {}
 	# One slot per worker before any second slot; real route distances decide activation.
 	for slot in ROUTE_CANDIDATES_PER_WORKER:
-		for proposal in proposals:
+		for scanned: Dictionary in proposals:
+			var scanned_job: String = scanned["entry"]["id"]
+			var scanned_worker: String = scanned["worker"]
+			if claimed_jobs.has(scanned_job) or _slot_taken(batches, scanned_worker, slot):
+				continue
+			var job_proposals: Array = proposals_by_job[scanned_job]
+			var proposal := _most_skilled_free(job_proposals, batches, slot)
 			var worker: String = proposal["worker"]
 			var entry: Dictionary = proposal["entry"]
-			if claimed_jobs.has(entry["id"]):
-				continue
 			if not batches.has(worker):
 				var new_candidates: Array[Dictionary] = []
 				batches[worker] = {"candidates": new_candidates, "cursor": 0,
 					"route": null, "found": [], "start": proposal["start"]}
-			if batches[worker]["candidates"].size() > slot:
-				continue
 			batches[worker]["candidates"].append(entry)
 			claimed_jobs[entry["id"]] = true
 	for worker in batches:
@@ -346,13 +350,51 @@ func _pending_matches_job(worker: String, job_id: String) -> bool:
 			return true
 	return false
 
+## "skill" is the worker's level in the job's labour (F3, ADR 062; 0 unwired or untracked).
 func _score_candidate(worker: String, colonist: Dictionary, entry: Dictionary, job_kinds: Dictionary,
 		labour_table: Dictionary, tick_number: int, get_job_labour: Callable, get_calendar_boost: Callable) -> Dictionary:
 	var bracket := _priority_bracket(entry, job_kinds, labour_table, tick_number, get_job_labour, get_calendar_boost)
 	var start := Vector2i(colonist["x"], colonist["y"])
 	var ticks_waiting := tick_number - int(entry["submitted_tick"])
-	return {"worker": worker, "entry": entry, "start": start,
+	var skill := 0
+	if get_job_labour.is_valid():
+		var kind: String = job_kinds.get(entry["id"], "")
+		var labour: String = get_job_labour.call(kind)
+		skill = SkillsType.level_of(colonist, labour)
+	return {"worker": worker, "entry": entry, "start": start, "skill": skill,
 		"score": PRIORITY_WEIGHT * bracket + ticks_waiting - mini(MAX_TRAVEL_PENALTY, TileGrid.manhattan(entry["target"], start))}
+
+## job id -> its proposals, each list in the global _pair_before() order.
+func _group_by_job(proposals: Array[Dictionary]) -> Dictionary:
+	var by_job: Dictionary = {}
+	for proposal in proposals:
+		var job_id: String = proposal["entry"]["id"]
+		if not by_job.has(job_id):
+			by_job[job_id] = []
+		(by_job[job_id] as Array).append(proposal)
+	return by_job
+
+func _slot_taken(batches: Dictionary, worker: String, slot: int) -> bool:
+	if not batches.has(worker):
+		return false
+	var candidates: Array = batches[worker]["candidates"]
+	return candidates.size() > slot
+
+## F3 (ADR 062): the batching pass hands a job, when its turn comes, to the most skilled of its
+## proposers whose `slot` is still free; equal skill keeps the first in _pair_before() order
+## (the best score: travel and aging as before), so all-equal skills batch exactly as before.
+func _most_skilled_free(job_proposals: Array, batches: Dictionary, slot: int) -> Dictionary:
+	var best: Dictionary = {}
+	var best_skill := -1
+	for proposal: Dictionary in job_proposals:
+		var worker: String = proposal["worker"]
+		var skill: int = proposal["skill"]
+		if _slot_taken(batches, worker, slot):
+			continue
+		if skill > best_skill:
+			best = proposal
+			best_skill = skill
+	return best
 
 ## Marks queued jobs labour_disabled when no colonist in `colony` has the labour on.
 ## `colony` must be the full roster, not tick()'s filtered list.
