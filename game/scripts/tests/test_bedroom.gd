@@ -6,9 +6,9 @@ extends SceneTree
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 const MAX_TICKS := 500
-const ROOM_ORIGIN := Vector2i(3, 3)
-const ROOM_INTERIOR := Vector2i(5, 5)
-const ROOM_DOOR := Vector2i(7, 5)
+const ROOM_ORIGIN := Vector3i(3, 3, 0)
+const ROOM_INTERIOR := Vector3i(5, 5, 0)
+const ROOM_DOOR := Vector3i(7, 5, 0)
 
 var _failed := false
 
@@ -43,7 +43,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _colonist() -> Dictionary:
-	return {"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	return {"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 20},
 		"route": null, "work": null, "carrying": null}
 
@@ -54,7 +54,7 @@ func _command_ok(world: WorldStateType, command_id: String, command_type: String
 
 func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 	TestAccess.colonists(world).append(_colonist())
-	_command_ok(world, "stockpile", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "stockpile", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	var total_wood := 0
 	for kind in ["wooden_wall", "door", "bed"]:
 		for cost_entry in (TestAccess.object_definitions(world)[kind]["build_cost"] as Array):
@@ -67,7 +67,7 @@ func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 	# subsequent build command still resolves through the real stockpile gate.
 	for item_index in range(total_wood):
 		var item_id := "item_%d" % (item_index + 1)
-		TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": 0, "y": 0, "kind": "wood", "count": 1}
+		TestAccess.item_table(world).items[item_id] = {"id": item_id, "x": 0, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = total_wood + 1
 
 	if bedroom:
@@ -75,14 +75,14 @@ func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 		# route and the builder can keep using the shared reachability rules.
 		if not _complete_build(world, "door", ROOM_DOOR):
 			return -1
-		var sites: Array[Vector2i] = []
+		var sites: Array[Vector3i] = []
 		for x in range(ROOM_ORIGIN.x, ROOM_ORIGIN.x + 5):
-			sites.append(Vector2i(x, ROOM_ORIGIN.y))
-			sites.append(Vector2i(x, ROOM_ORIGIN.y + 4))
+			sites.append(Vector3i(x, ROOM_ORIGIN.y, 0))
+			sites.append(Vector3i(x, ROOM_ORIGIN.y + 4, 0))
 		for y in range(ROOM_ORIGIN.y + 1, ROOM_ORIGIN.y + 4):
-			sites.append(Vector2i(ROOM_ORIGIN.x, y))
+			sites.append(Vector3i(ROOM_ORIGIN.x, y, 0))
 			if y != ROOM_DOOR.y:
-				sites.append(Vector2i(ROOM_ORIGIN.x + 4, y))
+				sites.append(Vector3i(ROOM_ORIGIN.x + 4, y, 0))
 		for site in sites:
 			if not _complete_build(world, "wooden_wall", site):
 				return -1
@@ -105,9 +105,9 @@ func _build_fixture(world: WorldStateType, bedroom: bool) -> int:
 ## Completion is instead observed through get_construction_sites(): the
 ## site record disappears and the declared object
 ## occupies the tile.
-func _complete_build(world: WorldStateType, kind: String, site: Vector2i) -> bool:
+func _complete_build(world: WorldStateType, kind: String, site: Vector3i) -> bool:
 	var result := Scenarios.command(world, "build_%s_%d_%d" % [kind, site.x, site.y], "build",
-		{"kind": kind, "x": site.x, "y": site.y})
+		{"kind": kind, "x": site.x, "y": site.y, "z": 0})
 	if not result.get("ok", false):
 		_fail("build command for %s at %s was rejected: %s" % [kind, site, result])
 		return false

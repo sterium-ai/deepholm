@@ -50,24 +50,24 @@ func _expect(condition: bool, message: String) -> void:
 func _make_box_room_map() -> Dictionary:
 	var blocked: Dictionary = {}
 	for x in range(19, 24):
-		blocked[Vector2i(x, 19)] = true
-		blocked[Vector2i(x, 23)] = true
-	blocked[Vector2i(19, 20)] = true
-	blocked[Vector2i(19, 21)] = true
-	blocked[Vector2i(19, 22)] = true
-	blocked[Vector2i(23, 20)] = true
-	blocked[Vector2i(23, 22)] = true
-	var door := Vector2i(23, 21)
+		blocked[Vector3i(x, 19, 0)] = true
+		blocked[Vector3i(x, 23, 0)] = true
+	blocked[Vector3i(19, 20, 0)] = true
+	blocked[Vector3i(19, 21, 0)] = true
+	blocked[Vector3i(19, 22, 0)] = true
+	blocked[Vector3i(23, 20, 0)] = true
+	blocked[Vector3i(23, 22, 0)] = true
+	var door := Vector3i(23, 21, 0)
 	var doors: Dictionary = {door: true}
 	var beds: Dictionary = {}
-	var passable := func(x: int, y: int) -> bool: return not blocked.has(Vector2i(x, y))
-	var is_door := func(x: int, y: int) -> bool: return doors.has(Vector2i(x, y))
-	var has_bed := func(x: int, y: int) -> bool: return beds.has(Vector2i(x, y))
-	var is_stockpile := func(x: int, y: int) -> bool: return false
+	var passable := func(x: int, y: int) -> bool: return not blocked.has(Vector3i(x, y, 0))
+	var is_door := func(x: int, y: int) -> bool: return doors.has(Vector3i(x, y, 0))
+	var has_bed := func(tile: Vector3i) -> bool: return beds.has(tile)
+	var is_stockpile := func(_tile: Vector3i) -> bool: return false
 	var rooms := RoomMapType.new(30, 30, passable, is_door, has_bed, is_stockpile)
 	return {
 		"rooms": rooms, "blocked": blocked, "doors": doors, "beds": beds,
-		"interior": Vector2i(21, 21), "door": door, "outside": Vector2i(24, 21),
+		"interior": Vector3i(21, 21, 0), "door": door, "outside": Vector3i(24, 21, 0),
 	}
 
 ## A 5x5 walled box (16-tile ring, one cell a door) around a 3x3 interior is
@@ -80,8 +80,8 @@ func _make_box_room_map() -> Dictionary:
 func _check_room_map_flood_recognises_enclosure_bed_and_door_removal() -> void:
 	var fixture := _make_box_room_map()
 	var rooms: RoomMapType = fixture["rooms"]
-	var interior: Vector2i = fixture["interior"]
-	var door: Vector2i = fixture["door"]
+	var interior: Vector3i = fixture["interior"]
+	var door: Vector3i = fixture["door"]
 	var doors: Dictionary = fixture["doors"]
 	var beds: Dictionary = fixture["beds"]
 
@@ -106,18 +106,18 @@ func _check_room_map_flood_recognises_enclosure_bed_and_door_removal() -> void:
 ## the empty map, so neither side of a standalone outdoor door -- nor a bed
 ## placed on one side of it -- ever resolves to a room.
 func _check_standalone_outdoor_door_is_not_a_room() -> void:
-	var doors: Dictionary = {Vector2i(10, 10): true}
+	var doors: Dictionary = {Vector3i(10, 10, 0): true}
 	var beds: Dictionary = {}
 	var passable := func(x: int, y: int) -> bool: return true
-	var is_door := func(x: int, y: int) -> bool: return doors.has(Vector2i(x, y))
-	var has_bed := func(x: int, y: int) -> bool: return beds.has(Vector2i(x, y))
-	var is_stockpile := func(x: int, y: int) -> bool: return false
+	var is_door := func(x: int, y: int) -> bool: return doors.has(Vector3i(x, y, 0))
+	var has_bed := func(tile: Vector3i) -> bool: return beds.has(tile)
+	var is_stockpile := func(_tile: Vector3i) -> bool: return false
 	var rooms := RoomMapType.new(30, 30, passable, is_door, has_bed, is_stockpile)
 
 	_expect(rooms.get_room_at(9, 10).is_empty(), "open ground beside a lone outdoor door must not be a room")
 	_expect(rooms.get_room_at(11, 10).is_empty(), "open ground on the other side of a lone outdoor door must not be a room")
 
-	beds[Vector2i(9, 10)] = true
+	beds[Vector3i(9, 10, 0)] = true
 	rooms.on_passability_changed(9, 10)
 	_expect(rooms.get_room_at(9, 10).is_empty(),
 		"a bed on open, unenclosed ground next to a lone door must still not resolve to a room")
@@ -130,7 +130,7 @@ func _check_standalone_outdoor_door_is_not_a_room() -> void:
 func _check_exterior_of_valid_room_is_not_a_room() -> void:
 	var fixture := _make_box_room_map()
 	var rooms: RoomMapType = fixture["rooms"]
-	var outside: Vector2i = fixture["outside"]
+	var outside: Vector3i = fixture["outside"]
 	_expect(rooms.get_room_at(outside.x, outside.y).is_empty(),
 		"the open exterior beside a valid room's own door must not itself be a room")
 
@@ -143,8 +143,8 @@ func _check_wall_removal_breaches_enclosure_resealing_restores_it() -> void:
 	var fixture := _make_box_room_map()
 	var rooms: RoomMapType = fixture["rooms"]
 	var blocked: Dictionary = fixture["blocked"]
-	var interior: Vector2i = fixture["interior"]
-	var breach := Vector2i(19, 20)
+	var interior: Vector3i = fixture["interior"]
+	var breach := Vector3i(19, 20, 0)
 
 	_expect(not rooms.get_room_at(interior.x, interior.y).is_empty(),
 		"the box must be a recognised room before any wall is removed")
@@ -173,7 +173,7 @@ func _check_worldstate_recognises_bedroom_and_storeroom_both() -> void:
 	_expect(not bool(room.get("has_stockpile", false)), "no zone yet must report has_stockpile false")
 
 	var zone_result := Scenarios.command(world, "zone_add", "zone_add", {
-		"x": room_coords["interior"].x - 1, "y": room_coords["interior"].y - 1, "width": 2, "height": 2})
+		"x": room_coords["interior"].x - 1, "y": room_coords["interior"].y - 1, "z": 0, "width": 2, "height": 2})
 	_expect(zone_result["ok"], "adding a zone overlapping the room must be accepted (got %s)" % zone_result)
 
 	room = world.get_room_at(room_coords["interior"].x, room_coords["interior"].y)
@@ -189,8 +189,8 @@ func _check_worldstate_removing_door_command_stops_being_a_room() -> void:
 	_expect(not world.get_room_at(room_coords["interior"].x, room_coords["interior"].y).is_empty(),
 		"the freshly built room must be recognised before the door is removed")
 
-	var door: Vector2i = room_coords["door"]
-	var remove_result := Scenarios.command(world, "remove_door", "remove_object", {"x": door.x, "y": door.y})
+	var door: Vector3i = room_coords["door"]
+	var remove_result := Scenarios.command(world, "remove_door", "remove_object", {"x": door.x, "y": door.y, "z": 0})
 	_expect(remove_result["ok"], "removing the door object must be accepted (got %s)" % remove_result)
 
 	_expect(world.get_room_at(room_coords["interior"].x, room_coords["interior"].y).is_empty(),
@@ -220,7 +220,7 @@ func _check_bedroom_bed_gets_rest_multiplier_ordinary_bed_does_not() -> void:
 	Scenarios.isolate_need(ordinary_world, "rest")
 	_set_rest_config(ordinary_world, 60, 1.5)
 	TestAccess.colonists(ordinary_world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
-	var place_result := Scenarios.command(ordinary_world, "place_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
+	var place_result := Scenarios.command(ordinary_world, "place_bed", "place_object", {"x": 5, "y": 0, "z": 0, "kind": "bed"})
 	_expect(place_result["ok"], "placing the ordinary bed fixture must be accepted")
 	var ordinary_rest := _run_sleep_to_completion(ordinary_world)
 	_expect(ordinary_rest == 60, "sleeping in an ordinary (non-bedroom) bed must restore only the plain test config restore value (got %s)" % ordinary_rest)
@@ -235,9 +235,9 @@ func _check_outdoor_bed_gets_no_multiplier() -> void:
 	Scenarios.isolate_need(world, "rest")
 	_set_rest_config(world, 60, 1.5)
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
-	var stray_door := Scenarios.command(world, "place_stray_door", "place_object", {"x": 10, "y": 10, "kind": "door"})
+	var stray_door := Scenarios.command(world, "place_stray_door", "place_object", {"x": 10, "y": 10, "z": 0, "kind": "door"})
 	_expect(stray_door["ok"], "placing a standalone door on open, unwalled ground must be accepted")
-	var place_result := Scenarios.command(world, "place_outdoor_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
+	var place_result := Scenarios.command(world, "place_outdoor_bed", "place_object", {"x": 5, "y": 0, "z": 0, "kind": "bed"})
 	_expect(place_result["ok"], "placing the outdoor bed fixture must be accepted")
 	var rest := _run_sleep_to_completion(world)
 	_expect(rest == 60, "a bed on open ground sharing a map with an unrelated stray door must not receive the bedroom multiplier (got %s)" % rest)
@@ -285,14 +285,14 @@ func _place_room(world: WorldStateType, ox: int, oy: int) -> Dictionary:
 	_place(world, ox, oy + 3, "wooden_wall")
 	_place(world, ox + 4, oy + 1, "wooden_wall")
 	_place(world, ox + 4, oy + 3, "wooden_wall")
-	var door := Vector2i(ox + 4, oy + 2)
+	var door := Vector3i(ox + 4, oy + 2, 0)
 	_place(world, door.x, door.y, "door")
-	return {"interior": Vector2i(ox + 2, oy + 2), "door": door}
+	return {"interior": Vector3i(ox + 2, oy + 2, 0), "door": door}
 
 func _place(world: WorldStateType, x: int, y: int, kind: String) -> void:
-	var result := Scenarios.command(world, "place_%s_%d_%d" % [kind, x, y], "place_object", {"x": x, "y": y, "kind": kind})
+	var result := Scenarios.command(world, "place_%s_%d_%d" % [kind, x, y], "place_object", {"x": x, "y": y, "z": 0, "kind": kind})
 	_expect(result["ok"], "placing %s at (%d, %d) must be accepted (got %s)" % [kind, x, y, result])
 
 func _colonist(id: String, x: int, y: int, needs: Dictionary) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y, "needs": needs.duplicate(),
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0, "needs": needs.duplicate(),
 		"route": null, "work": null, "carrying": null}

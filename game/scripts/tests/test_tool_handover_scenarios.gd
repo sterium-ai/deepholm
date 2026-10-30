@@ -87,14 +87,14 @@ func _check_scenario_1_two_colonists_one_axe_two_chop_orders() -> void:
 	TestAccess.set_tile(world, 9, 0, WorldStateType.TILE_TREE)
 	TestAccess.set_tile(world, 9, 1, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "z": 0, "route": null, "work": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 
-	var chop1 := Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "priority": 1})
+	var chop1 := Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "z": 0, "priority": 1})
 	_expect(chop1.get("ok", false), "chop_1 submission must be accepted")
 	var chop1_id := String(chop1.get("job_id", ""))
-	var chop2 := Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 1, "priority": 1})
+	var chop2 := Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 1, "z": 0, "priority": 1})
 	_expect(chop2.get("ok", false), "chop_2 submission must be accepted")
 	var chop2_id := String(chop2.get("job_id", ""))
 
@@ -143,9 +143,9 @@ func _check_scenario_2_no_tool_anywhere_blocks_and_frees_colonist() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 9, 0, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 
-	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "priority": 1})
+	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "z": 0, "priority": 1})
 	_expect(chop.get("ok", false), "chop_1 submission must be accepted even with no axe anywhere")
 	var chop_id := String(chop.get("job_id", ""))
 
@@ -160,9 +160,9 @@ func _check_scenario_2_no_tool_anywhere_blocks_and_frees_colonist() -> void:
 			break
 	_expect(blocked, "the chop job must expose reason blocked_no_tool within the tick budget")
 
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
-	var forage := Scenarios.command(world, "forage_1", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage := Scenarios.command(world, "forage_1", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage.get("ok", false), "forage submission must be accepted")
 	var forage_id := String(forage.get("job_id", ""))
 
@@ -184,10 +184,10 @@ func _check_scenario_3_destroyed_tool_mid_job_fails_and_requeues() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("axe", 0, 0)
 
-	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 2, "y": 0, "priority": 1})
+	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(chop.get("ok", false), "chop_1 submission must be accepted")
 	var job_id := String(chop.get("job_id", ""))
 
@@ -258,18 +258,18 @@ func _check_scenario_4_handover_bounded_ticks() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 10, 9, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
-	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_a"), "moving the axe into colonist_a's hand must succeed")
 
-	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush A placement must be accepted")
-	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush B placement must be accepted")
-	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_a.get("ok", false), "forage_a submission must be accepted")
 	var forage_a_id := String(forage_a.get("job_id", ""))
 
@@ -289,7 +289,7 @@ func _check_scenario_4_handover_bounded_ticks() -> void:
 			break
 	_expect(colonist_a_busy, "colonist_a must be busy on forage_a before chop_b (and its axe reservation) ever exists")
 
-	var chop_b := Scenarios.command(world, "chop_b", "chop", {"x": 10, "y": 9, "priority": 1})
+	var chop_b := Scenarios.command(world, "chop_b", "chop", {"x": 10, "y": 9, "z": 0, "priority": 1})
 	_expect(chop_b.get("ok", false), "chop_b submission must be accepted")
 	var chop_b_id := String(chop_b.get("job_id", ""))
 
@@ -306,7 +306,7 @@ func _check_scenario_4_handover_bounded_ticks() -> void:
 					# colonist_a's own next dispatched job -- submitted only
 					# now, so a third job is never queued while colonist_b
 					# waits -- is what makes its first toil drop_tool.
-					var forage_b := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
+					var forage_b := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "z": 0, "priority": 1})
 					_expect(forage_b.get("ok", false), "forage_b must be accepted right as forage_a completes")
 		var chop_job := Scenarios.find_job(world, chop_b_id)
 		if String(chop_job.get("reason", "")) == "waiting_for_tool_handover":
@@ -338,10 +338,10 @@ func _check_scenario_5a_save_load_mid_fetch_tool_matches_hash() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 11, 0, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 10, 0)
 
-	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 11, "y": 0, "priority": 1})
+	var chop := Scenarios.command(world, "chop_1", "chop", {"x": 11, "y": 0, "z": 0, "priority": 1})
 	_expect(chop.get("ok", false), "chop_1 submission must be accepted")
 	var job_id := String(chop.get("job_id", ""))
 
@@ -387,19 +387,19 @@ func _check_scenario_5b_save_load_mid_handover_drop_matches_hash() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 10, 9, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_a", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"chop": 0}})
-	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_b", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 4, "y": 0, "width": 1, "height": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 4, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush A placement must be accepted")
-	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush B placement must be accepted")
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_a"), "moving the axe into colonist_a's hand must succeed")
-	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_a.get("ok", false), "forage_a submission must be accepted")
 	var forage_a_id := String(forage_a.get("job_id", ""))
 	var busy := false
@@ -410,7 +410,7 @@ func _check_scenario_5b_save_load_mid_handover_drop_matches_hash() -> void:
 			busy = true
 			break
 	_expect(busy, "the holder must be doing real tool-free work before another real job requests the axe")
-	var chop_b := Scenarios.command(world, "chop_b", "chop", {"x": 10, "y": 9, "priority": 1})
+	var chop_b := Scenarios.command(world, "chop_b", "chop", {"x": 10, "y": 9, "z": 0, "priority": 1})
 	_expect(chop_b.get("ok", false), "chop_b submission must be accepted")
 	var chop_b_id := String(chop_b.get("job_id", ""))
 
@@ -420,7 +420,7 @@ func _check_scenario_5b_save_load_mid_handover_drop_matches_hash() -> void:
 	for _i in SCENARIO_4_MAX_TICKS:
 		world.tick()
 		if next_forage_id == "" and String(Scenarios.find_job(world, forage_a_id).get("status", "")) == "completed":
-			var next_forage := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
+			var next_forage := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "z": 0, "priority": 1})
 			_expect(next_forage.get("ok", false), "the holder's next job must be accepted")
 			next_forage_id = String(next_forage.get("job_id", ""))
 		var waiting_job := Scenarios.find_job(world, chop_b_id)

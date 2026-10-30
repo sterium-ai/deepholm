@@ -46,7 +46,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _place_command(world: WorldStateType, command_id: String, x: int, y: int, kind: String, orientation: String = "") -> Dictionary:
-	var payload := {"x": x, "y": y, "kind": kind}
+	var payload := {"x": x, "y": y, "z": 0, "kind": kind}
 	if not orientation.is_empty():
 		payload["orientation"] = orientation
 	return world.apply({
@@ -57,7 +57,7 @@ func _place_command(world: WorldStateType, command_id: String, x: int, y: int, k
 func _remove_command(world: WorldStateType, command_id: String, x: int, y: int) -> Dictionary:
 	return world.apply({
 		"actor": "player", "command_id": command_id, "tick": world.get_tick(),
-		"type": "remove_object", "payload": {"x": x, "y": y},
+		"type": "remove_object", "payload": {"x": x, "y": y, "z": 0},
 	})
 
 ## Skips any tile a colonist already stands on: several checks below place an
@@ -66,12 +66,12 @@ func _remove_command(world: WorldStateType, command_id: String, x: int, y: int) 
 ## tile search for "some placeable tile of this kind" must exclude that case
 ## rather than returning one at random depending on where map generation put
 ## the colonists for a given seed.
-func _find_tile(world: WorldStateType, kind: String) -> Vector2i:
+func _find_tile(world: WorldStateType, kind: String) -> Vector3i:
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH:
 			if world.get_tile(x, y) == kind and not TestAccess.colonist_at(world, x, y):
-				return Vector2i(x, y)
-	return Vector2i(-1, -1)
+				return Vector3i(x, y, 0)
+	return Vector3i(-1, -1, 0)
 
 func _check_place_object_valid() -> void:
 	if _failed:
@@ -176,7 +176,7 @@ func _check_place_wall_blocks_dig() -> void:
 	_expect(place_result.get("ok", false), "placing a wall on a soil tile must be accepted")
 	var dig_result: Dictionary = world.apply({
 		"actor": "player", "command_id": "dig_after_wall", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": tile.x, "y": tile.y, "priority": 1},
+		"type": "dig", "payload": {"x": tile.x, "y": tile.y, "z": 0, "priority": 1},
 	})
 	_expect(not dig_result.get("ok", true) and dig_result["rejection"]["reason"] == "invalid_target",
 		"dig on a tile with a placed wall must be rejected invalid_target")
@@ -185,13 +185,13 @@ func _check_place_wall_blocks_dig() -> void:
 ## footprint checks below -- content/objects.json's "test_footprint_crate"
 ## (footprint [2, 1], rotatable, impassable) placed "horizontal" needs an
 ## origin tile and its +x neighbour both free.
-func _find_floor_pair(world: WorldStateType) -> Vector2i:
+func _find_floor_pair(world: WorldStateType) -> Vector3i:
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH - 1:
 			if (world.get_tile(x, y) == WorldStateType.TILE_FLOOR and world.get_tile(x + 1, y) == WorldStateType.TILE_FLOOR
 					and not TestAccess.colonist_at(world, x, y) and not TestAccess.colonist_at(world, x + 1, y)):
-				return Vector2i(x, y)
-	return Vector2i(-1, -1)
+				return Vector3i(x, y, 0)
+	return Vector3i(-1, -1, 0)
 
 ## A [2, 1] footprint placed "horizontal" must occupy both its
 ## origin and its +x neighbour, each independently impassable and each

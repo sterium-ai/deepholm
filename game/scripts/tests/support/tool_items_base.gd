@@ -41,7 +41,7 @@ func _build_single_dig_world(seed_value: int) -> WorldStateType:
 	for x in range(0, 4):
 		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	return world
 
 ## The single wood item still on the ground, or {} when none: place() now

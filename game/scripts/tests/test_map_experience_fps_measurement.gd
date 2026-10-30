@@ -93,7 +93,7 @@ func _run() -> void:
 		var t: Vector2i = targets[i]
 		var result: Dictionary = boot.world.apply({
 			"actor": "test", "command_id": "fps_measurement_till_%d" % i, "tick": boot.world.get_tick(),
-			"type": "till", "payload": {"x": t.x, "y": t.y, "priority": 1},
+			"type": "till", "payload": {"x": t.x, "y": t.y, "z": 0, "priority": 1},
 		})
 		if result.get("ok", false):
 			accepted += 1

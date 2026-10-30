@@ -170,7 +170,7 @@ func _check_work_animations() -> void:
 	]:
 		var world := FakeWorld.new()
 		world.jobs = [{"id": "job_1", "kind": case["kind"]}]
-		world.colonists = [{"id": "colonist_0", "x": 2, "y": 2, "carrying": null,
+		world.colonists = [{"id": "colonist_0", "x": 2, "y": 2, "z": 0, "carrying": null,
 			"work": {"job_id": "job_1", "ticks_remaining": 10}}]
 		var sprites := ColonistSpritesType.new(case["root"])
 		sprites.set_tick_driver(FakeDriver.new())

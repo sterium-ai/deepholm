@@ -60,7 +60,7 @@ func _build_load_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, target.x, target.y, WorldType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
 	for i in 3:
-		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i, "y": 0, "route": null, "work": null, "carrying": null})
+		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": i, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	# Mixed chop/dig orders mean a colonist must be able to fetch either kind
 	# in turn (fetch_tool drops a mismatched held tool first, so a
 	# dropped tool ends up wherever a colonist last stood, not back at a home
@@ -69,14 +69,14 @@ func _build_load_world(seed_value: int) -> WorldType:
 	# by regardless of where tools have scattered to by a given tick, so tool
 	# logistics never becomes this scenario's bottleneck -- it is a scheduling
 	# fairness test, not a tool-supply one.
-	for point in [Vector2i(0, 0), Vector2i(9, 0), Vector2i(0, 5), Vector2i(9, 5), Vector2i(4, 2)]:
+	for point in [Vector3i(0, 0, 0), Vector3i(9, 0, 0), Vector3i(0, 5, 0), Vector3i(9, 5, 0), Vector3i(4, 2, 0)]:
 		world.spawn_ground_tool_item("pick", point.x, point.y)
 		world.spawn_ground_tool_item("axe", point.x, point.y)
 	return world
 
-func _load_tree_targets() -> Array[Vector2i]:
-	return [Vector2i(1, 2), Vector2i(3, 2), Vector2i(5, 2), Vector2i(7, 2),
-		Vector2i(1, 4), Vector2i(3, 4), Vector2i(5, 4), Vector2i(7, 4)]
+func _load_tree_targets() -> Array[Vector3i]:
+	return [Vector3i(1, 2, 0), Vector3i(3, 2, 0), Vector3i(5, 2, 0), Vector3i(7, 2, 0),
+		Vector3i(1, 4, 0), Vector3i(3, 4, 0), Vector3i(5, 4, 0), Vector3i(7, 4, 0)]
 
 ## This used to be "dig" on soil (always walkable, before and
 ## after), whose target tile becomes trench once dug -- trapping any
@@ -90,10 +90,10 @@ func _load_tree_targets() -> Array[Vector2i]:
 ## would itself have blocked every colonist from ever reaching y=2-5 at all,
 ## a reachability regression this fixture's own "fully open, fully
 ## connected" contract (_build_load_world()'s doc comment) never allows.
-func _load_mine_targets() -> Array[Vector2i]:
-	return [Vector2i(4, 0), Vector2i(6, 0), Vector2i(8, 0),
-		Vector2i(0, 1), Vector2i(2, 1), Vector2i(6, 1), Vector2i(8, 1),
-		Vector2i(2, 3), Vector2i(3, 3), Vector2i(5, 3), Vector2i(7, 3), Vector2i(8, 3)]
+func _load_mine_targets() -> Array[Vector3i]:
+	return [Vector3i(4, 0, 0), Vector3i(6, 0, 0), Vector3i(8, 0, 0),
+		Vector3i(0, 1, 0), Vector3i(2, 1, 0), Vector3i(6, 1, 0), Vector3i(8, 1, 0),
+		Vector3i(2, 3, 0), Vector3i(3, 3, 0), Vector3i(5, 3, 0), Vector3i(7, 3, 0), Vector3i(8, 3, 0)]
 
 ## Row y=5 is otherwise untouched by any dig/chop target, so a 10-cell zone
 ## there gives every one of chop's 8 wood items (and their auto-submitted
@@ -105,7 +105,7 @@ func _load_mine_targets() -> Array[Vector2i]:
 ## this test's own 20-order workload never intended to create, not a
 ## real scheduler fairness bug.
 func _add_stockpile_zone(world: WorldType) -> void:
-	var result := Scenarios.command(world, "haul_zone", "zone_add", {"x": 0, "y": 5, "width": LOAD_AREA_WIDTH, "height": 1})
+	var result := Scenarios.command(world, "haul_zone", "zone_add", {"x": 0, "y": 5, "z": 0, "width": LOAD_AREA_WIDTH, "height": 1})
 	_expect(result["ok"], "stockpile zone_add must be accepted: %s" % result)
 
 func _submit_load_orders(world: WorldType) -> int:
@@ -114,11 +114,11 @@ func _submit_load_orders(world: WorldType) -> int:
 	for target in _load_tree_targets():
 		TestAccess.set_tile(world, target.x, target.y, WorldType.TILE_TREE)
 	for target in _load_tree_targets():
-		var result := Scenarios.command(world, "chop_%d" % order_index, "chop", {"x": target.x, "y": target.y, "priority": 1})
+		var result := Scenarios.command(world, "chop_%d" % order_index, "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 		_expect(result["ok"], "chop order %d must be accepted: %s" % [order_index, result])
 		order_index += 1
 	for target in _load_mine_targets():
-		var result := Scenarios.command(world, "mine_%d" % order_index, "mine", {"x": target.x, "y": target.y, "priority": 1})
+		var result := Scenarios.command(world, "mine_%d" % order_index, "mine", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 		_expect(result["ok"], "mine order %d must be accepted: %s" % [order_index, result])
 		order_index += 1
 	return order_index
@@ -276,17 +276,17 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 	var world := WorldType.new(9002)
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0}})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
-	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"})["ok"],
+	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"})["ok"],
 		"berry_bush A placement must be accepted")
-	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "kind": "berry_bush"})["ok"],
+	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"})["ok"],
 		"berry_bush B placement must be accepted")
-	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage_a := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_a["ok"], "forage_a must be accepted")
 	var forage_a_id := String(forage_a["job_id"])
 
@@ -300,7 +300,7 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 	_expect(forage_a_busy, "colonist_0 must be busy on forage_a before dig_b (and its reservation) ever exists")
 
 	TestAccess.set_tile(world, 10, 9, WorldType.TILE_SOIL)
-	var dig_b := Scenarios.command(world, "dig_b", "dig", {"x": 10, "y": 9, "priority": 1})
+	var dig_b := Scenarios.command(world, "dig_b", "dig", {"x": 10, "y": 9, "z": 0, "priority": 1})
 	_expect(dig_b["ok"], "dig_b must be accepted")
 	var dig_b_id := String(dig_b["job_id"])
 
@@ -319,7 +319,7 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 					forage_a_done = true
 					# colonist_0's own NEXT dispatched job, submitted only now
 					# -- a third job is never queued while colonist_1 waits.
-					var forage_b := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
+					var forage_b := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "z": 0, "priority": 1})
 					_expect(forage_b["ok"], "forage_b must be accepted right as forage_a completes")
 					forage_b_id = String(forage_b.get("job_id", ""))
 		var waiting := _waiting_for_handover(world, "colonist_1")
@@ -359,7 +359,7 @@ func _build_corridor_world(seed_value: int) -> WorldType:
 	for x in range(0, 10):
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	# Already held: this scenario's exact one-tick-precision assertions leave
 	# no room for fetch_tool's own travel tick.
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
@@ -367,8 +367,8 @@ func _build_corridor_world(seed_value: int) -> WorldType:
 
 func _check_cancel_mid_walk_reassigns() -> void:
 	var world := _build_corridor_world(555)
-	var target := Vector2i(9, 0)
-	var submit_result := Scenarios.command(world, "far", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	var target := Vector3i(9, 0, 0)
+	var submit_result := Scenarios.command(world, "far", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(submit_result["ok"], "far order must be accepted")
 	if not submit_result["ok"]:
 		return
@@ -389,9 +389,9 @@ func _check_cancel_mid_walk_reassigns() -> void:
 	_expect(after_cancel["work"] == null, "colonist's work must be cleared the tick after cancellation")
 	_expect(not world.get_reservations().has(target), "reservation must stay released after the reconciling tick")
 
-	var next_target := Vector2i(5, 0)
+	var next_target := Vector3i(5, 0, 0)
 	var submitted_tick := world.get_tick()
-	var second_result := Scenarios.command(world, "near", "dig", {"x": next_target.x, "y": next_target.y, "priority": 1})
+	var second_result := Scenarios.command(world, "near", "dig", {"x": next_target.x, "y": next_target.y, "z": 0, "priority": 1})
 	_expect(second_result["ok"], "a fresh order must be accepted for the freed colonist")
 	if not second_result["ok"]:
 		return
@@ -421,9 +421,9 @@ func _check_cancel_mid_walk_reassigns() -> void:
 ## the cancelled "far" target using its old path instead of "near"'s.
 func _check_cancel_mid_walk_with_queued_job_reassigns_same_tick() -> void:
 	var world := _build_corridor_world(4242)
-	var far_target := Vector2i(9, 0)
-	var near_target := Vector2i(2, 0)
-	var far_result := Scenarios.command(world, "far", "dig", {"x": far_target.x, "y": far_target.y, "priority": 1})
+	var far_target := Vector3i(9, 0, 0)
+	var near_target := Vector3i(2, 0, 0)
+	var far_result := Scenarios.command(world, "far", "dig", {"x": far_target.x, "y": far_target.y, "z": 0, "priority": 1})
 	_expect(far_result["ok"], "far order must be accepted")
 	if not far_result["ok"]:
 		return
@@ -434,7 +434,7 @@ func _check_cancel_mid_walk_with_queued_job_reassigns_same_tick() -> void:
 	_expect(mid_walk["route"] != null and mid_walk["route"]["job_id"] == far_job_id,
 		"colonist must be mid-walk toward far before cancelling")
 
-	var near_result := Scenarios.command(world, "near", "dig", {"x": near_target.x, "y": near_target.y, "priority": 1})
+	var near_result := Scenarios.command(world, "near", "dig", {"x": near_target.x, "y": near_target.y, "z": 0, "priority": 1})
 	_expect(near_result["ok"], "near order must be accepted while far is still active")
 	if not near_result["ok"]:
 		return
@@ -469,8 +469,8 @@ const SAVE_LOAD_ADVANCE_TICKS := 60
 
 func _check_save_load_mid_walk() -> void:
 	var world := _build_corridor_world(777)
-	var target := Vector2i(9, 0)
-	var submit_result := Scenarios.command(world, "far", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	var target := Vector3i(9, 0, 0)
+	var submit_result := Scenarios.command(world, "far", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(submit_result["ok"], "far order must be accepted")
 
 	world.tick()

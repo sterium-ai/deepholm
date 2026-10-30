@@ -81,7 +81,7 @@ func _check_overflowing_run_refused(base: Dictionary) -> void:
 ## length check and drove billions of loop iterations.
 func _check_overflowing_route_box_refused(base: Dictionary) -> void:
 	var state := base.duplicate(true)
-	_set_pending_route(state, {"start": {"x": 0, "y": 0}, "target": {"x": 1, "y": 1}, "status": "searching",
+	_set_pending_route(state, {"start": {"x": 0, "y": 0, "z": 0}, "target": {"x": 1, "y": 1, "z": 0}, "status": "searching",
 		"path": [], "expansions": 1, "resumeCalls": 1, "box": [0, 2147483648, 0, 2147483647],
 		"visitedBits": "", "cameFromDirs": "", "frontierTiles": ""})
 	_expect_quick_refusal(state, "a route box outside int32", "box")
@@ -104,7 +104,7 @@ func _check_malformed_packed_fields(base: Dictionary) -> void:
 			"%s must be refused as schema_error, got %s" % [entry[0], result])
 	# A packed route search with lengths that do not match its box.
 	var bad_route := base.duplicate(true)
-	_set_pending_route(bad_route, {"start": {"x": 0, "y": 0}, "target": {"x": 1, "y": 1}, "status": "searching",
+	_set_pending_route(bad_route, {"start": {"x": 0, "y": 0, "z": 0}, "target": {"x": 1, "y": 1, "z": 0}, "status": "searching",
 		"path": [], "expansions": 1, "resumeCalls": 1, "box": [0, 0, 2, 2],
 		"visitedBits": Marshalls.raw_to_base64(PackedByteArray([1, 0])),
 		"cameFromDirs": Marshalls.raw_to_base64(PackedByteArray([0])), "frontierTiles": ""})
@@ -114,7 +114,7 @@ func _check_malformed_packed_fields(base: Dictionary) -> void:
 
 func _set_pending_route(state: Dictionary, route: Dictionary) -> void:
 	state["scheduling"]["pending"] = {"colonist_0": {"candidates": [], "cursor": 0, "found": [],
-		"start": {"x": 0, "y": 0}, "route": route}}
+		"start": {"x": 0, "y": 0, "z": 0}, "route": route}}
 
 ## state must be refused as schema_error whose message contains needle, within MAX_REFUSAL_MSEC.
 func _expect_quick_refusal(state: Dictionary, label: String, needle: String) -> void:

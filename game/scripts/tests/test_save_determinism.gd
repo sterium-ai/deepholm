@@ -67,8 +67,8 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	for y in range(1, WorldStateType.MAP_HEIGHT):
 		TestAccess.tile_grid(world).tiles[y * WorldStateType.MAP_WIDTH + (WorldStateType.MAP_WIDTH - 1)] = WorldStateType.TILE_SOIL
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 47, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 47, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	# Already held, not merely reachable: this scenario's exact tick-by-tick
 	# activation/completion choreography leaves no room for fetch_tool's own
 	# travel tick, so both colonists start the run already equipped.
@@ -98,12 +98,12 @@ func _apply(world: WorldStateType, command_id: String, type: String, payload: Di
 ## 004, route searches only ever live on a queued job's pending evaluation;
 ## FAR (queued) carries the in-flight search, never ACTIVE_JOB (active).
 func _prime_to_save_tick(world: WorldStateType) -> Dictionary:
-	var early: String = _apply(world, "early", "dig", {"x": 1, "y": 0, "priority": 1})["job_id"]
+	var early: String = _apply(world, "early", "dig", {"x": 1, "y": 0, "z": 0, "priority": 1})["job_id"]
 	world.tick() # tick 1: EARLY activates (single, adjacent candidate).
 	_apply(world, "complete_early", "complete_job", {"job_id": early})
-	var far: String = _apply(world, "far", "dig", {"x": 47, "y": 47, "priority": 2})["job_id"]
-	var active_job: String = _apply(world, "active", "dig", {"x": 46, "y": 0, "priority": 1})["job_id"]
-	var queued_low: String = _apply(world, "low", "dig", {"x": 2, "y": 0, "priority": 0})["job_id"]
+	var far: String = _apply(world, "far", "dig", {"x": 47, "y": 47, "z": 0, "priority": 2})["job_id"]
+	var active_job: String = _apply(world, "active", "dig", {"x": 46, "y": 0, "z": 0, "priority": 1})["job_id"]
+	var queued_low: String = _apply(world, "low", "dig", {"x": 2, "y": 0, "z": 0, "priority": 0})["job_id"]
 	world.tick() # tick 2 (SAVE_TICK): FAR resumed once (still searching); ACTIVE_JOB resolved + activated.
 	_expect(world.get_tick() == SAVE_TICK, "priming must land exactly on SAVE_TICK")
 	return {"early": early, "far": far, "active_job": active_job, "queued_low": queued_low}
@@ -292,7 +292,7 @@ func _chop_save_load_world(seed_value: int) -> WorldStateType:
 	TestAccess.set_tile(world, 0, 1, WorldStateType.TILE_TREE)
 	TestAccess.set_tile(world, WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1, WorldStateType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("axe", 0, 0), "colonist_0")
 	return world
 
@@ -309,12 +309,12 @@ func _chop_save_load_world(seed_value: int) -> WorldStateType:
 func _check_pending_chop_save_load() -> void:
 	if _failed:
 		return
-	var near_target := Vector2i(0, 1)
-	var far_target := Vector2i(WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1)
+	var near_target := Vector3i(0, 1, 0)
+	var far_target := Vector3i(WorldStateType.MAP_WIDTH - 1, WorldStateType.MAP_HEIGHT - 1, 0)
 
 	var world := _chop_save_load_world(CHOP_SAVE_SEED)
-	var near_id: String = _apply(world, "near", "chop", {"x": near_target.x, "y": near_target.y, "priority": 1})["job_id"]
-	var far_id: String = _apply(world, "far", "chop", {"x": far_target.x, "y": far_target.y, "priority": 1})["job_id"]
+	var near_id: String = _apply(world, "near", "chop", {"x": near_target.x, "y": near_target.y, "z": 0, "priority": 1})["job_id"]
+	var far_id: String = _apply(world, "far", "chop", {"x": far_target.x, "y": far_target.y, "z": 0, "priority": 1})["job_id"]
 
 	world.tick() # tick 1: batch created; NEAR's one-step search resolves into "found" this same tick.
 	world.tick() # tick 2: FAR's search starts and stays "searching" past its first resume() budget.
@@ -404,7 +404,7 @@ func _check_zone_save_load() -> void:
 	var world := WorldStateType.new(ZONE_SAVE_SEED, 10)
 	var add_result: Dictionary = world.apply({
 		"actor": "player", "command_id": "zone_add", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 3, "y": 3, "width": 2, "height": 2},
+		"type": "zone_add", "payload": {"x": 3, "y": 3, "z": 0, "width": 2, "height": 2},
 	})
 	_expect(add_result["ok"], "zone_add setup must be accepted: %s" % add_result)
 	var zone_id: String = add_result.get("zone_id", "")
@@ -424,12 +424,12 @@ func _check_zone_save_load() -> void:
 	# generating the same future zone ids as an uninterrupted run would.
 	var source_next: Dictionary = world.apply({
 		"actor": "player", "command_id": "zone_add_after_source", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 10, "width": 1, "height": 1},
+		"type": "zone_add", "payload": {"x": 10, "y": 10, "z": 0, "width": 1, "height": 1},
 	})
 	_expect(source_next["ok"], "second zone_add on source must be accepted: %s" % source_next)
 	var restored_next: Dictionary = restored.apply({
 		"actor": "player", "command_id": "zone_add_after_restore", "tick": restored.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 10, "width": 1, "height": 1},
+		"type": "zone_add", "payload": {"x": 10, "y": 10, "z": 0, "width": 1, "height": 1},
 	})
 	_expect(restored_next["ok"], "second zone_add on restored must be accepted: %s" % restored_next)
 	_expect(source_next.get("zone_id", "") == restored_next.get("zone_id", ""),
@@ -459,11 +459,11 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	var world := WorldStateType.new(HAUL_SAVE_SEED, 10)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_setup", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 20, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result["ok"], "haul save/load setup zone_add must succeed: %s" % zone_result)
 
 	# Mid-walk to the item (leg one): tick until a route toward item_1 exists
@@ -491,11 +491,11 @@ func _check_haul_save_load_mid_walk_and_mid_carry() -> void:
 	var carry_world := WorldStateType.new(HAUL_SAVE_SEED, 10)
 	TestAccess.tile_grid(carry_world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(carry_world).clear()
-	TestAccess.colonists(carry_world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(carry_world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(carry_world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(carry_world).items["item_1"] = {"id": "item_1", "x": 10, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(carry_world).next_item_id = 2
 	var carry_zone_result := carry_world.apply({"actor": "test", "command_id": "zone_setup", "tick": carry_world.get_tick(),
-		"type": "zone_add", "payload": {"x": 20, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 20, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(carry_zone_result["ok"], "haul save/load mid-carry setup zone_add must succeed: %s" % carry_zone_result)
 
 	var carrying := false
@@ -540,12 +540,12 @@ func _check_mine_save_load() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "hands": []})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
-	TestAccess.item_table(world).spawn_item("stone", 5, 5)
+	TestAccess.item_table(world).spawn_item("stone", Vector3i(5, 5, 0))
 
-	var submit := _apply(world, "mine_1", "mine", {"x": 1, "y": 0, "priority": 1})
+	var submit := _apply(world, "mine_1", "mine", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	var job_id := String(submit["job_id"])
 
 	var active := false

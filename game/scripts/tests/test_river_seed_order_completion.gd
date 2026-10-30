@@ -79,7 +79,7 @@ func _check_seed(seed_value: int) -> void:
 		if bush != Vector2i(-1, -1):
 			var result: Dictionary = world.apply({
 				"actor": "test", "command_id": "forage_seed_%d" % seed_value, "tick": world.get_tick(),
-				"type": "forage", "payload": {"x": bush.x, "y": bush.y, "priority": 1, "assignee": String(colonists[0]["id"])},
+				"type": "forage", "payload": {"x": bush.x, "y": bush.y, "z": 0, "priority": 1, "assignee": String(colonists[0]["id"])},
 			})
 			_expect(result.get("ok", false), "seed %d: forage order must be accepted: %s" % [seed_value, result])
 			var completed := false

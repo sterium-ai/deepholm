@@ -77,13 +77,13 @@ func _world(seed_value: int, wood: int, stone: int) -> WorldStateType:
 	var world := Scenarios.empty_floor_world(seed_value)
 	TestAccess.set_tile(world, 14, 12, WorldStateType.TILE_WATER)
 	TestAccess.tile_grid(world).reset_cells()
-	TestAccess.object_table(world).set_object(BENCH.x, BENCH.y, "workbench", "colony", "")
-	TestAccess.object_table(world).set_object(16, 12, "berry_bush", "colony", "")
-	TestAccess.object_table(world).set_object(18, 12, "bed", "colony", "")
+	TestAccess.object_table(world).set_object(Vector3i(BENCH.x, BENCH.y, 0), "workbench", "colony", "")
+	TestAccess.object_table(world).set_object(Vector3i(16, 12, 0), "berry_bush", "colony", "")
+	TestAccess.object_table(world).set_object(Vector3i(18, 12, 0), "bed", "colony", "")
 	TestAccess.colonists(world).append(Scenarios.idle_colonist(CRAFTER, 5, 3))
 	TestAccess.colonists(world).append(Scenarios.idle_colonist(HAULER, 6, 3))
 	_command_ok(world, "set_labour", {"colonist": HAULER, "kind": "craft", "level": 0})
-	_command_ok(world, "zone_add", {"x": 0, "y": 0, "width": 4, "height": 2})
+	_command_ok(world, "zone_add", {"x": 0, "y": 0, "z": 0, "width": 4, "height": 2})
 	if wood > 0:
 		Scenarios.add_stock(world, "wood", wood, 0, 0)
 	if stone > 0:
@@ -92,8 +92,8 @@ func _world(seed_value: int, wood: int, stone: int) -> WorldStateType:
 
 func _acceptance_world(seed_value: int) -> WorldStateType:
 	var world := _world(seed_value, 6, 4)
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
-	_command_ok(world, "craft_add_order", {"x": BENCH.x + 1, "y": BENCH.y, "recipe": "planks", "count": 2})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
+	_command_ok(world, "craft_add_order", {"x": BENCH.x + 1, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 2})
 	return world
 
 func _in_stockpile(x: int, y: int) -> bool:
@@ -180,7 +180,7 @@ func _check_target_retriggers_when_the_axe_is_taken(world: WorldStateType) -> vo
 	TestAccess.tile_grid(world).regions = null
 	TestAccess.tile_grid(world).rooms = null
 	Scenarios.add_stock(world, "wood", 3, 2, 0)
-	_command_ok(world, "chop", {"x": 20, "y": 8, "priority": 1})
+	_command_ok(world, "chop", {"x": 20, "y": 8, "z": 0, "priority": 1})
 	var saw_held := false
 	var saw_axe_bill_while_held := false
 	for _i in DAY_TICKS:
@@ -202,8 +202,8 @@ func _check_target_retriggers_when_the_axe_is_taken(world: WorldStateType) -> vo
 ## Acceptance (F2): "a recipe whose materials are missing waits without blocking the queue".
 func _check_missing_inputs_wait_without_blocking_the_queue() -> void:
 	var world := _world(610002, 1, 0)
-	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "pick", "count": 1})
-	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 1})
+	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "pick", "count": 1})
+	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 1})
 	for _i in DAY_TICKS:
 		world.tick()
 		_expect(String(_bench(world)["bill"].get("recipe", "")) != "pick", "pick has no stone: it must never take the bench")
@@ -232,7 +232,7 @@ func _check_target_ignores_an_unreachable_loose_axe() -> void:
 				TestAccess.set_tile(world, walled.x + dx, walled.y + dy, WorldStateType.TILE_ROCK)
 	TestAccess.tile_grid(world).reset_cells()
 	Scenarios.add_stock(world, "axe", 1, walled.x, walled.y)
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
 	for _i in DAY_TICKS:
 		world.tick()
 		if _stockpiled_tools(world, "axe") >= 1:
@@ -244,7 +244,7 @@ func _check_target_ignores_an_unreachable_loose_axe() -> void:
 ## "keep 2 planks" makes one batch (1 wood -> 2 planks), not one per tick until it is hauled.
 func _check_target_does_not_recraft_output_waiting_for_its_hauler() -> void:
 	var world := _world(610008, 5, 0)
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 2})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 2})
 	var stocked_at := -1
 	for _i in 2 * DAY_TICKS:
 		world.tick()
@@ -262,7 +262,7 @@ func _check_target_does_not_recraft_output_waiting_for_its_hauler() -> void:
 ## from the leftover inputs, which are hauled to the new stockpile.
 func _check_target_ignores_a_tool_whose_stockpile_was_removed() -> void:
 	var world := _world(610010, 6, 2)
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
 	for _i in DAY_TICKS:
 		world.tick()
 		if _stockpiled_tools(world, "axe") >= 1:
@@ -270,7 +270,7 @@ func _check_target_ignores_a_tool_whose_stockpile_was_removed() -> void:
 	_expect(_stockpiled_tools(world, "axe") == 1, "the keep-1 target must stock a first axe")
 	var first_zone: String = world.get_zones()[0]["id"]
 	var second_zone := Rect2i(0, 20, 4, 2)
-	_command_ok(world, "zone_add", {"x": second_zone.position.x, "y": second_zone.position.y,
+	_command_ok(world, "zone_add", {"x": second_zone.position.x, "y": second_zone.position.y, "z": 0,
 		"width": second_zone.size.x, "height": second_zone.size.y})
 	_command_ok(world, "zone_remove", {"id": first_zone})
 	var stocked_in_second := 0
@@ -329,14 +329,14 @@ func _check_recorded_session_replays() -> void:
 	var world := _world(610004, 6, 4)
 	var recorder := CommandRecorderType.new()
 	recorder.start(world, 100, false)
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
-	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 2})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
+	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 2})
 	var cancelled := false
 	for _i in 1500:
 		world.tick()
 		recorder.observe_tick(world)
 		if not cancelled and world.get_tick() >= 300 and not (_bench(world)["orders"] as Array).is_empty():
-			_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "order_id": "order_1"})
+			_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "order_id": "order_1"})
 			cancelled = true
 	var recording := recorder.stop()
 	_expect(cancelled, "the session must really cancel the planks order mid-run")
@@ -357,27 +357,27 @@ func _reason_detail(result: Dictionary) -> String:
 func _check_commands_are_validated_and_preview_agrees() -> void:
 	var world := _world(610005, 0, 0)
 	var cases := [
-		["craft_set_target", {"x": 30, "y": 30, "recipe": "axe", "count": 1}, "invalid_target/not_a_workbench"],
-		["craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "boat", "count": 1}, "invalid_payload/unknown_recipe"],
-		["craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": -1}, "invalid_payload/craft_count_out_of_range"],
-		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 0}, "invalid_payload/craft_count_out_of_range"],
-		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe"}, "invalid_payload/craft_payload"],
-		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1, "extra": 1}, "invalid_payload/craft_extra_field"],
-		["craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "order_id": "order_9"}, "invalid_target/unknown_craft_order"],
+		["craft_set_target", {"x": 30, "y": 30, "z": 0, "recipe": "axe", "count": 1}, "invalid_target/not_a_workbench"],
+		["craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "boat", "count": 1}, "invalid_payload/unknown_recipe"],
+		["craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": -1}, "invalid_payload/craft_count_out_of_range"],
+		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 0}, "invalid_payload/craft_count_out_of_range"],
+		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe"}, "invalid_payload/craft_payload"],
+		["craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1, "extra": 1}, "invalid_payload/craft_extra_field"],
+		["craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "order_id": "order_9"}, "invalid_target/unknown_craft_order"],
 	]
 	for case in cases:
 		var preview := world.preview({"actor": "test", "command_id": "p", "tick": world.get_tick(), "type": case[0], "payload": case[1]})
 		_expect(_reason_detail(preview) == case[2], "preview %s %s must reject %s, got %s" % [case[0], case[1], case[2], preview])
 		var result := _command(world, case[0], case[1])
 		_expect(_reason_detail(result) == case[2], "apply %s %s must reject %s, got %s" % [case[0], case[1], case[2], result])
-	var first := _command_ok(world, "craft_add_order", {"x": BENCH.x + 1, "y": BENCH.y, "recipe": "axe", "count": 2})
-	var second := _command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "pick", "count": 1})
+	var first := _command_ok(world, "craft_add_order", {"x": BENCH.x + 1, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 2})
+	var second := _command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "pick", "count": 1})
 	_expect(String(first.get("order_id", "")) == "order_1" and String(second.get("order_id", "")) == "order_2",
 		"orders must get fresh ids in command order: %s, %s" % [first.get("order_id"), second.get("order_id")])
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 5})
-	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "planks", "count": 0})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 5})
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "planks", "count": 0})
 	_expect((_bench(world)["targets"] as Dictionary).is_empty(), "a target set to 0 must be removed")
-	_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "order_id": "order_1"})
+	_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "order_id": "order_1"})
 	var orders: Array = _bench(world)["orders"]
 	_expect(orders.size() == 1 and String(orders[0]["id"]) == "order_2", "cancel must remove exactly that order: %s" % [orders])
 
@@ -386,7 +386,7 @@ func _check_commands_are_validated_and_preview_agrees() -> void:
 func _check_cancel_order_and_removed_bench_drop_held_inputs() -> void:
 	for removal: String in ["cancel_order", "remove_object"]:
 		var world := _world(610006, 3, 1)
-		var order := _command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+		var order := _command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
 		var holding := false
 		for _i in DAY_TICKS:
 			world.tick()
@@ -397,9 +397,9 @@ func _check_cancel_order_and_removed_bench_drop_held_inputs() -> void:
 				break
 		_expect(holding, "%s: the axe bill must hold an input before the removal" % removal)
 		if removal == "cancel_order":
-			_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "order_id": String(order["order_id"])})
+			_command_ok(world, "craft_cancel_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "order_id": String(order["order_id"])})
 		else:
-			_command_ok(world, "remove_object", {"x": BENCH.x, "y": BENCH.y})
+			_command_ok(world, "remove_object", {"x": BENCH.x, "y": BENCH.y, "z": 0})
 			world.tick()
 		for kind: String in ["wood", "stone"]:
 			_expect(_total(world, kind) == (3 if kind == "wood" else 1), "%s: no %s may be lost" % [removal, kind])
@@ -443,7 +443,7 @@ func _check_content_registry_rejects_bad_recipes_and_groups() -> void:
 ## refused by the save validator.
 func _check_recipe_and_save_quantity_caps_agree() -> void:
 	var world := _world(610009, 3, 1)
-	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	_command_ok(world, "craft_add_order", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "axe", "count": 1})
 	for _i in DAY_TICKS:
 		world.tick()
 		if not (_bench(world)["bill"] as Dictionary).is_empty():

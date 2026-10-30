@@ -66,7 +66,7 @@ func _build_arena(seed_value: int) -> WorldStateType:
 ## colonist definition (which has a `combat` component) rather than
 ## adding new species content.
 func _spawn_actor(world: WorldStateType, faction_id: String, actor_id: String, x: int, y: int) -> Dictionary:
-	var actor := ActorTableType.spawn("colonist", x, y, TestAccess.content(world), actor_id)
+	var actor := ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), actor_id)
 	# ActorTable.spawn() still literally builds the legacy single-slot
 	# "carrying" field; mirror WorldState._spawn_colonists()'s own post-spawn
 	# patch to the hands model.
@@ -103,7 +103,7 @@ func _build_combat_world(seed_value: int) -> WorldStateType:
 	var world := _build_arena(seed_value)
 	_spawn_actor(world, "colony", "det_a", 5, 5)
 	_spawn_actor(world, "raiders", "det_b", 6, 5)
-	TestAccess.object_table(world).set_object(7, 5, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(7, 5, 0), "wooden_wall")
 	return world
 
 ## RegionMap.reachable() (region_map.gd -- err, regions.gd:
@@ -137,8 +137,8 @@ func _build_faction_blocked_door_world(seed_value: int) -> WorldStateType:
 	for y in WorldStateType.MAP_HEIGHT:
 		if y == 10:
 			continue
-		TestAccess.object_table(world).set_object(14, y, "wooden_wall")
-	TestAccess.object_table(world).set_object(14, 10, "door")
+		TestAccess.object_table(world).set_object(Vector3i(14, y, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(14, 10, 0), "door")
 	world.tick() # backfills "combat" before a caller mutates it
 	return world
 
@@ -148,7 +148,7 @@ func _build_faction_blocked_door_world(seed_value: int) -> WorldStateType:
 ## `combat`/`flee_hp_fraction` component real wolf/trader content does not
 ## (flee_hp_fraction is colonist-only; there is no wolf/trader-specific data).
 func _make_incident_actor(world: WorldStateType, actor_id: String, x: int, y: int) -> Dictionary:
-	var actor := ActorTableType.spawn("colonist", x, y, TestAccess.content(world), actor_id)
+	var actor := ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), actor_id)
 	actor.erase("carrying")
 	actor["hands"] = []
 	actor["factionId"] = "raiders"
@@ -190,7 +190,7 @@ func _build_flee_racetrack_door_world(seed_value: int) -> WorldStateType:
 		TestAccess.set_tile(world, 15, y, WorldStateType.TILE_FLOOR)
 	for x in range(10, 16):
 		TestAccess.set_tile(world, x, WorldStateType.MAP_HEIGHT - 1, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(15, 1, "door")
+	TestAccess.object_table(world).set_object(Vector3i(15, 1, 0), "door")
 	_spawn_actor(world, "colony", "hunter", 10, 0)
 	_spawn_actor(world, "raiders", "prey", 11, 0)
 	world.tick() # backfills "combat" before a caller mutates it
@@ -210,9 +210,9 @@ func _build_wolf_door_world(seed_value: int) -> WorldStateType:
 	for y in WorldStateType.MAP_HEIGHT:
 		if y == 24:
 			continue
-		TestAccess.object_table(world).set_object(10, y, "wooden_wall")
-	TestAccess.object_table(world).set_object(10, 24, "door")
-	var wolf := ActorTableType.spawn("wolf", 0, 24, TestAccess.content(world), "wolf_1")
+		TestAccess.object_table(world).set_object(Vector3i(10, y, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(10, 24, 0), "door")
+	var wolf := ActorTableType.spawn("wolf", Vector3i(0, 24, 0), TestAccess.content(world), "wolf_1")
 	wolf["factionId"] = "wildlife"
 	TestAccess.append_colonist(world, wolf)
 	_spawn_actor(world, "colony", "villager", 11, 24)

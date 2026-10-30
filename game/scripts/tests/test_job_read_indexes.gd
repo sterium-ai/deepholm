@@ -17,12 +17,12 @@ var _n := 0
 func _init() -> void:
 	var world = WorldStateType.new(4242, 10, 64, 64)
 	var c0: Dictionary = world.get_colonists()[0]
-	var home := Vector2i(int(c0["x"]), int(c0["y"]))
+	var home := TileGrid.tile_of(c0)
 	for kind in ["pick", "pick", "axe"]:
 		world.spawn_ground_tool_item(kind, home.x, home.y)
-	_rect(world, "dig", home - Vector2i(8, 8), Vector2i(16, 16))
-	_rect(world, "chop", Vector2i(0, 0), Vector2i(64, 12))
-	_apply(world, "zone_add", {"x": home.x - 2, "y": home.y - 2, "width": 4, "height": 4})
+	_rect(world, "dig", home - Vector3i(8, 8, 0), Vector3i(16, 16, 0))
+	_rect(world, "chop", Vector3i(0, 0, 0), Vector3i(64, 12, 0))
+	_apply(world, "zone_add", {"x": home.x - 2, "y": home.y - 2, "z": 0, "width": 4, "height": 4})
 	for t in 160:
 		if t == 15:
 			_set_labour_all(world, "mine", 0)
@@ -32,7 +32,7 @@ func _init() -> void:
 			_cancel_every_third(world)
 		if t == 80:
 			world = WorldStateType.from_save_state(JSON.parse_string(JSON.stringify(world.to_save_state())))
-			_rect(world, "mine", Vector2i(0, 50), Vector2i(64, 10))
+			_rect(world, "mine", Vector3i(0, 50, 0), Vector3i(64, 10, 0))
 		world.tick()
 		_check_reads(world, t)
 		if _failures.size() > 10:
@@ -125,10 +125,10 @@ func _apply(world, type: String, payload: Dictionary) -> Dictionary:
 	_n += 1
 	return world.apply({"actor": "player", "command_id": "t%d" % _n, "tick": world.get_tick(), "type": type, "payload": payload})
 
-func _rect(world, type: String, origin: Vector2i, size: Vector2i) -> void:
+func _rect(world, type: String, origin: Vector3i, size: Vector3i) -> void:
 	for y in range(origin.y, origin.y + size.y):
 		for x in range(origin.x, origin.x + size.x):
-			_apply(world, type, {"x": x, "y": y, "priority": 1})
+			_apply(world, type, {"x": x, "y": y, "z": 0, "priority": 1})
 
 func _set_labour_all(world, kind: String, level: int) -> void:
 	for colonist in world.get_colonists():

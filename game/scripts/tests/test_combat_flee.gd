@@ -47,7 +47,7 @@ func _check_flee_below_threshold() -> void:
 	var hunter := TestAccess.find_colonist(world, "fighter_a")
 	hunter["combat"]["cooldown_remaining"] = 999 # isolate the prey's own flee/no-fight response this check
 	var hunter_hp_before := int(hunter["health"]["hp"])
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
+	var start_pos := TileGrid.tile_of(prey)
 	world.tick()
 
 	_expect(world.get_actor_combat_reason("fighter_b") == "", "an actor at/below its own flee_hp_fraction must stop fighting")
@@ -63,7 +63,7 @@ func _check_flee_below_threshold() -> void:
 
 	for i in 30:
 		world.tick()
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "fighter_b")["x"]), int(TestAccess.find_colonist(world, "fighter_b")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "fighter_b")["x"]), int(TestAccess.find_colonist(world, "fighter_b")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor must actually path away from its starting tile")
 
 ## The flee rule is "strictly below", not "at or below" --
@@ -105,7 +105,7 @@ func _check_flee_interrupts_active_work() -> void:
 	_spawn_actor(world, "raiders", "hunter", 5, 5)
 	var prey := TestAccess.find_colonist(world, "worker")
 	# Give the prey a normal work job elsewhere, activated before it takes damage.
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(7, 5), 1, world.get_tick(), "till", "worker")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(7, 5, 0), 1, world.get_tick(), "till", "worker")
 	_expect(submit_result.get("ok", false), "the prey's own till job must be accepted")
 	var work_job_id := String(submit_result.get("job_id", ""))
 	world.tick()
@@ -140,7 +140,7 @@ func _check_flee_wins_over_resuming_work_across_ticks() -> void:
 	# Far away: nearest_hostile_actor() is unbounded (never needs adjacency),
 	# so this is a real, targetable threat without ever landing a hit itself.
 	_spawn_actor(world, "raiders", "hunter", 40, 40)
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(7, 5), 1, world.get_tick(), "till", "worker")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(7, 5, 0), 1, world.get_tick(), "till", "worker")
 	_expect(submit_result.get("ok", false), "the worker's own till job must be accepted")
 	var work_job_id := String(submit_result.get("job_id", ""))
 	world.tick()
@@ -148,7 +148,7 @@ func _check_flee_wins_over_resuming_work_across_ticks() -> void:
 		"the worker's till job must be active before it starts fleeing")
 
 	TestAccess.find_colonist(world, "worker")["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
-	var start_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var start_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	var flee_became_active := false
 	for _i in 10:
 		world.tick()
@@ -158,7 +158,7 @@ func _check_flee_wins_over_resuming_work_across_ticks() -> void:
 			if String(job.get("kind", "")) == "flee" and String(job.get("status", "")) == "active":
 				flee_became_active = true
 	_expect(flee_became_active, "the flee job must actually be assigned (status active), not merely sit queued behind the work it interrupted")
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor whose own interrupted work re-enters the ordinary pool must still actually move away")
 
 ## An existing NeedGiver commitment (colonist_id -> job_id in
@@ -174,14 +174,14 @@ func _check_flee_wins_over_committed_need_job() -> void:
 	var world := _build_arena(21)
 	_spawn_actor(world, "colony", "worker", 6, 5)
 	_spawn_actor(world, "raiders", "hunter", 40, 40)
-	var need_submit: Dictionary = TestAccess.scheduler(world).submit(Vector2i(20, 20), 1, world.get_tick(), "drink_water", "worker")
+	var need_submit: Dictionary = TestAccess.scheduler(world).submit(Vector3i(20, 20, 0), 1, world.get_tick(), "drink_water", "worker")
 	_expect(need_submit.get("ok", false), "direct scheduler submission of the need job must be accepted")
 	var need_job_id := String(need_submit.get("job_id", ""))
 	TestAccess.need_giver_pending(world)["worker"] = need_job_id
 	world.tick()
 
 	TestAccess.find_colonist(world, "worker")["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
-	var start_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var start_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	var flee_became_active := false
 	for _i in 10:
 		world.tick()
@@ -191,7 +191,7 @@ func _check_flee_wins_over_committed_need_job() -> void:
 			if String(job.get("kind", "")) == "flee" and String(job.get("status", "")) == "active":
 				flee_became_active = true
 	_expect(flee_became_active, "a flee job must actually win assignment over an existing committed need job")
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor with a committed need job must still actually move away")
 
 ## WorldState._colonists_not_searching_need() excluded every
@@ -208,7 +208,7 @@ func _check_flee_wins_while_need_searching() -> void:
 	_spawn_actor(world, "raiders", "hunter", 40, 40)
 	world.tick() # backfills "combat" before this test mutates it
 	TestAccess.find_colonist(world, "worker")["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
-	TestAccess.need_giver_searching(world)["worker"] = {"kind": "water", "candidates": [Vector2i(20, 20)],
+	TestAccess.need_giver_searching(world)["worker"] = {"kind": "water", "candidates": [Vector3i(20, 20, 0)],
 		"distances": [29], "cursor": 0, "search": null, "found": []}
 	# _apply_combat() (inside this tick) must record "worker" into CombatGiver's
 	# own `_fleeing` before this same tick's _scheduler_workers() call is built,
@@ -221,7 +221,7 @@ func _check_flee_wins_while_need_searching() -> void:
 			included = true
 	_expect(included, "an actor CombatGiver already tracks as fleeing must still be proposed the scheduler tick even while mid need-search")
 
-	var start_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var start_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	var flee_became_active := false
 	for _i in 10:
 		world.tick()
@@ -229,7 +229,7 @@ func _check_flee_wins_while_need_searching() -> void:
 			if String(job.get("kind", "")) == "flee" and String(job.get("status", "")) == "active":
 				flee_became_active = true
 	_expect(flee_became_active, "an actor mid need-search must still actually be assigned its own flee job")
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "worker")["x"]), int(TestAccess.find_colonist(world, "worker")["y"]), 0)
 	_expect(moved_pos != start_pos, "an actor mid need-search must still actually flee (move)")
 
 ## A single diagonal ray away from the threat must not be the
@@ -242,15 +242,15 @@ func _check_flee_target_avoids_blocked_direction() -> void:
 	_spawn_actor(world, "colony", "prey", 11, 10) # threat directly west -- the prey's own "away" ray points due east
 	# Wall off the entire due-east ray so the single-ray approach has no candidate.
 	for x in range(12, 17):
-		TestAccess.object_table(world).set_object(x, 10, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 10, 0), "wooden_wall")
 	world.tick() # backfills "combat" (ActorTable's spawn path does not add it) before this test mutates it
 	var prey := TestAccess.find_colonist(world, "prey")
 	prey["health"]["hp"] = 25
 	TestAccess.find_colonist(world, "hunter")["combat"]["cooldown_remaining"] = 999
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
+	var start_pos := TileGrid.tile_of(prey)
 	for i in 20:
 		world.tick()
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor whose direct away-direction is walled off must still pick an alternate reachable direction")
 
 ## Regression: _pick_flee_target() used to try every direction at
@@ -266,19 +266,19 @@ func _check_flee_target_requires_separation_improvement() -> void:
 	var world := _build_arena(23)
 	_spawn_actor(world, "raiders", "hunter", 0, 10) # far west; nearest_hostile_actor() is unbounded
 	_spawn_actor(world, "colony", "prey", 10, 10)
-	for pos in [Vector2i(16, 10), Vector2i(10, 4), Vector2i(10, 16), Vector2i(16, 4), Vector2i(16, 16), Vector2i(4, 4), Vector2i(4, 16)]:
+	for pos in [Vector3i(16, 10, 0), Vector3i(10, 4, 0), Vector3i(10, 16, 0), Vector3i(16, 4, 0), Vector3i(16, 16, 0), Vector3i(4, 4, 0), Vector3i(4, 16, 0)]:
 		TestAccess.object_table(world).set_object(pos.x, pos.y, "wooden_wall")
 	for x in [12, 13, 14, 15]:
-		TestAccess.object_table(world).set_object(x, 10, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 10, 0), "wooden_wall")
 	world.tick() # backfills "combat" before this test mutates it
 	var prey := TestAccess.find_colonist(world, "prey")
 	prey["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
-	var threat_pos := Vector2i(0, 10)
+	var start_pos := TileGrid.tile_of(prey)
+	var threat_pos := Vector3i(0, 10, 0)
 	var start_distance := absi(start_pos.x - threat_pos.x) + absi(start_pos.y - threat_pos.y)
 	for i in 20:
 		world.tick()
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor must actually move")
 	_expect(moved_pos.x >= start_pos.x, "a fleeing actor must never move toward its own threat even when that is the only long escape available")
 	var moved_distance := absi(moved_pos.x - threat_pos.x) + absi(moved_pos.y - threat_pos.y)
@@ -321,7 +321,7 @@ func _check_flee_association_survives_save_load() -> void:
 func _check_flee_association_survives_save_load_before_activation() -> void:
 	if _failed: return
 	var world := _build_fighters(24)
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector2i(10, 10), 1, world.get_tick(), "flee", "fighter_b")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector3i(10, 10, 0), 1, world.get_tick(), "flee", "fighter_b")
 	_expect(submit_result.get("ok", false), "a directly submitted flee job must be accepted")
 	var flee_job_id := String(submit_result.get("job_id", ""))
 	_expect(String(TestAccess.get_job(world, flee_job_id).get("status", "")) == "queued",
@@ -407,7 +407,7 @@ func _check_flee_avoids_reserved_destination() -> void:
 	_spawn_actor(world, "colony", "prey", 11, 10) # threat directly west -- "away" ray points due east
 	world.tick() # backfills "combat" before this test mutates it
 
-	var reserved_tile := Vector2i(17, 10) # prey.x(11) + FLEE_DISTANCE(6) along the dominant away direction
+	var reserved_tile := Vector3i(17, 10, 0) # prey.x(11) + FLEE_DISTANCE(6) along the dominant away direction
 	var reserve_result: Dictionary = TestAccess.scheduler(world).submit(reserved_tile, 1, world.get_tick(), "till")
 	_expect(reserve_result.get("ok", false), "a job targeting the prey's own farthest escape tile must be accepted so it can actually reserve that tile")
 	world.tick()
@@ -417,7 +417,7 @@ func _check_flee_avoids_reserved_destination() -> void:
 	var prey := TestAccess.find_colonist(world, "prey")
 	prey["health"]["hp"] = 25 # below the colonist def's own 0.3 flee_hp_fraction
 	TestAccess.find_colonist(world, "hunter")["combat"]["cooldown_remaining"] = 999
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
+	var start_pos := TileGrid.tile_of(prey)
 	world.tick()
 
 	var flee_job_id := ""
@@ -426,12 +426,12 @@ func _check_flee_avoids_reserved_destination() -> void:
 			flee_job_id = String(job["id"])
 	_expect(not flee_job_id.is_empty(), "a fleeing actor must still be given a flee job even when its own preferred escape tile is reserved by another job")
 	if not flee_job_id.is_empty():
-		var flee_target: Vector2i = TestAccess.get_job(world, flee_job_id)["target"]
+		var flee_target: Vector3i = TestAccess.get_job(world, flee_job_id)["target"]
 		_expect(flee_target != reserved_tile, "a flee job must never target a tile another job already reserves")
 
 	for i in 20:
 		world.tick()
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]), 0)
 	_expect(moved_pos != start_pos, "a fleeing actor whose own preferred escape tile is reserved by another job must still find and move to an available alternate")
 
 func _check_flee_target_excludes_faction_blocked_door() -> void:
@@ -440,13 +440,13 @@ func _check_flee_target_excludes_faction_blocked_door() -> void:
 	var prey := TestAccess.find_colonist(world, "prey")
 	prey["health"]["hp"] = 25 # below the colonist def's own 0.3 flee_hp_fraction
 	TestAccess.find_colonist(world, "hunter")["combat"]["cooldown_remaining"] = 999
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
+	var start_pos := TileGrid.tile_of(prey)
 
 	var max_x := start_pos.x
 	for i in 150:
 		world.tick()
 		max_x = maxi(max_x, int(TestAccess.find_colonist(world, "prey")["x"]))
-	var moved_pos := Vector2i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]))
+	var moved_pos := Vector3i(int(TestAccess.find_colonist(world, "prey")["x"]), int(TestAccess.find_colonist(world, "prey")["y"]), 0)
 	_expect(moved_pos != start_pos,
 		"a fleeing raider whose every east-pointing escape route crosses a door forbidden to its own faction must still find and move to a reachable alternate, not remain stranded")
 	_expect(max_x < 14,
@@ -523,7 +523,7 @@ func _check_flee_recovery_retires_active_job() -> void:
 			became_active = true
 			break
 	_expect(became_active, "the flee job must actually reach 'active' status for this check to be meaningful")
-	var target: Vector2i = TestAccess.get_job(world, flee_job_id)["target"]
+	var target: Vector3i = TestAccess.get_job(world, flee_job_id)["target"]
 	_expect(TestAccess.flee_target_reserved(world, target.x, target.y),
 		"an active flee job must hold a live reservation on its own destination for this check to be meaningful")
 
@@ -583,8 +583,8 @@ func _check_flee_blocked_targets_survive_save_load_and_match_uninterrupted() -> 
 	for i in 150:
 		uninterrupted.tick()
 		loaded.tick()
-		var uninterrupted_pos := Vector2i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]))
-		var loaded_pos := Vector2i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]))
+		var uninterrupted_pos := Vector3i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]), 0)
+		var loaded_pos := Vector3i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]), 0)
 		_expect(uninterrupted_pos == loaded_pos,
 			"a save made after multiple blocked flee destinations must reproduce identical subsequent positions to an uninterrupted run (tick %d)" % i)
 		var uninterrupted_flee_status := ""
@@ -613,7 +613,7 @@ func _check_flee_interrupted_incident_job_survives_save_load() -> void:
 	if _failed: return
 	var world := _build_arena(37)
 	var actor_id := "incident_reaper"
-	var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 0, 5), Vector2i(10, 5), 5)
+	var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 0, 5), Vector3i(10, 5, 0), 5)
 	_expect(not job_id.is_empty(), "the incident proposal must be accepted")
 
 	var spawn_ticks := 0
@@ -694,7 +694,7 @@ func _check_flee_recovery_after_save_load_matches_uninterrupted() -> void:
 					_spawn_actor(world, "raiders", "hunter", 0, 0)
 				else:
 					_spawn_actor(world, "raiders", "hunter", 0, 10)
-				var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(11, 10), 1, world.get_tick(), "till", "prey")
+				var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(11, 10, 0), 1, world.get_tick(), "till", "prey")
 				_expect(submit_result.get("ok", false), "[%s] the prey's own till job must be accepted" % shape)
 				work_job_id = String(submit_result.get("job_id", ""))
 				world.tick()
@@ -740,7 +740,7 @@ func _check_flee_recovery_after_save_load_matches_uninterrupted() -> void:
 			"[%s] recovery right after a load must drop the restored flee job's own route search" % shape)
 		_expect(not TestAccess.needs_system(loaded).paused_jobs.has("prey") and not TestAccess.needs_system(uninterrupted).paused_jobs.has("prey"),
 			"[%s] recovery must consume the paused-job entry in both runs" % shape)
-		var flee_target: Vector2i = TestAccess.get_job(loaded, live_flee_id)["target"]
+		var flee_target: Vector3i = TestAccess.get_job(loaded, live_flee_id)["target"]
 		_expect(not TestAccess.flee_target_reserved(loaded, flee_target.x, flee_target.y),
 			"[%s] a flee job retired after a load must release its own destination reservation" % shape)
 		if not work_job_id.is_empty():
@@ -751,8 +751,8 @@ func _check_flee_recovery_after_save_load_matches_uninterrupted() -> void:
 		for i in 40:
 			uninterrupted.tick()
 			loaded.tick()
-			var a := Vector2i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]))
-			var b := Vector2i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]))
+			var a := Vector3i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]), 0)
+			var b := Vector3i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]), 0)
 			_expect(a == b, "[%s] positions after recovery must match the uninterrupted run (tick %d)" % [shape, i])
 			if not work_job_id.is_empty():
 				_expect(String(TestAccess.get_job(loaded, work_job_id).get("status", "")) == String(TestAccess.get_job(uninterrupted, work_job_id).get("status", "")),
@@ -770,15 +770,15 @@ func _check_flee_recovery_after_destination_exhaustion() -> void:
 	if _failed: return
 	var world := _build_arena(49)
 	for x in range(9, 14):
-		TestAccess.object_table(world).set_object(x, 9, "wooden_wall")
-		TestAccess.object_table(world).set_object(x, 11, "wooden_wall")
-	TestAccess.object_table(world).set_object(9, 10, "wooden_wall")
-	TestAccess.object_table(world).set_object(13, 10, "door")
+		TestAccess.object_table(world).set_object(Vector3i(x, 9, 0), "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 11, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(9, 10, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(13, 10, 0), "door")
 	_spawn_actor(world, "colony", "hunter", 10, 10)
 	_spawn_actor(world, "raiders", "prey", 11, 10)
 	world.tick() # backfills "combat"/"health"
 	TestAccess.find_colonist(world, "hunter")["combat"]["cooldown_remaining"] = 999
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector2i(12, 10), 1, world.get_tick(), "till", "prey")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector3i(12, 10, 0), 1, world.get_tick(), "till", "prey")
 	_expect(submit_result.get("ok", false), "the boxed-in raider's own autonomous till job must be accepted")
 	var work_job_id := String(submit_result.get("job_id", ""))
 	world.tick()
@@ -829,15 +829,15 @@ func _check_need_search_survives_flee_activation() -> void:
 	_spawn_actor(world, "colony", "worker", 15, 15)
 	_spawn_actor(world, "raiders", "reaper", 0, 0) # far away; nearest_hostile_actor() is unbounded, never lands a hit
 	for x in range(7, 24):
-		TestAccess.object_table(world).set_object(x, 7, "wooden_wall")
-		TestAccess.object_table(world).set_object(x, 23, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 7, 0), "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 23, 0), "wooden_wall")
 	for y in range(7, 24):
-		TestAccess.object_table(world).set_object(7, y, "wooden_wall")
-		TestAccess.object_table(world).set_object(23, y, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(7, y, 0), "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(23, y, 0), "wooden_wall")
 	TestAccess.set_tile(world, 25, 15, WorldStateType.TILE_WATER)
 	world.tick() # backfills "combat"/"health" before this test mutates them
 
-	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(16, 15), 1, world.get_tick(), "till")
+	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(16, 15, 0), 1, world.get_tick(), "till")
 	_expect(work_result.get("ok", false), "the worker's own unrestricted till job must be accepted")
 	var work_job_id := String(work_result.get("job_id", ""))
 	var settled := false
@@ -894,7 +894,7 @@ func _check_need_onset_during_existing_flee_episode() -> void:
 	world.tick() # backfills "combat"/"health" before this test mutates them
 	TestAccess.find_colonist(world, "reaper")["combat"]["cooldown_remaining"] = 999
 
-	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(16, 15), 1, world.get_tick(), "till")
+	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(16, 15, 0), 1, world.get_tick(), "till")
 	_expect(work_result.get("ok", false), "the worker's own unrestricted till job must be accepted")
 	var work_job_id := String(work_result.get("job_id", ""))
 	var settled := false
@@ -979,8 +979,8 @@ func _check_flee_pending_search_survives_save_load_faction_aware() -> void:
 	for i in 150:
 		uninterrupted.tick()
 		loaded.tick()
-		var uninterrupted_pos := Vector2i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]))
-		var loaded_pos := Vector2i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]))
+		var uninterrupted_pos := Vector3i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]), 0)
+		var loaded_pos := Vector3i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]), 0)
 		_expect(uninterrupted_pos == loaded_pos,
 			"a save taken mid-search must reproduce identical subsequent positions to an uninterrupted run (tick %d)" % i)
 		_expect(int(TestAccess.find_colonist(loaded, "prey")["x"]) < 14, "a restored search must never cross the raider's own faction-forbidden door (tick %d)" % i)
@@ -1010,8 +1010,8 @@ func _check_flee_active_reroute_survives_save_load_faction_aware() -> void:
 		if not walled:
 			var prey := TestAccess.find_colonist(live, "prey")
 			if int(prey["x"]) == 12 and int(prey["y"]) == 0:
-				TestAccess.object_table(live).set_object(13, 0, "wooden_wall")
-				TestAccess.object_table(uninterrupted).set_object(13, 0, "wooden_wall")
+				TestAccess.object_table(live).set_object(Vector3i(13, 0, 0), "wooden_wall")
+				TestAccess.object_table(uninterrupted).set_object(Vector3i(13, 0, 0), "wooden_wall")
 				walled = true
 		var route = TestAccess.find_colonist(live, "prey").get("route")
 		if route != null and route.get("rerouting") != null and String(route["rerouting"].get("status", "")) == "searching":
@@ -1028,11 +1028,11 @@ func _check_flee_active_reroute_survives_save_load_faction_aware() -> void:
 	for i in 400:
 		uninterrupted.tick()
 		loaded.tick()
-		var uninterrupted_pos := Vector2i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]))
-		var loaded_pos := Vector2i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]))
+		var uninterrupted_pos := Vector3i(int(TestAccess.find_colonist(uninterrupted, "prey")["x"]), int(TestAccess.find_colonist(uninterrupted, "prey")["y"]), 0)
+		var loaded_pos := Vector3i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]), 0)
 		_expect(uninterrupted_pos == loaded_pos,
 			"a save taken mid-reroute must reproduce identical subsequent positions to an uninterrupted run (tick %d)" % i)
-		_expect(loaded_pos != Vector2i(15, 1), "a restored reroute must never cross the raider's own faction-forbidden door (tick %d)" % i)
+		_expect(loaded_pos != Vector3i(15, 1, 0), "a restored reroute must never cross the raider's own faction-forbidden door (tick %d)" % i)
 
 ## WorldState._advance_go_to_or_resubmit() -- called by
 ## _resume_paused_job() when CombatGiver's own recovery resumes an
@@ -1049,7 +1049,7 @@ func _check_flee_active_reroute_survives_save_load_faction_aware() -> void:
 func _check_flee_recovery_resume_needs_fresh_route_faction_aware() -> void:
 	if _failed: return
 	var world := _build_flee_racetrack_door_world(55)
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector2i(15, 0), 1, world.get_tick(), "till", "prey")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit_autonomous(Vector3i(15, 0, 0), 1, world.get_tick(), "till", "prey")
 	_expect(submit_result.get("ok", false), "the raider's own autonomous till job must be accepted")
 	var job_id := String(submit_result["job_id"])
 	world.tick()
@@ -1070,8 +1070,8 @@ func _check_flee_recovery_resume_needs_fresh_route_faction_aware() -> void:
 	var resumed_active := false
 	for i in 600:
 		loaded.tick()
-		var pos := Vector2i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]))
-		if pos == Vector2i(15, 1):
+		var pos := Vector3i(int(TestAccess.find_colonist(loaded, "prey")["x"]), int(TestAccess.find_colonist(loaded, "prey")["y"]), 0)
+		if pos == Vector3i(15, 1, 0):
 			stood_on_door = true
 		if String(TestAccess.get_job(loaded, job_id).get("status", "")) == "active":
 			resumed_active = true
@@ -1097,7 +1097,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 	_spawn_actor(world, "raiders", "reaper", 0, 0) # far; nearest_hostile_actor() is unbounded, never lands a hit
 	world.tick() # backfills "combat"/"health" before this test mutates them
 
-	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(16, 15), 1, world.get_tick(), "till")
+	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(16, 15, 0), 1, world.get_tick(), "till")
 	_expect(work_result.get("ok", false), "the worker's own unrestricted till job must be accepted")
 	var work_job_id := String(work_result.get("job_id", ""))
 	world.tick()
@@ -1107,7 +1107,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 	TestAccess.needs_system(world).interrupt_current_job(worker) # mirrors NeedGiver's own critical-need interrupt
 	_expect(String(TestAccess.needs_system(world).paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
 
-	var need_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(20, 20), 1, world.get_tick(), "drink_water", "worker")
+	var need_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(20, 20, 0), 1, world.get_tick(), "drink_water", "worker")
 	_expect(need_result.get("ok", false), "the worker's own restricted need job must be accepted")
 	var need_job_id := String(need_result.get("job_id", ""))
 	TestAccess.need_giver_pending(world)["worker"] = need_job_id # fakes a real NeedGiver commitment, same seam other checks in this file use
@@ -1124,7 +1124,7 @@ func _check_need_cancel_defers_to_active_flee_episode() -> void:
 	_expect(flee_active, "the worker's own flee job must actually reach active for this check to be meaningful")
 	_expect(String(TestAccess.get_job(world, need_job_id).get("status", "")) == "queued",
 		"the need job must stay queued -- never assigned, since the flee commitment always wins the propose slot -- for this check to be meaningful")
-	var flee_target: Vector2i = TestAccess.get_job(world, flee_job_id)["target"]
+	var flee_target: Vector3i = TestAccess.get_job(world, flee_job_id)["target"]
 	_expect(TestAccess.flee_target_reserved(world, flee_target.x, flee_target.y),
 		"the active flee job must hold a live destination reservation for this check to be meaningful")
 
@@ -1176,13 +1176,13 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	if _failed: return
 	var world := _build_arena(61)
 	for x in range(4, 13):
-		TestAccess.object_table(world).set_object(x, 4, "wooden_wall")
-		TestAccess.object_table(world).set_object(x, 10, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 4, 0), "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 10, 0), "wooden_wall")
 	for y in range(5, 10):
-		TestAccess.object_table(world).set_object(4, y, "wooden_wall")
-		TestAccess.object_table(world).set_object(12, y, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(4, y, 0), "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(12, y, 0), "wooden_wall")
 	var actor_id := "incident_trapped"
-	var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 6, 7), Vector2i(10, 7), 5)
+	var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 6, 7), Vector3i(10, 7, 0), 5)
 	_expect(not job_id.is_empty(), "the incident proposal must be accepted")
 	var spawn_ticks := 0
 	while TestAccess.find_colonist(world, actor_id).is_empty() and spawn_ticks < 60:
@@ -1201,10 +1201,10 @@ func _check_flee_recovery_of_disconnected_incident_target_cancels_without_replac
 	# Disconnect the incident job's own target: wall off its four orthogonal
 	# neighbors, so the destination stays a bare floor tile but nothing can
 	# ever reach it.
-	TestAccess.object_table(world).set_object(9, 7, "wooden_wall")
-	TestAccess.object_table(world).set_object(11, 7, "wooden_wall")
-	TestAccess.object_table(world).set_object(10, 6, "wooden_wall")
-	TestAccess.object_table(world).set_object(10, 8, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(9, 7, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(11, 7, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(10, 6, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(10, 8, 0), "wooden_wall")
 	TestAccess.route_budget(world).erase(actor_id) # guarantees the recovery's own fresh search actually resumes this tick, not deferred by a stale per-tick routing allowance
 
 	world.tick() # CombatGiver.advance() sees no reason to flee (default full hp), closes the episode, and calls the shared recovery boundary
@@ -1243,7 +1243,7 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 			# under A*, as in _check_flee_recovery_retires_searching_job().
 			Scenarios.rock_row_with_gap(world, 13, 30)
 		var actor_id := "incident_fleeing"
-		var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 10, 10), Vector2i(20, 10), 5)
+		var job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 10, 10), Vector3i(20, 10, 0), 5)
 		_expect(not job_id.is_empty(), "the incident proposal must be accepted")
 		var spawn_ticks := 0
 		while TestAccess.find_colonist(world, actor_id).is_empty() and spawn_ticks < 60:
@@ -1271,7 +1271,7 @@ func _check_despawn_cleans_up_suspended_incident_flee_job() -> void:
 			if not searching and status == "active":
 				break
 		_expect(not flee_job_id.is_empty(), "a flee job must exist for this check to be meaningful")
-		var flee_target: Vector2i = TestAccess.get_job(world, flee_job_id).get("target", Vector2i(-1, -1))
+		var flee_target: Vector3i = TestAccess.get_job(world, flee_job_id).get("target", Vector3i(-1, -1, 0))
 		if searching:
 			_expect(String(TestAccess.get_job(world, flee_job_id).get("status", "")) == "queued" and TestAccess.scheduler(world).get_pending().has(actor_id),
 				"the flee job's own route search must still be mid-flight for this check to be meaningful")
@@ -1326,7 +1326,7 @@ func _check_flee_completes_while_carrying_interrupted_job_cargo() -> void:
 	InventoryType.add_to_hands(prey, "wood", 1)
 	prey["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
 	TestAccess.find_colonist(world, "fighter_a")["combat"]["cooldown_remaining"] = 999
-	var start_pos := Vector2i(int(prey["x"]), int(prey["y"]))
+	var start_pos := TileGrid.tile_of(prey)
 	world.tick()
 
 	var flee_job_id := ""
@@ -1343,7 +1343,7 @@ func _check_flee_completes_while_carrying_interrupted_job_cargo() -> void:
 		world.tick()
 		_expect(InventoryType.has_kind(TestAccess.find_colonist(world, "fighter_b"), "wood"),
 			"the carried item must survive the whole flee episode, never dropped or duplicated (tick %d)" % world.get_tick())
-		var pos := Vector2i(int(TestAccess.find_colonist(world, "fighter_b")["x"]), int(TestAccess.find_colonist(world, "fighter_b")["y"]))
+		var pos := Vector3i(int(TestAccess.find_colonist(world, "fighter_b")["x"]), int(TestAccess.find_colonist(world, "fighter_b")["y"]), 0)
 		if pos != start_pos:
 			moved = true
 		if String(TestAccess.get_job(world, flee_job_id).get("status", "")) == "completed":

@@ -126,7 +126,7 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 	# An unrelated, already-completed rescue, so a terminal "rescue" job is
 	# present in job history at save time (SaveIO must accept it too).
 	var early_victim := _spawn_colonist(world, "early_victim", 20, 20)
-	_trap_colonist_at(world, early_victim, Vector2i(20, 21))
+	_trap_colonist_at(world, early_victim, Vector3i(20, 21, 0))
 	var early_rescuer := _spawn_colonist(world, "early_rescuer", 20, 25)
 	var early_rescued := false
 	for _i in RESCUE_TICK_BOUND:
@@ -138,14 +138,14 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_TRENCH)
 	_fence_victim_b_lane(world)
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
 	TestAccess.set_tile(world, 4, 0, WorldStateType.TILE_ROCK)
@@ -159,7 +159,7 @@ func _check_save_load_through_real_save_io_preserves_shared_target_victim_identi
 		if not job_b.is_empty():
 			break
 	_expect(not job_b.is_empty(), "setup: victim B's own rescue job must be generated")
-	_expect(job_b["target"] == Vector2i(2, 0), "setup: victim B's own rescue target must be forced to the shared tile (2, 0)")
+	_expect(job_b["target"] == Vector3i(2, 0, 0), "setup: victim B's own rescue target must be forced to the shared tile (2, 0)")
 	var job_b_id: String = String(job_b["id"])
 
 	var state := StateCodecType.encode(world)
@@ -212,8 +212,8 @@ func _check_state_hash_equal_across_save_load_with_digit_boundary_rescue_ids() -
 	TestAccess.set_tile(world, 2, 10, WorldStateType.TILE_SOIL)
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	var victim_b := _spawn_colonist(world, "colonist_1", 0, 10)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 10), 1, world.get_tick(), "till", String(victim_b["id"]))
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 10, 0), 1, world.get_tick(), "till", String(victim_b["id"]))
 	_expect(submit_a.get("ok", false) and submit_b.get("ok", false), "setup: both till submissions must be accepted")
 	var both_trapped := false
 	for _i in TRAP_TICK_BOUND:
@@ -226,7 +226,7 @@ func _check_state_hash_equal_across_save_load_with_digit_boundary_rescue_ids() -
 	while TestAccess.scheduler(world).queue.get_next_id() < 9:
 		var y: int = 20 + TestAccess.scheduler(world).queue.get_next_id()
 		TestAccess.set_tile(world, 5, y, WorldStateType.TILE_SOIL)
-		var burn := TestAccess.scheduler(world).submit(Vector2i(5, y), 1, world.get_tick(), "till", "")
+		var burn := TestAccess.scheduler(world).submit(Vector3i(5, y, 0), 1, world.get_tick(), "till", "")
 		_expect(burn.get("ok", false), "setup: id-burning order must be accepted")
 		world.apply({"actor": "test", "command_id": "burn_%d" % y, "tick": world.get_tick(), "type": "cancel_job",
 			"payload": {"job_id": String(burn["job_id"])}})

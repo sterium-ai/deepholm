@@ -44,7 +44,7 @@ func _check_rescue_job_auto_generated_and_completes() -> void:
 		if not job.is_empty():
 			break
 	_expect(not job.is_empty(), "a rescue job restricted to the available colonist must be auto-generated")
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	_expect(world.get_tile(target.x, target.y) != WorldStateType.TILE_TRENCH,
 		"the rescue job's target must never be the trench tile itself")
 	_expect(maxi(absi(target.x - 1), absi(target.y - 0)) == 1, "the rescue target must be adjacent to the victim's own trench tile")
@@ -58,14 +58,14 @@ func _check_rescue_job_auto_generated_and_completes() -> void:
 			completed = true
 			break
 	_expect(completed, "the trapped colonist must be freed once the rescue job completes")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(int(rescuer["x"]), int(rescuer["y"])),
+	_expect(TileGrid.tile_of(victim) == TileGrid.tile_of(rescuer),
 		"a rescued colonist must be moved onto the rescuer's own tile")
 	_expect(not reservation_table.is_reserved("trapped:%s" % victim_id), "the trapped:<victim_id> key must be released once the rescue job completes")
 	var report := ReservationInvariantsType.check(reservation_table, world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "a completed rescue must leave no orphaned reservations")
 	# Resumes ordinary scheduling: an unrelated labour order is now accepted and eventually assigned to the freed colonist.
 	TestAccess.set_tile(world, int(victim["x"]) + 3, int(victim["y"]), WorldStateType.TILE_SOIL)
-	var order := TestAccess.scheduler(world).submit(Vector2i(int(victim["x"]) + 3, int(victim["y"])), 1, world.get_tick(), "till", victim_id)
+	var order := TestAccess.scheduler(world).submit(Vector3i(int(victim["x"]) + 3, int(victim["y"]), 0), 1, world.get_tick(), "till", victim_id)
 	_expect(order.get("ok", false), "the freed colonist must accept an ordinary order again")
 	var resumed := false
 	for _i in RESCUE_TICK_BOUND:
@@ -130,7 +130,7 @@ func _check_pending_rescue_preempts_ordinary_labour() -> void:
 	# whole time never lets a distance-scaling sweep finish before it moves
 	# again, so this deliberately keeps travel short instead of long).
 	TestAccess.set_tile(world, 10, 2, WorldStateType.TILE_SOIL)
-	var labour_submit := TestAccess.scheduler(world).submit(Vector2i(10, 2), 1, world.get_tick(), "till", worker_id)
+	var labour_submit := TestAccess.scheduler(world).submit(Vector3i(10, 2, 0), 1, world.get_tick(), "till", worker_id)
 	_expect(labour_submit.get("ok", false), "setup: the ordinary labour order must be accepted")
 	var labour_job_id: String = String(labour_submit["job_id"])
 	var labour_active := false
@@ -182,8 +182,8 @@ func _check_two_victims_each_get_own_rescue_no_double_claim() -> void:
 	var victim_b := _spawn_colonist(world, "colonist_1", 0, 10)
 	var rescuer_a := _spawn_colonist(world, "colonist_2", 0, 5)
 	var rescuer_b := _spawn_colonist(world, "colonist_3", 0, 15)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 10), 1, world.get_tick(), "till", String(victim_b["id"]))
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 10, 0), 1, world.get_tick(), "till", String(victim_b["id"]))
 	_expect(submit_a.get("ok", false) and submit_b.get("ok", false), "setup: both till submissions must be accepted")
 	var both_trapped := false
 	for _i in TRAP_TICK_BOUND:
@@ -341,7 +341,7 @@ func _check_command_cancelled_rescue_frees_the_rescuer() -> void:
 	_expect(TestAccess.rescue_giver(world).get_pending_job(rescuer_id).is_empty(),
 		"cancelling a rescue job through a command must clear RescueGiver's own association for the rescuer")
 	TestAccess.set_tile(world, int(rescuer["x"]) + 3, int(rescuer["y"]), WorldStateType.TILE_SOIL)
-	var order := TestAccess.scheduler(world).submit(Vector2i(int(rescuer["x"]) + 3, int(rescuer["y"])), 1, world.get_tick(), "till", rescuer_id)
+	var order := TestAccess.scheduler(world).submit(Vector3i(int(rescuer["x"]) + 3, int(rescuer["y"]), 0), 1, world.get_tick(), "till", rescuer_id)
 	_expect(order.get("ok", false), "setup: an ordinary order restricted to the freed rescuer must be accepted")
 	var scheduled := false
 	for _i in RESCUE_TICK_BOUND:
@@ -375,17 +375,17 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	var victim_a_id: String = String(victim_a["id"])
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "till", victim_a_id)
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "till", victim_a_id)
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_TRENCH)
 	_fence_victim_b_lane(world)
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
-	_expect(Vector2i(int(victim_b["x"]), int(victim_b["y"])) == Vector2i(3, 0), "setup: victim B must be trapped at (3, 0)")
+	_expect(TileGrid.tile_of(victim_b) == Vector3i(3, 0, 0), "setup: victim B must be trapped at (3, 0)")
 	# Only blocked now, after victim B's own approach already crossed both
 	# tiles -- forces victim B's rescue target to the shared tile (2, 0),
 	# its only remaining passable, non-trench neighbour.
@@ -400,7 +400,7 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 		if not job_b.is_empty():
 			break
 	_expect(not job_b.is_empty(), "setup: victim B's own rescue job must be generated")
-	_expect(job_b["target"] == Vector2i(2, 0),
+	_expect(job_b["target"] == Vector3i(2, 0, 0),
 		"setup: victim B's own rescue target must be forced to the shared tile (2, 0)")
 	var b_rescued := false
 	for _i in RESCUE_TICK_BOUND:
@@ -409,11 +409,11 @@ func _check_completing_rescue_frees_the_job_own_victim_not_a_shared_neighbour() 
 			b_rescued = true
 			break
 	_expect(b_rescued, "victim B's own rescue must complete")
-	_expect(Vector2i(int(victim_b["x"]), int(victim_b["y"])) == Vector2i(int(rescuer_b["x"]), int(rescuer_b["y"])),
+	_expect(TileGrid.tile_of(victim_b) == TileGrid.tile_of(rescuer_b),
 		"victim B must be moved onto its own rescuer's tile")
 	_expect(victim_a.get("trapped") != null,
 		"victim A, merely adjacent to the same shared target tile, must never be freed by victim B's own rescue job")
-	_expect(Vector2i(int(victim_a["x"]), int(victim_a["y"])) == Vector2i(1, 0),
+	_expect(TileGrid.tile_of(victim_a) == Vector3i(1, 0, 0),
 		"victim A must stay exactly where it was trapped, untouched by victim B's rescue")
 
 ## Victim B dies (is fully removed, not merely
@@ -429,14 +429,14 @@ func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 	var world := _fresh_world(360016)
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "till", String(victim_a["id"]))
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_TRENCH)
 	_fence_victim_b_lane(world)
 	var victim_b := _spawn_colonist(world, "colonist_1", 6, 0)
 	var victim_b_id: String = String(victim_b["id"])
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
 	TestAccess.set_tile(world, 4, 0, WorldStateType.TILE_ROCK)
@@ -467,7 +467,7 @@ func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 			break
 	_expect(completed, "victim B's own rescue job must still resolve to completion through the ordinary cleanup boundary")
 	_expect(victim_a.get("trapped") != null, "victim A must never be freed by victim B's own (now-obsolete) rescue job")
-	_expect(Vector2i(int(victim_a["x"]), int(victim_a["y"])) == Vector2i(1, 0), "victim A must stay exactly where it was trapped")
+	_expect(TileGrid.tile_of(victim_a) == Vector3i(1, 0, 0), "victim A must stay exactly where it was trapped")
 	_expect(TestAccess.rescue_giver(world).get_pending_job(rescuer_b_id).is_empty(), "rescuer B must be freed once its own obsolete rescue resolves")
 	var report := ReservationInvariantsType.check(TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "a rescue job whose victim died must leave no orphaned reservations")
@@ -482,7 +482,7 @@ func _check_victim_death_mid_rescue_never_frees_a_different_victim() -> void:
 func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> void:
 	var world := _fresh_world(360022)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	_trap_colonist_at(world, victim, Vector2i(2, 0))
+	_trap_colonist_at(world, victim, Vector3i(2, 0, 0))
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	var rescuer := _spawn_colonist(world, "colonist_1", 3, 5)
@@ -497,7 +497,7 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 			working = true
 			break
 	_expect(working, "setup: the rescuer must reach its own active work toil")
-	_expect(job["target"] == Vector2i(3, 0), "setup: the only remaining target must be (3, 0)")
+	_expect(job["target"] == Vector3i(3, 0, 0), "setup: the only remaining target must be (3, 0)")
 	TestAccess.needs_system(world).interrupt_current_job(rescuer)
 	rescuer["x"] = 4
 	rescuer["y"] = 1
@@ -511,7 +511,7 @@ func _check_need_interrupt_one_tile_beyond_target_requires_exact_arrival() -> vo
 			rescued = true
 			break
 	_expect(rescued, "the rescuer must still travel the remaining step and complete the rescue")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(int(rescuer["x"]), int(rescuer["y"])),
+	_expect(TileGrid.tile_of(victim) == TileGrid.tile_of(rescuer),
 		"the victim must end up on the rescuer's own tile")
 
 ## Rescue A is suspended mid-work with real
@@ -532,7 +532,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	var victim_a_id: String = String(victim_a["id"])
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	var submit_a := TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "till", victim_a_id)
+	var submit_a := TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "till", victim_a_id)
 	_expect(submit_a.get("ok", false), "setup: victim A's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_a, TRAP_TICK_BOUND), "setup: victim A must become trapped")
 	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_ROCK)
@@ -553,7 +553,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 			remaining_before_interrupt = int(rescuer_a["work"]["ticks_remaining"])
 			break
 	_expect(working_a, "setup: rescuer A must reach its own active work toil and make some real progress")
-	_expect(TestAccess.scheduler(world).queue.get_job(job_a_id)["target"] == Vector2i(2, 0), "setup: job A's target must be the shared tile (2, 0)")
+	_expect(TestAccess.scheduler(world).queue.get_job(job_a_id)["target"] == Vector3i(2, 0, 0), "setup: job A's target must be the shared tile (2, 0)")
 
 	# Column x=2 has no trench anywhere along it, so routing rescuer A south to
 	# its own food source never risks the general "stepping onto any trench
@@ -580,7 +580,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	var victim_b_id: String = String(victim_b["id"])
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_TRENCH)
 	_fence_victim_b_lane(world)
-	var submit_b := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", victim_b_id)
+	var submit_b := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", victim_b_id)
 	_expect(submit_b.get("ok", false), "setup: victim B's own till submission must be accepted")
 	_expect(_tick_until_trapped(world, victim_b, TRAP_TICK_BOUND), "setup: victim B must become trapped")
 	TestAccess.set_tile(world, 4, 0, WorldStateType.TILE_ROCK)
@@ -640,7 +640,7 @@ func _check_shared_target_suspend_resume_preserves_each_jobs_own_progress() -> v
 	var live_ticks_remaining := int(rescuer_a["work"]["ticks_remaining"])
 	_expect(live_ticks_remaining <= remaining_before_interrupt and live_ticks_remaining >= remaining_before_interrupt - 1,
 		"job A must resume from its own preserved progress, not restart fresh or inherit job B's leftover (got %d, expected close to %d)" % [live_ticks_remaining, remaining_before_interrupt])
-	var restored_progress = TestAccess.progress_table(world).get_progress(Vector2i(2, 0))
+	var restored_progress = TestAccess.progress_table(world).get_progress(Vector3i(2, 0, 0))
 	_expect(restored_progress != null and int(restored_progress) == live_ticks_remaining,
 		"job A's cached progress must match its own current live work state, never job B's leftover or a corrupted value (got %s expected %s)" % [restored_progress, live_ticks_remaining])
 	var rescued_a := false
@@ -667,7 +667,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_ROCK)
 	var worker := _spawn_colonist(world, "colonist_1", 2, 3)
 	var worker_id: String = String(worker["id"])
-	var till := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", worker_id)
+	var till := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", worker_id)
 	_expect(till.get("ok", false), "setup: the worker's own till order on the shared tile must be accepted")
 	var till_started := false
 	for _i in RESCUE_TICK_BOUND:
@@ -708,7 +708,7 @@ func _check_cancel_during_rescue_work_clears_only_its_own_progress_key() -> void
 		job = _find_rescue_job(world, rescuer_id)
 		if not job.is_empty():
 			break
-	_expect(not job.is_empty() and job["target"] == Vector2i(2, 0), "setup: the rescue must target the shared tile (2, 0)")
+	_expect(not job.is_empty() and job["target"] == Vector3i(2, 0, 0), "setup: the rescue must target the shared tile (2, 0)")
 	var job_id: String = String(job["id"])
 	var rescue_key := _tick_until_rescue_progress(world, rescuer, job_id, RESCUE_TICK_BOUND)
 	_expect(not rescue_key.is_empty(), "setup: the rescue must be mid-work with progress parked under its own job-scoped key")

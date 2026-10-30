@@ -30,10 +30,10 @@ func _expect(condition: bool, message: String) -> void:
 func _new_queue() -> JobQueue:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 51
-	return QueueType.new(rng, func(_target: Vector2i) -> bool: return true)
+	return QueueType.new(rng, func(_target: Vector3i) -> bool: return true)
 
 func _submit(queue: JobQueue, x: int, kind: String = "dig") -> String:
-	var result := queue.submit_dig(Vector2i(x, 0), QueueType.Priority.NORMAL, kind)
+	var result := queue.submit_dig(Vector3i(x, 0, 0), QueueType.Priority.NORMAL, kind)
 	_expect(result["ok"], "expected a valid submission")
 	return String(result.get("job_id", ""))
 

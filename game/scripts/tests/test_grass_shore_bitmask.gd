@@ -278,7 +278,7 @@ func _check_incremental_matches_full_rebuild() -> void:
 
 	# Orthogonal add: rock directly N of the probe (5,4).
 	TestAccess.set_tile(world, 5, 4, WorldStateType.TILE_ROCK)
-	TestAccess.tile_grid(world).dirty_cells.append(Vector2i(5, 4))
+	TestAccess.tile_grid(world).dirty_cells.append(Vector3i(5, 4, 0))
 	map_view.refresh()
 	_expect(overlay_layer.get_cell_atlas_coords(probe) == EDGE_N, "after an orthogonal neighbour addition, incremental refresh must set the N edge overlay, got %s" % overlay_layer.get_cell_atlas_coords(probe))
 	_expect(base_layer.get_cell_atlas_coords(probe) == rock_coords, "after an orthogonal neighbour addition, incremental refresh must set ROCK's own cell as the base backing, got %s" % base_layer.get_cell_atlas_coords(probe))
@@ -286,7 +286,7 @@ func _check_incremental_matches_full_rebuild() -> void:
 
 	# Orthogonal removal: revert (5,4) back to soil.
 	TestAccess.set_tile(world, 5, 4, WorldStateType.TILE_SOIL)
-	TestAccess.tile_grid(world).dirty_cells.append(Vector2i(5, 4))
+	TestAccess.tile_grid(world).dirty_cells.append(Vector3i(5, 4, 0))
 	map_view.refresh()
 	_expect(not overlay_layer.get_used_cells().has(probe), "after reverting the orthogonal neighbour, the probe must have no overlay cell again")
 	_expect(base_layer.get_cell_atlas_coords(probe) != rock_coords and base_layer.get_cell_atlas_coords(probe) != water_coords,
@@ -295,7 +295,7 @@ func _check_incremental_matches_full_rebuild() -> void:
 
 	# Diagonal-only add: water at the probe's NE diagonal (6,4).
 	TestAccess.set_tile(world, 6, 4, WorldStateType.TILE_WATER)
-	TestAccess.tile_grid(world).dirty_cells.append(Vector2i(6, 4))
+	TestAccess.tile_grid(world).dirty_cells.append(Vector3i(6, 4, 0))
 	map_view.refresh()
 	_expect(overlay_layer.get_cell_atlas_coords(probe) == CONCAVE_NE, "after a diagonal-only neighbour addition, incremental refresh must set the NE concave overlay, got %s" % overlay_layer.get_cell_atlas_coords(probe))
 	_expect(base_layer.get_cell_atlas_coords(probe) == water_coords, "after a diagonal-only neighbour addition, incremental refresh must set WATER's own cell as the base backing, got %s" % base_layer.get_cell_atlas_coords(probe))
@@ -303,7 +303,7 @@ func _check_incremental_matches_full_rebuild() -> void:
 
 	# Diagonal-only removal: revert (6,4) back to soil.
 	TestAccess.set_tile(world, 6, 4, WorldStateType.TILE_SOIL)
-	TestAccess.tile_grid(world).dirty_cells.append(Vector2i(6, 4))
+	TestAccess.tile_grid(world).dirty_cells.append(Vector3i(6, 4, 0))
 	map_view.refresh()
 	_expect(not overlay_layer.get_used_cells().has(probe), "after reverting the diagonal neighbour, the probe must have no overlay cell again")
 	_expect(base_layer.get_cell_atlas_coords(probe) != rock_coords and base_layer.get_cell_atlas_coords(probe) != water_coords,

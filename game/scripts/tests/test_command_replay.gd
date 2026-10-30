@@ -83,15 +83,15 @@ func _commands_for_tick(world: WorldStateType) -> Array[Dictionary]:
 			out.append(_command(world, "set_labour", {"colonist": String(colonists[0]["id"]), "kind": "chop", "level": 4}))
 		3:
 			var tree := _find_tile(world, WorldStateType.TILE_TREE)
-			out.append(_command(world, "chop", {"x": tree.x, "y": tree.y, "priority": 1}))
+			out.append(_command(world, "chop", {"x": tree.x, "y": tree.y, "z": 0, "priority": 1}))
 		7:
 			out.append(_previewed(world, "dig", {"priority": 1}))
 			var rock := _find_tile(world, WorldStateType.TILE_ROCK)
-			out.append(_command(world, "mine", {"x": rock.x, "y": rock.y, "priority": 1}))
+			out.append(_command(world, "mine", {"x": rock.x, "y": rock.y, "z": 0, "priority": 1}))
 		15:
-			out.append(_command(world, "area_order", {"order": "chop", "x": maxi(0, cx - 8), "y": maxi(0, cy - 8), "width": 16, "height": 16}))
+			out.append(_command(world, "area_order", {"order": "chop", "x": maxi(0, cx - 8), "y": maxi(0, cy - 8), "z": 0, "width": 16, "height": 16}))
 		25:
-			out.append(_command(world, "zone_add", {"x": cx, "y": cy, "width": 2, "height": 2}))
+			out.append(_command(world, "zone_add", {"x": cx, "y": cy, "z": 0, "width": 2, "height": 2}))
 		40:
 			out.append(_previewed(world, "build", {"kind": "wooden_wall"}))
 		60:
@@ -103,11 +103,11 @@ func _commands_for_tick(world: WorldStateType) -> Array[Dictionary]:
 		120:
 			out.append(_command(world, "spawn_incident", {"id": "wildlife_wander"}))
 		150:
-			out.append(_command(world, "area_order", {"order": "dig", "x": maxi(0, cx - 6), "y": maxi(0, cy - 6), "width": 12, "height": 12}))
+			out.append(_command(world, "area_order", {"order": "dig", "x": maxi(0, cx - 6), "y": maxi(0, cy - 6), "z": 0, "width": 12, "height": 12}))
 		200:
 			out.append(_command(world, "set_labour", {"colonist": String(colonists[colonists.size() - 1]["id"]), "kind": "mine", "level": 0}))
 		300:
-			out.append(_command(world, "area_order", {"order": "cancel", "x": cx, "y": cy, "width": 4, "height": 4}))
+			out.append(_command(world, "area_order", {"order": "cancel", "x": cx, "y": cy, "z": 0, "width": 4, "height": 4}))
 		400:
 			out.append(_command(world, "spawn_incident", {"id": "migrant_joins"}))
 	if tick % 50 == 25:

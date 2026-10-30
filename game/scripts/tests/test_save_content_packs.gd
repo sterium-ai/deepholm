@@ -188,7 +188,7 @@ func _check_replay_on_pack() -> void:
 	var dug := 0
 	for x in world.get_map_width():
 		if dug < 3 and world.apply({"actor": "player", "command_id": "a13b_dig_%d" % x, "tick": world.get_tick(),
-				"type": "dig", "payload": {"x": x, "y": 2, "priority": 1}}).get("ok", false):
+				"type": "dig", "payload": {"x": x, "y": 2, "z": 0, "priority": 1}}).get("ok", false):
 			dug += 1
 	for _i in 40:
 		world.tick()

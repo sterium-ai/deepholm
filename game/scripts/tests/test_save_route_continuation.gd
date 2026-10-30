@@ -60,12 +60,12 @@ func _grid_costs() -> Dictionary:
 	var costs: Dictionary = {}
 	for y in GRID:
 		for x in GRID:
-			costs[Vector2i(x, y)] = 0.0 if y == 20 and x > 1 and x < GRID - 2 else 1.0
+			costs[Vector3i(x, y, 0)] = 0.0 if y == 20 and x > 1 and x < GRID - 2 else 1.0
 	return costs
 
 func _new_search(costs: Dictionary) -> RouteType:
-	var cost_fn := func(tile: Vector2i) -> float: return costs.get(tile, 0.0)
-	return RouteType.new(Vector2i(18, 5), Vector2i(18, 35), cost_fn, Vector2i.ZERO, Vector2i(GRID - 1, GRID - 1))
+	var cost_fn := func(tile: Vector3i) -> float: return costs.get(tile, 0.0)
+	return RouteType.new(Vector3i(18, 5, 0), Vector3i(18, 35, 0), cost_fn, Vector3i.ZERO, Vector3i(GRID - 1, GRID - 1, 0))
 
 ## Resumes twice (128 expansions), then applies the change: the visited parent of the
 ## westmost frontier tile (so a rebuild would push that branch back behind the east one), or
@@ -76,11 +76,11 @@ func _start_and_change(costs: Dictionary, change: String) -> RouteType:
 	search.resume()
 	var snapshot := search.snapshot()
 	if change == "visited":
-		var west: Vector2i = snapshot["frontier"][0]
-		for tile: Vector2i in snapshot["frontier"]:
+		var west: Vector3i = snapshot["frontier"][0]
+		for tile: Vector3i in snapshot["frontier"]:
 			if tile.x < west.x:
 				west = tile
-		var parent: Vector2i = snapshot["came_from"][west]
+		var parent: Vector3i = snapshot["came_from"][west]
 		_expect(parent != snapshot["start"], "route/visited: the changed tile must not be the start")
 		costs[parent] = 12.0
 	else:
@@ -104,7 +104,7 @@ func _through_save(snapshot: Dictionary) -> Dictionary:
 	SaveJsonInts._coerce_floats_to_ints(parsed)
 	var unpacked := SaveWireType.unpack_route(parsed, GRID, GRID)
 	_expect(unpacked["ok"], "the packed route must unpack: %s" % unpacked)
-	var check := SchedulingValidator._valid_route_state(unpacked["route"], GRID, GRID)
+	var check := SchedulingValidator._valid_route_state(unpacked["route"], GRID, GRID, 1)
 	_expect(check["ok"], "the unpacked route must validate: %s" % check)
 	return SchedulingCodecType._decode_route(unpacked["route"])
 
@@ -144,7 +144,7 @@ func _build_world() -> WorldStateType:
 	Scenarios.rock_row_with_gap(world, 24, 44)
 	TestAccess.set_tile(world, 2, 40, WorldStateType.TILE_TREE)
 	world.spawn_ground_tool_item("axe", 1, 0)
-	var order := Scenarios.command(world, "chop_far", "chop", {"x": 2, "y": 40, "priority": 1})
+	var order := Scenarios.command(world, "chop_far", "chop", {"x": 2, "y": 40, "z": 0, "priority": 1})
 	_expect(order.get("ok", false), "the chop order must be accepted: %s" % order)
 	return world
 
@@ -170,17 +170,17 @@ func _advance_and_change(world: WorldStateType, change: String) -> bool:
 		if search == null or search.expansions < 100:
 			continue
 		var snapshot := search.snapshot()
-		var tile := Vector2i(-1, -1)
+		var tile := Vector3i(-1, -1, 0)
 		if change == "visited":
 			var came_from: Dictionary = snapshot["came_from"]
-			for candidate: Vector2i in came_from:
+			for candidate: Vector3i in came_from:
 				if came_from.values().has(candidate) and candidate != snapshot["start"]:
 					tile = candidate
 					break
-			TestAccess.object_table(world).set_object(tile.x, tile.y, "chair")
+			TestAccess.object_table(world).set_object(Vector3i(tile.x, tile.y, 0), "chair")
 		else:
 			tile = (snapshot["frontier"] as Array)[0]
-			TestAccess.object_table(world).set_object(tile.x, tile.y, "wooden_wall")
+			TestAccess.object_table(world).set_object(Vector3i(tile.x, tile.y, 0), "wooden_wall")
 		return tile.x >= 0
 	return false
 

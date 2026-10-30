@@ -31,7 +31,7 @@ var _open_grid := PackedByteArray()
 func _init() -> void:
 	print(BenchCommon.header("bench_route_search"))
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
-	var start := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
+	var start := Vector3i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]), 0)
 	_bench_generated_routes(world, start)
 	_open_grid.resize(SIZE * SIZE)
 	_open_grid.fill(1)
@@ -41,36 +41,36 @@ func _init() -> void:
 	print("bench_route_search: done")
 	quit(0)
 
-func _bench_generated_routes(world: WorldStateType, start: Vector2i) -> void:
-	var by_distance := _tiles_at_distances(func(tile: Vector2i) -> bool:
+func _bench_generated_routes(world: WorldStateType, start: Vector3i) -> void:
+	var by_distance := _tiles_at_distances(func(tile: Vector3i) -> bool:
 		return bool(world.passability(tile.x, tile.y)["passable"]), start)
 	for distance in DISTANCES:
 		if not by_distance.has(distance):
 			continue
-		var target: Vector2i = by_distance[distance]
+		var target: Vector3i = by_distance[distance]
 		_time_search("generated/passability()", start, target, distance, TestAccess.passability(world).is_passable)
 
 func _bench_open_routes() -> void:
-	var start := Vector2i(0, 0)
+	var start := Vector3i(0, 0, 0)
 	for distance in DISTANCES:
 		if distance > (SIZE - 1) * 2:
 			continue
-		var target := Vector2i(mini(distance, SIZE - 1), distance - mini(distance, SIZE - 1))
+		var target := Vector3i(mini(distance, SIZE - 1), distance - mini(distance, SIZE - 1), 0)
 		_time_search("open/array-cost", start, target, distance, _open_cost)
 
 func _bench_unreachable() -> void:
-	var target := Vector2i(200, 200)
-	for step in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-		var wall: Vector2i = target + step
+	var target := Vector3i(200, 200, 0)
+	for step in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+		var wall: Vector3i = target + step
 		_open_grid[wall.y * SIZE + wall.x] = 0
-	_time_search("open/unreachable", Vector2i(0, 0), target, -1, _open_cost)
-	for step in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-		var wall: Vector2i = target + step
+	_time_search("open/unreachable", Vector3i(0, 0, 0), target, -1, _open_cost)
+	for step in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+		var wall: Vector3i = target + step
 		_open_grid[wall.y * SIZE + wall.x] = 1
 
-func _time_search(label: String, start: Vector2i, target: Vector2i, distance: int, cost_fn: Callable) -> void:
+func _time_search(label: String, start: Vector3i, target: Vector3i, distance: int, cost_fn: Callable) -> void:
 	var t := Time.get_ticks_usec()
-	var search := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, Vector2i(SIZE - 1, SIZE - 1))
+	var search := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, Vector3i(SIZE - 1, SIZE - 1, 0))
 	while not search.is_terminal():
 		search.resume()
 	var usec := Time.get_ticks_usec() - t
@@ -83,23 +83,23 @@ func _time_search(label: String, start: Vector2i, target: Vector2i, distance: in
 		"expansions": search.expansions, "resume calls (ticks)": search.resume_calls, "time ms": "%.2f" % (usec / 1000.0),
 		"us/expansion": "%.2f" % (float(usec) / maxi(1, search.expansions)), "snapshot json B": snapshot_size})
 
-func _open_cost(tile: Vector2i) -> float:
+func _open_cost(tile: Vector3i) -> float:
 	return float(_open_grid[tile.y * SIZE + tile.x])
 
 ## First tile found at each requested BFS path distance from start.
-func _tiles_at_distances(passable: Callable, start: Vector2i) -> Dictionary:
+func _tiles_at_distances(passable: Callable, start: Vector3i) -> Dictionary:
 	var result := {}
 	var dist := {start: 0}
-	var frontier: Array[Vector2i] = [start]
+	var frontier: Array[Vector3i] = [start]
 	var head := 0
 	while head < frontier.size():
-		var tile: Vector2i = frontier[head]
+		var tile: Vector3i = frontier[head]
 		head += 1
 		var d: int = dist[tile]
 		if DISTANCES.has(d) and not result.has(d):
 			result[d] = tile
-		for step in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-			var next: Vector2i = tile + step
+		for step in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+			var next: Vector3i = tile + step
 			if dist.has(next) or next.x < 0 or next.y < 0 or next.x >= SIZE or next.y >= SIZE:
 				continue
 			if not passable.call(next):
@@ -128,7 +128,7 @@ func _bench_regions(world: WorldStateType) -> void:
 	# completed work job (_toil_on_work_complete), even when passability did
 	# not change (soil -> plowed_soil). Timed on the generated map at
 	# colonist_0's own tile, whose passability does not change.
-	var tile := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
+	var tile := Vector3i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]), 0)
 	t = Time.get_ticks_usec()
 	var rooms = TestAccess.tile_grid(world).get_rooms()
 	_print_map_time("rooms full build (generated map, TileGrid.get_rooms())", t)
@@ -142,7 +142,7 @@ func _print_map_time(label: String, since_usec: int) -> void:
 	print("bench_route_search: %s time=%.2fms" % [label, ms])
 	BenchCommon.row("bench_route_search", "regions and rooms", label, {"time ms": "%.2f" % ms})
 
-## Vector2i keys/values -> "x,y" strings, only to measure the snapshot's JSON size.
+## Vector3i keys/values -> "x,y" strings, only to measure the snapshot's JSON size.
 func _json_safe(value):
 	match typeof(value):
 		TYPE_VECTOR2I:

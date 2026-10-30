@@ -60,7 +60,7 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
 	return world
 
@@ -96,70 +96,70 @@ func _job_command(world: WorldStateType, command_id: String, kind: String, paylo
 func _check_dig_accepted_and_rejected_cases() -> void:
 	var world := _single_colonist_world(346001)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-	_check_preview_matches_apply(world, _job_command(world, "dig_accepted", "dig", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(world, _job_command(world, "dig_accepted", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"dig on a passable soil tile")
 
 	var oob := _single_colonist_world(346002)
-	_check_preview_matches_apply(oob, _job_command(oob, "dig_oob", "dig", {"x": -1, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(oob, _job_command(oob, "dig_oob", "dig", {"x": -1, "y": 0, "z": 0, "priority": 1}),
 		"dig out of bounds")
 
 	var wrong_kind := _single_colonist_world(346003)
-	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "dig_wrong_kind", "dig", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "dig_wrong_kind", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"dig on a non-soil (floor) tile")
 
 	var impassable := _single_colonist_world(346004)
 	TestAccess.set_tile(impassable, 2, 0, WorldStateType.TILE_SOIL)
-	TestAccess.object_table(impassable).set_object(2, 0, "wooden_wall")
-	_check_preview_matches_apply(impassable, _job_command(impassable, "dig_impassable", "dig", {"x": 2, "y": 0, "priority": 1}),
+	TestAccess.object_table(impassable).set_object(Vector3i(2, 0, 0), "wooden_wall")
+	_check_preview_matches_apply(impassable, _job_command(impassable, "dig_impassable", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"dig on an impassable (wall-covered) soil tile")
 
 	var unknown_assignee := _single_colonist_world(346005)
 	TestAccess.set_tile(unknown_assignee, 2, 0, WorldStateType.TILE_SOIL)
 	_check_preview_matches_apply(unknown_assignee,
-		_job_command(unknown_assignee, "dig_unknown_assignee", "dig", {"x": 2, "y": 0, "priority": 1, "assignee": "no_such_colonist"}),
+		_job_command(unknown_assignee, "dig_unknown_assignee", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1, "assignee": "no_such_colonist"}),
 		"dig naming an unknown assignee")
 
 func _check_chop_accepted_and_rejected() -> void:
 	var world := _single_colonist_world(346010)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_TREE)
-	_check_preview_matches_apply(world, _job_command(world, "chop_accepted", "chop", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(world, _job_command(world, "chop_accepted", "chop", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"chop on a tree tile")
 
 	var wrong_kind := _single_colonist_world(346011)
-	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "chop_wrong_kind", "chop", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "chop_wrong_kind", "chop", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"chop on a non-tree (floor) tile")
 
 func _check_forage_accepted_and_non_bush_rejected() -> void:
 	var world := _single_colonist_world(346020)
-	TestAccess.object_table(world).set_object(2, 0, "berry_bush")
-	_check_preview_matches_apply(world, _job_command(world, "forage_accepted", "forage", {"x": 2, "y": 0, "priority": 1}),
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "berry_bush")
+	_check_preview_matches_apply(world, _job_command(world, "forage_accepted", "forage", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"forage on a berry_bush object")
 
 	var non_bush := _single_colonist_world(346021)
-	_check_preview_matches_apply(non_bush, _job_command(non_bush, "forage_non_bush", "forage", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(non_bush, _job_command(non_bush, "forage_non_bush", "forage", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"forage on a tile with no berry_bush")
 
 func _check_till_accepted_and_rejected() -> void:
 	var world := _single_colonist_world(346030)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-	_check_preview_matches_apply(world, _job_command(world, "till_accepted", "till", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(world, _job_command(world, "till_accepted", "till", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"till on a passable soil tile")
 
 	var wrong_kind := _single_colonist_world(346031)
-	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "till_wrong_kind", "till", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "till_wrong_kind", "till", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"till on a non-soil (floor) tile")
 
 func _check_sow_accepted_and_missing_seed_rejected() -> void:
 	var world := _single_colonist_world(346040)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_PLOWED_SOIL)
-	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "z": 0, "kind": "seed", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
-	_check_preview_matches_apply(world, _job_command(world, "sow_accepted", "sow", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(world, _job_command(world, "sow_accepted", "sow", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"sow on a plowed_soil tile with a seed available")
 
 	var missing_seed := _single_colonist_world(346041)
 	TestAccess.set_tile(missing_seed, 2, 0, WorldStateType.TILE_PLOWED_SOIL)
-	_check_preview_matches_apply(missing_seed, _job_command(missing_seed, "sow_missing_seed", "sow", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(missing_seed, _job_command(missing_seed, "sow_missing_seed", "sow", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"sow with no seed anywhere")
 
 ## Mine's own target/assignee validation moved into
@@ -169,17 +169,17 @@ func _check_sow_accepted_and_missing_seed_rejected() -> void:
 func _check_mine_accepted_and_rejected() -> void:
 	var world := _single_colonist_world(346042)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_ROCK)
-	_check_preview_matches_apply(world, _job_command(world, "mine_accepted", "mine", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(world, _job_command(world, "mine_accepted", "mine", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"mine on a rock tile")
 
 	var wrong_kind := _single_colonist_world(346043)
-	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "mine_wrong_kind", "mine", {"x": 2, "y": 0, "priority": 1}),
+	_check_preview_matches_apply(wrong_kind, _job_command(wrong_kind, "mine_wrong_kind", "mine", {"x": 2, "y": 0, "z": 0, "priority": 1}),
 		"mine on a non-rock (floor) tile")
 
 	var unknown_assignee := _single_colonist_world(346044)
 	TestAccess.set_tile(unknown_assignee, 2, 0, WorldStateType.TILE_ROCK)
 	_check_preview_matches_apply(unknown_assignee,
-		_job_command(unknown_assignee, "mine_unknown_assignee", "mine", {"x": 2, "y": 0, "priority": 1, "assignee": "no_such_colonist"}),
+		_job_command(unknown_assignee, "mine_unknown_assignee", "mine", {"x": 2, "y": 0, "z": 0, "priority": 1, "assignee": "no_such_colonist"}),
 		"mine naming an unknown assignee")
 
 	var refused_assignee := _single_colonist_world(346045)
@@ -191,14 +191,14 @@ func _check_mine_accepted_and_rejected() -> void:
 	})
 	_expect(set_faction_result.get("ok", false), "set_faction to raiders must be accepted")
 	_check_preview_matches_apply(refused_assignee,
-		_job_command(refused_assignee, "mine_refused_assignee", "mine", {"x": 2, "y": 0, "priority": 1, "assignee": raider_id}),
+		_job_command(refused_assignee, "mine_refused_assignee", "mine", {"x": 2, "y": 0, "z": 0, "priority": 1, "assignee": raider_id}),
 		"mine assigned to a non-colony (raiders) actor")
 
 func _place_object_command(world: WorldStateType, command_id: String, x: int, y: int, kind: String) -> Dictionary:
-	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "place_object", "payload": {"x": x, "y": y, "kind": kind}}
+	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "place_object", "payload": {"x": x, "y": y, "z": 0, "kind": kind}}
 
 func _remove_object_command(world: WorldStateType, command_id: String, x: int, y: int) -> Dictionary:
-	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "remove_object", "payload": {"x": x, "y": y}}
+	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "remove_object", "payload": {"x": x, "y": y, "z": 0}}
 
 func _check_place_object_accepted_and_occupied_rejected() -> void:
 	var world := _single_colonist_world(346050)
@@ -206,13 +206,13 @@ func _check_place_object_accepted_and_occupied_rejected() -> void:
 		"place_object on an empty floor tile")
 
 	var occupied := _single_colonist_world(346051)
-	TestAccess.object_table(occupied).set_object(2, 0, "wooden_wall")
+	TestAccess.object_table(occupied).set_object(Vector3i(2, 0, 0), "wooden_wall")
 	_check_preview_matches_apply(occupied, _place_object_command(occupied, "place_occupied", 2, 0, "wooden_wall"),
 		"place_object on an already-occupied tile")
 
 func _check_remove_object_accepted_and_rejected() -> void:
 	var world := _single_colonist_world(346060)
-	TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "wooden_wall")
 	_check_preview_matches_apply(world, _remove_object_command(world, "remove_accepted", 2, 0),
 		"remove_object on a tile holding an object")
 
@@ -221,7 +221,7 @@ func _check_remove_object_accepted_and_rejected() -> void:
 		"remove_object on a tile with no object")
 
 func _zone_add_command(world: WorldStateType, command_id: String, x: int, y: int, width: int, height: int) -> Dictionary:
-	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "zone_add", "payload": {"x": x, "y": y, "width": width, "height": height}}
+	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "zone_add", "payload": {"x": x, "y": y, "z": 0, "width": width, "height": height}}
 
 func _zone_remove_command(world: WorldStateType, command_id: String, id: String) -> Dictionary:
 	return {"actor": "player", "command_id": command_id, "tick": world.get_tick(), "type": "zone_remove", "payload": {"id": id}}
@@ -251,7 +251,7 @@ func _check_zone_remove_accepted_and_unknown_rejected() -> void:
 func _check_cancel_job_accepted_and_unknown_rejected() -> void:
 	var world := _single_colonist_world(346090)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-	var setup: Dictionary = world.apply(_job_command(world, "cancel_setup", "dig", {"x": 2, "y": 0, "priority": 1}))
+	var setup: Dictionary = world.apply(_job_command(world, "cancel_setup", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}))
 	_expect(setup.get("ok", false), "setup dig for the cancel_job case must be accepted")
 	_check_preview_matches_apply(world,
 		{"actor": "player", "command_id": "cancel_accepted", "tick": world.get_tick(), "type": "cancel_job", "payload": {"job_id": String(setup["job_id"])}},
@@ -268,7 +268,7 @@ func _check_cancel_job_accepted_and_unknown_rejected() -> void:
 func _check_terminal_job_already_terminal_and_not_active() -> void:
 	var world := _single_colonist_world(346160)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-	var setup: Dictionary = world.apply(_job_command(world, "already_terminal_setup", "dig", {"x": 2, "y": 0, "priority": 1}))
+	var setup: Dictionary = world.apply(_job_command(world, "already_terminal_setup", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}))
 	_expect(setup.get("ok", false), "setup dig for the already-terminal case must be accepted")
 	var job_id := String(setup["job_id"])
 	var first_cancel := world.apply({"actor": "player", "command_id": "already_terminal_cancel_1", "tick": world.get_tick(), "type": "cancel_job", "payload": {"job_id": job_id}})
@@ -279,7 +279,7 @@ func _check_terminal_job_already_terminal_and_not_active() -> void:
 
 	var queued_world := _single_colonist_world(346161)
 	TestAccess.set_tile(queued_world, 2, 0, WorldStateType.TILE_SOIL)
-	var queued_setup: Dictionary = queued_world.apply(_job_command(queued_world, "not_active_setup", "dig", {"x": 2, "y": 0, "priority": 1}))
+	var queued_setup: Dictionary = queued_world.apply(_job_command(queued_world, "not_active_setup", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1}))
 	_expect(queued_setup.get("ok", false), "setup dig for the not-active case must be accepted")
 	_expect(String(TestAccess.get_job(queued_world, String(queued_setup["job_id"]))["status"]) == "queued",
 		"the freshly submitted job must still be queued (no tick() has run yet) for this case to be meaningful")
@@ -331,15 +331,15 @@ func _check_job_priority_range_rejected() -> void:
 				"mine":
 					TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_ROCK)
 				"forage":
-					TestAccess.object_table(world).set_object(2, 0, "berry_bush")
+					TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "berry_bush")
 				"sow":
 					TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_PLOWED_SOIL)
-					TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "kind": "seed", "count": 1}
+					TestAccess.item_table(world).items["item_seed_1"] = {"id": "item_seed_1", "x": 5, "y": 5, "z": 0, "kind": "seed", "count": 1}
 					TestAccess.item_table(world).next_item_id = 2
 			var description := "%s with a valid target but unsupported priority %d" % [job_type, priority]
 			var sequence_before: int = TestAccess.scheduler(world).queue.get_sequence()
 			_check_preview_matches_apply(world,
-				_job_command(world, "%s_priority_%d" % [job_type, priority], job_type, {"x": 2, "y": 0, "priority": priority}),
+				_job_command(world, "%s_priority_%d" % [job_type, priority], job_type, {"x": 2, "y": 0, "z": 0, "priority": priority}),
 				description)
 			var saw_job_rejected := false
 			for event in world.get_events():
@@ -410,17 +410,17 @@ func _check_unknown_command_type_rejected() -> void:
 func _check_malformed_envelope_with_valid_actor_purity() -> void:
 	var missing_command_id := _single_colonist_world(346230)
 	_check_preview_matches_apply(missing_command_id,
-		{"actor": "player", "tick": missing_command_id.get_tick(), "type": "dig", "payload": {"x": 2, "y": 0, "priority": 1}},
+		{"actor": "player", "tick": missing_command_id.get_tick(), "type": "dig", "payload": {"x": 2, "y": 0, "z": 0, "priority": 1}},
 		"envelope missing command_id, valid actor")
 
 	var missing_tick := _single_colonist_world(346231)
 	_check_preview_matches_apply(missing_tick,
-		{"actor": "player", "command_id": "c1", "type": "dig", "payload": {"x": 2, "y": 0, "priority": 1}},
+		{"actor": "player", "command_id": "c1", "type": "dig", "payload": {"x": 2, "y": 0, "z": 0, "priority": 1}},
 		"envelope missing tick, valid actor")
 
 	var missing_type := _single_colonist_world(346232)
 	_check_preview_matches_apply(missing_type,
-		{"actor": "player", "command_id": "c1", "tick": missing_type.get_tick(), "payload": {"x": 2, "y": 0, "priority": 1}},
+		{"actor": "player", "command_id": "c1", "tick": missing_type.get_tick(), "payload": {"x": 2, "y": 0, "z": 0, "priority": 1}},
 		"envelope missing type, valid actor")
 
 	var missing_payload := _single_colonist_world(346233)
@@ -430,12 +430,12 @@ func _check_malformed_envelope_with_valid_actor_purity() -> void:
 
 	var invalid_payload_value := _single_colonist_world(346234)
 	_check_preview_matches_apply(invalid_payload_value,
-		{"actor": "player", "command_id": "c1", "tick": invalid_payload_value.get_tick(), "type": "dig", "payload": {"x": 2, "y": 0.5, "priority": 1}},
+		{"actor": "player", "command_id": "c1", "tick": invalid_payload_value.get_tick(), "type": "dig", "payload": {"x": 2, "y": 0.5, "z": 0, "priority": 1}},
 		"payload with a non-int/string value (float), valid actor")
 
 	var tick_mismatch := _single_colonist_world(346235)
 	_check_preview_matches_apply(tick_mismatch,
-		{"actor": "player", "command_id": "c1", "tick": tick_mismatch.get_tick() + 1, "type": "dig", "payload": {"x": 2, "y": 0, "priority": 1}},
+		{"actor": "player", "command_id": "c1", "tick": tick_mismatch.get_tick() + 1, "type": "dig", "payload": {"x": 2, "y": 0, "z": 0, "priority": 1}},
 		"tick mismatch, valid actor")
 
 ## Goal: previewing a 12x12 hover rectangle (144 commands) on a 256x256 world must cost less
@@ -459,7 +459,7 @@ func _check_preview_performance_256() -> void:
 	var commands: Array[Dictionary] = []
 	for y in range(10, 22):
 		for x in range(10, 22):
-			commands.append(_job_command(world, "perf_dig_%d_%d" % [x, y], "dig", {"x": x, "y": y, "priority": 1}))
+			commands.append(_job_command(world, "perf_dig_%d_%d" % [x, y], "dig", {"x": x, "y": y, "z": 0, "priority": 1}))
 	_expect(commands.size() == 144, "the timed fixture must cover a 12x12 = 144-tile rectangle, got %d" % commands.size())
 	var hash_before := world.state_hash()
 	var preview_usec := 1 << 62

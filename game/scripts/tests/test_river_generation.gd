@@ -35,7 +35,7 @@ const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const SEEDS := [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 42, 1337, 20260919]
 const WIDTH := 256
 const HEIGHT := 256
-const NEI4: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+const NEI4: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0)]
 const NECK_FLOOR := 4
 const WATER_STEP_LIMIT := 40
 const FOOD_STEP_LIMIT := 40
@@ -165,7 +165,7 @@ func _check_rock_outcrops(world: WorldStateType, tiles: Array[String], width: in
 
 	var colonists := world.get_colonists()
 	for colonist in colonists:
-		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var start := TileGrid.tile_of(colonist)
 		var steps := _bfs_route_distance(world, start, func(x, y): return qualifying_lookup.has(y * width + x))
 		if steps != -1 and steps <= TREE_STEP_LIMIT:
 			return
@@ -414,12 +414,12 @@ func _check_only_one_colonist_reachable_detected() -> void:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.set_colonists(world, [
-		ActorTableType.spawn("colonist", 0, 2, TestAccess.content(world), "colonist_0"),
-		ActorTableType.spawn("colonist", 90, 2, TestAccess.content(world), "colonist_1"),
-		ActorTableType.spawn("colonist", 95, 2, TestAccess.content(world), "colonist_2"),
+		ActorTableType.spawn("colonist", Vector3i(0, 2, 0), TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", Vector3i(90, 2, 0), TestAccess.content(world), "colonist_1"),
+		ActorTableType.spawn("colonist", Vector3i(95, 2, 0), TestAccess.content(world), "colonist_2"),
 	])
 	for colonist in world.get_colonists():
-		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var start := TileGrid.tile_of(colonist)
 		var steps := _bfs_route_distance(world, start, func(x, y): return world.get_tile(x, y) == "water")
 		if steps == -1 or steps > WATER_STEP_LIMIT:
 			return # correctly rejected: at least one colonist fails the bound
@@ -436,12 +436,12 @@ func _check_bush_blocked_route_detected() -> void:
 	TestAccess.tile_grid(world).tiles[0 * 20 + 5] = "water"
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
-	for pos in [Vector2i(4, 5), Vector2i(6, 5), Vector2i(5, 4), Vector2i(5, 6)]:
+	for pos in [Vector3i(4, 5, 0), Vector3i(6, 5, 0), Vector3i(5, 4, 0), Vector3i(5, 6, 0)]:
 		var key := TestAccess.tile_grid(world).tile_index(pos.x, pos.y)
 		TestAccess.object_table(world).objects[key] = "berry_bush"
 		TestAccess.object_table(world).object_factions[key] = "colony"
 	TestAccess.tile_grid(world).reset_cells()
-	var steps := _bfs_route_distance(world, Vector2i(5, 5), func(x, y): return world.get_tile(x, y) == "water")
+	var steps := _bfs_route_distance(world, Vector3i(5, 5, 0), func(x, y): return world.get_tile(x, y) == "water")
 	if steps != -1:
 		_fail("accessibility BFS must respect blocking objects (a berry bush must not be treated as passable soil), got distance %d instead of unreachable" % steps)
 
@@ -459,9 +459,9 @@ func _check_single_shared_bush_insufficient_food_detected() -> void:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.set_colonists(world, [
-		ActorTableType.spawn("colonist", 5, 5, TestAccess.content(world), "colonist_0"),
-		ActorTableType.spawn("colonist", 6, 5, TestAccess.content(world), "colonist_1"),
-		ActorTableType.spawn("colonist", 7, 5, TestAccess.content(world), "colonist_2"),
+		ActorTableType.spawn("colonist", Vector3i(5, 5, 0), TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", Vector3i(6, 5, 0), TestAccess.content(world), "colonist_1"),
+		ActorTableType.spawn("colonist", Vector3i(7, 5, 0), TestAccess.content(world), "colonist_2"),
 	])
 	TestAccess.object_table(world).objects[TestAccess.tile_grid(world).tile_index(10, 5)] = "berry_bush"
 	TestAccess.object_table(world).object_factions[TestAccess.tile_grid(world).tile_index(10, 5)] = "colony"
@@ -489,10 +489,10 @@ func _check_bush_wall_detour_rejected() -> void:
 	var width := 15
 	var height := 11
 	var limit := 20
-	var near := Vector2i(1, 2)
-	var far := Vector2i(14, 2)
-	var target_bush := Vector2i(0, 2)
-	var wall_bushes: Array[Vector2i] = [Vector2i(10, 2), Vector2i(11, 2), Vector2i(12, 2)]
+	var near := Vector3i(1, 2, 0)
+	var far := Vector3i(14, 2, 0)
+	var target_bush := Vector3i(0, 2, 0)
+	var wall_bushes: Array[Vector3i] = [Vector3i(10, 2, 0), Vector3i(11, 2, 0), Vector3i(12, 2, 0)]
 
 	# -- production counter, called directly against a raw map/bush_lookup --
 	var map: Array[String] = []
@@ -510,7 +510,7 @@ func _check_bush_wall_detour_rejected() -> void:
 	bush_lookup[target_bush.y * width + target_bush.x] = true
 	for pos in wall_bushes:
 		bush_lookup[pos.y * width + pos.x] = true
-	var footprint: Array[Vector2i] = [near, far]
+	var footprint: Array[Vector3i] = [near, far]
 	var confirmed := TestAccess.generator_count_reachable_food_sources(map, width, height, footprint, bush_lookup, limit)
 	if confirmed >= 1:
 		_fail("production _count_reachable_food_sources must reject a bush only reachable by cutting through a wall of other bushes, counted %d confirmed" % confirmed)
@@ -527,8 +527,8 @@ func _check_bush_wall_detour_rejected() -> void:
 		TestAccess.object_table(world).object_factions[TestAccess.tile_grid(world).tile_index(pos.x, pos.y)] = "colony"
 	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.set_colonists(world, [
-		ActorTableType.spawn("colonist", near.x, near.y, TestAccess.content(world), "colonist_0"),
-		ActorTableType.spawn("colonist", far.x, far.y, TestAccess.content(world), "colonist_1"),
+		ActorTableType.spawn("colonist", Vector3i(near.x, near.y, 0), TestAccess.content(world), "colonist_0"),
+		ActorTableType.spawn("colonist", Vector3i(far.x, far.y, 0), TestAccess.content(world), "colonist_1"),
 	])
 	var colonists := world.get_colonists()
 	var independent_count := _count_reachable_food_sources(world, colonists, limit)
@@ -629,7 +629,7 @@ func _check_spawn_accessibility(world: WorldStateType, seed_value: int) -> void:
 		return
 
 	for colonist in colonists:
-		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var start := TileGrid.tile_of(colonist)
 		var colonist_id: String = String(colonist["id"])
 		var water_steps := _bfs_route_distance(world, start, func(x, y): return world.get_tile(x, y) == "water")
 		var tree_steps := _bfs_route_distance(world, start, func(x, y): return world.get_tile(x, y) == "tree")
@@ -673,7 +673,7 @@ func _count_reachable_food_sources(world: WorldStateType, colonists: Array, limi
 		return 0
 	var reachable_per_colonist: Array[Dictionary] = []
 	for colonist in colonists:
-		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var start := TileGrid.tile_of(colonist)
 		reachable_per_colonist.append(_reachable_bushes_from(world, start, limit))
 	var intersection: Dictionary = reachable_per_colonist[0].duplicate()
 	for i in range(1, reachable_per_colonist.size()):
@@ -687,16 +687,16 @@ func _count_reachable_food_sources(world: WorldStateType, colonists: Array, limi
 ## WorldGenerator._distance_field()'s own "walk to reach it, plus one
 ## interaction step" metric) collecting every distinct berry_bush object index
 ## reached within `limit` hops.
-func _reachable_bushes_from(world: WorldStateType, start: Vector2i, limit: int) -> Dictionary:
+func _reachable_bushes_from(world: WorldStateType, start: Vector3i, limit: int) -> Dictionary:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
 	var visited: Dictionary = {}
 	visited[start.y * width + start.x] = 0
-	var queue: Array[Vector2i] = [start]
+	var queue: Array[Vector3i] = [start]
 	var found: Dictionary = {}
 	var head := 0
 	while head < queue.size():
-		var current: Vector2i = queue[head]
+		var current: Vector3i = queue[head]
 		head += 1
 		var dist: int = visited[current.y * width + current.x]
 		var next_dist := dist + 1
@@ -714,7 +714,7 @@ func _reachable_bushes_from(world: WorldStateType, start: Vector2i, limit: int) 
 			if visited.has(nindex) or not bool(world.passability(nx, ny)["passable"]):
 				continue
 			visited[nindex] = next_dist
-			queue.append(Vector2i(nx, ny))
+			queue.append(Vector3i(nx, ny, 0))
 	return found
 
 ## Single-source BFS from `start`, expanding only through world.passability()
@@ -723,15 +723,15 @@ func _reachable_bushes_from(world: WorldStateType, start: Vector2i, limit: int) 
 ## to the nearest neighbour `is_target` accepts -- the walk to reach it, plus
 ## one interaction step onto/into the resource itself, matching
 ## WorldGenerator._distance_field()'s own metric (ADR 020).
-func _bfs_route_distance(world: WorldStateType, start: Vector2i, is_target: Callable) -> int:
+func _bfs_route_distance(world: WorldStateType, start: Vector3i, is_target: Callable) -> int:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
 	var visited: Dictionary = {}
-	var queue: Array[Vector2i] = [start]
+	var queue: Array[Vector3i] = [start]
 	visited[start.y * width + start.x] = 0
 	var head := 0
 	while head < queue.size():
-		var current: Vector2i = queue[head]
+		var current: Vector3i = queue[head]
 		head += 1
 		var distance: int = visited[current.y * width + current.x]
 		for offset in NEI4:
@@ -744,5 +744,5 @@ func _bfs_route_distance(world: WorldStateType, start: Vector2i, is_target: Call
 			var nindex := ny * width + nx
 			if not visited.has(nindex) and bool(world.passability(nx, ny)["passable"]):
 				visited[nindex] = distance + 1
-				queue.append(Vector2i(nx, ny))
+				queue.append(Vector3i(nx, ny, 0))
 	return -1

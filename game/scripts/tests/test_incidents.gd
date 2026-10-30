@@ -54,7 +54,7 @@ const BOOT_TICK_BUDGET := 1500
 const WALL_X := 2
 const DOOR_Y := 24
 const GAP_Y := 0
-const NO_TILE := Vector2i(-1, -1)
+const NO_TILE := Vector3i(-1, -1, 0)
 
 ## ADR 034: content/incidents.json's test-only "raider_incursion"
 ## row (raiders faction, hostile to colony per content/factions.json; wolf
@@ -64,7 +64,7 @@ const NO_TILE := Vector2i(-1, -1)
 ## inside them.
 const LINGER_INCIDENT_ID := "raider_incursion"
 const LINGER_MIN_DAY := 10
-const LINGER_SPAWN := Vector2i(24, 0)
+const LINGER_SPAWN := Vector3i(24, 0, 0)
 ## Bare floor tiles strictly between the spawn and the door, all genuinely
 ## not Chebyshev-adjacent to it: with LINGER_NEAR_DOOR_TILE sealed off for
 ## the one tick that runs the daily draw, these are IncidentScheduler's own
@@ -74,8 +74,8 @@ const LINGER_SPAWN := Vector2i(24, 0)
 ## behaviour, not a coincidental incident-target pick.
 const LINGER_FAR_CORRIDOR_START_Y := 1
 const LINGER_FAR_CORRIDOR_END_Y := 5
-const LINGER_NEAR_DOOR_TILE := Vector2i(24, 6)
-const LINGER_DOOR_TILE := Vector2i(24, 7)
+const LINGER_NEAR_DOOR_TILE := Vector3i(24, 6, 0)
+const LINGER_DOOR_TILE := Vector3i(24, 7, 0)
 const LINGER_ARRIVAL_BUDGET := 900
 const LINGER_ATTACK_OBSERVE_TICKS := 90
 
@@ -157,16 +157,16 @@ func _wait_ticks_of(world: WorldStateType, incident_id: String) -> int:
 
 ## First in-bounds tile with no colonist, no object and not a tree -- a valid
 ## place_object target regardless of the seed's generated terrain.
-func _find_placeable_tile(world: WorldStateType) -> Vector2i:
+func _find_placeable_tile(world: WorldStateType) -> Vector3i:
 	for y in WorldStateType.MAP_HEIGHT:
 		for x in WorldStateType.MAP_WIDTH:
 			if world.get_tile(x, y) != WorldStateType.TILE_TREE and world.get_object(x, y) == "" and not TestAccess.colonist_at(world, x, y):
-				return Vector2i(x, y)
+				return Vector3i(x, y, 0)
 	return NO_TILE
 
 func _place(world: WorldStateType, x: int, y: int, kind: String) -> Dictionary:
 	return world.apply({"actor": "test", "command_id": "place_%s_%d_%d" % [kind, x, y], "tick": world.get_tick(),
-		"type": "place_object", "payload": {"x": x, "y": y, "kind": kind}})
+		"type": "place_object", "payload": {"x": x, "y": y, "z": 0, "kind": kind}})
 
 ## A full-height double-thick wall at x in {WALL_X, WALL_X+1} with one door
 ## gap at y=DOOR_Y in both columns: a wildlife actor can only ever cross
@@ -216,10 +216,10 @@ func _build_pocket_world(seed_value: int, floor_tiles: Array) -> WorldStateType:
 	return world
 
 func _colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y, "route": null, "work": null, "carrying": null}
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0, "route": null, "work": null, "carrying": null}
 
 func _make_wolf(world: WorldStateType, actor_id: String, x: int, y: int) -> Dictionary:
-	var actor := ActorTableType.spawn("wolf", x, y, TestAccess.content(world), actor_id)
+	var actor := ActorTableType.spawn("wolf", Vector3i(x, y, 0), TestAccess.content(world), actor_id)
 	actor["factionId"] = "wildlife"
 	return actor
 
@@ -238,9 +238,9 @@ func _in_world(actor_id: String) -> Callable:
 func _gone(actor_id: String) -> Callable:
 	return func(world: WorldStateType) -> bool: return TestAccess.find_colonist(world, actor_id).is_empty()
 
-func _actor_pos(world: WorldStateType, actor_id: String) -> Vector2i:
+func _actor_pos(world: WorldStateType, actor_id: String) -> Vector3i:
 	var actor := TestAccess.find_colonist(world, actor_id)
-	return Vector2i(int(actor["x"]), int(actor["y"])) if not actor.is_empty() else NO_TILE
+	return TileGrid.tile_of(actor) if not actor.is_empty() else NO_TILE
 
 func _check_natural_daily_draw_spawns_wildlife_on_day3() -> void:
 	if _failed: return
@@ -364,14 +364,14 @@ func _check_initial_route_avoids_door_via_alternate_route() -> void:
 	if _failed: return
 	var world := _build_controlled_world(303)
 	_build_single_wall(world, WALL_X, DOOR_Y, GAP_Y)
-	var wolf_target := Vector2i(WALL_X + 2, DOOR_Y)
-	var till_target := Vector2i(WALL_X + 2, DOOR_Y + 1)
+	var wolf_target := Vector3i(WALL_X + 2, DOOR_Y, 0)
+	var till_target := Vector3i(WALL_X + 2, DOOR_Y + 1, 0)
 	TestAccess.set_tile(world, till_target.x, till_target.y, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).append(_colonist("door_colonist", 0, DOOR_Y + 1))
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "gap_wolf", 0, DOOR_Y), wolf_target, 5)
 	_expect(not job_id.is_empty(), "the wolf's job must be accepted")
 	var till_result := world.apply({"actor": "test", "command_id": "till_beyond", "tick": world.get_tick(),
-		"type": "till", "payload": {"x": till_target.x, "y": till_target.y, "priority": 1}})
+		"type": "till", "payload": {"x": till_target.x, "y": till_target.y, "z": 0, "priority": 1}})
 	_expect(till_result.get("ok", false), "the colonist's till order beyond the wall must be accepted")
 
 	# The colonist's short route activates (and finishes) long before the
@@ -379,16 +379,16 @@ func _check_initial_route_avoids_door_via_alternate_route() -> void:
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return not w.get_assignments().get("door_colonist", {}).is_empty()) >= 0,
 		"the colonist's till job must activate")
 	var colonist_path: Array = world.get_assignments().get("door_colonist", {}).get("path", [])
-	_expect(colonist_path.has(Vector2i(WALL_X, DOOR_Y)), "the colonist's initial route must pass through the door (the short way)")
+	_expect(colonist_path.has(Vector3i(WALL_X, DOOR_Y, 0)), "the colonist's initial route must pass through the door (the short way)")
 
 	_expect(_tick_until(world, _in_world("gap_wolf")) >= 0, "the wolf must spawn once its faction-aware route is found")
 	var wolf_path: Array = world.get_assignments().get("gap_wolf", {}).get("path", [])
 	_expect(wolf_path.size() > 1, "the wolf's assignment must carry the initial route")
 	var wolf_crossings := 0
 	for tile in wolf_path:
-		if (tile as Vector2i).x == WALL_X:
+		if (tile as Vector3i).x == WALL_X:
 			wolf_crossings += 1
-			_expect((tile as Vector2i).y == GAP_Y, "the wolf's initial route must cross the wall only at the gap, never the door (at %s)" % [tile])
+			_expect((tile as Vector3i).y == GAP_Y, "the wolf's initial route must cross the wall only at the gap, never the door (at %s)" % [tile])
 	_expect(wolf_crossings == 1, "the wolf's initial route must cross the wall line exactly once")
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return _actor_pos(w, "gap_wolf") == wolf_target) >= 0,
 		"the wolf must reach its target via the gap")
@@ -402,7 +402,7 @@ func _check_unreachable_candidate_is_never_spawned() -> void:
 	if _failed: return
 	var world := _build_controlled_world(303)
 	_build_single_wall(world, WALL_X, DOOR_Y, -1)
-	var target := Vector2i(WALL_X + 2, DOOR_Y)
+	var target := Vector3i(WALL_X + 2, DOOR_Y, 0)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "blocked_wolf", 0, DOOR_Y), target, 5)
 	_expect(not job_id.is_empty(), "the wolf's job must be accepted")
 	var ticks := 0
@@ -422,7 +422,7 @@ func _check_unreachable_candidate_is_never_spawned() -> void:
 func _check_door_introduced_mid_travel_blocks_wildlife() -> void:
 	if _failed: return
 	var world := _build_controlled_world(303)
-	var target := Vector2i(WALL_X + 10, DOOR_Y)
+	var target := Vector3i(WALL_X + 10, DOOR_Y, 0)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "travel_wolf", 0, DOOR_Y), target, 5)
 	_expect(not job_id.is_empty(), "the wolf's job must be accepted")
 	_expect(_tick_until(world, _in_world("travel_wolf")) >= 0, "the wolf must spawn on the open map")
@@ -455,7 +455,7 @@ func _check_actor_despawns_after_exact_wait() -> void:
 		if actor_ids.is_empty(): return
 		var actor_id := String(actor_ids[0])
 		_expect(_tick_until(world, _in_world(actor_id)) >= 0, "%s's actor must spawn" % incident_id)
-		var target: Vector2i = Scenarios.find_job(world, _assignment_job_id(world, actor_id)).get("target", NO_TILE)
+		var target: Vector3i = Scenarios.find_job(world, _assignment_job_id(world, actor_id)).get("target", NO_TILE)
 		_expect(target != NO_TILE, "%s's actor must carry an active job target" % incident_id)
 		_expect(_tick_until(world, func(w: WorldStateType) -> bool: return _actor_pos(w, actor_id) == target) >= 0,
 			"%s's actor must arrive at its target" % incident_id)
@@ -500,8 +500,8 @@ func _check_spawn_incident_debug_command() -> void:
 ## winner's job releases the target -- then it spawns and runs in turn.
 func _check_two_actor_race_spawns_only_the_winner() -> void:
 	if _failed: return
-	var spawn := Vector2i(0, 10)
-	var target := Vector2i(1, 10)
+	var spawn := Vector3i(0, 10, 0)
+	var target := Vector3i(1, 10, 0)
 	var world := _build_pocket_world(909, [spawn, target])
 	var spawn_result := _spawn_incident_command(world, "race", "wildlife_wander")
 	var actor_ids: Array = spawn_result.get("actor_ids", [])
@@ -542,13 +542,13 @@ func _check_two_actor_race_spawns_only_the_winner() -> void:
 ## job: the wolf stays staged until the till job releases the tile.
 func _check_reserved_by_colonist_job_defers_spawn() -> void:
 	if _failed: return
-	var spawn := Vector2i(0, 10)
-	var target := Vector2i(1, 10)
+	var spawn := Vector3i(0, 10, 0)
+	var target := Vector3i(1, 10, 0)
 	var world := _build_pocket_world(919, [spawn, target])
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).append(_colonist("tiller", target.x, target.y))
 	_expect(world.apply({"actor": "test", "command_id": "till_pocket", "tick": world.get_tick(),
-		"type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}}).get("ok", false), "the till order must be accepted")
+		"type": "till", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1}}).get("ok", false), "the till order must be accepted")
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return not w.get_assignments().get("tiller", {}).is_empty()) >= 0,
 		"the till job must activate and hold the target's reservation")
 	var spawn_result := _spawn_incident_command(world, "reserved", "wildlife_wander")
@@ -578,7 +578,7 @@ func _check_incident_submission_does_not_disturb_queue_clock_or_backoff() -> voi
 	var with_incidents := _build_controlled_world(1111)
 	for world in [baseline, with_incidents]:
 		TestAccess.colonists(world).append(_colonist("solo_colonist", 5, 5))
-		TestAccess.item_table(world).items["wood_1"] = {"id": "wood_1", "x": 20, "y": 20, "kind": "wood", "count": 1}
+		TestAccess.item_table(world).items["wood_1"] = {"id": "wood_1", "x": 20, "y": 20, "z": 0, "kind": "wood", "count": 1}
 	for i in 40:
 		baseline.tick()
 		if i == 5:
@@ -607,12 +607,12 @@ func _check_incident_submission_does_not_disturb_queue_clock_or_backoff() -> voi
 func _check_cleanup_on_every_terminal_transition() -> void:
 	if _failed: return
 	# Cancel before activation: the target is held by a colonist's till job.
-	var spawn := Vector2i(0, 10)
-	var target := Vector2i(1, 10)
+	var spawn := Vector3i(0, 10, 0)
+	var target := Vector3i(1, 10, 0)
 	var pocket := _build_pocket_world(929, [spawn, target])
 	TestAccess.set_tile(pocket, target.x, target.y, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(pocket).append(_colonist("tiller", target.x, target.y))
-	pocket.apply({"actor": "test", "command_id": "till_hold", "tick": 0, "type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}})
+	pocket.apply({"actor": "test", "command_id": "till_hold", "tick": 0, "type": "till", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1}})
 	pocket.tick()
 	var staged_job := TestAccess.incidents(pocket).propose(_make_wolf(pocket, "staged_wolf", spawn.x, spawn.y), target, 40)
 	pocket.tick()
@@ -625,7 +625,7 @@ func _check_cleanup_on_every_terminal_transition() -> void:
 
 	for command_type in ["cancel_job", "fail_job", "invalidate_job", "complete_job"]:
 		var world := _build_controlled_world(939)
-		var wolf_target := Vector2i(30, 10)
+		var wolf_target := Vector3i(30, 10, 0)
 		var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "cmd_wolf", 0, 10), wolf_target, 40)
 		_expect(_tick_until(world, _in_world("cmd_wolf")) >= 0, "%s: the wolf must spawn" % command_type)
 		if command_type == "complete_job":
@@ -654,7 +654,7 @@ func _check_cleanup_on_every_terminal_transition() -> void:
 func _check_unreachable_travel_clears_progress_for_next_job() -> void:
 	if _failed: return
 	var world := _build_controlled_world(949)
-	var target := Vector2i(WALL_X + 10, DOOR_Y)
+	var target := Vector3i(WALL_X + 10, DOOR_Y, 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_SOIL)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "cut_wolf", 0, DOOR_Y), target, 40)
 	_expect(_tick_until(world, _in_world("cut_wolf")) >= 0, "the wolf must spawn")
@@ -665,7 +665,7 @@ func _check_unreachable_travel_clears_progress_for_next_job() -> void:
 	_expect(TestAccess.progress_table(world).get_progress(target) == null, "the unreachable hook must clear the incident's stamped wait")
 	TestAccess.colonists(world).append(_colonist("next_worker", target.x + 1, target.y))
 	_expect(world.apply({"actor": "test", "command_id": "till_after", "tick": world.get_tick(),
-		"type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1}}).get("ok", false), "a till order on the freed tile must be accepted")
+		"type": "till", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1}}).get("ok", false), "a till order on the freed tile must be accepted")
 	_expect(_tick_until(world, func(w: WorldStateType) -> bool: return TestAccess.find_colonist(w, "next_worker").get("work") != null) >= 0,
 		"the till job must reach its work toil")
 	var work: Dictionary = TestAccess.find_colonist(world, "next_worker")["work"]
@@ -682,8 +682,8 @@ func _check_cancelling_queued_competitor_preserves_active_owner_wait() -> void:
 
 func _check_queued_competitor_command_preserves_wait(command_type: String) -> void:
 	if _failed: return
-	var spawn := Vector2i(0, 10)
-	var target := Vector2i(1, 10)
+	var spawn := Vector3i(0, 10, 0)
+	var target := Vector3i(1, 10, 0)
 	var world := _build_pocket_world(971, [spawn, target])
 	var spawn_result := _spawn_incident_command(world, "competitor", "wildlife_wander")
 	var actor_ids: Array = spawn_result.get("actor_ids", [])
@@ -729,8 +729,8 @@ func _check_door_on_spawn_tile_during_pending_route_retires_proposal() -> void:
 	# the route: the door lands on the wolf's own spawn tile only after that
 	# search has already begun and validated its start, not before.
 	_build_single_wall(world, WALL_X, DOOR_Y, GAP_Y)
-	var spawn := Vector2i(0, DOOR_Y)
-	var target := Vector2i(WALL_X + 2, DOOR_Y)
+	var spawn := Vector3i(0, DOOR_Y, 0)
+	var target := Vector3i(WALL_X + 2, DOOR_Y, 0)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "gated_wolf", spawn.x, spawn.y), target, 40)
 	_expect(not job_id.is_empty(), "the wolf's job must be accepted")
 	world.tick()
@@ -757,7 +757,7 @@ func _check_door_on_spawn_tile_during_pending_route_retires_proposal() -> void:
 func _check_door_on_destination_during_travel_is_never_reached() -> void:
 	if _failed: return
 	var world := _build_controlled_world(991)
-	var target := Vector2i(30, 10)
+	var target := Vector3i(30, 10, 0)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "dest_wolf", 0, 10), target, 40)
 	_expect(_tick_until(world, _in_world("dest_wolf")) >= 0, "the wolf must spawn on the open map")
 	_expect(_place(world, target.x, target.y, "door").get("ok", false),
@@ -781,7 +781,7 @@ func _check_door_on_destination_during_travel_is_never_reached() -> void:
 func _check_terminate_during_active_reroute_releases_search() -> void:
 	if _failed: return
 	var world := _build_controlled_world(997)
-	var target := Vector2i(WALL_X + 10, DOOR_Y)
+	var target := Vector3i(WALL_X + 10, DOOR_Y, 0)
 	var job_id := TestAccess.incidents(world).propose(_make_wolf(world, "reroute_wolf", 0, DOOR_Y), target, 40)
 	_expect(_tick_until(world, _in_world("reroute_wolf")) >= 0, "the wolf must spawn")
 	world.tick()
@@ -1069,7 +1069,7 @@ func _build_lingering_arena(seed_value: int) -> WorldStateType:
 	TestAccess.colonists(world).clear()
 	for y in range(LINGER_SPAWN.y, LINGER_DOOR_TILE.y + 1):
 		TestAccess.set_tile(world, LINGER_SPAWN.x, y, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(LINGER_DOOR_TILE.x, LINGER_DOOR_TILE.y, "door")
+	TestAccess.object_table(world).set_object(Vector3i(LINGER_DOOR_TILE.x, LINGER_DOOR_TILE.y, 0), "door")
 	return world
 
 ## Ticks to one tick before raider_incursion's own min_day boundary, seals
@@ -1082,15 +1082,15 @@ func _build_lingering_arena(seed_value: int) -> WorldStateType:
 func _draw_lingering_incident(world: WorldStateType) -> Array:
 	var draw_tick := (LINGER_MIN_DAY - 1) * DAY_LENGTH_TICKS
 	_tick_to(world, draw_tick - 1)
-	TestAccess.object_table(world).set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "bed")
+	TestAccess.object_table(world).set_object(Vector3i(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, 0), "bed")
 	world.tick()
-	TestAccess.object_table(world).set_object(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, "")
+	TestAccess.object_table(world).set_object(Vector3i(LINGER_NEAR_DOOR_TILE.x, LINGER_NEAR_DOOR_TILE.y, 0), "")
 	var events := _incident_started_events(world, LINGER_INCIDENT_ID)
 	if events.size() != 1:
 		return []
 	return events[0]["data"]["actor_ids"]
 
-func _chebyshev(a: Vector2i, b: Vector2i) -> int:
+func _chebyshev(a: Vector3i, b: Vector3i) -> int:
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
 ## get_colonists() filters to worker-component actors only (ADR 012), which a
@@ -1126,7 +1126,7 @@ func _check_lingering_actor_survives_arrival_and_hands_off_to_approach() -> void
 		"raider_incursion must spawn a wolf carrying the raiders faction, got %s" % spawned)
 
 	var incident_job_id := _assignment_job_id(world, actor_id)
-	var incident_target: Vector2i = Scenarios.find_job(world, incident_job_id).get("target", NO_TILE)
+	var incident_target: Vector3i = Scenarios.find_job(world, incident_job_id).get("target", NO_TILE)
 	_expect(incident_target != NO_TILE, "the lingering actor's own incident job must carry a target")
 	_expect(_chebyshev(incident_target, LINGER_DOOR_TILE) > 1,
 		"the incident's own picked target (%s) must not be adjacent to the door (%s) -- the near-door seal must have worked" % [incident_target, LINGER_DOOR_TILE])

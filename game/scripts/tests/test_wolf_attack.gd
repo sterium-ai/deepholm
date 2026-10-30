@@ -25,7 +25,7 @@ const MIN_DAY := 6
 ## test_incidents.gd's own lingering-hand-off arena), so this file's daily
 ## budget draw (day 6 onward) can never compete with that arena's own
 ## north-edge spawn tile for the same candidate.
-const SPAWN_TILE := Vector2i(24, 47)
+const SPAWN_TILE := Vector3i(24, 47, 0)
 ## Bare floor tiles between the spawn and the door, all genuinely not
 ## adjacent to it (Chebyshev distance >= 2): with NEAR_DOOR_TILE sealed off
 ## (see _draw_wolf_attack_naturally_away_from_door()) these are IncidentScheduler's own
@@ -35,8 +35,8 @@ const SPAWN_TILE := Vector2i(24, 47)
 ## (not a coincidental incident target) is what closes the gap.
 const FAR_CORRIDOR_START_Y := 46
 const FAR_CORRIDOR_END_Y := 42
-const NEAR_DOOR_TILE := Vector2i(24, 41)
-const DOOR_TILE := Vector2i(24, 40)
+const NEAR_DOOR_TILE := Vector3i(24, 41, 0)
+const DOOR_TILE := Vector3i(24, 40, 0)
 ## Behind the door, not walled off: a "bed" object (passable, no health) sits
 ## here only to keep this tile out of IncidentScheduler's own
 ## _pick_reachable_target() candidate pool (a per-tile passability/bareness
@@ -46,9 +46,9 @@ const DOOR_TILE := Vector2i(24, 40)
 ## so the wolf would never spawn at all. "predators" may not pass a door
 ## (content/factions.json), so this is the only thing that keeps the guard
 ## safe; a rock tile here would prove nothing about the door.
-const GUARD_TILE := Vector2i(24, 39)
+const GUARD_TILE := Vector3i(24, 39, 0)
 const GUARD_ID := "door_guard"
-const NO_TILE := Vector2i(-1, -1)
+const NO_TILE := Vector3i(-1, -1, 0)
 ## Generous relative to the wolf's own 20-tick combat cooldown (content/
 ## actors.json): enough ticks after arrival to observe several attacks land.
 const ATTACK_OBSERVE_TICKS := 90
@@ -96,9 +96,9 @@ func _build_wolf_attack_world(seed_value: int) -> WorldStateType:
 	TestAccess.colonists(world).clear()
 	for y in range(GUARD_TILE.y, SPAWN_TILE.y + 1):
 		TestAccess.set_tile(world, SPAWN_TILE.x, y, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(DOOR_TILE.x, DOOR_TILE.y, "door") # defaults to faction "colony"
-	TestAccess.object_table(world).set_object(GUARD_TILE.x, GUARD_TILE.y, "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
-	var guard := ActorTableType.spawn("colonist", GUARD_TILE.x, GUARD_TILE.y, TestAccess.content(world), GUARD_ID)
+	TestAccess.object_table(world).set_object(Vector3i(DOOR_TILE.x, DOOR_TILE.y, 0), "door") # defaults to faction "colony"
+	TestAccess.object_table(world).set_object(Vector3i(GUARD_TILE.x, GUARD_TILE.y, 0), "bed") # defaults to faction "colony"; keeps GUARD_TILE out of candidacy
+	var guard := ActorTableType.spawn("colonist", Vector3i(GUARD_TILE.x, GUARD_TILE.y, 0), TestAccess.content(world), GUARD_ID)
 	guard.erase("carrying")
 	guard["hands"] = []
 	guard["factionId"] = "colony"
@@ -134,9 +134,9 @@ func _advance_to_eve_of_day6(world: WorldStateType) -> void:
 ## incident_started event's own actor_ids ([] if the draw did not fire).
 func _draw_wolf_attack_naturally_away_from_door(world: WorldStateType) -> Array:
 	_advance_to_eve_of_day6(world)
-	TestAccess.object_table(world).set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "bed")
+	TestAccess.object_table(world).set_object(Vector3i(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, 0), "bed")
 	world.tick()
-	TestAccess.object_table(world).set_object(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, "")
+	TestAccess.object_table(world).set_object(Vector3i(NEAR_DOOR_TILE.x, NEAR_DOOR_TILE.y, 0), "")
 	var events := _incident_started_events(world, "wolf_attack")
 	if events.is_empty():
 		return []
@@ -152,9 +152,9 @@ func _tick_until(world: WorldStateType, predicate: Callable, budget: int) -> int
 func _in_world(actor_id: String) -> Callable:
 	return func(world: WorldStateType) -> bool: return not TestAccess.find_colonist(world, actor_id).is_empty()
 
-func _actor_pos(world: WorldStateType, actor_id: String) -> Vector2i:
+func _actor_pos(world: WorldStateType, actor_id: String) -> Vector3i:
 	var actor := TestAccess.find_colonist(world, actor_id)
-	return Vector2i(int(actor["x"]), int(actor["y"])) if not actor.is_empty() else NO_TILE
+	return TileGrid.tile_of(actor) if not actor.is_empty() else NO_TILE
 
 func _assignment_job_id(world: WorldStateType, actor_id: String) -> String:
 	return String(world.get_assignments().get(actor_id, {}).get("job_id", ""))
@@ -244,7 +244,7 @@ func _check_wolf_reaches_door_fights_and_flees_and_guard_survives() -> void:
 	# FAR_CORRIDOR_* tile, genuinely non-adjacent to the door -- everything
 	# after this point is the generic lingering hand-off/approach behaviour,
 	# never a coincidence and never set by this test.
-	var incident_target: Vector2i = Scenarios.find_job(world, _assignment_job_id(world, wolf_id)).get("target", NO_TILE)
+	var incident_target: Vector3i = Scenarios.find_job(world, _assignment_job_id(world, wolf_id)).get("target", NO_TILE)
 	_expect(incident_target != NO_TILE, "the wolf's own incident job must carry a target")
 	_expect(maxi(absi(incident_target.x - DOOR_TILE.x), absi(incident_target.y - DOOR_TILE.y)) > 1,
 		"the incident's own target (%s) must NOT be adjacent to the door -- the seal in _draw_wolf_attack_naturally_away_from_door() must have worked" % incident_target)

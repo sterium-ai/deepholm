@@ -1,18 +1,20 @@
 extends SceneTree
 
-## The save format after the R14 reset (ADR 049), now at schema v8 (A5, ADR 053:
+## The save format after the R14 reset (ADR 049), now at schema v9 (A5, ADR 053:
 ## terminal jobs leave the save; A13b, ADR 010 amendment 2: the save records its
 ## content packs; A16b, ADR 057: the scenario calendar and incident list are saved;
 ## A7, ADR 058: compact file encoding and saved route costs; F1, ADR 059: farm zones
 ## and crop growth; F2, ADR 061: workbench targets, orders and bills; F3, ADR 062: colonist
-## skills).
+## skills; L2, ADR 045 §5: map layers and "z" on every tile).
 ## Proves a save written before the reset is rejected with a clear message, the
 ## committed v1 to v6 fixtures migrate to exactly the migrated v7 fixture, a v1 save
 ## holding terminal jobs loads without them and with the original state_hash, the
 ## v3 -> v4 step adds the base start and nothing else, the v5 -> v6 step adds an empty
 ## crops list and nothing else, the v6 -> v7 step adds an empty "crafting" and nothing
-## else, the v7 -> v8 step adds zero skills and nothing else, a malformed scenarioStart is
-## rejected, the committed v8 fixture loads and re-encodes unchanged, a
+## else, the v7 -> v8 step adds zero skills and nothing else, the v8 -> v9 step adds
+## layerCount 1 and "z": 0 and nothing else (turning the v8 fixture into exactly the v9 one, the
+## migrated world keeping its state_hash through save/load), a malformed scenarioStart is
+## rejected, the committed v9 fixture loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
 ## live beside the old migration chain.
@@ -48,12 +50,16 @@ const V7_FIXTURE := "res://scripts/tests/fixtures/save_schema_v7_fixture.json"
 ## The same session written by this build (docs/orca/handoffs/F3-write-save.gd): schemaVersion 8.
 ## Its colonists carry seeded skills (ADR 062), so they worked at other speeds than in the
 ## older fixtures' session: the older fixtures migrate to zero skills, not to this file.
+## The same session written by this build (docs/orca/handoffs/L2-write-save.gd): schemaVersion 9,
+## in the SaveWire encoding: the v8 fixture plus map.layerCount 1 and "z": 0 (ADR 045 §5).
+const V9_FIXTURE := "res://scripts/tests/fixtures/save_schema_v9_fixture.json"
 const V8_FIXTURE := "res://scripts/tests/fixtures/save_schema_v8_fixture.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
 const FRESH_SAVE_PATH := "user://test-save-migration-fresh.json"
-const V8_RESAVE_PATH := "user://test-save-migration-v8-resave.json"
+const V9_RESAVE_PATH := "user://test-save-migration-v9-resave.json"
+const V8_MIGRATED_PATH := "user://test-save-migration-v8-migrated.json"
 const MALFORMED_FIXTURE_DIR := "user://test-save-migration-malformed-fixture"
 ## Proves SaveIO.read() rejects a save whose contentVersion has no
 ## registered rename with the new typed content_version_mismatch code, never
@@ -81,8 +87,9 @@ func _init() -> void:
 	_check_v5_to_v6_adds_only_empty_crops()
 	_check_v6_to_v7_adds_only_empty_crafting()
 	_check_v7_to_v8_adds_only_zero_skills()
+	_check_v8_to_v9_adds_only_the_surface_layer()
 	_check_malformed_scenario_start_rejected_through_save_io()
-	_check_v8_fixture_loads_and_reencodes_unchanged()
+	_check_v9_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -132,22 +139,23 @@ func _check_pre_release_save_is_rejected() -> void:
 		"load_best() must report the pre-release slot as skipped with unsupported_pre_release_save: %s" % [skipped])
 	_cleanup_dir(PRE_RELEASE_SLOT_DIR)
 
-## Acceptance (A5, A13b, A16b, A7, F1, F2, F3): the committed v1 to v6 fixtures load through
-## SaveIO.read() migrated to v8 and equal the v7 fixture (the same session written at v7)
-## migrated to v8 exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the
+## Acceptance (A5, A13b, A16b, A7, F1, F2, F3, L2): the committed v1 to v6 fixtures load through
+## SaveIO.read() migrated to v9 and equal the v7 fixture (the same session written at v7)
+## migrated to v9 exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the
 ## v2 fixture.
 func _check_older_fixtures_migrate_to_the_migrated_v7_fixture() -> void:
 	var v7 := SaveIOType.read(V7_FIXTURE)
 	_expect(v7["ok"], "the v7 fixture must load through SaveIO.read(): %s" % v7)
 	if not v7["ok"]:
 		return
-	_expect(int(v7["state"]["schemaVersion"]) == 8, "the v7 fixture must load as schemaVersion 8")
+	_expect(int(v7["state"]["schemaVersion"]) == 9, "the v7 fixture must load as schemaVersion 9")
 	for fixture: String in [V1_FIXTURE, V2_FIXTURE, V3_FIXTURE, V4_FIXTURE, V5_FIXTURE, V6_FIXTURE]:
 		var result := SaveIOType.read(fixture)
 		_expect(result["ok"], "%s must load through SaveIO.read(): %s" % [fixture, result])
 		if not result["ok"]:
 			continue
-		_expect(int(result["state"]["schemaVersion"]) == 8, "%s must load as schemaVersion 8" % fixture)
+		_expect(int(result["state"]["schemaVersion"]) == 9, "%s must load as schemaVersion 9" % fixture)
+		_expect(int(result["state"]["map"]["layerCount"]) == 1, "%s must load as one layer" % fixture)
 		_expect(result["state"]["contentPacks"] == [], "%s must load with no content packs" % fixture)
 		_expect(JSON.stringify(result["state"]["scenarioStart"]) == JSON.stringify({"calendar": null, "enabledIncidents": []}),
 			"%s must load with the base scenario start" % fixture)
@@ -247,12 +255,13 @@ func _check_v7_to_v8_adds_only_zero_skills() -> void:
 			_expect(JSON.stringify(skills[labour]) == JSON.stringify({"level": 0, "xp": 0}),
 				"a migrated skill must be level 0 with 0 XP, got %s" % [skills[labour]])
 	_expect(colonists == 3, "the v7 fixture's three colonists must be migrated, got %d" % colonists)
-	# The step itself on a plain v7 state (this build's encode() without skills, stamped v7):
+	# The step itself on a plain v7 state (this build's encode() without skills or layers, stamped v7):
 	# exactly the colonists' zero skills and schemaVersion change.
 	var plain_v7 := StateCodecType.encode(WorldStateType.new(1414, 3, 24, 24))
 	for entity: Dictionary in plain_v7["entities"]:
 		entity.erase("skills")
 	plain_v7["schemaVersion"] = 7
+	plain_v7 = _without_layers(plain_v7) as Dictionary
 	var before := JSON.stringify(plain_v7)
 	var stepped := SaveMigrationsType.migrate(plain_v7, 7, 8)
 	_expect(stepped["ok"], "v7 -> v8 must migrate a plain v7 state: %s" % stepped)
@@ -268,6 +277,85 @@ func _check_v7_to_v8_adds_only_zero_skills() -> void:
 	var twice: Dictionary = JSON.parse_string(before)
 	(twice["entities"] as Array)[0]["skills"] = {}
 	_expect(not SaveMigrationsType.migrate(twice, 7, 8)["ok"], "a v7 colonist already holding skills must be refused")
+
+## Acceptance (L2, ADR 045 §5): the v8 -> v9 step adds map.layerCount 1 and "z": 0 beside every
+## x/y and changes nothing else: layer 0's tiles, objects, actors, items, zones, jobs, routes and
+## every other field equal the v8 values field by field once those additions are taken out. It
+## turns the v8 fixture into exactly the v9 fixture (both unpacked from SaveWire); it never
+## mutates its argument, a v8 state that already has layerCount is refused, and the migrated
+## world's state_hash() survives a save/load round trip.
+func _check_v8_to_v9_adds_only_the_surface_layer() -> void:
+	var raw := _unpacked_fixture_state(V8_FIXTURE)
+	var v9_raw := _unpacked_fixture_state(V9_FIXTURE)
+	var before := JSON.stringify(raw)
+	var migrated := SaveMigrationsType.migrate(raw, 8, 9)
+	_expect(migrated["ok"], "v8 -> v9 must migrate: %s" % migrated)
+	if not migrated["ok"]:
+		return
+	var state: Dictionary = migrated["state"]
+	_expect(JSON.stringify(raw) == before, "the migration must not mutate its argument")
+	_expect(int(state["schemaVersion"]) == 9 and int(state["map"]["layerCount"]) == 1,
+		"v8 -> v9 must write schemaVersion 9 and map.layerCount 1")
+	_expect(state["map"]["tiles"] == raw["map"]["tiles"], "v8 -> v9 must keep the tiles: they are already layer 0's")
+	_expect(_count_xy_without_z(state) == 0, "v8 -> v9 must give every x/y a z")
+	_expect(_count_xy_without_z(raw) > 0, "sanity: the v8 fixture holds x/y records")
+	var stripped: Dictionary = _without_layers(state)
+	stripped["schemaVersion"] = raw["schemaVersion"]
+	for key: String in raw:
+		_expect(JSON.stringify(stripped[key]) == JSON.stringify(raw[key]),
+			"v8 -> v9 must change nothing in '%s' but the added z/layerCount" % key)
+	_expect(stripped.keys().size() == raw.keys().size(), "v8 -> v9 must add no top-level field")
+	_expect(JSON.stringify(state) == JSON.stringify(v9_raw),
+		"the v8 -> v9 step alone must turn the v8 fixture into exactly the v9 fixture")
+	var twice := raw.duplicate(true)
+	twice["map"]["layerCount"] = 1
+	_expect(not SaveMigrationsType.migrate(twice, 8, 9)["ok"], "a v8 state already holding layerCount must be refused")
+	var loaded := SaveIOType.read(V8_FIXTURE)
+	_expect(loaded["ok"], "the v8 fixture must load through SaveIO.read(): %s" % loaded)
+	if not loaded["ok"]:
+		return
+	var world := StateCodecType.decode(loaded["state"])
+	_remove(V8_MIGRATED_PATH)
+	var written := SaveIOType.write_atomic(V8_MIGRATED_PATH, StateCodecType.encode(world))
+	_expect(written["ok"], "the migrated v8 world must save: %s" % written)
+	var reread := SaveIOType.read(V8_MIGRATED_PATH)
+	_expect(reread["ok"], "the re-saved migrated v8 world must load: %s" % reread)
+	if reread["ok"]:
+		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
+			"the migrated v8 world must keep its state_hash() through save/load")
+	_remove(V8_MIGRATED_PATH)
+
+## Objects holding an int x/y pair without "z", at any depth.
+func _count_xy_without_z(value: Variant) -> int:
+	var count := 0
+	if value is Dictionary:
+		var dict: Dictionary = value
+		if typeof(dict.get("x")) == TYPE_INT and typeof(dict.get("y")) == TYPE_INT and not dict.has("z"):
+			count += 1
+		for key: Variant in dict:
+			count += _count_xy_without_z(dict[key])
+	elif value is Array:
+		for item: Variant in value:
+			count += _count_xy_without_z(item)
+	return count
+
+## A deep copy without the fields v8 -> v9 adds: every "z" next to x/y and map.layerCount.
+func _without_layers(value: Variant) -> Variant:
+	if value is Dictionary:
+		var copy: Dictionary = {}
+		for key: Variant in (value as Dictionary):
+			if key == "z" and (value as Dictionary).has("x") and (value as Dictionary).has("y"):
+				continue
+			if key == "layerCount" and (value as Dictionary).has("tiles"):
+				continue
+			copy[key] = _without_layers((value as Dictionary)[key])
+		return copy
+	if value is Array:
+		var items: Array = []
+		for item: Variant in (value as Array):
+			items.append(_without_layers(item))
+		return items
+	return value
 
 ## A fixture's state as SaveIO.read() sees it before migrating: ints coerced, SaveWire unpacked.
 func _unpacked_fixture_state(path: String) -> Dictionary:
@@ -320,7 +408,7 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	for x in range(24):
 		for type in ["chop", "dig"]:
 			if issued < 6 and world.apply({"actor": "player", "command_id": "a5_%d_%s" % [x, type], "tick": world.get_tick(),
-					"type": type, "payload": {"x": x, "y": 0, "priority": 1}}).get("ok", false):
+					"type": type, "payload": {"x": x, "y": 0, "z": 0, "priority": 1}}).get("ok", false):
 				issued += 1
 				break
 	var first_job := String(world.get_jobs()[0]["id"])
@@ -333,13 +421,14 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	v1_state["jobs"] = TestAccess.scheduling_encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
 	v1_state["schemaVersion"] = 1
 	# A v1 save predates contentPacks (schema v3), scenarioStart (v4), crops (v6), crafting (v7)
-	# and skills (v8); the steps add them back.
+	# and skills (v8), map layers with "z" (v9); the steps add them back.
 	v1_state.erase("contentPacks")
 	v1_state.erase("scenarioStart")
 	v1_state.erase("crops")
 	v1_state.erase("crafting")
 	for entity: Dictionary in v1_state["entities"]:
 		entity.erase("skills")
+	v1_state = _without_layers(v1_state) as Dictionary
 	_expect(v1_state["jobs"].size() > live_jobs.size(), "the v1 state must really list terminal jobs for this to prove anything")
 	var path := _write_state_fixture(V1_TERMINAL_JOBS_DIR, v1_state)
 	var result := SaveIOType.read(path)
@@ -357,33 +446,33 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		loaded.tick()
 	_expect(loaded.state_hash() == world.state_hash(), "the migrated world must keep ticking in step with the original")
 
-## The committed v8 fixture loads through SaveIO.read(), decodes, and re-encodes to
+## The committed v9 fixture loads through SaveIO.read(), decodes, and re-encodes to
 ## exactly the state it was read from (the unpacked shape is the codec's shape), and
 ## the decoded world keeps its state_hash through a second write/read.
-func _check_v8_fixture_loads_and_reencodes_unchanged() -> void:
-	var result := SaveIOType.read(V8_FIXTURE)
-	_expect(result["ok"], "the v8 fixture must load through SaveIO.read(): %s" % result)
+func _check_v9_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V9_FIXTURE)
+	_expect(result["ok"], "the v9 fixture must load through SaveIO.read(): %s" % result)
 	if not result["ok"]:
 		return
 	var state: Dictionary = result["state"]
-	_expect(int(state["schemaVersion"]) == 8 and StateCodecType.SCHEMA_VERSION == 8,
-		"the v8 fixture and this build must both be schemaVersion 8")
-	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V8_FIXTURE))["state"]["map"]
+	_expect(int(state["schemaVersion"]) == 9 and StateCodecType.SCHEMA_VERSION == 9,
+		"the v9 fixture and this build must both be schemaVersion 9")
+	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V9_FIXTURE))["state"]["map"]
 	_expect(raw_map.has("palette") and raw_map.has("tileRuns") and not raw_map.has("tiles"),
-		"the v8 fixture must hold its tiles as a palette plus runs (SaveWire)")
+		"the v9 fixture must hold its tiles as a palette plus runs (SaveWire)")
 	var world := StateCodecType.decode(state)
 	var reencoded := StateCodecType.encode(world)
 	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
-		"decode() -> encode() of the v8 fixture must reproduce its state exactly")
-	_remove(V8_RESAVE_PATH)
-	var write_result := SaveIOType.write_atomic(V8_RESAVE_PATH, reencoded)
-	_expect(write_result["ok"], "the re-encoded v8 fixture must save: %s" % write_result)
-	var reread := SaveIOType.read(V8_RESAVE_PATH)
-	_expect(reread["ok"], "the re-saved v8 fixture must load: %s" % reread)
+		"decode() -> encode() of the v9 fixture must reproduce its state exactly")
+	_remove(V9_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V9_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v9 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V9_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v9 fixture must load: %s" % reread)
 	if reread["ok"]:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
-			"a second write/read of the v8 fixture must keep the decoded state_hash")
-	_remove(V8_RESAVE_PATH)
+			"a second write/read of the v9 fixture must keep the decoded state_hash")
+	_remove(V9_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.
@@ -422,9 +511,9 @@ func _check_empty_migration_chain() -> void:
 ## containers, non-Dictionary entries, non-String kinds and contentVersion), now
 ## checked on the plain current-content path.
 func _check_malformed_current_state_rejected_through_save_io() -> void:
-	var site := {"id": "site_1", "kind": 123, "origin": {"x": 0, "y": 0}, "orientation": "",
+	var site := {"id": "site_1", "kind": 123, "origin": {"x": 0, "y": 0, "z": 0}, "orientation": "",
 		"requiredMaterials": [], "heldMaterials": [], "progress": 0, "buildTicks": 1, "maxBuilders": 1, "builderIds": []}
-	var job := {"id": "job_1", "kind": "dig", "status": "queued", "priority": 1, "target": {"x": 0, "y": 0},
+	var job := {"id": "job_1", "kind": "dig", "status": "queued", "priority": 1, "target": {"x": 0, "y": 0, "z": 0},
 		"reason": "", "remedy": "", "blockingJobId": "", "itemId": "", "cell": null, "retryAt": 0, "backoffTicks": 0,
 		"buildKind": 123}
 	var cases := [
@@ -438,7 +527,7 @@ func _check_malformed_current_state_rejected_through_save_io() -> void:
 		["non-Dictionary constructionSites entry", "constructionSites", ["not-a-dictionary"], "schema_error"],
 		["non-Array jobs", "jobs", "not-an-array", "schema_error"],
 		["non-Dictionary jobs entry", "jobs", ["not-a-dictionary"], "schema_error"],
-		["non-String objects[].kind", "objects", [{"target": {"x": 0, "y": 0}, "kind": 123, "factionId": "colony"}], "schema_error"],
+		["non-String objects[].kind", "objects", [{"target": {"x": 0, "y": 0, "z": 0}, "kind": 123, "factionId": "colony"}], "schema_error"],
 		["non-String constructionSites[].kind", "constructionSites", [site], "schema_error"],
 		["retired jobs[].buildKind field", "jobs", [job], "schema_error"],
 	]
@@ -495,10 +584,10 @@ func _check_dig_find_rng_continuation_survives_save_load_round_trip() -> void:
 ## re-occupies both footprint tiles with a byte-identical state_hash().
 func _check_multi_tile_object_round_trips_through_save_load() -> void:
 	var world := WorldStateType.new(20260926, 10)
-	var origin := Vector2i(5, 5)
+	var origin := Vector3i(5, 5, 0)
 	TestAccess.set_tile(world, origin.x, origin.y, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, origin.x, origin.y + 1, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(origin.x, origin.y, "test_footprint_crate", "colony", "vertical")
+	TestAccess.object_table(world).set_object(Vector3i(origin.x, origin.y, 0), "test_footprint_crate", "colony", "vertical")
 	_expect(world.get_object(origin.x, origin.y) == "test_footprint_crate" and world.get_object(origin.x, origin.y + 1) == "test_footprint_crate",
 		"setup must occupy both footprint tiles before the round trip")
 	var before_hash := world.state_hash()
@@ -511,7 +600,7 @@ func _check_multi_tile_object_round_trips_through_save_load() -> void:
 	_expect(footprint_records.size() == 1, "a multi-tile object must persist as exactly one record, not one per occupied tile")
 	if footprint_records.size() == 1:
 		var record: Dictionary = footprint_records[0]
-		_expect(record["target"] == {"x": origin.x, "y": origin.y}, "the persisted record must name the object's origin tile")
+		_expect(record["target"] == {"x": origin.x, "y": origin.y, "z": 0}, "the persisted record must name the object's origin tile")
 		_expect(String(record.get("orientation", "")) == "vertical", "the persisted record must carry the placed orientation")
 
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
@@ -526,7 +615,7 @@ func _check_multi_tile_object_round_trips_through_save_load() -> void:
 ## route.rerouting's own optional-field precedent.
 func _check_object_without_orientation_field_loads_unchanged() -> void:
 	var state := _minimal_current_schema_state("test-content", "wood")
-	state["objects"] = [{"target": {"x": 0, "y": 0}, "kind": "wall", "factionId": "colony"}]
+	state["objects"] = [{"target": {"x": 0, "y": 0, "z": 0}, "kind": "wall", "factionId": "colony"}]
 	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a current-schema object entry with no orientation field must validate: %s" % validation.get("message", ""))
 	if not validation["ok"]:
@@ -542,7 +631,7 @@ func _check_object_without_orientation_field_loads_unchanged() -> void:
 ## legal, rejecting a save that wrote "" explicitly).
 func _check_object_with_empty_orientation_field_loads_unchanged() -> void:
 	var state := _minimal_current_schema_state("test-content", "wood")
-	state["objects"] = [{"target": {"x": 0, "y": 0}, "kind": "wall", "factionId": "colony", "orientation": ""}]
+	state["objects"] = [{"target": {"x": 0, "y": 0, "z": 0}, "kind": "wall", "factionId": "colony", "orientation": ""}]
 	var validation := TestAccess.save_validate_state(state)
 	_expect(validation["ok"], "a current-schema object entry with orientation '' must validate: %s" % validation.get("message", ""))
 	if not validation["ok"]:
@@ -577,10 +666,10 @@ func _check_construction_site_round_trips_through_save_load() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	TestAccess.object_table(world).objects.clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "route": null, "work": null, "carrying": null})
 	var apply_result := world.apply({"actor": "test", "command_id": "wb", "tick": world.get_tick(), "type": "build",
-		"payload": {"kind": "workbench", "x": 5, "y": 5}})
+		"payload": {"kind": "workbench", "x": 5, "y": 5, "z": 0}})
 	_expect(bool(apply_result.get("ok", false)), "the setup build command must be accepted: %s" % apply_result)
 	_expect(not world.get_construction_site(5, 5).is_empty(), "setup must create a real site before the round trip")
 	var before_hash := world.state_hash()
@@ -740,13 +829,13 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "hands": [], "labourTable": TestAccess.default_labour_table(world)})
 	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
 
 	var submit := world.apply({
 		"actor": "test", "command_id": "mine_1", "tick": world.get_tick(),
-		"type": "mine", "payload": {"x": 1, "y": 0, "priority": 1},
+		"type": "mine", "payload": {"x": 1, "y": 0, "z": 0, "priority": 1},
 	})
 	_expect(submit.get("ok", false), "mine submission must be accepted: %s" % submit)
 	var job_id := String(submit.get("job_id", ""))
@@ -762,7 +851,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 	_expect(active, "setup: the mine job must reach active status before saving")
 	_expect(world.get_tile(1, 0) == WorldStateType.TILE_ROCK, "setup: the target tile must still be rock, not yet mined")
 
-	TestAccess.item_table(world).spawn_item("stone", 5, 5)
+	TestAccess.item_table(world).spawn_item("stone", Vector3i(5, 5, 0))
 	var stone_item_id := ""
 	for item in world.get_items():
 		if String(item["kind"]) == "stone":
@@ -781,7 +870,7 @@ func _check_mine_job_and_stone_item_survive_save_load_round_trip() -> void:
 			restored_job = job
 	_expect(String(restored_job.get("kind", "")) == "mine" and String(restored_job.get("status", "")) == "active",
 		"a save/load round trip must preserve the active mine job's kind and status exactly, got %s" % restored_job)
-	_expect(restored_job.get("target") == Vector2i(1, 0),
+	_expect(restored_job.get("target") == Vector3i(1, 0, 0),
 		"a save/load round trip must preserve the mine job's target tile exactly")
 
 	var restored_stone := {}
@@ -851,7 +940,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 			TestAccess.need_definitions(world)[other]["rate_per_day"] = 0
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({
-		"id": "colonist_0", "kind": "colonist", "x": 9, "y": 0,
+		"id": "colonist_0", "kind": "colonist", "x": 9, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": TestAccess.default_labour_table(world),
 		"route": null, "work": null, "hands": [],
@@ -866,7 +955,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 
 	var dig_result := world.apply({
 		"actor": "test", "command_id": "dig_1", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": 10, "y": 0, "priority": 1},
+		"type": "dig", "payload": {"x": 10, "y": 0, "z": 0, "priority": 1},
 	})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
@@ -999,7 +1088,7 @@ func _minimal_current_schema_state(content_version: String, item_kind: String) -
 	return {
 		"schemaVersion": SaveIOType.SCHEMA_VERSION, "contentVersion": content_version, "contentPacks": [], "seed": 1, "tick": 0,
 		"epoch": 0,
-		"map": {"width": 1, "height": 1, "tiles": ["soil"], "generatorVersion": 1},
+		"map": {"width": 1, "height": 1, "layerCount": 1, "tiles": ["soil"], "generatorVersion": 1},
 		"entities": [],
 		"inventory": {}, "jobs": [],
 		"scheduling": {
@@ -1008,7 +1097,7 @@ func _minimal_current_schema_state(content_version: String, item_kind: String) -
 			"assignments": {}, "activatedEntries": {},
 		},
 		"rng": {"seed": 1, "state": 0},
-		"items": {"nextId": 2, "list": [{"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1, "factionId": "colony"}]},
+		"items": {"nextId": 2, "list": [{"id": "item_1", "x": 0, "y": 0, "z": 0, "kind": item_kind, "count": 1, "factionId": "colony"}]},
 		"objects": [], "zones": [], "nextZoneId": 1, "crops": [], "groundBerries": [],
 		"workProgress": [], "pausedJobs": [], "toolItems": {"nextId": 1, "list": []},
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},

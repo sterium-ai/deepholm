@@ -59,13 +59,13 @@ func _world(seed_value: int, count: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.colonists(world).clear()
 	for i in count:
-		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": 1, "y": 1 + i,
+		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": 1, "y": 1 + i, "z": 0,
 			"route": null, "work": null, "labourTable": _labours()})
 	_day_ticks = TestAccess.calendar(world).day_length_ticks()
 	return world
 
 func _zone(world: WorldStateType, id: String, rect: Rect2i, extra: Dictionary = {}) -> Dictionary:
-	var payload := {"x": rect.position.x, "y": rect.position.y, "width": rect.size.x, "height": rect.size.y}
+	var payload := {"x": rect.position.x, "y": rect.position.y, "z": 0, "width": rect.size.x, "height": rect.size.y}
 	payload.merge(extra)
 	return Scenarios.command(world, id, "zone_add", payload)
 
@@ -224,7 +224,7 @@ func _check_no_growth_outside_window_and_wither() -> void:
 	TestAccess.set_tile(world, 3, 3, WorldStateType.TILE_PLOWED_SOIL)
 	Scenarios.add_stock(world, "seed", 4, 10, 10)
 	TestAccess.clock(world).tick = 17 * _day_ticks
-	_expect(Scenarios.command(world, "sow_late", "sow", {"x": 3, "y": 3, "priority": 1}).get("ok", false), "the day-18 sow order must be accepted")
+	_expect(Scenarios.command(world, "sow_late", "sow", {"x": 3, "y": 3, "z": 0, "priority": 1}).get("ok", false), "the day-18 sow order must be accepted")
 	while world.get_tick() < 20 * _day_ticks:
 		world.tick()
 	var at_close := world.get_crop_at(3, 3)
@@ -240,7 +240,7 @@ func _check_no_growth_outside_window_and_wither() -> void:
 	_expect(day_21_end.get("growth") == at_close.get("growth") and world.get_tile(3, 3) == tile_at_close,
 		"outside the window a crop must not grow: %s -> %s" % [at_close, day_21_end])
 	_expect(world.get_tile(6, 6) == WorldStateType.TILE_PLOWED_SOIL and world.get_jobs(["sow"]).filter(
-		func(job: Dictionary) -> bool: return job["target"] == Vector2i(6, 6)).is_empty(),
+		func(job: Dictionary) -> bool: return job["target"] == Vector3i(6, 6, 0)).is_empty(),
 		"a farm zone must not sow outside the window")
 	_expect(world.get_tile(7, 6) == WorldStateType.TILE_PLOWED_SOIL, "a farm zone still tills outside the window")
 	world.tick()
@@ -253,7 +253,7 @@ func _check_ripe_crop_waits_and_outside_zone_harvest_job() -> void:
 	var world := _world(SEED + 3, 1)
 	TestAccess.set_tile(world, 3, 3, WorldStateType.TILE_PLOWED_SOIL)
 	Scenarios.add_stock(world, "seed", 1, 10, 10)
-	_expect(Scenarios.command(world, "sow", "sow", {"x": 3, "y": 3, "priority": 1}).get("ok", false), "the sow order must be accepted")
+	_expect(Scenarios.command(world, "sow", "sow", {"x": 3, "y": 3, "z": 0, "priority": 1}).get("ok", false), "the sow order must be accepted")
 	for _i in 200:
 		world.tick()
 	_expect(world.apply({"actor": "player", "command_id": "farm_off", "tick": world.get_tick(), "type": "set_labour",
@@ -262,7 +262,7 @@ func _check_ripe_crop_waits_and_outside_zone_harvest_job() -> void:
 		world.tick()
 	_expect(world.get_tile(3, 3) == "crop_ripe", "the crop must be ripe after 4 in-window days, got %s" % world.get_tile(3, 3))
 	var harvests := world.get_jobs(["harvest"]).filter(func(job: Dictionary) -> bool:
-		return job["target"] == Vector2i(3, 3) and job["status"] == "queued")
+		return job["target"] == Vector3i(3, 3, 0) and job["status"] == "queued")
 	_expect(harvests.size() == 1, "a ripe tile outside any farm zone must get exactly one harvest job, got %s" % [harvests])
 	TestAccess.clock(world).tick = 23 * _day_ticks
 	for _i in 10:

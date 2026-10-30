@@ -46,7 +46,7 @@ func _init() -> void:
 	quit()
 
 func _tile(x: int, y: int) -> Dictionary:
-	return {"x": x, "y": y}
+	return {"x": x, "y": y, "z": 0}
 
 func _fail(message: String) -> void:
 	push_error(message)
@@ -96,11 +96,11 @@ func _base_state() -> Dictionary:
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
 		"contentPacks": [], "seed": 1, "tick": 0, "epoch": 0,
 		"map": {
-			"width": MAP_WIDTH, "height": MAP_HEIGHT,
+			"width": MAP_WIDTH, "height": MAP_HEIGHT, "layerCount": 1,
 			"tiles": _flat_soil_tiles(), "generatorVersion": WorldGeneratorType.GENERATOR_VERSION,
 		},
 		"entities": [{
-			"id": "colonist_1", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
+			"id": "colonist_1", "kind": "colonist", "x": 0, "y": 0, "z": 0, "factionId": "colony",
 			"health": {"hp": 10, "maxHp": 10, "dead": false},
 			"needs": {"food": 100, "water": 100, "rest": 100},
 			"needsAccumulator": {"food": 0, "water": 0, "rest": 0},

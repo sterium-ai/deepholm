@@ -47,7 +47,7 @@ func _init() -> void:
 		return
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "till_one", "tick": world.get_tick(),
-		"type": "till", "payload": {"x": target.x, "y": target.y, "priority": 1},
+		"type": "till", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1},
 	})
 	_expect(result.get("ok", false), "the till command must be accepted: %s" % result)
 	var ticks := 0

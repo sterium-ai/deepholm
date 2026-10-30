@@ -399,7 +399,7 @@ func _arena() -> WorldStateType:
 ## A spawned colonist (ActorTable's real shape: labour table all 3, skills all 0) at (x, y)
 ## with `levels` written into its skills.
 func _add_worker(world: WorldStateType, id: String, x: int, y: int, levels: Dictionary) -> Dictionary:
-	var actor := ActorTableType.spawn("colonist", x, y, TestAccess.content(world), id)
+	var actor := ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), id)
 	actor.erase("carrying")
 	actor["hands"] = []
 	actor["trapped"] = null

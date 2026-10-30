@@ -38,6 +38,6 @@ static func columns(actors: Array, worker_ids: Dictionary, job_kinds: Dictionary
 		hp.append(int((health as Dictionary).get("hp", 0)) if health is Dictionary else -1)
 		max_hp.append(int((health as Dictionary).get("maxHp", 1)) if health is Dictionary else -1)
 	return {"tick": 0, "ids": Array(ids), "kinds": Array(kinds), "factions": Array(factions), "x": Array(xs),
-		"y": Array(ys), "worker": Array(worker), "carrying": Array(carrying), "tool_kinds": Array(tools),
+		"y": Array(ys), "z": 0, "worker": Array(worker), "carrying": Array(carrying), "tool_kinds": Array(tools),
 		"trapped": Array(trapped), "work_kinds": Array(work_kinds), "hp": Array(hp), "max_hp": Array(max_hp),
 		"need_reasons": {}, "details": {}, "jobs": {}}

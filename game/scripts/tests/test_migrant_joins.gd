@@ -30,7 +30,7 @@ func _check_migrant_incident_and_recruitment() -> void:
 	var world := WorldStateType.new(306278, 10, 32, 32, true)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append(ActorTableType.spawn("colonist", 16, 16, TestAccess.content(world), "colonist_home"))
+	TestAccess.colonists(world).append(ActorTableType.spawn("colonist", Vector3i(16, 16, 0), TestAccess.content(world), "colonist_home"))
 
 	var entry := TestAccess.content(world).get_entry("incidents", "migrant_joins")
 	_expect(int(entry.get("min_day", 0)) == 8, "migrant_joins must be gated to day 8")
@@ -80,13 +80,13 @@ func _check_migrant_incident_and_recruitment() -> void:
 	_expect(recruit_result.get("ok", false), "set_faction must recruit the migrant")
 	_expect(String(TestAccess.find_colonist(world, migrant_id).get("factionId", "")) == "colony", "recruitment must switch faction to colony")
 
-	var target := Vector2i(int(migrant["x"]) + 1, int(migrant["y"]))
+	var target := Vector3i(int(migrant["x"]) + 1, int(migrant["y"]), 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_SOIL)
 	var pick_id := world.spawn_ground_tool_item("pick", migrant["x"], migrant["y"])
 	_expect(world.set_tool_item_held(pick_id, migrant_id), "recruited migrant must be able to hold a pick")
 	var dig_result := world.apply({
 		"actor": "player", "command_id": "dig_migrant_target", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": target.x, "y": target.y},
+		"type": "dig", "payload": {"x": target.x, "y": target.y, "z": 0},
 	})
 	_expect(dig_result.get("ok", false), "a dig job must be queued for the recruited migrant")
 	world.tick()

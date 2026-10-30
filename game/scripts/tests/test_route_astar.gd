@@ -52,8 +52,8 @@ func _expect(condition: bool, message: String) -> void:
 		push_error(message)
 
 func _check_astar_matches_dijkstra_cost_on_weighted_maps() -> void:
-	var cost_fn := func(tile: Vector2i) -> float: return float(_costs[tile.y * MAP_SIZE + tile.x])
-	var bounds_max := Vector2i(MAP_SIZE - 1, MAP_SIZE - 1)
+	var cost_fn := func(tile: Vector3i) -> float: return float(_costs[tile.y * MAP_SIZE + tile.x])
+	var bounds_max := Vector3i(MAP_SIZE - 1, MAP_SIZE - 1, 0)
 	var improved_somewhere := false
 	for map_seed in MAP_SEEDS:
 		var rng := RandomNumberGenerator.new()
@@ -62,8 +62,8 @@ func _check_astar_matches_dijkstra_cost_on_weighted_maps() -> void:
 		for i in _costs.size():
 			_costs[i] = 0 if rng.randi_range(0, 5) == 0 else rng.randi_range(1, 4)
 		for pair in PAIRS_PER_MAP:
-			var start := Vector2i(rng.randi_range(0, MAP_SIZE - 1), rng.randi_range(0, MAP_SIZE - 1))
-			var target := Vector2i(rng.randi_range(0, MAP_SIZE - 1), rng.randi_range(0, MAP_SIZE - 1))
+			var start := Vector3i(rng.randi_range(0, MAP_SIZE - 1), rng.randi_range(0, MAP_SIZE - 1), 0)
+			var target := Vector3i(rng.randi_range(0, MAP_SIZE - 1), rng.randi_range(0, MAP_SIZE - 1), 0)
 			var label := "seed %d %s -> %s" % [map_seed, start, target]
 			var dijkstra := _run(start, target, cost_fn, bounds_max, 0.0)
 			var astar := _run(start, target, cost_fn, bounds_max, MeasuredRouteType.MIN_TILE_COST)
@@ -77,9 +77,9 @@ func _check_astar_matches_dijkstra_cost_on_weighted_maps() -> void:
 ## Finishes a copy of the search from its mid-search snapshot(); true when that
 ## snapshot holds an open tile whose recorded parent is not the one it was
 ## discovered from (its g improved after discovery).
-func _check_restore_matches(label: String, start: Vector2i, target: Vector2i, cost_fn: Callable,
-		bounds_max: Vector2i, uninterrupted: MeasuredRouteType) -> bool:
-	var search := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, bounds_max)
+func _check_restore_matches(label: String, start: Vector3i, target: Vector3i, cost_fn: Callable,
+		bounds_max: Vector3i, uninterrupted: MeasuredRouteType) -> bool:
+	var search := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, bounds_max)
 	var first_parent := {}
 	var improved := false
 	var mid_snapshot := {}
@@ -95,7 +95,7 @@ func _check_restore_matches(label: String, start: Vector2i, target: Vector2i, co
 				improved = true
 	if mid_snapshot.is_empty():
 		return improved
-	var restored := MeasuredRouteType.new(start, start, cost_fn, Vector2i.ZERO, bounds_max)
+	var restored := MeasuredRouteType.new(start, start, cost_fn, Vector3i.ZERO, bounds_max)
 	restored.restore(mid_snapshot)
 	while not restored.is_terminal():
 		restored.resume()
@@ -107,24 +107,24 @@ func _check_restore_matches(label: String, start: Vector2i, target: Vector2i, co
 func _check_region_check_refuses_walled_target_before_expanding() -> void:
 	var world := WorldStateType.new(7, 1, 12, 12)
 	_open_map(world)
-	var walled := Vector2i(9, 9)
+	var walled := Vector3i(9, 9, 0)
 	for x in range(8, 11):
 		for y in range(8, 11):
-			if Vector2i(x, y) != walled:
+			if Vector3i(x, y, 0) != walled:
 				TestAccess.set_tile(world, x, y, WorldStateType.TILE_ROCK)
 	# Raw tile writes: drop the passability cache and the region map so both
 	# are rebuilt from the map above on their next query.
 	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.tile_grid(world).regions = null
 	var passability := TestAccess.passability(world)
-	var bounds_max := Vector2i(11, 11)
-	var checked := MeasuredRouteType.new(Vector2i(1, 1), walled, passability.is_passable, Vector2i.ZERO, bounds_max, passability.region_reachable)
+	var bounds_max := Vector3i(11, 11, 0)
+	var checked := MeasuredRouteType.new(Vector3i(1, 1, 0), walled, passability.is_passable, Vector3i.ZERO, bounds_max, passability.region_reachable)
 	_expect(checked.get_status() == MeasuredRouteType.STATUS_UNREACHABLE, "a target in another region must be refused in _init()")
 	_expect(checked.resume() == MeasuredRouteType.STATUS_UNREACHABLE and checked.expansions == 0,
 		"a refused search must never expand a tile (expanded %d)" % checked.expansions)
 	_expect((checked.snapshot()["visited"] as Dictionary).is_empty() and (checked.snapshot()["frontier"] as Array).is_empty(),
 		"a refused search must leave nothing in its snapshot")
-	var unchecked := MeasuredRouteType.new(Vector2i(1, 1), walled, passability.is_passable, Vector2i.ZERO, bounds_max)
+	var unchecked := MeasuredRouteType.new(Vector3i(1, 1, 0), walled, passability.is_passable, Vector3i.ZERO, bounds_max)
 	while not unchecked.is_terminal():
 		unchecked.resume()
 	_expect(unchecked.get_status() == MeasuredRouteType.STATUS_UNREACHABLE and unchecked.expansions > 100,
@@ -133,13 +133,13 @@ func _check_region_check_refuses_walled_target_before_expanding() -> void:
 func _check_region_check_never_refuses_a_reachable_target() -> void:
 	var world := WorldStateType.new(42, 1, 48, 48)
 	var passability := TestAccess.passability(world)
-	var bounds_max := Vector2i(47, 47)
+	var bounds_max := Vector3i(47, 47, 0)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	var compared := 0
 	for i in 60:
-		var start := Vector2i(rng.randi_range(0, 47), rng.randi_range(0, 47))
-		var target := Vector2i(rng.randi_range(0, 47), rng.randi_range(0, 47))
+		var start := Vector3i(rng.randi_range(0, 47), rng.randi_range(0, 47), 0)
+		var target := Vector3i(rng.randi_range(0, 47), rng.randi_range(0, 47), 0)
 		if passability.is_passable(start) <= 0.0:
 			continue
 		compared += 1
@@ -156,15 +156,15 @@ func _check_walled_off_drop_target_is_refused_without_searching() -> void:
 	for x in range(0, 48):
 		TestAccess.set_tile(world, x, 6, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "route": null, "work": null})
-	_expect(ScenariosType.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"}).get("ok", false),
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "z": 0, "route": null, "work": null})
+	_expect(ScenariosType.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement on the wall row must be accepted")
-	_expect(ScenariosType.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 9, "width": 1, "height": 1}).get("ok", false),
+	_expect(ScenariosType.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 9, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add south of the wall must be accepted")
 	var pick_id := world.spawn_ground_tool_item("pick", 5, 5)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(world.reserve_tool_item(pick_id, "foreign_job"), "reserving the held pick for a foreign job must succeed")
-	var job_id := String(ScenariosType.command(world, "forage_1", "forage", {"x": 5, "y": 6, "priority": 1}).get("job_id", ""))
+	var job_id := String(ScenariosType.command(world, "forage_1", "forage", {"x": 5, "y": 6, "z": 0, "priority": 1}).get("job_id", ""))
 	_expect(not job_id.is_empty(), "forage submission must be accepted")
 	var saw_searching := false
 	var completed := false
@@ -188,7 +188,7 @@ func _check_restore_refuses_found_pair_cut_off_before_save() -> void:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "factionId": "colony",
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "z": 0, "factionId": "colony",
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
@@ -196,10 +196,10 @@ func _check_restore_refuses_found_pair_cut_off_before_save() -> void:
 		"health": {"hp": 100, "maxHp": 100, "dead": false}})
 	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.tile_grid(world).regions = null
-	var near := Vector2i(5, 8)
+	var near := Vector3i(5, 8, 0)
 	var scheduler := TestAccess.scheduler(world)
 	_expect(scheduler.submit(near, 1, world.get_tick(), "till").get("ok", false), "setup: the near till order must be accepted")
-	_expect(scheduler.submit(Vector2i(40, 40), 1, world.get_tick(), "till").get("ok", false), "setup: the far till order must be accepted")
+	_expect(scheduler.submit(Vector3i(40, 40, 0), 1, world.get_tick(), "till").get("ok", false), "setup: the far till order must be accepted")
 	world.tick() # the near candidate's search resolves into "found"
 	world.tick() # the far candidate's search is still running
 	var request: Dictionary = scheduler.get_pending().get("colonist_0", {})
@@ -207,7 +207,7 @@ func _check_restore_refuses_found_pair_cut_off_before_save() -> void:
 		"setup: colonist_0 must hold a pending batch with the near pair found and the far search in flight")
 	if request.is_empty() or (request["found"] as Array).size() != 1:
 		return
-	for tile in [near + Vector2i(0, -1), near + Vector2i(-1, 0), near + Vector2i(1, 0), near + Vector2i(0, 1)]:
+	for tile in [near + Vector3i(0, -1, 0), near + Vector3i(-1, 0, 0), near + Vector3i(1, 0, 0), near + Vector3i(0, 1, 0)]:
 		TestAccess.set_tile(world, tile.x, tile.y, WorldStateType.TILE_ROCK)
 	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.tile_grid(world).regions = null
@@ -216,16 +216,16 @@ func _check_restore_refuses_found_pair_cut_off_before_save() -> void:
 	_expect(WorldStateType.from_save_state(state).state_hash() == world.state_hash(), "a save/load round trip must keep state_hash()")
 
 	var passability := TestAccess.passability(world)
-	var bounds_max := Vector2i(TestAccess.tile_grid(world).width - 1, TestAccess.tile_grid(world).height - 1)
+	var bounds_max := Vector3i(TestAccess.tile_grid(world).width - 1, TestAccess.tile_grid(world).height - 1, 0)
 	var calls := [0]
-	var counting := func(tile: Vector2i) -> float:
+	var counting := func(tile: Vector3i) -> float:
 		calls[0] += 1
 		return passability.is_passable(tile)
-	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector2i.ZERO, bounds_max, passability.region_reachable)
+	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector3i.ZERO, bounds_max, passability.region_reachable)
 	var checked_calls: int = calls[0]
 	var checked_path: Array = scheduler.get_pending()["colonist_0"]["found"][0]["path"]
 	calls[0] = 0
-	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector2i.ZERO, bounds_max)
+	scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(state["scheduling"]), counting, Vector3i.ZERO, bounds_max)
 	var unchecked_calls: int = calls[0]
 	var unchecked_path: Array = scheduler.get_pending()["colonist_0"]["found"][0]["path"]
 	_expect(checked_path.is_empty() and unchecked_path.is_empty(), "a found target cut off before the save has no path after the restore, with or without the check")
@@ -239,20 +239,20 @@ func _open_map(world: WorldStateType) -> void:
 		for x in 12:
 			TestAccess.set_tile(world, x, y, WorldStateType.TILE_SOIL)
 
-func _run(start: Vector2i, target: Vector2i, cost_fn: Callable, bounds_max: Vector2i, min_cost: float) -> MeasuredRouteType:
-	var search := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, bounds_max, Callable(), min_cost)
+func _run(start: Vector3i, target: Vector3i, cost_fn: Callable, bounds_max: Vector3i, min_cost: float) -> MeasuredRouteType:
+	var search := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, bounds_max, Callable(), min_cost)
 	while not search.is_terminal():
 		search.resume()
 	return search
 
-func _run_with(start: Vector2i, target: Vector2i, cost_fn: Callable, bounds_max: Vector2i, reachable: Callable) -> MeasuredRouteType:
-	var search := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, bounds_max, reachable)
+func _run_with(start: Vector3i, target: Vector3i, cost_fn: Callable, bounds_max: Vector3i, reachable: Callable) -> MeasuredRouteType:
+	var search := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, bounds_max, reachable)
 	while not search.is_terminal():
 		search.resume()
 	return search
 
 ## Sum of cost_fn over every tile entered (the start tile is not entered).
-func _path_cost(path: Array[Vector2i], cost_fn: Callable) -> float:
+func _path_cost(path: Array[Vector3i], cost_fn: Callable) -> float:
 	var total := 0.0
 	for i in range(1, path.size()):
 		total += float(cost_fn.call(path[i]))

@@ -163,7 +163,7 @@ func _check_missing_pack_falls_back() -> void:
 	_expect(not _map_view_has_actor_art(MISSING_ROOT), "no pack -> map_view draws no actor sprites")
 	var actors := ActorSpritesType.new()
 	var world := FakeWorld.new()
-	world.actors = [{"id": "wolf_1", "kind": "wolf", "x": 3, "y": 3, "factionId": "predators"}]
+	world.actors = [{"id": "wolf_1", "kind": "wolf", "x": 3, "y": 3, "z": 0, "factionId": "predators"}]
 	actors.set_world(world)
 	_expect(actors.get_child_count() == 0, "no pack -> no actor sprites (as before B3)")
 	actors.free()
@@ -254,12 +254,12 @@ func _check_actor_sprites() -> void:
 	var driver := FakeDriver.new()
 	actors.set_tick_driver(driver)
 	var world := FakeWorld.new()
-	world.colonists = [{"id": "colonist_0", "x": 1, "y": 1}]
+	world.colonists = [{"id": "colonist_0", "x": 1, "y": 1, "z": 0}]
 	world.actors = [
-		{"id": "colonist_0", "kind": "colonist", "x": 1, "y": 1, "factionId": "colony"},
-		{"id": "wolf_1", "kind": "wolf", "x": 5, "y": 5, "factionId": "predators"},
-		{"id": "wolf_2", "kind": "wolf", "x": 7, "y": 5, "factionId": "raiders"},
-		{"id": "trader_1", "kind": "trader", "x": 9, "y": 5, "factionId": "traders"},
+		{"id": "colonist_0", "kind": "colonist", "x": 1, "y": 1, "z": 0, "factionId": "colony"},
+		{"id": "wolf_1", "kind": "wolf", "x": 5, "y": 5, "z": 0, "factionId": "predators"},
+		{"id": "wolf_2", "kind": "wolf", "x": 7, "y": 5, "z": 0, "factionId": "raiders"},
+		{"id": "trader_1", "kind": "trader", "x": 9, "y": 5, "z": 0, "factionId": "traders"},
 	]
 	actors.set_world(world)
 	_expect(actors.sprite_for("colonist_0") == null, "colonists are colonist_sprites.gd's, not drawn twice")

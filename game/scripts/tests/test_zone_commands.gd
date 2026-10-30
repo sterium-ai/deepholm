@@ -40,7 +40,7 @@ func _expect(condition: bool, message: String) -> void:
 func _zone_add_command(world: WorldStateType, command_id: String, x: int, y: int, width: int, height: int) -> Dictionary:
 	return world.apply({
 		"actor": "player", "command_id": command_id, "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": x, "y": y, "width": width, "height": height},
+		"type": "zone_add", "payload": {"x": x, "y": y, "z": 0, "width": width, "height": height},
 	})
 
 func _zone_remove_command(world: WorldStateType, command_id: String, id: String) -> Dictionary:
@@ -106,7 +106,7 @@ func _check_zone_add_rejects_invalid_payload() -> void:
 	var world := WorldStateType.new(5, 10)
 	var result: Dictionary = world.apply({
 		"actor": "player", "command_id": "add_bad_payload", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 1, "y": 1, "width": 2},
+		"type": "zone_add", "payload": {"x": 1, "y": 1, "z": 0, "width": 2},
 	})
 	_expect(not result.get("ok", true) and result["rejection"]["reason"] == "invalid_payload",
 		"zone_add missing a required integer field must be rejected invalid_payload")

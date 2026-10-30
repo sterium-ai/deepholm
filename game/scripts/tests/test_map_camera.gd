@@ -103,7 +103,7 @@ func _run() -> void:
 				if expected_valid[i]:
 					var found := false
 					for job in boot.world.get_jobs():
-						if job["target"] == preview[i] and job["kind"] == "chop":
+						if job["target"] == Vector3i(preview[i].x, preview[i].y, 0) and job["kind"] == "chop":
 							found = true
 					_expect(found, "valid preview creates real chop job")
 			_expect(map._preview_tiles.is_empty(), "grid disappears on confirm")

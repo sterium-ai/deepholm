@@ -80,7 +80,7 @@ func _job_status(world: WorldType, job_id: String) -> String:
 ## WorldState._advance_go_to_or_resubmit()) leaves the old, terminal job in
 ## get_jobs() alongside the new one: filtering for "queued" is what finds the
 ## live job for that target rather than the cancelled one that precedes it.
-func _find_queued_job_for_target(world: WorldType, target: Vector2i) -> Dictionary:
+func _find_queued_job_for_target(world: WorldType, target: Vector3i) -> Dictionary:
 	for job in world.get_jobs():
 		if job["target"] == target and job["status"] == "queued":
 			return job
@@ -107,7 +107,7 @@ func _build_two_row_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
 		TestAccess.set_tile(world, x, 1, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -118,8 +118,8 @@ func _build_two_row_world(seed_value: int) -> WorldType:
 ## found, and the job completes within the declared tick bound.
 func _check_reroute_then_resume() -> void:
 	var world := _build_racetrack_world(9001)
-	var target := Vector2i(5, 0)
-	var job_id: String = Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var target := Vector3i(5, 0, 0)
+	var job_id: String = Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 
 	var walled := false
 	var saw_rerouting := false
@@ -143,8 +143,8 @@ func _check_reroute_then_resume() -> void:
 ## it the same way it already surfaces other reasons (for an idle colonist).
 func _check_panel_shows_rerouting_reason() -> void:
 	var world := _build_racetrack_world(9002)
-	var target := Vector2i(5, 0)
-	Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})
+	var target := Vector3i(5, 0, 0)
+	Scenarios.command(world, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 
 	var walled := false
 	var rerouting_colonist := {}
@@ -180,8 +180,8 @@ func _check_panel_shows_rerouting_reason() -> void:
 ## colonist within the declared tick bound.
 func _check_unreachable_target_releases_job() -> void:
 	var world := _build_two_row_world(9003)
-	var enclosed_target := Vector2i(4, 0)
-	Scenarios.command(world, "dig", "dig", {"x": enclosed_target.x, "y": enclosed_target.y, "priority": 1})
+	var enclosed_target := Vector3i(4, 0, 0)
+	Scenarios.command(world, "dig", "dig", {"x": enclosed_target.x, "y": enclosed_target.y, "z": 0, "priority": 1})
 
 	var walled := false
 	var released := false
@@ -192,8 +192,8 @@ func _check_unreachable_target_releases_job() -> void:
 		ticks += 1
 		var colonist := world.get_colonists()[0]
 		if not walled and colonist["x"] == 2 and colonist["y"] == 0:
-			TestAccess.object_table(world).set_object(3, 0, "wooden_wall")
-			TestAccess.object_table(world).set_object(4, 1, "wooden_wall")
+			TestAccess.object_table(world).set_object(Vector3i(3, 0, 0), "wooden_wall")
+			TestAccess.object_table(world).set_object(Vector3i(4, 1, 0), "wooden_wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -201,7 +201,7 @@ func _check_unreachable_target_releases_job() -> void:
 				released = true
 				_expect(not world.get_reservations().has(enclosed_target),
 					"no reservation must be left behind for the released, enclosed target")
-				second_job_id = Scenarios.command(world, "second", "dig", {"x": 1, "y": 1, "priority": 1})["job_id"]
+				second_job_id = Scenarios.command(world, "second", "dig", {"x": 1, "y": 1, "z": 0, "priority": 1})["job_id"]
 		if released and second_job_id != "" and _job_status(world, second_job_id) == "completed":
 			break
 
@@ -235,7 +235,7 @@ func _build_racetrack_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, 0, y, WorldType.TILE_SOIL)
 		TestAccess.set_tile(world, 5, y, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
@@ -247,7 +247,7 @@ func _tick_and_wall_once(world: WorldType, walled: bool) -> bool:
 		return walled
 	var colonist := world.get_colonists()[0]
 	if colonist["x"] == 1 and colonist["y"] == 0:
-		TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
+		TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "wooden_wall")
 		return true
 	return walled
 
@@ -271,12 +271,12 @@ func _build_fetch_tool_racetrack_world(seed_value: int) -> WorldType:
 	return world
 
 func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
-	var target := Vector2i(1, 0)
+	var target := Vector3i(1, 0, 0)
 	var seed_value := 9006
 
 	# Path A: an uninterrupted run straight through to completion.
 	var direct := _build_fetch_tool_racetrack_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -288,7 +288,7 @@ func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
 	# STATUS_SEARCHING (mid-flight, not yet resolved), restore into a fresh
 	# WorldState, then advance identically.
 	var source := _build_fetch_tool_racetrack_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -334,11 +334,11 @@ func _check_save_load_mid_fetch_tool_matches_uninterrupted_run() -> void:
 ## exact tick the search resolves cannot hide behind a coincidentally-matching
 ## last hash.
 func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupted_run() -> void:
-	var target := Vector2i(1, 0)
+	var target := Vector3i(1, 0, 0)
 	var seed_value := 9013
 
 	var direct := _build_fetch_tool_racetrack_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -347,7 +347,7 @@ func _check_save_io_round_trip_mid_fetch_tool_initial_search_matches_uninterrupt
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_racetrack_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -418,11 +418,11 @@ func _build_fetch_tool_excluded_candidate_world(seed_value: int) -> WorldType:
 ## alongside it. Compares state_hash() after every tick post-restore, not
 ## merely the final one.
 func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrupted_run() -> void:
-	var target := Vector2i(1, 0)
+	var target := Vector3i(1, 0, 0)
 	var seed_value := 9014
 
 	var direct := _build_fetch_tool_excluded_candidate_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_excluded_seen := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
@@ -435,7 +435,7 @@ func _check_save_io_round_trip_mid_fetch_tool_after_exclusion_matches_uninterrup
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_excluded_candidate_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var mid_search := false
 	var source_ticks := 0
 	while not mid_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -510,11 +510,11 @@ func _build_fetch_tool_return_leg_racetrack_world(seed_value: int) -> WorldType:
 	return world
 
 func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_run() -> void:
-	var target := Vector2i(5, 24)
+	var target := Vector3i(5, 24, 0)
 	var seed_value := 9015
 
 	var direct := _build_fetch_tool_return_leg_racetrack_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < FETCH_TOOL_MAX_TICKS:
 		direct.tick()
@@ -523,7 +523,7 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 		"uninterrupted run must complete within the declared tick bound (%d)" % FETCH_TOOL_MAX_TICKS)
 
 	var source := _build_fetch_tool_return_leg_racetrack_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var mid_return_search := false
 	var source_ticks := 0
 	while not mid_return_search and source_ticks < FETCH_TOOL_MAX_TICKS:
@@ -606,7 +606,7 @@ func _build_fetch_tool_racetrack_world_with_moving_holder(seed_value: int) -> Wo
 	# proposed for (and, being closer, keep winning over colonist_0) the chop
 	# job's own activation search every tick, which can never resolve from
 	# colonist_1's own invalid start tile, wedging the job forever.
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 5, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 5, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": {"mine": 0, "chop": 0, "farm": 0, "haul": 0, "build": 0, "craft": 0, "cook": 0},
 		"route": null, "work": null, "carrying": null, "held_tool": ""})
@@ -626,7 +626,7 @@ func _drive_fetch_tool_holder_moves_fixture(world: WorldType, state: Dictionary)
 	var colonist := world.get_colonists()[0]
 	if not state.get("walled", false):
 		if colonist["x"] == 1 and colonist["y"] == 0:
-			TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
+			TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "wooden_wall")
 			state["walled"] = true
 		return
 	if state.get("moved", false):
@@ -673,14 +673,14 @@ func _fetch_tool_holder_moved_job_settled(world: WorldType, job_id: String) -> b
 ## point under test is that they settle on the same outcome at the same tick
 ## (state_hash() equality), not which outcome that is.
 func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted_run() -> void:
-	var target := Vector2i(3, 1)
+	var target := Vector3i(3, 1, 0)
 	var seed_value := 9010
 
 	# Path A: an uninterrupted run, driven by the same scripted wall/holder-
 	# move side effects as path B (both share the same frozen search cost_fn
 	# regardless; the fix under test only matters at restore).
 	var direct := _build_fetch_tool_racetrack_world_with_moving_holder(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_state := {"walled": false, "moved": false}
 	var direct_ticks := 0
 	while not _fetch_tool_holder_moved_job_settled(direct, direct_job_id) and direct_ticks < FETCH_TOOL_MAX_TICKS:
@@ -692,7 +692,7 @@ func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted
 	# Path B: same fixture and script, saving through SaveIO's real file
 	# boundary the instant colonist_1 has just moved mid-second-search.
 	var source := _build_fetch_tool_racetrack_world_with_moving_holder(seed_value)
-	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var source_state := {"walled": false, "moved": false}
 	var mid_search := false
 	var source_ticks := 0
@@ -758,10 +758,10 @@ func _check_save_io_round_trip_mid_fetch_tool_holder_moves_matches_uninterrupted
 ## brand-new fetch_tool search object must not both have spent a resume this
 ## same tick.
 func _check_route_budget_shared_across_scheduler_fetch_and_return() -> void:
-	var target := Vector2i(1, 0)
+	var target := Vector3i(1, 0, 0)
 	var seed_value := 9008
 	var world := _build_fetch_tool_racetrack_world(seed_value)
-	var job_id: String = Scenarios.command(world, "chop", "chop", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var job_id: String = Scenarios.command(world, "chop", "chop", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var colonist_id := "colonist_0"
 
 	var multi_batch_seen := false
@@ -804,12 +804,12 @@ func _check_route_budget_shared_across_scheduler_fetch_and_return() -> void:
 		"test fixture must force at least one search (fetch or return) to need more than one resume() batch")
 
 func _check_save_load_mid_reroute_matches_uninterrupted_run() -> void:
-	var target := Vector2i(5, 0)
+	var target := Vector3i(5, 0, 0)
 	var seed_value := 9004
 
 	# Path A: an uninterrupted run straight through to completion.
 	var direct := _build_racetrack_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_walled := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < SAVE_LOAD_MAX_TICKS:
@@ -822,7 +822,7 @@ func _check_save_load_mid_reroute_matches_uninterrupted_run() -> void:
 	# (mid-flight, not yet resolved), restore into a fresh WorldState, then
 	# advance identically.
 	var source := _build_racetrack_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var source_walled := false
 	var mid_search := false
 	var source_ticks := 0
@@ -864,11 +864,11 @@ func _check_save_load_mid_reroute_matches_uninterrupted_run() -> void:
 ## SaveIO's own _valid_entity_route() allow-list is what previously rejected
 ## the extra "rerouting" key on read.
 func _check_save_io_round_trip_mid_reroute_matches_uninterrupted_run() -> void:
-	var target := Vector2i(5, 0)
+	var target := Vector3i(5, 0, 0)
 	var seed_value := 9005
 
 	var direct := _build_racetrack_world(seed_value)
-	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var direct_job_id: String = Scenarios.command(direct, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var direct_walled := false
 	var direct_ticks := 0
 	while _job_status(direct, direct_job_id) != "completed" and direct_ticks < SAVE_LOAD_MAX_TICKS:
@@ -878,7 +878,7 @@ func _check_save_io_round_trip_mid_reroute_matches_uninterrupted_run() -> void:
 		"uninterrupted run must complete within the declared tick bound (%d)" % SAVE_LOAD_MAX_TICKS)
 
 	var source := _build_racetrack_world(seed_value)
-	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "priority": 1})["job_id"]
+	var source_job_id: String = Scenarios.command(source, "dig", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})["job_id"]
 	var source_walled := false
 	var mid_search := false
 	var source_ticks := 0

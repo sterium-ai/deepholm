@@ -33,7 +33,7 @@ func _init() -> void:
 func _check_unsafe_route_rejected_in_favour_of_a_safe_candidate() -> void:
 	var world := _fresh_world(360014)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	_trap_colonist_at(world, victim, Vector2i(2, 2))
+	_trap_colonist_at(world, victim, Vector3i(2, 2, 0))
 	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 2, 3, WorldStateType.TILE_ROCK)
 	# Reserves the near-side target directly on the shared table, exactly like
@@ -53,7 +53,7 @@ func _check_unsafe_route_rejected_in_favour_of_a_safe_candidate() -> void:
 	_expect(not job.is_empty(), "a rescue job must still be generated despite the near candidate's own route being unsafe")
 	_expect(TestAccess.rescue_giver(world).colonist_for_job(String(job["id"])) == safe_id,
 		"the unsafe near candidate must never be chosen; the safe far candidate must be used instead")
-	_expect(job["target"] == Vector2i(3, 2), "the only remaining target must be (3, 2)")
+	_expect(job["target"] == Vector3i(3, 2, 0), "the only remaining target must be (3, 2)")
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -75,7 +75,7 @@ func _check_no_rescue_when_every_route_crosses_the_trench() -> void:
 	var world := _fresh_world(360015)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
 	var victim_id: String = String(victim["id"])
-	_trap_colonist_at(world, victim, Vector2i(5, 0))
+	_trap_colonist_at(world, victim, Vector3i(5, 0, 0))
 	TestAccess.set_tile(world, 4, 0, WorldStateType.TILE_ROCK)
 	for y in range(1, world.get_map_height()):
 		TestAccess.set_tile(world, 5, y, WorldStateType.TILE_ROCK)
@@ -101,7 +101,7 @@ func _check_no_rescue_when_every_route_crosses_the_trench() -> void:
 func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 	var world := _fresh_world(360018)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	_trap_colonist_at(world, victim, Vector2i(5, 0))
+	_trap_colonist_at(world, victim, Vector3i(5, 0, 0))
 	TestAccess.set_tile(world, 6, 0, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 5, 1, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_TRENCH)
@@ -117,7 +117,7 @@ func _check_route_rejected_when_it_crosses_an_unrelated_trench() -> void:
 	_expect(not job.is_empty(), "a rescue job must still be generated despite the near candidate's route crossing an unrelated trench")
 	_expect(TestAccess.rescue_giver(world).colonist_for_job(String(job["id"])) == safe_id,
 		"a candidate whose only route crosses a different trench than the victim's own must never be chosen")
-	_expect(job["target"] == Vector2i(4, 0), "the only remaining target must be (4, 0)")
+	_expect(job["target"] == Vector3i(4, 0, 0), "the only remaining target must be (4, 0)")
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -154,7 +154,7 @@ func _check_long_ordinary_travel_eventually_lets_a_later_candidate_win() -> void
 	# lets the worker simply arrive and go stationary first, legitimately (not
 	# staleness) resolving the search before the retry bound is ever tested.
 	TestAccess.set_tile(world, 46, 5, WorldStateType.TILE_SOIL)
-	var labour_submit := TestAccess.scheduler(world).submit(Vector2i(46, 5), 1, world.get_tick(), "till", worker_id)
+	var labour_submit := TestAccess.scheduler(world).submit(Vector3i(46, 5, 0), 1, world.get_tick(), "till", worker_id)
 	_expect(labour_submit.get("ok", false), "setup: the long ordinary labour order must be accepted")
 	var labour_job_id: String = String(labour_submit["job_id"])
 	# Waits for the worker to be genuinely under way and far along (not merely
@@ -251,7 +251,7 @@ func _check_moving_candidate_cannot_starve_a_stationary_backup() -> void:
 func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	var world := _fresh_world(360021)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	_trap_colonist_at(world, victim, Vector2i(5, 0))
+	_trap_colonist_at(world, victim, Vector3i(5, 0, 0))
 	for y in range(1, world.get_map_height()):
 		TestAccess.set_tile(world, 5, y, WorldStateType.TILE_ROCK)
 	var rescuer := _spawn_colonist(world, "colonist_1", 0, 0)
@@ -268,7 +268,7 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 			working = true
 			break
 	_expect(working, "setup: the rescuer must reach its own active work toil")
-	_expect(TestAccess.scheduler(world).queue.get_job(job_id)["target"] == Vector2i(4, 0),
+	_expect(TestAccess.scheduler(world).queue.get_job(job_id)["target"] == Vector3i(4, 0, 0),
 		"setup: the west-side candidate must commit to the only route that never crosses the trench")
 	TestAccess.needs_system(world).interrupt_current_job(rescuer)
 	rescuer["x"] = 10
@@ -297,9 +297,9 @@ func _check_need_interrupt_across_the_trench_rejects_unsafe_resume() -> void:
 	_expect(rescuer.get("trapped") == null, "the rescuer must never have fallen into the trench while re-routing")
 	for key in TestAccess.progress_table(world).progress.keys():
 		_expect(not String(key).begins_with(job_id + ":"), "retiring the stale rescue must drop its own job-scoped progress key")
-	_expect(not fresh_job.is_empty() and fresh_job["target"] == Vector2i(6, 0),
+	_expect(not fresh_job.is_empty() and fresh_job["target"] == Vector3i(6, 0, 0),
 		"the fresh target must be the east-side candidate, reachable from the rescuer's new side without crossing the trench")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(int(rescuer["x"]), int(rescuer["y"])),
+	_expect(TileGrid.tile_of(victim) == TileGrid.tile_of(rescuer),
 		"the victim must end up on the rescuer's own tile")
 	var report := ReservationInvariantsType.check(TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "retiring an unsafe resumed rescue must leave no orphaned reservations")
@@ -316,15 +316,15 @@ func _check_rescue_searches_share_the_per_colonist_route_budget() -> void:
 	var victim_a: Dictionary = TestAccess.colonists(world)[0]
 	var victim_b := _spawn_colonist(world, "colonist_1", 0, 0)
 	var victim_c := _spawn_colonist(world, "colonist_2", 0, 0)
-	var victims: Array = [[victim_a, Vector2i(10, 12)], [victim_b, Vector2i(20, 24)], [victim_c, Vector2i(30, 36)]]
+	var victims: Array = [[victim_a, Vector3i(10, 12, 0)], [victim_b, Vector3i(20, 24, 0)], [victim_c, Vector3i(30, 36, 0)]]
 	for entry in victims:
 		var victim: Dictionary = entry[0]
-		var trench: Vector2i = entry[1]
+		var trench: Vector3i = entry[1]
 		victim["x"] = trench.x - 1
 		victim["y"] = trench.y
 		TestAccess.set_tile(world, trench.x, trench.y, WorldStateType.TILE_TRENCH)
 		TestAccess.set_tile(world, trench.x + 1, trench.y, WorldStateType.TILE_SOIL)
-		var submit := TestAccess.scheduler(world).submit(Vector2i(trench.x + 1, trench.y), 1, world.get_tick(), "till", String(victim["id"]))
+		var submit := TestAccess.scheduler(world).submit(Vector3i(trench.x + 1, trench.y, 0), 1, world.get_tick(), "till", String(victim["id"]))
 		_expect(submit.get("ok", false), "setup: each victim's own till submission must be accepted")
 	var all_trapped := false
 	for _i in TRAP_TICK_BOUND:
@@ -403,7 +403,7 @@ func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_
 		TestAccess.set_tile(world, 10, y, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 5, 5, WorldStateType.TILE_TRENCH)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	_trap_colonist_at(world, victim, Vector2i(5, 0))
+	_trap_colonist_at(world, victim, Vector3i(5, 0, 0))
 	var rescuer_1 := _spawn_colonist(world, "colonist_1", 0, 0)
 	var rescuer_2 := _spawn_colonist(world, "colonist_2", 10, 0)
 	var rescuer_1_id: String = String(rescuer_1["id"])
@@ -414,16 +414,16 @@ func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_
 		job_1 = _find_rescue_job(world, rescuer_1_id)
 		if not job_1.is_empty():
 			break
-	_expect(not job_1.is_empty() and job_1["target"] == Vector2i(4, 0), "setup: rescuer 1 must commit to the west-side target (4, 0)")
+	_expect(not job_1.is_empty() and job_1["target"] == Vector3i(4, 0, 0), "setup: rescuer 1 must commit to the west-side target (4, 0)")
 	var job_1_id: String = String(job_1["id"])
 	var reached_corridor := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
-		if Vector2i(int(rescuer_1["x"]), int(rescuer_1["y"])) == Vector2i(2, 0):
+		if TileGrid.tile_of(rescuer_1) == Vector3i(2, 0, 0):
 			reached_corridor = true
 			break
 	_expect(reached_corridor, "setup: rescuer 1 must be walking the west corridor")
-	TestAccess.object_table(world).set_object(3, 0, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(3, 0, 0), "wooden_wall")
 	var retired := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -442,7 +442,7 @@ func _check_blocked_corridor_reroute_never_crosses_a_trench_and_another_rescuer_
 			rescued = true
 			break
 	_expect(rescued, "the victim must still be rescued by the other available rescuer")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(6, 0) and Vector2i(int(rescuer_2["x"]), int(rescuer_2["y"])) == Vector2i(6, 0),
+	_expect(TileGrid.tile_of(victim) == Vector3i(6, 0, 0) and TileGrid.tile_of(rescuer_2) == Vector3i(6, 0, 0),
 		"rescuer 2 must complete the rescue from the east-side target (6, 0)")
 	var report := ReservationInvariantsType.check(TestAccess.scheduler(world).queue.get_reservation_table(), world.get_jobs())
 	_expect((report["orphaned_reservations"] as Array).is_empty(), "retiring and re-proposing must leave no orphaned reservations")
@@ -467,16 +467,16 @@ func _check_blocked_corridor_with_a_safe_detour_reroutes_without_crossing_the_tr
 		job = _find_rescue_job(world, rescuer_id)
 		if not job.is_empty():
 			break
-	_expect(not job.is_empty() and job["target"] == Vector2i(0, 0), "setup: the only target left must be (0, 0)")
+	_expect(not job.is_empty() and job["target"] == Vector3i(0, 0, 0), "setup: the only target left must be (0, 0)")
 	var job_id: String = String(job["id"])
 	var reached := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
-		if Vector2i(int(rescuer["x"]), int(rescuer["y"])) == Vector2i(0, 3):
+		if TileGrid.tile_of(rescuer) == Vector3i(0, 3, 0):
 			reached = true
 			break
 	_expect(reached, "setup: the rescuer must be walking up column x=0")
-	TestAccess.object_table(world).set_object(0, 2, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(0, 2, 0), "wooden_wall")
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_FLOOR)
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND:
@@ -487,7 +487,7 @@ func _check_blocked_corridor_with_a_safe_detour_reroutes_without_crossing_the_tr
 			break
 	_expect(rescued, "the rescue must complete via the trench-free detour")
 	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "completed", "the same rescue job must complete (re-routed, not retired)")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(0, 0), "the victim must end up on the rescue target")
+	_expect(TileGrid.tile_of(victim) == Vector3i(0, 0, 0), "the victim must end up on the rescue target")
 
 ## A newly impassable target -- both while the
 ## commitment is still queued (activation-time path trim) and mid-travel
@@ -511,10 +511,10 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 		queued_job = _find_rescue_job(world, rescuer_id)
 		if not queued_job.is_empty():
 			break
-	_expect(not queued_job.is_empty() and queued_job["target"] == Vector2i(2, 0), "setup: the rescue must target (2, 0)")
+	_expect(not queued_job.is_empty() and queued_job["target"] == Vector3i(2, 0, 0), "setup: the rescue must target (2, 0)")
 	_expect(String(queued_job.get("status", "")) == "queued", "setup: the commitment is still queued the tick it appears")
 	var queued_job_id: String = String(queued_job["id"])
-	TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "wooden_wall")
 	var retired_before_moving := false
 	for _i in 20:
 		world.tick()
@@ -522,15 +522,15 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 			retired_before_moving = true
 			break
 	_expect(retired_before_moving, "a queued rescue whose target became impassable must be retired at activation, never trimmed to an adjacent tile")
-	_expect(Vector2i(int(rescuer["x"]), int(rescuer["y"])) == Vector2i(2, 8) and rescuer.get("work") == null,
+	_expect(TileGrid.tile_of(rescuer) == Vector3i(2, 8, 0) and rescuer.get("work") == null,
 		"the rescuer must not have moved or started work toward an impassable target")
 	# The victim's fresh search runs on the tick after the retirement
 	# (RescueGiver.advance() precedes _advance_colonists() within a tick).
 	world.tick()
 	_expect(world.get_colonist_rescue_reason(victim_id) == TestAccess.rescue_giver(world).REASON_NO_RESCUER_AVAILABLE,
 		"with every neighbour blocked the victim's reason must read no_rescuer_available")
-	_expect(Vector2i(int(rescuer["x"]), int(rescuer["y"])) == Vector2i(2, 8), "no rescue may be re-proposed while the only target is impassable")
-	TestAccess.object_table(world).set_object(2, 0, "")
+	_expect(TileGrid.tile_of(rescuer) == Vector3i(2, 8, 0), "no rescue may be re-proposed while the only target is impassable")
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "")
 	var job := {}
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -543,11 +543,11 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 	var mid_travel := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
-		if Vector2i(int(rescuer["x"]), int(rescuer["y"])) == Vector2i(2, 4):
+		if TileGrid.tile_of(rescuer) == Vector3i(2, 4, 0):
 			mid_travel = true
 			break
 	_expect(mid_travel, "setup: the rescuer must be mid-travel toward the target")
-	TestAccess.object_table(world).set_object(2, 0, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "wooden_wall")
 	var retired_mid_travel := false
 	for _i in RESCUE_TICK_BOUND:
 		world.tick()
@@ -556,8 +556,8 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 			retired_mid_travel = true
 			break
 	_expect(retired_mid_travel, "a rescue whose target becomes impassable mid-travel must be retired, never trimmed to start work adjacent")
-	_expect(victim.get("trapped") != null and Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(1, 0), "the victim must be untouched")
-	TestAccess.object_table(world).set_object(2, 0, "")
+	_expect(victim.get("trapped") != null and TileGrid.tile_of(victim) == Vector3i(1, 0, 0), "the victim must be untouched")
+	TestAccess.object_table(world).set_object(Vector3i(2, 0, 0), "")
 	var rescued := false
 	for _i in RESCUE_TICK_BOUND * 2:
 		world.tick()
@@ -565,4 +565,4 @@ func _check_target_made_impassable_retires_the_rescue_instead_of_working_off_tar
 			rescued = true
 			break
 	_expect(rescued, "a fresh rescue must complete once the target is passable again")
-	_expect(Vector2i(int(victim["x"]), int(victim["y"])) == Vector2i(2, 0), "the victim must be moved exactly onto the rescue target")
+	_expect(TileGrid.tile_of(victim) == Vector3i(2, 0, 0), "the victim must be moved exactly onto the rescue target")

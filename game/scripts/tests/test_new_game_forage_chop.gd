@@ -242,7 +242,7 @@ func _all_done(colonists: Array, bush_targets: Array, forage_done: Dictionary, t
 	return true
 
 func _submit(world, job_type: String, target: Vector2i, assignee: String = "") -> void:
-	var payload := {"x": target.x, "y": target.y, "priority": 1}
+	var payload := {"x": target.x, "y": target.y, "z": 0, "priority": 1}
 	if not assignee.is_empty():
 		payload["assignee"] = assignee
 	var result: Dictionary = world.apply({

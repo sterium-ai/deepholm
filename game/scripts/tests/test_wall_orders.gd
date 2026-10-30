@@ -69,9 +69,9 @@ func _reason_of(result: Dictionary) -> String:
 	return String((result.get("rejection", {}) as Dictionary).get("reason", ""))
 
 func _tile(x: int, y: int) -> Dictionary:
-	return {"x": x, "y": y}
+	return {"x": x, "y": y, "z": 0}
 
-func _tiles_from(positions: Array[Vector2i]) -> Array:
+func _tiles_from(positions: Array[Vector3i]) -> Array:
 	var tiles: Array = []
 	for pos in positions:
 		tiles.append(_tile(pos.x, pos.y))
@@ -167,10 +167,10 @@ func _check_line_that_would_enclose_rejects_whole_batch_with_zero_sites_and_rese
 	# their north corners, are pre-built individually; the whole north row
 	# (4 tiles) is left open for the build_line under test.
 	for x in range(4, 8):
-		_command_ok(world, "south_%d" % x, "build", {"kind": "wooden_wall", "x": x, "y": 7})
+		_command_ok(world, "south_%d" % x, "build", {"kind": "wooden_wall", "x": x, "y": 7, "z": 0})
 	for y in [5, 6]:
-		_command_ok(world, "west_%d" % y, "build", {"kind": "wooden_wall", "x": 4, "y": y})
-		_command_ok(world, "east_%d" % y, "build", {"kind": "wooden_wall", "x": 7, "y": y})
+		_command_ok(world, "west_%d" % y, "build", {"kind": "wooden_wall", "x": 4, "y": y, "z": 0})
+		_command_ok(world, "east_%d" % y, "build", {"kind": "wooden_wall", "x": 7, "y": y, "z": 0})
 	var north_row: Array = [_tile(7, 4), _tile(4, 4), _tile(6, 4), _tile(5, 4)]
 	var before_hash := world.state_hash()
 	var result := Scenarios.command(world, "seal", "build_line", {"kind": "wooden_wall", "tiles": north_row})
@@ -179,7 +179,7 @@ func _check_line_that_would_enclose_rejects_whole_batch_with_zero_sites_and_rese
 	_expect(world.state_hash() == before_hash, "a rejected build_line must never mutate the world")
 	var table := TestAccess.scheduler(world).queue.get_reservation_table()
 	for tile in north_row:
-		var pos := Vector2i(int(tile["x"]), int(tile["y"]))
+		var pos := TileGrid.tile_of(tile)
 		_expect(world.get_construction_site(pos.x, pos.y).is_empty(),
 			"no site may exist at (%d, %d) after the whole batch was rejected" % [pos.x, pos.y])
 		_expect(table.owner("tile:%d,%d" % [pos.x, pos.y]).is_empty(),
@@ -213,9 +213,9 @@ func _check_preview_matches_apply_including_skipped() -> void:
 func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_the_rest_leaves_no_orphans() -> void:
 	var world := Scenarios.empty_floor_world(450600)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 20, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(11, 10), Vector2i(12, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(11, 10, 0), Vector3i(12, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 3, "the fixture line must create 3 sites: %s" % result)
 
@@ -223,7 +223,7 @@ func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_
 	# implementation detail of GlobalAssignmentScheduler, not this command's
 	# own contract -- this scenario only needs any one of them holding
 	# material to prove cancelling it leaves its siblings untouched.
-	var delivered_to: Vector2i = Vector2i(-1, -1)
+	var delivered_to: Vector3i = Vector3i(-1, -1, 0)
 	for _i in CANCEL_TEST_MAX_TICKS:
 		world.tick()
 		for pos in positions:
@@ -237,11 +237,11 @@ func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_
 
 	var cancelled_before := world.get_construction_site(delivered_to.x, delivered_to.y)
 	var cancelled_wood_before := _held_quantity(cancelled_before, "wood")
-	var siblings: Array[Vector2i] = []
+	var siblings: Array[Vector3i] = []
 	for pos in positions:
 		if pos != delivered_to:
 			siblings.append(pos)
-	_command_ok(world, "cancel_delivered", "cancel_site", {"x": delivered_to.x, "y": delivered_to.y})
+	_command_ok(world, "cancel_delivered", "cancel_site", {"x": delivered_to.x, "y": delivered_to.y, "z": 0})
 	_expect(world.get_construction_site(delivered_to.x, delivered_to.y).is_empty(), "cancel_site must remove the cancelled site")
 	for sibling in siblings:
 		_expect(not world.get_construction_site(sibling.x, sibling.y).is_empty(),
@@ -249,14 +249,14 @@ func _check_cancel_one_site_in_line_drops_only_its_own_material_then_cancelling_
 
 	var dropped_wood := 0
 	for item in world.get_items():
-		var tile := Vector2i(int(item["x"]), int(item["y"]))
+		var tile := TileGrid.tile_of(item)
 		if String(item["kind"]) == "wood" and absi(tile.x - delivered_to.x) <= 1 and absi(tile.y - delivered_to.y) <= 1:
 			dropped_wood += int(item["count"])
 	_expect(dropped_wood == cancelled_wood_before,
 		"cancelling the site must drop exactly its own held wood (%d), found %d nearby" % [cancelled_wood_before, dropped_wood])
 
 	for sibling in siblings:
-		_command_ok(world, "cancel_%d_%d" % [sibling.x, sibling.y], "cancel_site", {"x": sibling.x, "y": sibling.y})
+		_command_ok(world, "cancel_%d_%d" % [sibling.x, sibling.y], "cancel_site", {"x": sibling.x, "y": sibling.y, "z": 0})
 	_expect(world.get_construction_sites().is_empty(), "no construction site may remain once every site in the line is cancelled")
 	var orphans := ReservationInvariantsType.find_orphaned_reservations(
 		TestAccess.scheduler(world).queue.get_reservation_table(), TestAccess.scheduler(world).queue.get_jobs())
@@ -301,7 +301,7 @@ func _check_overlapping_footprints_within_one_batch_skip_the_later_origin_horizo
 		"the single surviving site must hold the reservation for both of its own footprint tiles")
 	_expect(String(world.get_construction_site(11, 10).get("id", "")) == String(site["id"]),
 		"tile (11, 10) must resolve to the same single site, not a second phantom site")
-	_command_ok(world, "cancel_h", "cancel_site", {"x": 11, "y": 10})
+	_command_ok(world, "cancel_h", "cancel_site", {"x": 11, "y": 10, "z": 0})
 	_expect(world.get_construction_site(10, 10).is_empty() and world.get_construction_site(11, 10).is_empty(),
 		"cancelling via either footprint tile must remove the one site entirely")
 	_expect(table.owner("tile:10,10").is_empty() and table.owner("tile:11,10").is_empty(),
@@ -379,9 +379,9 @@ func _pick_up_count(world: WorldStateType) -> int:
 func _check_hands_load_serves_four_one_quantity_blocks_with_a_single_pick_up() -> void:
 	var world := Scenarios.empty_floor_world(451100)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 4, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(11, 10), Vector2i(12, 10), Vector2i(13, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(11, 10, 0), Vector3i(12, 10, 0), Vector3i(13, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 4, "the fixture line must create 4 sites: %s" % result)
 	var completed := false
@@ -413,10 +413,10 @@ func _check_three_colonists_build_three_blocks_concurrently_each_declared_ticks_
 	var world := Scenarios.empty_floor_world(451200)
 	for i in range(3):
 		TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_%d" % i, i * 3, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 9, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 9, "height": 1})
 	for i in range(3):
 		Scenarios.add_stock(world, "wood", 1, i * 3, 0)
-	var positions: Array[Vector2i] = [Vector2i(20, 20), Vector2i(21, 20), Vector2i(22, 20)]
+	var positions: Array[Vector3i] = [Vector3i(20, 20, 0), Vector3i(21, 20, 0), Vector3i(22, 20, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 3, "the fixture line must create 3 sites: %s" % result)
 	var declared_ticks := int(TestAccess.object_definitions(world)["wooden_wall"]["build_ticks"])
@@ -459,21 +459,21 @@ func _check_three_colonists_build_three_blocks_concurrently_each_declared_ticks_
 func _reach_mid_chain(seed_value: int) -> Dictionary:
 	var world := Scenarios.empty_floor_world(seed_value)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 3, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(13, 10), Vector2i(16, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(13, 10, 0), Vector3i(16, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	var sites: Array = result.get("sites", [])
 	if sites.size() != 3:
 		_fail("the mid-chain fixture must create 3 sites: %s" % result)
 		return {}
-	var first_origin := Vector2i(int(sites[0]["x"]), int(sites[0]["y"]))
+	var first_origin := TileGrid.tile_of(sites[0])
 	for _i in MAX_TICKS:
 		world.tick()
 		for job in world.get_jobs():
 			if String(job.get("kind", "")) != "site_fetch" or job.get("site") == null:
 				continue
-			var site: Vector2i = job["site"]
+			var site: Vector3i = job["site"]
 			if site == first_origin:
 				continue
 			var colonist := TestAccess.find_colonist(world, "colonist_0")
@@ -495,7 +495,7 @@ func _check_critical_need_interrupt_mid_chain_resumes_same_leg_no_material_lost(
 		return
 	var world: WorldStateType = state["world"]
 	var job_id: String = state["job_id"]
-	var chained_site: Vector2i = state["chained_site"]
+	var chained_site: Vector3i = state["chained_site"]
 	var held_before: int = state["held"]
 	_expect(held_before > 0, "the mid-chain fixture must catch the colonist still carrying material")
 	var colonist := TestAccess.find_colonist(world, "colonist_0")
@@ -532,13 +532,13 @@ func _check_cancel_mid_chain_drops_exactly_what_is_currently_held() -> void:
 	var job_id: String = state["job_id"]
 	var held_before: int = state["held"]
 	var colonist := TestAccess.find_colonist(world, "colonist_0")
-	var drop_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var drop_tile := TileGrid.tile_of(colonist)
 	_command_ok(world, "cancel_mid_chain", "cancel_job", {"job_id": job_id})
 	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "cancelled", "cancelling mid-chain must cancel the job")
 	_expect(not InventoryType.is_carrying(TestAccess.find_colonist(world, "colonist_0")), "cancelling mid-chain must empty the colonist's hands")
 	var dropped := 0
 	for item in world.get_items():
-		if String(item["kind"]) == "wood" and Vector2i(int(item["x"]), int(item["y"])) == drop_tile:
+		if String(item["kind"]) == "wood" and TileGrid.tile_of(item) == drop_tile:
 			dropped += int(item["count"])
 	_expect(dropped == held_before,
 		"cancelling mid-chain must drop exactly what was currently held (%d), found %d" % [held_before, dropped])
@@ -553,7 +553,7 @@ func _active_site_fetch_job_id(world: WorldStateType) -> String:
 ## Ticks world until colonist_0 is carrying exactly `count` units of `kind`
 ## and no site in `positions` has received any of it yet -- "hands loaded,
 ## before the first delivery." False on timeout.
-func _reach_hands_loaded_before_any_delivery(world: WorldStateType, kind: String, count: int, positions: Array[Vector2i]) -> bool:
+func _reach_hands_loaded_before_any_delivery(world: WorldStateType, kind: String, count: int, positions: Array[Vector3i]) -> bool:
 	for _i in MAX_TICKS:
 		world.tick()
 		var colonist := TestAccess.find_colonist(world, "colonist_0")
@@ -600,9 +600,9 @@ func _total_ground_kind(world: WorldStateType, kind: String) -> int:
 func _check_save_load_before_first_deposit_preserves_the_chain() -> void:
 	var world := Scenarios.empty_floor_world(451500)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 4, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(11, 10), Vector2i(12, 10), Vector2i(13, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(11, 10, 0), Vector3i(12, 10, 0), Vector3i(13, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 4, "the fixture line must create 4 sites: %s" % result)
 	_expect(_reach_hands_loaded_before_any_delivery(world, "wood", 4, positions),
@@ -660,7 +660,7 @@ func _check_save_load_between_chained_deposits_preserves_the_chain() -> void:
 	if state.is_empty():
 		return
 	var job_id: String = state["job_id"]
-	var chained_site: Vector2i = state["chained_site"]
+	var chained_site: Vector3i = state["chained_site"]
 	var held_before: int = state["held"]
 	var world: WorldStateType = state["world"]
 	var pick_ups_before_load := _pick_up_count(world)
@@ -703,10 +703,10 @@ func _check_save_load_between_chained_deposits_preserves_the_chain() -> void:
 func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -> void:
 	var world := Scenarios.empty_floor_world(451800)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 2, 0, 0)
-	var pos_a := Vector2i(10, 10)
-	var pos_b := Vector2i(11, 10)
+	var pos_a := Vector3i(10, 10, 0)
+	var pos_b := Vector3i(11, 10, 0)
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from([pos_a, pos_b])})
 	_expect((result.get("sites", []) as Array).size() == 2, "the fixture line must create 2 sites: %s" % result)
 	_expect(_reach_hands_loaded_before_any_delivery(world, "wood", 2, [pos_a, pos_b]),
@@ -714,7 +714,7 @@ func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -
 	# Occupies site B's own single max_builders slot with an unrelated fetch
 	# job before colonist_0 ever delivers to A -- mirrors a second colonist
 	# already committed to B by the time this chain would otherwise reach it.
-	TestAccess.construction(world).submit_site_fetch(pos_b, "stub_competing_item", Vector2i(0, 0), world.get_tick())
+	TestAccess.construction(world).submit_site_fetch(pos_b, "stub_competing_item", Vector3i(0, 0, 0), world.get_tick())
 	var job_id := _active_site_fetch_job_id(world)
 	_expect(not job_id.is_empty(), "colonist_0's own active site_fetch job must be found before it delivers")
 	var completed := false
@@ -744,9 +744,9 @@ func _check_chain_never_retargets_onto_a_sibling_already_at_its_own_capacity() -
 func _check_cancelling_future_destinations_mid_chain_drops_leftover_and_completes() -> void:
 	var world := Scenarios.empty_floor_world(451900)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 4, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(11, 10), Vector2i(12, 10), Vector2i(13, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(11, 10, 0), Vector3i(12, 10, 0), Vector3i(13, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 4, "the fixture line must create 4 sites: %s" % result)
 	_expect(_reach_hands_loaded_before_any_delivery(world, "wood", 4, positions),
@@ -754,7 +754,7 @@ func _check_cancelling_future_destinations_mid_chain_drops_leftover_and_complete
 	var job_id := _active_site_fetch_job_id(world)
 	_expect(not job_id.is_empty(), "colonist_0's own active site_fetch job must be found before its destinations are cancelled")
 	for i in range(1, 4):
-		_command_ok(world, "cancel_%d" % i, "cancel_site", {"x": positions[i].x, "y": positions[i].y})
+		_command_ok(world, "cancel_%d" % i, "cancel_site", {"x": positions[i].x, "y": positions[i].y, "z": 0})
 	var completed := false
 	for _i in MAX_TICKS:
 		world.tick()
@@ -781,9 +781,9 @@ func _check_cancelling_future_destinations_mid_chain_drops_leftover_and_complete
 func _check_competing_deliveries_that_satisfy_remaining_sites_drop_leftover_and_complete() -> void:
 	var world := Scenarios.empty_floor_world(452000)
 	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 0, 0))
-	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "width": 1, "height": 1})
+	_command_ok(world, "zone", "zone_add", {"x": 0, "y": 0, "z": 0, "width": 1, "height": 1})
 	Scenarios.add_stock(world, "wood", 4, 0, 0)
-	var positions: Array[Vector2i] = [Vector2i(10, 10), Vector2i(11, 10), Vector2i(12, 10), Vector2i(13, 10)]
+	var positions: Array[Vector3i] = [Vector3i(10, 10, 0), Vector3i(11, 10, 0), Vector3i(12, 10, 0), Vector3i(13, 10, 0)]
 	var result := _command_ok(world, "line", "build_line", {"kind": "wooden_wall", "tiles": _tiles_from(positions)})
 	_expect((result.get("sites", []) as Array).size() == 4, "the fixture line must create 4 sites: %s" % result)
 	_expect(_reach_hands_loaded_before_any_delivery(world, "wood", 4, positions),

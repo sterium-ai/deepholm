@@ -81,7 +81,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
@@ -93,7 +93,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 ## Non-goals-mandated "construct a test actor" route test_faction_reservations.gd
 ## already establishes for a non-colony actor, rather than a live incident draw.
 func _spawn_wolf(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var wolf: Dictionary = ActorTableType.spawn("wolf", x, y, TestAccess.content(world), id)
+	var wolf: Dictionary = ActorTableType.spawn("wolf", Vector3i(x, y, 0), TestAccess.content(world), id)
 	wolf["factionId"] = "wildlife"
 	TestAccess.colonists(world).append(wolf)
 	return wolf
@@ -103,7 +103,7 @@ func _spawn_wolf(world: WorldStateType, id: String, x: int, y: int) -> Dictionar
 ## hostile) is the Non-goals-named non-hostile, non-colonist actor trap-on-
 ## entry/hostile climb-out must never extend to. Mirrors _spawn_wolf() above.
 func _spawn_trader(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var trader: Dictionary = ActorTableType.spawn("trader", x, y, TestAccess.content(world), id)
+	var trader: Dictionary = ActorTableType.spawn("trader", Vector3i(x, y, 0), TestAccess.content(world), id)
 	trader["factionId"] = "traders"
 	TestAccess.colonists(world).append(trader)
 	return trader
@@ -116,7 +116,7 @@ func _spawn_trader(world: WorldStateType, id: String, x: int, y: int) -> Diction
 ## colony hostile, the asymmetric direction _trap_actor()'s own escape check
 ## reads), so a colonist never flees one.
 func _spawn_raider(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var raider: Dictionary = ActorTableType.spawn("colonist", x, y, TestAccess.content(world), id)
+	var raider: Dictionary = ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), id)
 	raider.erase("carrying")
 	raider["hands"] = []
 	raider["factionId"] = "raiders"
@@ -140,12 +140,12 @@ func _check_colonist_falls_into_trench_releases_job() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id)
+	var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id)
 	_expect(submit.get("ok", false), "till submission must be accepted")
 	var job_id: String = String(submit["job_id"])
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND),
 		"the colonist must become trapped after stepping onto the trench tile")
-	_expect(colonist.get("trapped", {}).get("tile") == Vector2i(1, 0),
+	_expect(colonist.get("trapped", {}).get("tile") == Vector3i(1, 0, 0),
 		"trapped.tile must be the trench tile the colonist stepped onto")
 	_expect(not (colonist["trapped"] as Dictionary).has("ticksRemaining"),
 		"a trapped colonist must carry no ticksRemaining (only a hostile actor's exit is timed)")
@@ -169,10 +169,10 @@ func _check_trapped_colonist_refuses_new_job() -> void:
 	TestAccess.set_tile(world, 3, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	_expect(TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
+	_expect(TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"first till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
-	var submit := TestAccess.scheduler(world).submit(Vector2i(3, 0), 1, world.get_tick(), "till", colonist_id)
+	var submit := TestAccess.scheduler(world).submit(Vector3i(3, 0, 0), 1, world.get_tick(), "till", colonist_id)
 	_expect(submit.get("ok", false), "a second submission is still accepted by the queue -- refused later, at the scheduler's own gate")
 	var job_id: String = String(submit["job_id"])
 	var job: Dictionary = {}
@@ -192,7 +192,7 @@ func _check_trapped_colonist_needs_keep_decaying() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	_expect(TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
+	_expect(TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
 	var food_before := int(colonist["needs"]["food"])
@@ -209,7 +209,7 @@ func _check_colonist_stays_trapped_indefinitely() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	_expect(TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
+	_expect(TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
 	for _i in 200:
@@ -230,16 +230,16 @@ func _check_hostile_actor_auto_escapes() -> void:
 	var world := _fresh_world(305001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf")
 	_expect(submit.get("ok", false), "direct autonomous submission for the trap scenario must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	var trapped_state: Dictionary = wolf["trapped"]
-	_expect(trapped_state.get("tile") == Vector2i(1, 0), "the wolf must be trapped at the tile it fell into")
+	_expect(trapped_state.get("tile") == Vector3i(1, 0, 0), "the wolf must be trapped at the tile it fell into")
 	_expect(int(trapped_state.get("ticksRemaining", -1)) == WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS,
 		"a hostile actor's trapped.ticksRemaining must read content/actors.json's tunables.wild.trench_climb_ticks (default %d)" % WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS)
 	var escape_job_found := false
 	for job in world.get_jobs():
-		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 0):
+		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 0, 0):
 			escape_job_found = true
 	_expect(escape_job_found, "a hostile actor must auto-submit an escape_trench job the instant it becomes trapped")
 	var escaped := false
@@ -250,7 +250,7 @@ func _check_hostile_actor_auto_escapes() -> void:
 			break
 	_expect(escaped, "the hostile actor must no longer be trapped once its escape_trench job completes")
 	_expect(not TestAccess.find_colonist(world, "trap_wolf").is_empty(), "the escaped actor must still exist in the world, not despawned")
-	var final_tile := Vector2i(int(wolf["x"]), int(wolf["y"]))
+	var final_tile := TileGrid.tile_of(wolf)
 	_expect(bool(world.passability(final_tile.x, final_tile.y)["passable"]) and world.get_tile(final_tile.x, final_tile.y) != WorldStateType.TILE_TRENCH,
 		"the escaped actor must land on an adjacent passable, non-trench tile")
 	_expect(maxi(absi(final_tile.x - 1), absi(final_tile.y - 0)) == 1,
@@ -278,8 +278,8 @@ func _check_route_choice_unaffected_by_trench() -> void:
 	var trench_world := _diamond_world(306001, WorldStateType.TILE_TRENCH)
 	var floor_world := _diamond_world(306001, WorldStateType.TILE_FLOOR)
 	var colonist_id: String = TestAccess.colonists(trench_world)[0]["id"]
-	var trench_submit := TestAccess.scheduler(trench_world).submit(Vector2i(2, 1), 1, trench_world.get_tick(), "till", colonist_id)
-	var floor_submit := TestAccess.scheduler(floor_world).submit(Vector2i(2, 1), 1, floor_world.get_tick(), "till", colonist_id)
+	var trench_submit := TestAccess.scheduler(trench_world).submit(Vector3i(2, 1, 0), 1, trench_world.get_tick(), "till", colonist_id)
+	var floor_submit := TestAccess.scheduler(floor_world).submit(Vector3i(2, 1, 0), 1, floor_world.get_tick(), "till", colonist_id)
 	_expect(trench_submit.get("ok", false) and floor_submit.get("ok", false), "both diamond-detour submissions must be accepted")
 	var trench_path: Array = []
 	var floor_path: Array = []
@@ -297,15 +297,15 @@ func _check_route_choice_unaffected_by_trench() -> void:
 ## remaining ticks for a hostile) for every entity."
 func _check_save_load_round_trip_preserves_trapped_state() -> void:
 	var world := _fresh_world(307001)
-	TestAccess.colonists(world)[0]["trapped"] = {"tile": Vector2i(1, 0)}
+	TestAccess.colonists(world)[0]["trapped"] = {"tile": Vector3i(1, 0, 0)}
 	var colonist_id: String = TestAccess.colonists(world)[0]["id"]
 	var wolf := _spawn_wolf(world, "trap_wolf", 3, 3)
-	wolf["trapped"] = {"tile": Vector2i(3, 3), "ticksRemaining": 17}
+	wolf["trapped"] = {"tile": Vector3i(3, 3, 0), "ticksRemaining": 17}
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
-	_expect(TestAccess.find_colonist(restored, colonist_id).get("trapped") == {"tile": Vector2i(1, 0)},
+	_expect(TestAccess.find_colonist(restored, colonist_id).get("trapped") == {"tile": Vector3i(1, 0, 0)},
 		"a save/load round trip must preserve a trapped colonist's tile exactly")
-	_expect(TestAccess.find_colonist(restored, "trap_wolf").get("trapped") == {"tile": Vector2i(3, 3), "ticksRemaining": 17},
+	_expect(TestAccess.find_colonist(restored, "trap_wolf").get("trapped") == {"tile": Vector3i(3, 3, 0), "ticksRemaining": 17},
 		"a save/load round trip must preserve a trapped hostile's tile and ticksRemaining exactly")
 	_expect(restored.state_hash() == world.state_hash(),
 		"a save/load round trip must reproduce the exact same state_hash() once trapped state is restored")
@@ -319,8 +319,8 @@ func _check_save_load_round_trip_preserves_trapped_state() -> void:
 ## this isolates escape_trench's own self-tile reservation (the thing under
 ## test) from the pre-existing, unrelated bare-tile gate on an entry job that
 ## targets property directly (which correctly still refuses, unchanged).
-func _escape_and_confirm(world: WorldStateType, wolf: Dictionary, wolf_id: String, trench: Vector2i, label: String) -> void:
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(trench.x + 1, trench.y), 1, world.get_tick(), "incident", wolf_id)
+func _escape_and_confirm(world: WorldStateType, wolf: Dictionary, wolf_id: String, trench: Vector3i, label: String) -> void:
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(trench.x + 1, trench.y, 0), 1, world.get_tick(), "incident", wolf_id)
 	_expect(submit.get("ok", false), "%s: setup submission must be accepted" % label)
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "%s: setup: the wolf must be trapped before this check runs" % label)
 	_expect((wolf.get("trapped", {}) as Dictionary).get("tile") == trench,
@@ -336,31 +336,31 @@ func _escape_and_confirm(world: WorldStateType, wolf: Dictionary, wolf_id: Strin
 func _check_hostile_escapes_despite_ground_item_on_trench() -> void:
 	var world := _fresh_world(320001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	TestAccess.item_table(world).items["item_test_wood"] = {"id": "item_test_wood", "x": 1, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_test_wood"] = {"id": "item_test_wood", "x": 1, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).item_factions["item_test_wood"] = "colony"
 	var wolf := _spawn_wolf(world, "trap_wolf_item", 0, 0)
-	_escape_and_confirm(world, wolf, "trap_wolf_item", Vector2i(1, 0), "ground item")
+	_escape_and_confirm(world, wolf, "trap_wolf_item", Vector3i(1, 0, 0), "ground item")
 
 func _check_hostile_escapes_despite_tool_item_on_trench() -> void:
 	var world := _fresh_world(320002)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	_expect(not world.spawn_ground_tool_item("pick", 1, 0).is_empty(), "setup: a tool item must spawn on the trench tile")
 	var wolf := _spawn_wolf(world, "trap_wolf_tool", 0, 0)
-	_escape_and_confirm(world, wolf, "trap_wolf_tool", Vector2i(1, 0), "tool item")
+	_escape_and_confirm(world, wolf, "trap_wolf_tool", Vector3i(1, 0, 0), "tool item")
 
 func _check_hostile_escapes_despite_object_on_trench() -> void:
 	var world := _fresh_world(320003)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	TestAccess.object_table(world).set_object(1, 0, "chair")
+	TestAccess.object_table(world).set_object(Vector3i(1, 0, 0), "chair")
 	var wolf := _spawn_wolf(world, "trap_wolf_object", 0, 0)
-	_escape_and_confirm(world, wolf, "trap_wolf_object", Vector2i(1, 0), "object")
+	_escape_and_confirm(world, wolf, "trap_wolf_object", Vector3i(1, 0, 0), "object")
 
 func _check_hostile_escapes_despite_stockpile_cell_on_trench() -> void:
 	var world := _fresh_world(320004)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	TestAccess.zone_table(world).zones["zone_test"] = {"id": "zone_test", "x": 1, "y": 0, "width": 1, "height": 1}
+	TestAccess.zone_table(world).zones["zone_test"] = {"id": "zone_test", "x": 1, "y": 0, "z": 0, "width": 1, "height": 1}
 	var wolf := _spawn_wolf(world, "trap_wolf_zone", 0, 0)
-	_escape_and_confirm(world, wolf, "trap_wolf_zone", Vector2i(1, 0), "stockpile cell")
+	_escape_and_confirm(world, wolf, "trap_wolf_zone", Vector3i(1, 0, 0), "stockpile cell")
 
 ## A go_to arrival and this same tick's work
 ## completion can land together -- a real IncidentScheduler.propose() wait
@@ -369,9 +369,9 @@ func _check_hostile_escapes_despite_stockpile_cell_on_trench() -> void:
 func _check_incident_wait_job_traps_before_despawn() -> void:
 	var world := _fresh_world(321001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
-	var actor := ActorTableType.spawn("wolf", 0, 0, TestAccess.content(world), "trap_wolf_incident")
+	var actor := ActorTableType.spawn("wolf", Vector3i(0, 0, 0), TestAccess.content(world), "trap_wolf_incident")
 	actor["factionId"] = "wildlife"
-	var job_id := TestAccess.incidents(world).propose(actor, Vector2i(1, 0), 1)
+	var job_id := TestAccess.incidents(world).propose(actor, Vector3i(1, 0, 0), 1)
 	_expect(not job_id.is_empty(), "setup: IncidentScheduler.propose() must accept the staged wait job targeting the trench tile")
 	var trapped_seen := false
 	for _i in TRAP_TICK_BOUND:
@@ -402,10 +402,10 @@ func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
 	var world := _fresh_world(322001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_south", 1, 1)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_south")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_south")
 	_expect(submit.get("ok", false), "setup: submission from the south must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
-	_expect((wolf["trapped"] as Dictionary).get("fromTile") == Vector2i(1, 1),
+	_expect((wolf["trapped"] as Dictionary).get("fromTile") == Vector3i(1, 1, 0),
 		"trapped.fromTile must record the tile the wolf fell from (south)")
 	var escaped := false
 	for _i in TRAP_TICK_BOUND:
@@ -414,7 +414,7 @@ func _check_hostile_exit_prefers_entry_tile_from_south() -> void:
 			escaped = true
 			break
 	_expect(escaped, "setup: the wolf must escape")
-	_expect(Vector2i(int(wolf["x"]), int(wolf["y"])) == Vector2i(1, 1),
+	_expect(TileGrid.tile_of(wolf) == Vector3i(1, 1, 0),
 		"the escaped actor must prefer the tile it fell from (south, (1,1)) over the row-major fallback order, which would otherwise pick west (0,0)")
 
 ## Once fromTile itself becomes impassable
@@ -424,10 +424,10 @@ func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 	var world := _fresh_world(322002)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_blocked_entry", 1, 1)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_blocked_entry")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_blocked_entry")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
-	TestAccess.object_table(world).set_object(1, 1, "wooden_wall") # seal the tile it fell from after it is already trapped
+	TestAccess.object_table(world).set_object(Vector3i(1, 1, 0), "wooden_wall") # seal the tile it fell from after it is already trapped
 	var escaped := false
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -435,7 +435,7 @@ func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 			escaped = true
 			break
 	_expect(escaped, "setup: the wolf must still escape once its entry tile is blocked")
-	_expect(Vector2i(int(wolf["x"]), int(wolf["y"])) == Vector2i(0, 0),
+	_expect(TileGrid.tile_of(wolf) == Vector3i(0, 0, 0),
 		"once the entry tile is blocked, the exit must fall back to the row-major fallback order (west, (0,0)) rather than the now-impassable entry tile")
 
 ## The exit must use the actor's own faction
@@ -449,15 +449,15 @@ func _check_hostile_exit_falls_back_when_entry_tile_blocked() -> void:
 func _check_hostile_exit_never_uses_forbidden_door() -> void:
 	var world := _fresh_world(322003)
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_TRENCH)
-	TestAccess.object_table(world).set_object(1, 0, "door") # north row-major candidate: colony-passable, wildlife-forbidden
+	TestAccess.object_table(world).set_object(Vector3i(1, 0, 0), "door") # north row-major candidate: colony-passable, wildlife-forbidden
 	# west (0,1) and south (1,2) stay plain floor from _fresh_world()'s own fill.
 	var wolf := _spawn_wolf(world, "trap_wolf_door", 2, 1)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_door")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 1, 0), 1, world.get_tick(), "incident", "trap_wolf_door")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
-	_expect((wolf["trapped"] as Dictionary).get("fromTile") == Vector2i(2, 1),
+	_expect((wolf["trapped"] as Dictionary).get("fromTile") == Vector3i(2, 1, 0),
 		"setup: the wolf must have fallen in from the east")
-	TestAccess.object_table(world).set_object(2, 1, "wooden_wall") # seal fromTile so the search must fall through to the row-major order
+	TestAccess.object_table(world).set_object(Vector3i(2, 1, 0), "wooden_wall") # seal fromTile so the search must fall through to the row-major order
 	var escaped := false
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -465,10 +465,10 @@ func _check_hostile_exit_never_uses_forbidden_door() -> void:
 			escaped = true
 			break
 	_expect(escaped, "the wolf must still find a non-door exit")
-	var final_tile := Vector2i(int(wolf["x"]), int(wolf["y"]))
-	_expect(final_tile != Vector2i(1, 0),
+	var final_tile := TileGrid.tile_of(wolf)
+	_expect(final_tile != Vector3i(1, 0, 0),
 		"the exit must never be the wildlife-forbidden door -- the actor's own faction passability must be used, never the colony default")
-	_expect(final_tile == Vector2i(0, 1),
+	_expect(final_tile == Vector3i(0, 1, 0),
 		"with the entry tile blocked and the north candidate a forbidden door, the exit must fall back to the next passable row-major candidate (west, (0,1))")
 
 ## A "recoverable blocked-exit outcome" -- every
@@ -483,7 +483,7 @@ func _check_hostile_stays_trapped_and_retries_when_no_exit_available() -> void:
 	var world := _fresh_world(322004)
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_sealed", 1, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_sealed")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 1, 0), 1, world.get_tick(), "incident", "trap_wolf_sealed")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
@@ -496,7 +496,7 @@ func _check_hostile_stays_trapped_and_retries_when_no_exit_available() -> void:
 		"a hostile actor with no passable exit anywhere must stay trapped -- a blocked climb-out is a recoverable outcome, not a silent trapped: null")
 	var still_retrying := false
 	for job in world.get_jobs():
-		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 1) and String(job.get("status", "")) == "active":
+		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 1, 0) and String(job.get("status", "")) == "active":
 			still_retrying = true
 	_expect(still_retrying, "a blocked climb-out must keep retrying with a freshly submitted escape_trench job, not give up")
 
@@ -507,7 +507,7 @@ func _check_hostile_ticks_remaining_syncs_with_real_work_progress() -> void:
 	var world := _fresh_world(323001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_sync", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_sync")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_sync")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	_expect(int((wolf["trapped"] as Dictionary).get("ticksRemaining", -1)) == WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS,
@@ -545,8 +545,8 @@ func _check_two_hostiles_trapped_on_same_tile_each_get_correct_duration() -> voi
 	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	var wolf_a := _spawn_wolf(world, "trap_wolf_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_b", 2, 0)
-	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_a")
-	var submit_b := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_b")
+	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_a")
+	var submit_b := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_b")
 	_expect(submit_a.get("ok", false) and submit_b.get("ok", false), "setup: both incident submissions must be accepted")
 	var both_trapped := false
 	for _i in TRAP_TICK_BOUND:
@@ -566,7 +566,7 @@ func _check_two_hostiles_trapped_on_same_tile_each_get_correct_duration() -> voi
 		active_count = 0
 		queued_count = 0
 		for job in world.get_jobs():
-			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 0):
+			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 0, 0):
 				if String(job.get("status", "")) == "active": active_count += 1
 				elif String(job.get("status", "")) == "queued": queued_count += 1
 		if active_count == 1 and queued_count == 1:
@@ -610,7 +610,7 @@ func _check_save_io_round_trip_preserves_trapped_hostile() -> void:
 	var world := _fresh_world(325001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_saveio", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_saveio")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_saveio")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	for _i in 5:
@@ -643,14 +643,14 @@ func _check_save_io_rejects_malformed_from_tile() -> void:
 	var world := _fresh_world(325002)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_malformed", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_malformed")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_malformed")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	var state := world.to_save_state()
 	var found := false
 	for entity in state["entities"]:
 		if String((entity as Dictionary).get("id", "")) == "trap_wolf_malformed":
-			(entity as Dictionary)["trapped"]["fromTile"] = {"x": -1, "y": 0}
+			(entity as Dictionary)["trapped"]["fromTile"] = {"x": -1, "y": 0, "z": 0}
 			found = true
 	_expect(found, "setup: the encoded state must carry the trapped wolf's own entity")
 	var validation: Dictionary = TestAccess.save_validate_state(state)
@@ -668,7 +668,7 @@ func _check_save_load_immediately_after_trapping_preserves_escape_duration() -> 
 	var world := _fresh_world(326001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_immediate", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_immediate")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_immediate")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	var saved := world.to_save_state()
@@ -698,8 +698,8 @@ func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> vo
 	TestAccess.set_tile(world, 2, 1, WorldStateType.TILE_ROCK)
 	var wolf_a := _spawn_wolf(world, "trap_wolf_q_a", 0, 0)
 	var wolf_b := _spawn_wolf(world, "trap_wolf_q_b", 2, 0)
-	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_q_a")
-	var submit_b := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_q_b")
+	var submit_a := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_q_a")
+	var submit_b := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_q_b")
 	_expect(submit_a.get("ok", false) and submit_b.get("ok", false), "setup: both incident submissions must be accepted")
 	var both_trapped := false
 	for _i in TRAP_TICK_BOUND:
@@ -715,7 +715,7 @@ func _check_save_load_two_queued_escapes_sharing_tile_preserves_duration() -> vo
 		active_count = 0
 		queued_count = 0
 		for job in world.get_jobs():
-			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 0):
+			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 0, 0):
 				if String(job.get("status", "")) == "active": active_count += 1
 				elif String(job.get("status", "")) == "queued": queued_count += 1
 		if active_count == 1 and queued_count == 1:
@@ -752,18 +752,18 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 	var world := _fresh_world(326003)
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_retry", 1, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 1), 1, world.get_tick(), "incident", "trap_wolf_retry")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 1, 0), 1, world.get_tick(), "incident", "trap_wolf_retry")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	var initial_job_id := ""
 	for job in world.get_jobs():
-		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 1):
+		if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 1, 0):
 			initial_job_id = String(job["id"])
 	_expect(not initial_job_id.is_empty(), "setup: the wolf's first escape_trench job must be found")
-	TestAccess.object_table(world).set_object(1, 0, "wooden_wall")
-	TestAccess.object_table(world).set_object(0, 1, "wooden_wall")
-	TestAccess.object_table(world).set_object(2, 1, "wooden_wall")
-	TestAccess.object_table(world).set_object(1, 2, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(1, 0, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(0, 1, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(2, 1, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(1, 2, 0), "wooden_wall")
 	# Tick only until the FIRST climb finishes and the blocked exit forces a
 	# fresh resubmission (a new job_id on the same tile) -- save right as
 	# that retry appears, still queued or only just active, the exact window
@@ -772,14 +772,14 @@ func _check_save_load_after_blocked_exit_retry_preserves_duration() -> void:
 	for _i in WorldStateType.DEFAULT_TRENCH_CLIMB_TICKS + 10:
 		world.tick()
 		for job in world.get_jobs():
-			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 1) \
+			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 1, 0) \
 					and String(job["id"]) != initial_job_id and String(job.get("status", "")) in ["queued", "active"]:
 				retry_job_id = String(job["id"])
 		if not retry_job_id.is_empty():
 			break
 	_expect(not retry_job_id.is_empty(), "setup: a blocked climb-out must resubmit a fresh escape_trench job to retry")
 	_expect(wolf.get("trapped") != null, "setup: the wolf must still be trapped, now retrying")
-	TestAccess.object_table(world).set_object(1, 2, "") # open exactly one exit for the retry to find
+	TestAccess.object_table(world).set_object(Vector3i(1, 2, 0), "") # open exactly one exit for the retry to find
 	var saved := world.to_save_state()
 	var restored: WorldStateType = WorldStateType.from_save_state(saved)
 	var restored_wolf := TestAccess.find_colonist(restored, "trap_wolf_retry")
@@ -833,10 +833,10 @@ func _check_trapping_on_work_target_arrival_clears_progress() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_TRENCH)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id)
+	var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id)
 	_expect(submit.get("ok", false), "setup: till submission targeting the pre-existing trench tile must be accepted (bypasses CommandChecks, exactly like the scheduler's own gate does for an autonomous/direct submission)")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "the colonist must become trapped on arriving at its own job's target")
-	_expect(TestAccess.progress_table(world).get_progress(Vector2i(2, 0)) == null,
+	_expect(TestAccess.progress_table(world).get_progress(Vector3i(2, 0, 0)) == null,
 		"trapping on arrival at a work target must clear that target's owned work-progress key, not leave the cancelled job's progress behind")
 
 ## An actor trapped while carrying a haul item
@@ -854,10 +854,10 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_ROCK)
 	TestAccess.set_tile(world, 1, 1, WorldStateType.TILE_TRENCH)
-	TestAccess.item_table(world).items["item_test_wood"] = {"id": "item_test_wood", "x": 0, "y": 1, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_test_wood"] = {"id": "item_test_wood", "x": 0, "y": 1, "z": 0, "kind": "wood", "count": 1}
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_1", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 2, "y": 1, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 2, "y": 1, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "setup: stockpile zone must be added: %s" % zone_result)
 	var job_id := ""
 	for _i in TRAP_TICK_BOUND:
@@ -892,7 +892,7 @@ func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void
 	colonist["x"] = 1
 	colonist["y"] = 0
 	var colonist_id: String = colonist["id"]
-	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "dig", colonist_id)
+	var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "dig", colonist_id)
 	_expect(submit.get("ok", false), "setup: dig submission must be accepted")
 	var job_id: String = String(submit["job_id"])
 	for _i in TRAP_TICK_BOUND:
@@ -933,7 +933,7 @@ func _check_trapped_colonist_removed_on_death() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	_expect(TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
+	_expect(TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"setup: till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
 	TestAccess.combat_system(world).apply_actor_death(colonist)
@@ -954,13 +954,13 @@ func _check_trapped_hostile_removed_on_death_during_escape() -> void:
 	var world := _fresh_world(332001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var wolf := _spawn_wolf(world, "trap_wolf_death", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_wolf_death")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_wolf_death")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	_expect(_tick_until_trapped(world, wolf, TRAP_TICK_BOUND), "setup: the wolf must be trapped before this check runs")
 	var escape_job_id := ""
 	for _i in TRAP_TICK_BOUND:
 		for job in world.get_jobs():
-			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector2i(1, 0) \
+			if String(job.get("kind", "")) == "escape_trench" and job["target"] == Vector3i(1, 0, 0) \
 					and String(job.get("status", "")) == "active":
 				escape_job_id = String(job["id"])
 		if not escape_job_id.is_empty():
@@ -998,14 +998,14 @@ func _check_trader_crosses_trench_unaffected() -> void:
 	var world := _fresh_world(333001)
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	var trader := _spawn_trader(world, "trap_trader", 0, 0)
-	var submit := TestAccess.scheduler(world).submit_autonomous(Vector2i(1, 0), 1, world.get_tick(), "incident", "trap_trader")
+	var submit := TestAccess.scheduler(world).submit_autonomous(Vector3i(1, 0, 0), 1, world.get_tick(), "incident", "trap_trader")
 	_expect(submit.get("ok", false), "setup: submission must be accepted")
 	var job_id: String = String(submit["job_id"])
 	var reached_trench := false
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
 		_expect(trader.get("trapped") == null, "a trader must never become trapped by stepping onto or targeting a trench tile")
-		if Vector2i(int(trader["x"]), int(trader["y"])) == Vector2i(1, 0):
+		if TileGrid.tile_of(trader) == Vector3i(1, 0, 0):
 			reached_trench = true
 			break
 	_expect(reached_trench, "setup: the trader must actually reach the trench tile")
@@ -1039,15 +1039,15 @@ func _check_trapped_colonist_cannot_flee_via_combat_giver() -> void:
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	var colonist_id: String = colonist["id"]
-	_expect(TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
+	_expect(TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", colonist_id).get("ok", false),
 		"setup: till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: the colonist must be trapped before this check runs")
-	var trapped_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	var control: Dictionary = ActorTableType.spawn("colonist", 20, 20, TestAccess.content(world), "flee_control_colonist")
+	var trapped_tile := TileGrid.tile_of(colonist)
+	var control: Dictionary = ActorTableType.spawn("colonist", Vector3i(20, 20, 0), TestAccess.content(world), "flee_control_colonist")
 	control.erase("carrying")
 	control["hands"] = []
 	TestAccess.append_colonist(world, control)
-	var control_start := Vector2i(int(control["x"]), int(control["y"]))
+	var control_start := TileGrid.tile_of(control)
 	_spawn_raider(world, "flee_threat_raider_cg", trapped_tile.x + 3, trapped_tile.y)
 	colonist["health"]["hp"] = 25 # below the colonist's own 0.3 flee_hp_fraction
 	control["health"]["hp"] = 25 # the same threshold, so the control is equally eligible to flee
@@ -1057,9 +1057,9 @@ func _check_trapped_colonist_cannot_flee_via_combat_giver() -> void:
 		_expect(String(job.get("kind", "")) != "flee" or TestAccess.job_restricted_to(world, String(job["id"])) != colonist_id,
 			"a trapped colonist below its own flee threshold must never get an auto-submitted flee job, got one in status '%s'" % job.get("status"))
 	_expect(colonist.get("trapped") != null, "the colonist must still be trapped")
-	_expect(Vector2i(int(colonist["x"]), int(colonist["y"])) == trapped_tile,
+	_expect(TileGrid.tile_of(colonist) == trapped_tile,
 		"a trapped colonist must never move away, even while below its own flee threshold")
-	_expect(Vector2i(int(control["x"]), int(control["y"])) != control_start,
+	_expect(TileGrid.tile_of(control) != control_start,
 		"control: an untrapped colonist facing the same hostile threat and hp must actually flee, proving CombatGiver was exercised for real -- otherwise the trapped colonist's own lack of a flee job proves nothing")
 
 ## Trapping also applies to a colonist that falls into a trench during an

@@ -70,7 +70,7 @@ func _run() -> void:
 func _run_and_verify(world, job_type: String, target: Vector2i, expected_tile: String) -> void:
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "%s_new_game" % job_type, "tick": world.get_tick(),
-		"type": job_type, "payload": {"x": target.x, "y": target.y, "priority": 1},
+		"type": job_type, "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1},
 	})
 	_expect(result.get("ok", false), "%s command on a New Game world must be accepted: %s" % [job_type, result])
 	var ticks := 0

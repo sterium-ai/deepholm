@@ -272,7 +272,7 @@ func _check_grid_reconciles_rows_when_colonist_set_changes() -> void:
 	var original_count := panel.cell_count()
 
 	TestAccess.colonists(world).append({
-		"id": "colonist_extra", "kind": "colonist", "x": 0, "y": 0,
+		"id": "colonist_extra", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
 		"route": null, "work": null, "carrying": null, "held_tool": "",
