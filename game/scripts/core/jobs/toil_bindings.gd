@@ -8,7 +8,8 @@ extends RefCounted
 ## - carried cargo is never lost at a terminal transition (_force_drop_carried_item() fallback).
 ## - a need-paused job's cargo is deposited without touching route/work (the need job's).
 ## - site_fetch's "cell" is null while fetching, the site origin once delivering; job["site"]
-##   always names its site, so a mid-chain load needs no extra field.
+##   always names its site, so a mid-chain load needs no extra field. craft_fetch (F2, ADR 061)
+##   shares that shape with a workbench origin as its "site", but never chains: one source, one bill.
 ## - incident, flee and approach jobs are never resubmitted on unreachable.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
@@ -27,6 +28,7 @@ const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
 const NeedsSystemType = preload("res://scripts/core/actors/needs_system.gd")
 const CombatGiverType = preload("res://scripts/core/combat/combat_giver.gd")
 const ApproachGiverType = preload("res://scripts/core/combat/approach_giver.gd")
+const CraftingSystemType = preload("res://scripts/core/crafting/crafting_system.gd")
 
 const TILE_WATER := ContentRegistryType.TILE_WATER
 
@@ -46,6 +48,7 @@ var _tile_grid: TileGridType
 var _object_table: ObjectTableType
 var _passability: PassabilityType
 var _construction: ConstructionSystemType
+var _crafting: CraftingSystemType
 var _trench: TrenchSystemType
 var _needs_system: NeedsSystemType
 var _reroutes: Dictionary
@@ -68,8 +71,9 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 		needs_system: NeedsSystemType, reroutes: Dictionary, tool_requirements_by_kind: Dictionary,
 		get_colonists: Callable, find_colonist: Callable, find_job_colonist: Callable, finish_job: Callable,
 		resubmit_unreachable_job: Callable, routable_to: Callable, route_cost: Callable,
-		need_giver_resolve_job: Callable, rescue_giver_resolve_job: Callable) -> void:
+		need_giver_resolve_job: Callable, rescue_giver_resolve_job: Callable, crafting: CraftingSystemType) -> void:
 	_scheduler = scheduler
+	_crafting = crafting
 	_toils = toils
 	_item_table = item_table
 	_tool_store = tool_store
@@ -150,6 +154,35 @@ func drop_carried_haul_item(job_id: String) -> void:
 			_deposit_carried_item(carrier)
 		return
 
+## Fails colonist_id's haul job once what it carried was consumed (ItemTable's callback,
+## moved from WorldState). A haul paused by a need only loses its pause entry: the route/work
+## belong to the need job.
+func cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
+	var job_id: String = ""
+	var was_paused := false
+	if _needs_system.paused_jobs.has(colonist_id):
+		job_id = String(_needs_system.paused_jobs[colonist_id])
+		was_paused = true
+	else:
+		var assignment: Variant = _scheduler.get_assignments().get(colonist_id)
+		if assignment != null:
+			job_id = String(assignment["job_id"])
+	if job_id.is_empty():
+		return
+	var job := _scheduler.queue.get_job(job_id)
+	if String(job.get("kind", "")) != "haul":
+		return
+	if was_paused:
+		_needs_system.paused_jobs.erase(colonist_id)
+	else:
+		var colonist: Dictionary = _find_colonist.call(colonist_id)
+		if not colonist.is_empty():
+			colonist["route"] = null
+			colonist["work"] = null
+			_reroutes.erase(colonist_id)
+	_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
+	_finish_job.call(job_id, "fail_job")
+
 ## Terminal, not retried; HaulGiver resubmits next tick if the item is still on the ground.
 func terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void:
 	drop_carried_haul_item(job_id)
@@ -171,14 +204,14 @@ func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector2i:
 	var kind := String(job["kind"])
 	if kind == "haul":
 		return job["target"] if is_first else job["cell"]
-	if kind == "site_fetch" and not is_first:
+	if kind in JobQueueType.FETCH_KINDS and not is_first:
 		return job["site"]
 	return job["target"]
 
 ## site_fetch's "cell" doubles as the delivering flag (JobQueue.mark_site_fetch_delivering()),
 ## so one job can visit several sources before it delivers.
 func _toil_is_first_leg(job: Dictionary, colonist: Dictionary) -> bool:
-	if String(job.get("kind", "")) != "site_fetch":
+	if String(job.get("kind", "")) not in JobQueueType.FETCH_KINDS:
 		return not InventoryType.is_carrying(colonist)
 	return job.get("cell") == null
 
@@ -197,7 +230,7 @@ func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, fac
 ## adjacent and can never wall itself in when the site completes.
 func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
 	var kind := String(job["kind"])
-	return kind == "site_work" or (kind == "site_fetch" and not is_first)
+	return kind == "site_work" or (kind in JobQueueType.FETCH_KINDS and not is_first)
 
 ## Forces the fresh bounded search (which applies the trim above) instead of the scheduler's
 ## precomputed path: always for site_work, and for a site_fetch already retargeted.
@@ -215,11 +248,11 @@ func toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> voi
 	elif String(job["kind"]) == "rescue":
 		# Retired, so another rescuer may be chosen.
 		_trench.retire_rescue_job(job_id, job)
-	elif String(job["kind"]) == "site_fetch":
-		# Fails (dropping cargo, releasing the item); ConstructionGiver submits a replacement.
+	elif String(job["kind"]) in JobQueueType.FETCH_KINDS:
+		# Fails (dropping cargo, releasing the item); its giver submits a replacement.
 		terminate_haul_job_by_id(job_id, "blocked_target_unreachable", "restore_target_access")
-	elif String(job["kind"]) == "site_work":
-		# No cargo; ConstructionGiver tops the site back up to max_builders later.
+	elif String(job["kind"]) in ["site_work", "craft_work"]:
+		# No cargo; ConstructionGiver/CraftGiver submit a replacement later.
 		_finish_job.call(job_id, "cancel_job")
 	elif is_first or String(job["kind"]) != "haul":
 		_resubmit_unreachable_job.call(job_id, job)
@@ -233,16 +266,21 @@ func _toil_item_id_for(job: Dictionary) -> String:
 func _toil_cell_for(job: Dictionary) -> Vector2i:
 	return job["cell"]
 
-## The site a site_fetch is delivering to; "" for any other kind.
+## The site a site_fetch (the bench bill a craft_fetch) is delivering to; "" for any other kind.
 func _toil_site_id_for(job: Dictionary) -> String:
 	if job.get("site") == null:
 		return ""
+	if job.get("kind", "") == "craft_fetch":
+		var bench_tile: Vector2i = job["site"]
+		return _crafting.bill_id_at(bench_tile)
 	return _construction.site_table.find_at_origin(job["site"])
 
 ## Clamps a site_fetch pick_up to what this site and every reachable, short, not-at-capacity
 ## sibling still need of that kind, minus what hands hold: deposit() never takes more, and
 ## an excess would stay in hands. -1 (take the whole stack) otherwise.
 func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
+	if job.get("kind", "") == "craft_fetch":
+		return _crafting.pick_up_count(job, colonist)
 	if String(job.get("kind", "")) != "site_fetch":
 		return -1
 	var site_id := _toil_site_id_for(job)
@@ -267,6 +305,9 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 ## cost is no farther than the next source's; otherwise reserve and retarget that source.
 func _toil_on_pick_up_success(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
+	if job.get("kind", "") == "craft_fetch":
+		_scheduler.queue.mark_site_fetch_delivering(job_id) # one source per craft_fetch
+		return
 	if String(job.get("kind", "")) != "site_fetch":
 		return
 	var colonist: Dictionary = _find_job_colonist.call(job_id)
@@ -322,7 +363,9 @@ func _toil_on_place_success(job_id: String) -> void:
 func _toil_on_deposit_success(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
 	var colonist: Dictionary = _find_job_colonist.call(job_id)
-	if not colonist.is_empty() and InventoryType.is_carrying(colonist):
+	if not colonist.is_empty() and InventoryType.is_carrying(colonist) and job.get("kind", "") == "craft_fetch":
+		drop_carried_item_from(colonist) # a bill never chains to a sibling: leftovers go down
+	elif not colonist.is_empty() and InventoryType.is_carrying(colonist):
 		var kind := String((InventoryType.hands_snapshot(colonist)[0] as Dictionary)["kind"])
 		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
 		var delivered_site_id := _toil_site_id_for(job)
@@ -359,6 +402,9 @@ func _toil_on_work_complete(job_id: String) -> void:
 			# Progress is the site's shared counter (every builder adds to it), so N builders
 			# sum; ConstructionSystem finalizes the site once it meets build_ticks.
 			_construction.add_site_work(target, job_id)
+		"craft_work":
+			# F2 (ADR 061): spends the bill's held inputs and leaves the outputs by the bench.
+			_crafting.complete_craft(target)
 		"sleep":
 			var colonist: Dictionary = _find_job_colonist.call(job_id)
 			if not colonist.is_empty():

@@ -91,7 +91,9 @@ would do. `dig`, `chop`, `forage`, `till`, `sow`, `mine`, `complete_job`,
 each have a check function. `build` and `build_line` are previewed through
 `ConstructionSystem`'s own checks, and `cancel_site` through
 `CommandChecks.check_cancel_site_command()`: the same functions their `apply()`
-handlers run. `noop`
+handlers run. The workbench commands (`craft_set_target`, `craft_add_order`,
+`craft_cancel_order`, see "Workbench commands" below) are previewed through
+`CraftingSystem.check_command()`, which their handler also runs. `noop`
 always previews `{"ok": true}` once envelope validation
 passes (its own `apply()` handler never rejects); an unrecognized type
 previews the same `unknown_command_type` rejection `apply()`'s dispatch
@@ -117,6 +119,24 @@ mirroring it, so the rule stays in exactly one place:
   consulted by `preview()` only: `apply()`'s own terminal branch keeps going
   through `JobQueue._finish()` itself so a rejected terminal command still
   produces the same `job_rejected` + `command_rejected` event pair.
+
+## Workbench commands
+
+F2 ([ADR 061](../../../../docs/decisions/061-workbench-recipes-and-craft-labour.md)),
+handled by `handlers/crafting_handler.gd`; `(x, y)` is any tile of a colony workbench:
+
+| type | payload | effect |
+|------|---------|--------|
+| `craft_set_target` | `{x, y, recipe, count}`, count 0..999 | "keep `count` in stock"; 0 removes the target |
+| `craft_add_order` | `{x, y, recipe, count}`, count 1..999 | appends an order; the applied result carries `"order_id"` |
+| `craft_cancel_order` | `{x, y, order_id}` | removes the order; if the bench's bill serves it, its jobs end and its held inputs drop next to the bench |
+
+Rejections (`reason`/`params.detail`): `invalid_target`/`not_a_workbench`,
+`invalid_target`/`recipe_wrong_bench` (`recipe`), `invalid_target`/`unknown_craft_order`,
+`invalid_payload`/`unknown_recipe` (`recipe`), `invalid_payload`/`craft_count_out_of_range`,
+`invalid_payload`/`craft_payload` (a missing or mistyped field) and
+`invalid_payload`/`craft_extra_field` (`field`). `WorldState.get_crafting_benches()` lists every
+colony workbench with its `targets`, `orders` and `bill`.
 
 ## Reads (non-mutating)
 

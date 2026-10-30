@@ -15,9 +15,10 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
 ## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2); v4 saves the scenario's
 ## calendar and enabled incidents (A16b, ADR 057); v5 saves route-search costs and SaveIO writes
-## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059).
+## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059);
+## v7 saves the workbench targets, orders and bills (F2, ADR 061).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 6
+const SCHEMA_VERSION := 7
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -58,6 +59,8 @@ static func encode(world: WorldState) -> Dictionary:
 		"objects": object_table["objects"],
 		# One record per active construction site.
 		"constructionSites": world._construction.encode()["constructionSites"],
+		# ADR 061 (v6): per-bench targets, orders and the bill in progress.
+		"crafting": world._crafting.encode()["crafting"],
 		"zones": zone_table["zones"],
 		"nextZoneId": zone_table["nextZoneId"],
 		# F1 (ADR 059): growth of every sown tile, in tile-key order.
@@ -116,6 +119,8 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	world._object_table.decode(state)
 	# Absent "constructionSites" restores an empty table (ConstructionSystem.decode()).
 	world._construction.decode(state)
+	# Absent "crafting" restores no configured bench (CraftingSystem.decode()).
+	world._crafting.decode(state)
 	world._zone_table.decode(state)
 	# After the tiles: reconciles the records with the decoded stage tiles (FarmSystem.decode()).
 	world._farm.decode(state)
@@ -208,6 +213,9 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 			cost_fn = world._passability.is_passable
 		elif String(job.get("kind", "")) == "haul" and InventoryType.is_carrying(colonist):
 			cost_fn = world._passability.is_passable
+		elif job.get("kind", "") == "craft_fetch" and job.get("cell") != null:
+			# A delivering craft_fetch routes to its bench (impassable): the target-tile exception.
+			cost_fn = world._routable_to(job["site"] as Vector2i, faction_id)
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
 			# The carrying build leg routes to job.site (ToilBindings._toil_go_to_passable()).
 			cost_fn = world._routable_to(job["site"], faction_id)

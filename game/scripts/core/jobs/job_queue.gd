@@ -25,6 +25,9 @@ const HAUL_KIND := "haul"
 ## tiles are reserved to "site:<id>" by ConstructionSystem, never to a job (ADR 040).
 const SITE_FETCH_KIND := "site_fetch"
 const SITE_WORK_KIND := "site_work"
+## F2 (ADR 061): craft_fetch hauls a bill's inputs to a workbench through site_fetch's
+## activation, reservations and delivering flag; "site" is the bench origin.
+const FETCH_KINDS := [SITE_FETCH_KIND, "craft_fetch"]
 
 var _random: RandomNumberGenerator
 var _can_reach: Callable
@@ -141,10 +144,10 @@ func retarget_site_fetch_source(job_id: String, item_id: String, target: Vector2
 	return true
 
 ## Sets "cell" = "site": the job stops fetching and delivers what its hands hold
-## (ToilBindings._toil_is_first_leg() reads it). No-op false unless active site_fetch.
+## (ToilBindings._toil_is_first_leg() reads it). No-op false unless an active FETCH_KINDS job.
 func mark_site_fetch_delivering(job_id: String) -> bool:
 	var job := _find_job(job_id)
-	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
+	if job.is_empty() or job["status"] != "active" or String(job["kind"]) not in FETCH_KINDS:
 		return false
 	job["cell"] = job["site"]
 	return true
@@ -207,7 +210,7 @@ func tick() -> void:
 			if String(job["kind"]) == HAUL_KIND:
 				_tick_haul(job)
 				continue
-			if String(job["kind"]) == SITE_FETCH_KIND:
+			if String(job["kind"]) in FETCH_KINDS:
 				_tick_site_fetch(job)
 				continue
 			if String(job["kind"]) == SITE_WORK_KIND:
@@ -280,7 +283,7 @@ func _tick_haul(job: Dictionary) -> void:
 	_emit("reservation_acquired", job["id"], {"target": cell, "key": cell_key})
 	_emit("job_active", job["id"], {})
 
-## site_fetch activation: reserves only the source item (see SITE_FETCH_KIND).
+## site_fetch/craft_fetch activation: reserves only the source item (see SITE_FETCH_KIND).
 func _tick_site_fetch(job: Dictionary) -> void:
 	var item_key := ITEM_KEY_PREFIX + String(job["item_id"])
 	var item_owner: String = _table.owner(item_key)
@@ -355,7 +358,7 @@ func reactivate(job_id: String) -> bool:
 		return false
 	if String(job["kind"]) == HAUL_KIND:
 		return _reactivate_haul(job)
-	if String(job["kind"]) == SITE_FETCH_KIND:
+	if String(job["kind"]) in FETCH_KINDS:
 		return _reactivate_site_fetch(job)
 	if String(job["kind"]) == SITE_WORK_KIND:
 		job["status"] = "active"
@@ -519,7 +522,7 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 			var cell: Variant = job.get("cell")
 			if cell != null:
 				_table.acquire(_cell_key(cell), job["id"])
-		elif String(job["kind"]) == SITE_FETCH_KIND:
+		elif String(job["kind"]) in FETCH_KINDS:
 			_table.acquire(ITEM_KEY_PREFIX + String(job["item_id"]), job["id"])
 		elif String(job["kind"]) == SITE_WORK_KIND:
 			pass # no reservation of its own -- see _tick_site_work().

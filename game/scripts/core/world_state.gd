@@ -159,6 +159,8 @@ var _combat_system: CombatSystemType
 var _approach_giver: ApproachGiverType
 var _construction: ConstructionSystemType
 var _construction_giver: ConstructionGiverType
+var _crafting: CraftingSystem # F2 (ADR 061): workbench targets, orders and bills
+var _craft_giver: CraftGiver
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
 var _farm: FarmSystemType # crop growth + FarmGiver (F1, ADR 059)
@@ -221,7 +223,7 @@ func _build_scheduling(dig_find_random: RandomNumberGenerator) -> void:
 	_event_log = EventLogType.new(_clock, _scheduler.queue, PRIORITY_COMMAND)
 	_item_table = ItemTableType.new(_content, dig_find_random, func() -> Array[Dictionary]: return _colonists,
 		passability, get_tile, _zone_table.is_in_any_zone, _scheduler.queue.get_reservation_table,
-		_fail_haul_jobs_referencing_item, _cancel_haul_job_carrying_consumed_item)
+		_fail_haul_jobs_referencing_item, func(colonist_id: String) -> void: _toil_bindings.cancel_haul_job_carrying_consumed_item(colonist_id))
 	# F3: the faction gates read this world's actors, never a hardcoded "colony".
 	_scheduler.set_order_eligibility(_passability.colonist_may_be_ordered)
 	_scheduler.set_reservation_gate(_passability.colonist_may_reserve_colony_items)
@@ -241,6 +243,8 @@ func _build_systems() -> void:
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
+	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, spawn_ground_tool_item,
+		set_tool_item_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit)
 	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
 	_trench = TrenchSystemType.new(_content, _relations, _tile_grid, _passability, _scheduler, _progress_table, _clock,
 		func() -> Array[Dictionary]: return _colonists, _find_colonist, _find_job_colonist, _finish_job,
@@ -265,7 +269,7 @@ func _build_commands() -> void:
 		ZoneHandlerType.new(_event_log, _scheduler, _zone_table, check, _terminate_haul_job_by_id),
 		ActorHandlerType.new(_event_log, check, _find_colonist),
 		IncidentHandlerType.new(_clock, _event_log, _trade, check,
-			func(incident_id: String, tick: int) -> Array: return _incidents.force_spawn(incident_id, tick)))
+			func(incident_id: String, tick: int) -> Array: return _incidents.force_spawn(incident_id, tick)), _crafting)
 
 func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 	_toils = ToilExecutorType.new(int(_content.list("tiles")[0]["move_ticks_per_tile"]), _work_ticks, passability, _get_job,
@@ -276,7 +280,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		set_tool_item_held, set_tool_item_ground, _worker_view, _route_budget,
 		_zone_table.get_stockpile_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
-		_work_target_for, _construction.construction_site_exists, _construction.construction_site_deposit)
+		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
 	# Built after _toils; CombatGiver and ToilExecutor above reach it through lambdas.
 	_needs_system = NeedsSystemType.new(_content, _need_definitions, _need_full, PRIORITY_TICK, _clock, _calendar, _scheduler,
@@ -295,7 +299,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 	_toil_bindings = ToilBindingsType.new(_scheduler, _toils, _item_table, _tool_store, _tile_grid, _object_table, _passability,
 		_construction, _trench, _needs_system, _reroutes, tool_requirements_by_kind, func() -> Array[Dictionary]: return _colonists,
 		_find_colonist, _find_job_colonist, _finish_job, _resubmit_unreachable_job, _routable_to, _route_cost,
-		func(job_id: String) -> void: _need_giver.resolve_job(job_id), func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
+		func(job_id: String) -> void: _need_giver.resolve_job(job_id), func(job_id: String) -> void: _rescue_giver.resolve_job(job_id), _crafting)
 
 func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.set_route_budget(_route_budget)
@@ -309,6 +313,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
 		_construction.submit_site_work, _construction.site_table.materials_met, _construction.site_table.remaining)
+	_craft_giver = CraftGiver.new(_crafting, _scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _scheduler.queue.attach_item, _scheduler.queue.attach_site)
 	# Live tiles by reference: get_tiles() would copy 65536 Strings per tick.
 	_calendar_alert_giver = CalendarAlertGiverType.new(_worker_view, func() -> Array[String]: return _tile_grid.tiles, _has_item_of_kind, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK)
 
@@ -342,7 +347,8 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_combat_system, _combat_giver, _construction, _scheduler, _passability, _tile_grid, _toils, func() -> CalendarServiceType: return _calendar, _rescue_giver,
 		_trench, _incidents, _approach_giver, _item_table, _event_log, _calendar_alert_giver, _progress_table, _reroutes,
 		_toil_hooks, func() -> Array[Dictionary]: return _colonists, func() -> Dictionary: return _calendar_alerts_fired,
-		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index, _farm.advance)
+		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index, _farm.advance,
+		_craft_giver)
 
 var command_observer: Callable # optional (command, result) listener after each apply() from outside the core (area-order expansion bypasses it); never mutates (A11)
 ## apply() and tick() are the only mutators; preview() is apply()'s read-only dry run.
@@ -391,6 +397,7 @@ func state_hash(include_incidents: bool = true) -> int:
 	_progress_table.hash_into(snapshot)
 	_construction.hash_into(snapshot)
 	_farm.hash_into(snapshot)
+	_crafting.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 
@@ -423,6 +430,8 @@ func get_object_faction_id(x: int, y: int) -> String: return _object_table.get_o
 func get_objects() -> Array[Dictionary]: return _object_table.get_objects()
 func get_construction_sites() -> Array[Dictionary]: return _construction.get_construction_sites()
 func get_construction_site(x: int, y: int) -> Dictionary: return _construction.get_construction_site(x, y)
+## Every colony workbench with its targets, orders and bill (F2, ADR 061), for the viewer's panel.
+func get_crafting_benches() -> Array[Dictionary]: return _crafting.get_benches()
 func get_zones() -> Array[Dictionary]: return _zone_table.get_zones()
 func get_zone(id: String) -> Dictionary: return _zone_table.get_zone(id)
 func get_crop_at(x: int, y: int) -> Dictionary: return _farm.crop_at(x, y) # {} or {crop, growth, ripe_growth}
@@ -599,34 +608,6 @@ func _fail_haul_jobs_referencing_item(item_id: String) -> void:
 			continue
 		_terminate_haul_job_by_id(String(job["id"]), "blocked_missing_input", "resubmit_order")
 
-## Fails colonist_id's haul job once what it carried was consumed. A haul paused by a
-## need only loses its pause entry: the route/work belong to the need job.
-func _cancel_haul_job_carrying_consumed_item(colonist_id: String) -> void:
-	var job_id: String = ""
-	var was_paused := false
-	if _needs_system.paused_jobs.has(colonist_id):
-		job_id = String(_needs_system.paused_jobs[colonist_id])
-		was_paused = true
-	else:
-		var assignment: Variant = _scheduler.get_assignments().get(colonist_id)
-		if assignment != null:
-			job_id = String(assignment["job_id"])
-	if job_id.is_empty():
-		return
-	var job := _scheduler.queue.get_job(job_id)
-	if String(job.get("kind", "")) != "haul":
-		return
-	if was_paused:
-		_needs_system.paused_jobs.erase(colonist_id)
-	else:
-		var colonist := _find_colonist(colonist_id)
-		if not colonist.is_empty():
-			colonist["route"] = null
-			colonist["work"] = null
-			_reroutes.erase(colonist_id)
-	_scheduler.queue.set_pending_fail_reason(job_id, "blocked_missing_input", "resubmit_order")
-	_finish_job(job_id, "fail_job")
-
 ## start_work()'s resume lookup; a site_work job's duration always comes from its site.
 func _resume_work_progress(target: Vector2i, job_id: String):
 	var job := _get_job(job_id)
@@ -656,7 +637,7 @@ func _resolve_refused_reservations() -> void:
 			var job_id: String = String(entry["job_id"])
 			var worker: String = String(entry["worker"])
 			var job := _scheduler.queue.get_job(job_id)
-			if String(job.get("kind", "")) in ["haul", "site_fetch"]:
+			if String(job.get("kind", "")) in ["haul", "site_fetch", "craft_fetch"]:
 				var refused_colonist := _find_colonist(worker)
 				if not refused_colonist.is_empty():
 					_toil_bindings.drop_carried_item_from(refused_colonist)

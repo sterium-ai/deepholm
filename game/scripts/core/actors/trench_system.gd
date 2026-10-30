@@ -225,7 +225,7 @@ func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> v
 	var job := _scheduler.queue.get_job(job_id)
 	if String(job.get("status", "")) == "active":
 		var job_kind := String(job.get("kind", ""))
-		if job_kind in ["haul", "site_fetch"]: _drop_carried_haul_item.call(job_id)
+		if job_kind in ["haul", "site_fetch", "craft_fetch"]: _drop_carried_haul_item.call(job_id)
 		if _finish_job.call(job_id, "cancel_job").get("ok", false):
 			_progress_table.clear_terminated_job(job_id, job, true)
 			_resolve_giver_association.call(job_id, job_kind)

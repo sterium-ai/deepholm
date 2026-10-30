@@ -1,0 +1,8 @@
+{
+  "recipes": [
+    {"id": "axe", "bench": "workbench", "inputs": [{"item": "wood", "quantity": 3}, {"item": "stone", "quantity": 1}], "outputs": [{"item": "axe", "quantity": 1}]},
+    {"id": "pick", "bench": "workbench", "inputs": [{"item": "wood", "quantity": 2}, {"item": "stone", "quantity": 2}], "outputs": [{"item": "pick", "quantity": 1}]},
+    {"id": "planks", "bench": "workbench", "inputs": [{"item": "wood", "quantity": 1}], "outputs": [{"item": "planks", "quantity": 2}]},
+    {"id": "stone_blocks", "bench": "workbench", "inputs": [{"item": "stone", "quantity": 2}], "outputs": [{"item": "stone_blocks", "quantity": 1}]}
+  ]
+}

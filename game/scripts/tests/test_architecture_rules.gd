@@ -204,7 +204,7 @@ func _run_and_verify(kind: String, seed_value: int, setup: Callable) -> void:
 	_verify_trace_against_toils(kind, toils, result["world"], result["statuses"], result["completed"])
 
 func _check_execution_trace() -> void:
-	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "haul", "site_fetch", "site_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
+	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "haul", "site_fetch", "site_work", "craft_fetch", "craft_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
 	for kind in expected_kinds:
 		_expect(_jobs_content.has(kind), "content/jobs.json must declare a \"%s\" job kind" % kind)
 	_expect(_jobs_content.size() == expected_kinds.size(),
@@ -235,6 +235,7 @@ func _check_execution_trace() -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_WATER))
 	_check_haul_execution_trace(207001)
 	_check_construction_execution_trace(207501)
+	_check_crafting_execution_trace(207601)
 	_run_and_verify("till", 208001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
 		_expect(_command(world, "till", {"x": 5, "y": 0, "priority": 1})["ok"], "till order must be accepted"))
@@ -401,6 +402,46 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 	_verify_trace_against_toils("site_work", _jobs_content["site_work"], world, site_work_statuses, site_work_statuses.has("completed"))
 	_expect(not TestAccess.item_table(world).items.has("item_1"), "the delivered wood must be consumed by construction, not left on the ground")
 	_expect(world.get_object(10, 0) == "wooden_wall", "the declared object must appear at the build target")
+
+## Crafting (F2, ADR 061): an order at a built workbench makes CraftGiver submit a
+## craft_fetch (site_fetch's [go_to, pick_up, go_to, deposit] shape, delivering into the
+## bench's bill) and then a craft_work ([go_to, work], at the bench); both run through
+## ToilExecutor's ordinary dispatch and complete, and the crafted planks appear by the bench.
+func _check_crafting_execution_trace(seed_value: int) -> void:
+	for kind in ["craft_fetch", "craft_work"]:
+		if not _jobs_content.has(kind):
+			_fail("content/jobs.json does not declare a \"%s\" job kind" % kind)
+			return
+	var world := _build_world(seed_value)
+	Scenarios.isolate_need(world, "")
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).next_item_id = 2
+	TestAccess.object_table(world).set_object(10, 2, "workbench", "colony", "")
+	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
+	_expect(_command(world, "craft_add_order", {"x": 10, "y": 2, "recipe": "planks", "count": 1})["ok"], "craft order must be accepted")
+	TestAccess.toils(world).clear_trace()
+	var fetch_statuses: Dictionary = {}
+	var fetch_verified := false
+	var work_statuses: Dictionary = {}
+	for _i in MAX_TICKS:
+		world.tick()
+		for job in Scenarios.jobs_of_kind(world, "craft_fetch"):
+			fetch_statuses[String(job["status"])] = true
+		if not fetch_verified and fetch_statuses.has("completed"):
+			_verify_trace_against_toils("craft_fetch", _jobs_content["craft_fetch"], world, fetch_statuses, true)
+			TestAccess.toils(world).clear_trace()
+			fetch_verified = true
+		for job in Scenarios.jobs_of_kind(world, "craft_work"):
+			work_statuses[String(job["status"])] = true
+		if work_statuses.has("completed"):
+			break
+	_expect(fetch_verified, "craft_fetch must complete before craft_work does")
+	_verify_trace_against_toils("craft_work", _jobs_content["craft_work"], world, work_statuses, work_statuses.has("completed"))
+	var planks := 0
+	for item in world.get_items():
+		if String(item["kind"]) == "planks":
+			planks += int(item["count"])
+	_expect(planks == 2 and not TestAccess.item_table(world).items.has("item_1"), "the wood must become 2 planks by the bench, got %d" % planks)
 
 # --- 2) single per-colonist advance path -------------------------------------
 

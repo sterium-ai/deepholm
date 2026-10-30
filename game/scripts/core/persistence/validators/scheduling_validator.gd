@@ -193,8 +193,8 @@ static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array
 			var site_check := _valid_tile(job["site"], map_width, map_height)
 			if not site_check["ok"]:
 				return site_check
-		# A site_fetch/site_work job's site is mandatory: activation and completion both need it.
-		if String(job["kind"]) in ["site_fetch", "site_work"] and job.get("site") == null:
+		# A site_fetch/site_work/craft_fetch job's site is mandatory: activation and delivery need it.
+		if String(job["kind"]) in ["site_fetch", "site_work", "craft_fetch"] and job.get("site") == null:
 			return _fail("site job missing site")
 	return {"ok": true}
 

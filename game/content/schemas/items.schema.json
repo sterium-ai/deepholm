@@ -1,17 +1,38 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["items"],
+  "required": [
+    "items"
+  ],
   "properties": {
+    "groups": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Item groups (F2, ADR 061): an item's kind names its group, for stockpile filters (F5). When declared, ContentRegistry rejects an item whose kind is not listed (dangling_reference)."
+    },
     "items": {
       "type": "array",
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "kind"],
+        "required": [
+          "id",
+          "kind"
+        ],
         "properties": {
-          "id": {"type": "string", "minLength": 1},
-          "kind": {"type": "string", "minLength": 1}
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The item's group: one of `groups` when that list is declared."
+          }
         },
         "additionalProperties": false
       }

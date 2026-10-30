@@ -2,13 +2,15 @@ extends ScrollContainer
 
 ## The debug viewer's independently scrollable information column: the date
 ## line, the status line, the alert/rejection/room labels boot.gd owns, the
-## work table and the colonist panel. Layout only; boot.gd sets the label
-## texts, except the date line, which refresh() fills from the snapshot.
+## work table, the workbench panel (F2) and the colonist panel. Layout only;
+## boot.gd sets the label texts, except the date line, which refresh() fills
+## from the snapshot.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const TextTableType = preload("res://scripts/viewer/text_table.gd")
 const ColonistPanelType = preload("res://scripts/viewer/colonist_panel.gd")
 const WorkTablePanelType = preload("res://scripts/viewer/work_table_panel.gd")
+const WorkbenchPanelType = preload("res://scripts/viewer/workbench_panel.gd")
 
 var content: VBoxContainer
 ## "Day D · month M · year Y" plus the open calendar window's label, from the
@@ -16,6 +18,7 @@ var content: VBoxContainer
 var date_label: Label
 var status_label: Label
 var work_table_panel: WorkTablePanelType
+var workbench_panel: WorkbenchPanelType
 var colonist_panel: ColonistPanelType
 var _text_table: TextTableType
 var _world: WorldStateType
@@ -41,6 +44,9 @@ func build(world: WorldStateType, text_table: TextTableType, labels: Array[Label
 	work_table_panel.custom_minimum_size = Vector2(620, 330)
 	work_table_panel.setup(world, text_table)
 	content.add_child(work_table_panel)
+	workbench_panel = WorkbenchPanelType.new()
+	workbench_panel.setup(world, text_table)
+	content.add_child(workbench_panel)
 	colonist_panel = ColonistPanelType.new()
 	colonist_panel.custom_minimum_size = Vector2(620, 650)
 	colonist_panel.setup(world, text_table)
@@ -57,6 +63,7 @@ func refresh(snapshot: Dictionary = {}) -> void:
 	_refresh_date(snapshot)
 	colonist_panel.refresh(snapshot)
 	work_table_panel.refresh(snapshot)
+	workbench_panel.refresh()
 
 func set_world(world: WorldStateType) -> void:
 	_world = world
@@ -66,6 +73,8 @@ func set_world(world: WorldStateType) -> void:
 	colonist_panel.refresh()
 	work_table_panel.world = world
 	work_table_panel.refresh()
+	workbench_panel.world = world
+	workbench_panel.refresh()
 
 func _refresh_date(snapshot: Dictionary = {}) -> void:
 	if snapshot.is_empty():
