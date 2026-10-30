@@ -130,6 +130,8 @@ func _check_registry_requires_one_complete_range() -> void:
 		var window := base.duplicate()
 		window.merge(ranges)
 		var registry := _registry_with_windows([window])
+		if registry == null:
+			return
 		var error := registry.get_error()
 		_expect(not registry.is_valid() and error.get("code") == ContentRegistryType.ERROR_SCHEMA_VIOLATION
 			and error.get("file") == "calendar.json", "window %s must be rejected as schema_violation, got %s" % [ranges, error])
@@ -137,6 +139,8 @@ func _check_registry_requires_one_complete_range() -> void:
 	var by_month := base.duplicate()
 	by_month.merge({"from_month": 2, "to_month": 3})
 	var registry := _registry_with_windows([by_month])
+	if registry == null:
+		return
 	_expect(registry.is_valid(), "a complete month range must load, got %s" % [registry.get_error()])
 	if registry.is_valid():
 		var calendar := CalendarServiceType.new("", registry.document("calendar"))
@@ -144,13 +148,23 @@ func _check_registry_requires_one_complete_range() -> void:
 		_expect(int(defined["from"]) == 4 and int(defined["to"]) == 9, "months 2-3 load as days 4-9, got %s" % defined)
 	_expect(ContentRegistryType.new().is_valid(), "the shipped content still loads")
 
-## A copy of res://content/ whose calendar.json has `windows` (3-day months, 12-month years).
+## A copy of res://content/ whose calendar.json has `windows` (3-day months, 12-month years), or
+## null after recording a failure when the fixture cannot be written (a read-only user:// must fail
+## the test, not skip the registry checks and still print PASS).
 func _registry_with_windows(windows: Array) -> ContentRegistryType:
-	DirAccess.make_dir_recursive_absolute(FIXTURE_DIR)
+	var made := DirAccess.make_dir_recursive_absolute(FIXTURE_DIR)
+	_expect(made == OK, "could not create %s: %s" % [FIXTURE_DIR, error_string(made)])
+	var copied := 0
 	for file_name in DirAccess.get_files_at("res://content/"):
 		if file_name.ends_with(".json"):
-			DirAccess.copy_absolute("res://content/" + file_name, FIXTURE_DIR + file_name)
+			var result := DirAccess.copy_absolute("res://content/" + file_name, FIXTURE_DIR + file_name)
+			_expect(result == OK, "could not copy %s into %s: %s" % [file_name, FIXTURE_DIR, error_string(result)])
+			copied += 1 if result == OK else 0
+	_expect(copied > 0, "no content file was copied into %s" % FIXTURE_DIR)
 	var file := FileAccess.open(FIXTURE_DIR + "calendar.json", FileAccess.WRITE)
+	_expect(file != null, "could not write %scalendar.json: %s" % [FIXTURE_DIR, error_string(FileAccess.get_open_error())])
+	if _failed or file == null:
+		return null
 	file.store_string(JSON.stringify({"day_length_ticks": 2200, "days_per_month": 3, "months_per_year": 12,
 		"windows": windows}))
 	file.close()
