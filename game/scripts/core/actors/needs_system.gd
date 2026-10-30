@@ -269,7 +269,7 @@ func resume_interrupted_job(colonist_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
 	if String(job.get("status", "")) == "active":
 		return
-	if String(job.get("kind", "")) in ["haul", "site_fetch"] and InventoryType.is_carrying(colonist):
+	if String(job.get("kind", "")) in ["haul", "site_fetch", "craft_fetch"] and InventoryType.is_carrying(colonist):
 		paused_jobs[colonist_id] = job_id
 
 ## set_reason callable for NeedGiver: the cache get_colonist_need_reason() reads.

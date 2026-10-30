@@ -1,4 +1,5 @@
 {
+  "groups": ["tool", "material", "food", "seed", "valuable"],
   "items": [
     {"id": "axe", "kind": "tool"},
     {"id": "pick", "kind": "tool"},
@@ -9,6 +10,8 @@
     {"id": "flint", "kind": "material"},
     {"id": "coal", "kind": "material"},
     {"id": "wood", "kind": "material"},
-    {"id": "food", "kind": "food"}
+    {"id": "food", "kind": "food"},
+    {"id": "planks", "kind": "material"},
+    {"id": "stone_blocks", "kind": "material"}
   ]
 }

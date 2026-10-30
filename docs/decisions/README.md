@@ -69,6 +69,7 @@ all with one size rule.
 | [057](057-scenario-start-fields.md) | Scenario start fields: roster, calendar, enabled incidents |
 | [059](059-crops-and-farm-zones.md) | Crops, growth stages, harvest and farm zones |
 | [060](060-calendar-months-and-years.md) | Calendar months and years derived from the day |
+| [061](061-workbench-recipes-and-craft-labour.md) | Workbench recipes, the craft labour and item groups |
 
 ## Renumbered records (redirects)
 

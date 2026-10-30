@@ -16,6 +16,8 @@ const ConstructionHandlerType = preload("res://scripts/core/commands/handlers/co
 const ZoneHandlerType = preload("res://scripts/core/commands/handlers/zone_handler.gd")
 const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_handler.gd")
 const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
+const CraftingHandlerType = preload("res://scripts/core/commands/handlers/crafting_handler.gd")
+const CraftingSystemType = preload("res://scripts/core/crafting/crafting_system.gd")
 
 var _clock: SeededClockType
 var _event_log: EventLogType
@@ -27,10 +29,12 @@ var _construction: ConstructionHandlerType
 var _zones: ZoneHandlerType
 var _actors: ActorHandlerType
 var _incidents: IncidentHandlerType
+var _crafting: CraftingHandlerType
+var _crafting_system: CraftingSystemType
 
 func _init(clock: SeededClockType, event_log: EventLogType, construction_system: ConstructionSystemType,
 		check: Callable, orders: OrderHandlerType, construction: ConstructionHandlerType, zones: ZoneHandlerType,
-		actors: ActorHandlerType, incidents: IncidentHandlerType) -> void:
+		actors: ActorHandlerType, incidents: IncidentHandlerType, crafting_system: CraftingSystemType) -> void:
 	_clock = clock
 	_event_log = event_log
 	_construction_system = construction_system
@@ -40,6 +44,8 @@ func _init(clock: SeededClockType, event_log: EventLogType, construction_system:
 	_zones = zones
 	_actors = actors
 	_incidents = incidents
+	_crafting_system = crafting_system
+	_crafting = CraftingHandlerType.new(event_log, crafting_system)
 
 ## Read-only dry run of apply(): state_hash() and the event log are unchanged.
 func preview(command) -> Dictionary:
@@ -58,6 +64,9 @@ func preview(command) -> Dictionary:
 		check = _check.call(CommandChecks.check_cancel_site_command, command)
 	elif command["type"] == "place_object":
 		check = _check.call(CommandChecks.check_place_object_command, command)
+	elif command["type"] in CraftingSystemType.COMMAND_TYPES:
+		var craft_command: Dictionary = command
+		check = _crafting_system.check_command(craft_command)
 	else:
 		check = _check.call(CommandChecks.check, command)
 	if not check.is_empty():
@@ -100,6 +109,9 @@ func apply(command) -> Dictionary:
 			return _zones.apply_zone_add_command(command)
 		"zone_remove":
 			return _zones.apply_zone_remove_command(command)
+		"craft_set_target", "craft_add_order", "craft_cancel_order":
+			var craft_command: Dictionary = command
+			return _crafting.apply_craft_command(craft_command)
 		_:
 			return _event_log.rejection(
 				command["command_id"], command["actor"], "unknown_command_type",

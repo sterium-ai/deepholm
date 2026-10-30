@@ -16,8 +16,8 @@ const DEFAULT_SCHEMA_DIR := "res://content/schemas/"
 const COLLECTION_KINDS: Array[String] = ["jobs", "needs", "objects", "items", "tiles", "actors", "factions", "incidents"]
 const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
 ## A16 (ADR 054): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
-const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios", "crops"]
-const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id", "crops": "id"}
+const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios", "crops", "recipes"]
+const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id", "crops": "id", "recipes": "id"}
 ## The fields each scenario setup step (world/scenario_builder.gd) reads besides step/when.
 const SCENARIO_STEP_FIELDS := {
 	"needed_tools": [], "per_colonist_objects": ["kind"], "object_rows": ["seed_offset", "rows"],
@@ -96,6 +96,11 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 	var job_effects_error: Array[String] = _check_job_effects(raw_by_kind)
 	if not job_effects_error.is_empty():
 		_fail(job_effects_error[0], job_effects_error[1], "jobs.json")
+		return
+
+	var crafting_error: Array[String] = _check_crafting_content(raw_by_kind)
+	if not crafting_error.is_empty():
+		_fail(ERROR_DANGLING_REFERENCE, crafting_error[1], crafting_error[0])
 		return
 
 	var actor_tunables_check := _check_actor_component_tunables(raw_by_kind)
@@ -601,6 +606,35 @@ func _check_job_effects(raw_by_kind: Dictionary) -> Array[String]:
 				return [ERROR_DANGLING_REFERENCE, bad + " name an unknown item id '%s'" % item_id]
 		if yields.has("find_table") and total != 100:
 			return [ERROR_SCHEMA_VIOLATION, bad + ".yields.find_table weights must sum to 100, got %d" % total]
+	return []
+
+## F2 (ADR 061): an item's kind must be one of items.json's declared groups, and a recipe's
+## bench must be an object kind and its inputs/outputs item ids. [file, message], or [].
+func _check_crafting_content(raw_by_kind: Dictionary) -> Array[String]:
+	var items_document: Dictionary = raw_by_kind["items"]
+	var groups: Array = items_document.get("groups", [])
+	var known_items: Dictionary = {}
+	for entry: Dictionary in (items_document["items"] as Array):
+		var item_id: String = entry["id"]
+		var group: String = entry["kind"]
+		known_items[item_id] = true
+		if not groups.is_empty() and not groups.has(group):
+			return ["items.json", "item '%s' kind '%s' names an undeclared group" % [item_id, group]]
+	var known_objects: Dictionary = {}
+	for entry: Dictionary in (raw_by_kind["objects"]["objects"] as Array):
+		var object_kind: String = entry["kind"]
+		known_objects[object_kind] = true
+	var recipes_document: Dictionary = raw_by_kind.get("recipes", {})
+	for recipe: Dictionary in (recipes_document.get("recipes", []) as Array):
+		var recipe_id: String = recipe["id"]
+		var bench: String = recipe["bench"]
+		if not known_objects.has(bench):
+			return ["recipes.json", "recipe '%s' bench '%s' names an unknown object kind" % [recipe_id, bench]]
+		for field: String in ["inputs", "outputs"]:
+			for stack: Dictionary in (recipe[field] as Array):
+				var stack_item: String = stack["item"]
+				if not known_items.has(stack_item):
+					return ["recipes.json", "recipe '%s' %s names an unknown item id '%s'" % [recipe_id, field, stack_item]]
 	return []
 
 ## ADR 012: every actor's declared components validate their tunables, including cross-field

@@ -958,7 +958,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   sown ≥ the starting count" (the zone resows every harvested seed while the window is open);
   (3) each crop's sow/harvest effects come from its own jobs (crops.json `sow_job`/`harvest_job`).
 
-### F2 — Workbench recipes, craft labour and item groups · `todo` · after F1 (uses the same haul/yield patterns) · Design: closed 2026-10-29
+### F2 — Workbench recipes, craft labour and item groups · `review (antonelmejor50-hub/f2-workbench-recipes-craft-labour)` · after F1 (uses the same haul/yield patterns) · Design: closed 2026-10-29
 
 - **Design (owner, 2026-10-29):** recipes are content (`recipes.json` + schema) on the existing
   2×1 `workbench`. v1 recipes: **axe** (3 wood + 1 stone), **pick** (2 wood + 2 stone),
@@ -980,6 +980,16 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   fixture; next free schema number at rebase time), viewer: a minimal workbench panel to set
   targets/queue (reuse the panel pattern of A9), `docs/architecture/*.md`, an ADR (next free
   number), tests, `docs/orca/handoffs/F2.md`.
+- **Approved scope extension (owner, 2026-10-30):** minimal edits outside the owned paths to
+  reuse the site_fetch mechanism and run the giver, each listed and justified in
+  `handoffs/F2.md`: `core/jobs/job_queue.gd` (shared `FETCH_KINDS`), `core/jobs/job_index.gd`,
+  `core/jobs/toil_bindings.gd` (craft_fetch delivery, craft_work completion; it also receives
+  `cancel_haul_job_carrying_consumed_item()` moved out of `world_state.gd`),
+  `core/world/tick_pipeline.gd` (`craft_giver` phase), `core/world/command_router.gd` (three
+  command types), `core/actors/needs_system.gd`, `core/actors/trench_system.gd` (drop a carried
+  craft_fetch load), `core/content/content_registry.gd` (recipes kind + reference check),
+  `data/text/en.json`, `data/sprite_frames/world_pack.json`, `docs/architecture/contracts/
+  game-state.schema.json`; no net growth of `world_state.gd` (782 -> 762). ADR 061.
 - **Acceptance:** headless scenario: one built workbench, 6 wood + 4 stone in a stockpile, one
   colonist with `craft` enabled, target "keep 1 axe" and an order "planks ×2" → within 2 days an
   axe and 4 planks are in the stockpile, materials consumed exactly per recipe, deterministic

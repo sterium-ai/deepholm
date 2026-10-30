@@ -1148,7 +1148,9 @@
    "gold_coin": "no ground icon today (not in ITEM_ATLAS_MAP)",
    "flint": "no ground icon today (not in ITEM_ATLAS_MAP)",
    "coal": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "food": "no ground icon today (not in ITEM_ATLAS_MAP); F1 harvest yield"
+   "food": "no ground icon today (not in ITEM_ATLAS_MAP); F1 harvest yield",
+   "planks": "no ground icon today (not in ITEM_ATLAS_MAP); crafted at the workbench (F2)",
+   "stone_blocks": "no ground icon today (not in ITEM_ATLAS_MAP); crafted at the workbench (F2)"
   }
  }
 }

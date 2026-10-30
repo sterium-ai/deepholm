@@ -27,7 +27,7 @@ extends RefCounted
 const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.gd")
 
 const PHASES: Array[String] = ["caches_begin", "area_orders", "clock", "needs_decay", "need_giver", "haul_giver",
-	"construction_giver", "combat", "scheduler", "site_fetch_resolve", "rescue_giver",
+	"construction_giver", "craft_giver", "combat", "scheduler", "site_fetch_resolve", "rescue_giver",
 	"incidents_activate", "escapes_activate", "advance_colonists", "approach_giver", "dig_finds",
 	"farming", "refused_reservations", "collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event", "caches_end"]
 
@@ -37,6 +37,7 @@ var _needs_system: NeedsSystem
 var _need_giver: NeedGiver
 var _haul_giver: HaulGiver
 var _construction_giver: ConstructionGiver
+var _craft_giver: CraftGiver
 var _combat_system: CombatSystem
 var _combat_giver: CombatGiver
 var _construction: ConstructionSystem
@@ -78,13 +79,14 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 		calendar_alert_giver: CalendarAlertGiver, progress_table: WorkProgress, reroutes: Dictionary,
 		toil_hooks: Dictionary, colonists: Callable, calendar_alerts_fired: Callable,
 		resolve_refused_reservations: Callable, route: Callable, tick_priority: int, actor_index: ActorIndex,
-		farming: Callable) -> void:
+		farming: Callable, craft_giver: CraftGiver) -> void:
 	_clock = clock
 	_area_orders = area_orders
 	_needs_system = needs_system
 	_need_giver = need_giver
 	_haul_giver = haul_giver
 	_construction_giver = construction_giver
+	_craft_giver = craft_giver
 	_combat_system = combat_system
 	_combat_giver = combat_giver
 	_construction = construction
@@ -111,7 +113,7 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 	_actor_index = actor_index
 	_farming = farming
 	_phases = [_phase_caches_begin, _area_orders.advance, _phase_clock, _needs_system.decay_needs, _phase_need_giver,
-		_phase_haul_giver, _phase_construction_giver, _phase_combat, _phase_scheduler, _phase_site_fetch_resolve,
+		_phase_haul_giver, _phase_construction_giver, _phase_craft_giver, _phase_combat, _phase_scheduler, _phase_site_fetch_resolve,
 		_phase_rescue_giver, _incidents.activate_pending, _trench.activate_pending_escapes, _advance_colonists,
 		_phase_approach_giver, _item_table.resolve_dig_finds, _farming, _resolve_refused_reservations,
 		_event_log.collect_queue_events, _phase_calendar_alerts, _phase_incidents_advance, _phase_tick_event, _phase_caches_end]
@@ -152,6 +154,10 @@ func _phase_haul_giver() -> void:
 
 func _phase_construction_giver() -> void:
 	_construction_giver.advance(_clock.tick)
+
+## F2 (ADR 061): workbench bills and their craft_fetch/craft_work jobs, before the scheduler.
+func _phase_craft_giver() -> void:
+	_craft_giver.advance(_clock.tick)
 
 func _phase_combat() -> void:
 	_combat_system.apply_combat(_clock.tick)

@@ -243,11 +243,12 @@ func _check_malformed_content_packs() -> void:
 ## v2 -> v3 adds an empty list right after contentVersion and refuses a v2 state that already
 ## claims one; the input is never mutated.
 func _check_v2_to_v3_step() -> void:
-	# The v3 shape: this build's encode without v4's scenarioStart (A16b, ADR 057) and v6's
-	# crops (F1, ADR 059).
+	# The v3 shape: this build's encode without v4's scenarioStart (A16b, ADR 057), v6's
+	# crops (F1, ADR 059) and v7's crafting (F2, ADR 061).
 	var v3 := StateCodecType.encode(WorldStateType.new(SEED, 3, 16, 16))
 	v3.erase("scenarioStart")
 	v3.erase("crops")
+	v3.erase("crafting")
 	v3["schemaVersion"] = 3
 	var v2 := v3.duplicate(true)
 	v2.erase("contentPacks")

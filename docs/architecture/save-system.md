@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 6` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 7` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -128,7 +128,8 @@ scenario's calendar and incident list (see "Scenario start" below and
 encoding and saves each in-flight route search's accumulated costs (see "Wire encoding" and
 "Route searches" below and [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)); v6 adds
 farm zones and the crop growth records (see "Crops" below and
-[ADR 059](../decisions/059-crops-and-farm-zones.md)).
+[ADR 059](../decisions/059-crops-and-farm-zones.md)); v7 saves the workbench targets, orders and
+bills (see "Workbenches" below and [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)).
 
 **Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
 `JSON.stringify` of a write and unpacks it right after the parse of a read (after the
@@ -217,6 +218,11 @@ returns a new dictionary and never mutates its input. Steps today:
   shape. A sown tile of a v5 save gets its record on decode, at its stage's threshold. The
   v1 to v5 fixtures all migrate exactly to `save_schema_v6_fixture.json` (the same session,
   written packed by `docs/orca/handoffs/F1-write-save.gd`).
+- **v6 → v7** (F2, ADR 061): adds `crafting` with no configured bench,
+  `{"benches": [], "nextOrderId": 1}` (a v6 world had no recipes); nothing else changes, and a
+  v6 state that already has the field is refused. The v1 to v6 fixtures all migrate exactly to
+  `save_schema_v7_fixture.json` (the same session, written packed by
+  `docs/orca/handoffs/F2-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -429,6 +435,21 @@ site id counter is not persisted: decode re-derives it from the highest
 only in held materials, progress or builders never hash equal. See
 [orders-and-movement.md](orders-and-movement.md)'s "Construction" section for
 how sites are worked.
+
+## Workbenches
+
+The optional top-level `crafting` object (schema v7, [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md))
+is `{benches, nextOrderId}`. Each bench record is `{x, y, targets, orders, bill}`: `x, y` is
+the workbench's origin tile, `targets` the `[{recipe, count}]` "keep N in stock" list (count
+1..999, sorted by recipe), `orders` the queue `[{id, recipe, remaining}]` in order, and `bill`
+either `null` or `{recipe, orderId, held}`: the recipe being made, the order it serves (`""`
+for a target) and the inputs already delivered, `[{item, quantity}]`. `nextOrderId` continues
+the `order_<n>` ids. Absent (and every v6 save, migrated to `{benches: [], nextOrderId: 1}`)
+means no configured bench. A bench whose object is gone is dropped on the next tick. The
+craft jobs themselves are ordinary saved jobs (`craft_fetch` with its bench origin in `site`,
+`craft_work` with its progress in `workProgress`); a delivering craft_fetch's route resumes
+with the bench's target-tile exception. `state_hash()` covers `crafting` once any bench was
+configured.
 
 ## Items and hands
 

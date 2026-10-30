@@ -175,7 +175,7 @@ func pending_ids_at(tile: Vector2i) -> Array[String]:
 	return ids
 
 func _track_pending(job: Dictionary, pending: bool) -> void:
-	if String(job.get("kind", "")) in ["site_fetch", "site_work"]:
+	if String(job.get("kind", "")) in ["site_fetch", "craft_fetch", "site_work"]:
 		return
 	var tile: Vector2i = job["target"]
 	var jobs: Array = _pending_by_target.get(tile, [])
@@ -188,7 +188,7 @@ func _track_pending(job: Dictionary, pending: bool) -> void:
 		_pending_by_target.erase(tile)
 
 func _designate(job: Dictionary, delta: int) -> void:
-	if String(job.get("kind", "")) == "site_fetch":
+	if String(job.get("kind", "")) in ["site_fetch", "craft_fetch"]:
 		return
 	var tile: Vector2i = job["target"]
 	var count := int(_designations.get(tile, 0)) + delta

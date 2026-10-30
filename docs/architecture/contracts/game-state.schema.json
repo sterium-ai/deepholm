@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v6",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v7",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. v7 (ADR 061) adds crafting, the workbench targets, orders and bills; a v6 state is migrated with no configured bench {benches: [], nextOrderId: 1}. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
@@ -399,7 +399,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 6 },
+    "schemaVersion": { "type": "integer", "const": 7 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -448,6 +448,60 @@
       "description": "One record per active construction site. Always written by StateCodec.encode(); optional on the wire like combatBlockedTargets/digFindRng, absent meaning no active sites, the same as a fresh world.",
       "type": "array",
       "items": { "$ref": "#/$defs/constructionSite" }
+    },
+    "crafting": {
+      "description": "F2 (ADR 061, schema v7): workbench production. One record per configured bench (its origin tile): 'keep N in stock' targets, the order queue and the bill in progress with the inputs already hauled to it. Always written by StateCodec.encode(); optional on the wire, absent meaning no configured bench.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["benches", "nextOrderId"],
+      "properties": {
+        "nextOrderId": { "type": "integer", "minimum": 1 },
+        "benches": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "targets", "orders", "bill"],
+            "properties": {
+              "x": { "type": "integer", "minimum": 0 },
+              "y": { "type": "integer", "minimum": 0 },
+              "targets": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false, "required": ["recipe", "count"],
+                  "properties": { "recipe": { "type": "string", "pattern": "^[a-z0-9_-]+$" }, "count": { "type": "integer", "minimum": 1, "maximum": 999 } }
+                }
+              },
+              "orders": {
+                "type": "array",
+                "items": {
+                  "type": "object", "additionalProperties": false, "required": ["id", "recipe", "remaining"],
+                  "properties": { "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" }, "recipe": { "type": "string", "pattern": "^[a-z0-9_-]+$" }, "remaining": { "type": "integer", "minimum": 1, "maximum": 999 } }
+                }
+              },
+              "bill": {
+                "oneOf": [
+                  { "type": "null" },
+                  {
+                    "type": "object", "additionalProperties": false, "required": ["recipe", "orderId", "held"],
+                    "properties": {
+                      "recipe": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+                      "orderId": { "type": "string", "description": "The order this bill serves; \"\" for a stock target." },
+                      "held": {
+                        "type": "array",
+                        "items": {
+                          "type": "object", "additionalProperties": false, "required": ["item", "quantity"],
+                          "properties": { "item": { "type": "string", "pattern": "^[a-z0-9_-]+$" }, "quantity": { "type": "integer", "minimum": 0, "maximum": 999 } }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
     },
     "groundBerries": {
       "type": "array",
@@ -639,8 +693,8 @@
           "itemId", "cell", "retryAt", "backoffTicks"],
         "allOf": [
           {
-            "description": "SaveIO's site-job rule: a job of kind site_fetch or site_work must carry a non-null tile site; every other kind is unaffected, matching the base properties' optional site below.",
-            "if": { "properties": { "kind": { "enum": ["site_fetch", "site_work"] } } },
+            "description": "SaveIO's site-job rule: a job of kind site_fetch, site_work or craft_fetch (F2: its bench origin) must carry a non-null tile site; every other kind is unaffected, matching the base properties' optional site below.",
+            "if": { "properties": { "kind": { "enum": ["site_fetch", "site_work", "craft_fetch"] } } },
             "then": {
               "required": ["site"],
               "properties": {
@@ -651,7 +705,7 @@
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
           "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
           "priority": { "type": "integer", "enum": [0, 1, 2] },
           "target": { "$ref": "#/$defs/tile" },

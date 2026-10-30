@@ -597,6 +597,25 @@ consumes that same ground seed, the dangling haul job is failed `blocked_missing
 reservations released the same way a mid-carry consumption already fails the hauler (see above),
 rather than left retrying forever for an item that no longer exists.
 
+## Implemented: workbench crafting — craft_fetch/craft_work job kinds
+
+F2 ([ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)). Recipes are content
+(`content/recipes.json`); each colony workbench has "keep N in stock" targets and an order
+queue (`core/crafting/crafting_system.gd`). A job-giver, `CraftGiver`
+(`core/jobs/givers/craft_giver.gd`, TickPipeline phase `craft_giver`), decides which jobs
+exist, as ConstructionGiver does for sites; no new toil:
+
+- **`craft_fetch`** (`labour: "haul"`): site_fetch's toils and reservations
+  (`JobQueue.FETCH_KINDS`), delivering into the bench's current bill instead of a site; one
+  at a time per bench, one source per job.
+- **`craft_work`** (`labour: "craft"`, `work_ticks` 60): `go_to` + `work` at the bench origin
+  once every input is held; its completion spends the inputs and leaves the outputs on a free
+  tile next to the bench, where HaulGiver picks them up. A crafted tool becomes a tool item
+  once it lies in a stockpile.
+
+A bill (the recipe a bench makes now) is chosen only when all its inputs are stockpiled and
+free, so a recipe with missing inputs never blocks the orders behind it.
+
 ## 5. Sequencing
 
 | Increment | Adds |

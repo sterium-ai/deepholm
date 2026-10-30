@@ -9,6 +9,7 @@ extends RefCounted
 ## - v3 -> v4 (A16b, ADR 057): the scenario calendar and incident list are saved.
 ## - v4 -> v5 (A7, ADR 058): compact file encoding (SaveWire) and saved route-search costs.
 ## - v5 -> v6 (F1, ADR 059): farm zones and the "crops" growth records.
+## - v6 -> v7 (F2, ADR 061): workbench targets, orders and bills ("crafting").
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -40,6 +41,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v4_to_v5(state)
 		5:
 			return _v5_to_v6(state)
+		6:
+			return _v6_to_v7(state)
 		_:
 			return {
 				"ok": false,
@@ -111,6 +114,16 @@ static func _v5_to_v6(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["crops"] = []
 	migrated["schemaVersion"] = 6
+	return {"ok": true, "state": migrated}
+
+## v6 -> v7 (F2, ADR 061): adds "crafting" with no configured bench: a v6 world had no
+## recipes, so nothing was ever ordered or crafted. Nothing else changes.
+static func _v6_to_v7(state: Dictionary) -> Dictionary:
+	if state.has("crafting"):
+		return {"ok": false, "code": "schema_error", "message": "v6 save already has crafting"}
+	var migrated := state.duplicate(true)
+	migrated["crafting"] = {"benches": [], "nextOrderId": 1}
+	migrated["schemaVersion"] = 7
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

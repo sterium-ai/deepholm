@@ -19,7 +19,7 @@ const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
-const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders"]
+const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting"]
 
 ## Every entry point takes the session's ContentRegistry (A13b, ADR 010 amendment 2): its
 ## version, packs and tile/job/need ids are what a save is checked against. null builds the
@@ -252,6 +252,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return ItemValidator._valid_items(state.get("items"), w, h),
 		func() -> Dictionary: return ObjectValidator._valid_objects(state["objects"], w, h),
 		func() -> Dictionary: return _optional(state, "constructionSites", func(v: Variant) -> Dictionary: return ObjectValidator._valid_construction_sites(v, w, h)),
+		func() -> Dictionary: return _optional(state, "crafting", func(v: Variant) -> Dictionary: return CraftingValidator._valid_crafting(v, w, h)),
 		func() -> Dictionary: return _optional(state, "areaOrders", func(v: Variant) -> Dictionary: return ObjectValidator._valid_area_orders(v, w, h)),
 		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h, crop_ids),
 		func() -> Dictionary: return {"ok": true} if _is_int_min(state.get("nextZoneId"), 1) else _fail("invalid nextZoneId"),
