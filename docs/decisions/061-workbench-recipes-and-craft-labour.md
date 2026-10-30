@@ -81,7 +81,8 @@ Rules, run once a tick by `update_bills()` before any job is submitted:
    bill. A recipe whose inputs are missing is skipped, so it never blocks the orders behind it.
 
 "Stock" (for targets) is the design's *stockpiled* count of the recipe's first output: loose
-units on a stockpile tile and tool items stocked in a stockpile, plus units a haul is taking to
+units on a stockpile tile and tool items stocked in a stockpile that a stockpile zone still
+covers (a tool keeps its "stockpile" location after `zone_remove`), plus units a haul is taking to
 a stockpile right now (a loose item named by a queued or active haul job that is not blocked,
 or what a colonist on a haul job carries). The haul term keeps an output waiting for its hauler
 from being made twice; a blocked haul (an item no colonist can reach, or no free stockpile cell)

@@ -260,7 +260,8 @@ func pick_up_count(job: Dictionary, colonist: Dictionary) -> int:
 ## stockpile tile and tools stocked in one, plus units a haul is taking to a stockpile right
 ## now (a loose item named by an unblocked haul job, or what a colonist on a haul job
 ## carries), so an output waiting for its hauler is not crafted twice. A tool a colonist holds,
-## a tool lying outside a stockpile and an item no haul can reach do not count.
+## a tool lying outside a stockpile (also one whose stockpile zone was removed) and an item
+## no haul can reach do not count.
 func stock_count(kind: String) -> int:
 	var total := 0
 	var hauling: Dictionary = {}
@@ -285,7 +286,13 @@ func stock_count(kind: String) -> int:
 	if is_tool:
 		for tool_item: Dictionary in (_get_tool_items.call() as Array):
 			var location: Dictionary = tool_item["location"]
-			if tool_item["kind"] == kind and location.get("type", "") == "stockpile":
+			if tool_item["kind"] != kind or location.get("type", "") != "stockpile":
+				continue
+			# The location type outlives a zone_remove: count it only while a stockpile covers it.
+			var tool_x: int = location["x"]
+			var tool_y: int = location["y"]
+			var still_stocked: bool = _is_in_any_zone.call(tool_x, tool_y)
+			if still_stocked:
 				total += 1
 	return total
 

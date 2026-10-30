@@ -40,6 +40,7 @@ func _init() -> void:
 	_check_missing_inputs_wait_without_blocking_the_queue()
 	_check_target_ignores_an_unreachable_loose_axe()
 	_check_target_does_not_recraft_output_waiting_for_its_hauler()
+	_check_target_ignores_a_tool_whose_stockpile_was_removed()
 	_check_save_load_mid_fetch_and_mid_craft_continue_identically()
 	_check_recorded_session_replays()
 	_check_commands_are_validated_and_preview_agrees()
@@ -254,6 +255,37 @@ func _check_target_does_not_recraft_output_waiting_for_its_hauler() -> void:
 	_expect(stocked_at >= 0, "the keep-2 planks target must stock its planks")
 	_expect(_total(world, "planks") == 2 and _stockpiled(world, "planks") == 2, "exactly one batch of planks: %d made" % _total(world, "planks"))
 	_expect(_total(world, "wood") == 4, "exactly one wood must be spent, %d left" % _total(world, "wood"))
+
+## Design (F2), review round 2: a stocked tool keeps location type "stockpile" after its zone
+## is removed. Once no stockpile covers it, it is not in stock: with a new stockpile added and
+## the first one removed (zone commands, then ticks), "keep 1 axe" makes and stocks a second axe
+## from the leftover inputs, which are hauled to the new stockpile.
+func _check_target_ignores_a_tool_whose_stockpile_was_removed() -> void:
+	var world := _world(610010, 6, 2)
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "recipe": "axe", "count": 1})
+	for _i in DAY_TICKS:
+		world.tick()
+		if _stockpiled_tools(world, "axe") >= 1:
+			break
+	_expect(_stockpiled_tools(world, "axe") == 1, "the keep-1 target must stock a first axe")
+	var first_zone: String = world.get_zones()[0]["id"]
+	var second_zone := Rect2i(0, 20, 4, 2)
+	_command_ok(world, "zone_add", {"x": second_zone.position.x, "y": second_zone.position.y,
+		"width": second_zone.size.x, "height": second_zone.size.y})
+	_command_ok(world, "zone_remove", {"id": first_zone})
+	var stocked_in_second := 0
+	for _i in 2 * DAY_TICKS:
+		world.tick()
+		stocked_in_second = 0
+		for tool_item in world.get_tool_items():
+			var location: Dictionary = tool_item["location"]
+			if String(tool_item["kind"]) == "axe" and String(location["type"]) == "stockpile" \
+					and second_zone.has_point(Vector2i(int(location["x"]), int(location["y"]))):
+				stocked_in_second += 1
+		if stocked_in_second >= 1:
+			break
+	_expect(stocked_in_second == 1, "an axe outside every stockpile is not stock: a second axe must be made and stocked")
+	_expect(_total(world, "wood") == 0 and _total(world, "stone") == 0, "exactly two axes' inputs must be spent")
 
 ## Acceptance (F2): "save/load mid-craft continues identically" -- once while a craft_fetch
 ## carries an input to the bench, once while craft_work is under way.
