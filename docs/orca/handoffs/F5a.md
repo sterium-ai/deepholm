@@ -5,40 +5,70 @@
 > nearest one first; an item in a stockpile that stops accepting it is hauled out. A new
 > stockpile accepts everything at priority 2 (the old behaviour, byte for byte in the save and
 > the hash). New command `zone_set_stockpile`, a stockpile panel in the viewer, a save schema bump
-> (v8 on this base, **v10** once rebased onto F3 and L2, per the owner), ADR 064. `world_state.gd` did not grow (767 lines, as on `main`). Suite green; line below.
+> (**v8 -> v9 for now**, provisional: v10 once L2 lands, per the owner), ADR 064.
+> `world_state.gd` did not grow (767 lines, as on `main`). Suite green; line below.
+
+## Pendiente al reanudar (pipeline paused for the owner's playtest, 2026-10-30)
+
+The branch is pushed (`git push -u origin HEAD`) and paused by the owner's instruction: "PAUSA
+del pipeline para playtest ... No hagas nada mas hasta nueva nota". When work resumes:
+
+1. **Wait for the owner's note that L2 is merged** (L2 takes v9 and changes `Vector2i` ->
+   `Vector3i` across the core).
+2. **Rebase again onto `origin/main`.** Expected conflicts: `save_migrations.gd` (L2's
+   `_v8_to_v9` next to this branch's), `state_codec.gd` (`SCHEMA_VERSION`, header),
+   `save_io.gd` `content_rules()`, the contract (description, title, `const`),
+   `save-system.md`, `docs/decisions/README.md`, `test_save_migration.gd`, and the
+   `save_schema_v9_fixture.json` add/add (keep L2's). From the `Vector3i` sweep:
+   `ZoneTable._distance_to()`/`_contains()`/`stockpiles_for_item(kind, from: Vector2i)`,
+   `HaulGiver.find_free_haul_cell()` (`Vector2i(item_x, item_y)`, the returned cell),
+   `test_stockpile_filters.gd` (`Rect2i`/`Vector2i` constants) and the zone-rectangle checks.
+   Keep both sides, as F2 did with F1.
+3. **Renumber the bump to v10:** `_v8_to_v9` -> `_v9_to_v10` (same body: the zones keep their
+   shape, a zone already carrying `groups`/`priority` is refused) with arm `9:`;
+   `SCHEMA_VERSION := 10`; regenerate `save_schema_v10_fixture.json` with
+   `docs/orca/handoffs/F5a-write-save.gd` (it must equal L2's v9 fixture but for
+   `schemaVersion`, as v9 equals F3's v8 today); update the contract `const`/title/description,
+   `save-system.md`, ADR 064 ("schema v9", `_v8_to_v9`), the header of `F5a-write-save.gd` and
+   `test_save_migration.gd` (`V10_FIXTURE`, the v9 -> v10 step check, the resave check, the
+   older-fixtures schemaVersion asserts).
+4. Rerun the warnings and budgets gates, `measure_core`, the full suite (quote the new N), update
+   this report, then `tools\orca\review.ps1`.
 
 ## Branch and commit
 
-- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities`, one commit on top of
-  **73d0fa6**. Not pushed (the owner ships with `tools\orca\ship.ps1`).
-- **Not rebased, by owner instruction (terminal, 2026-10-30):** "F3 ya esta en origin/main
-  (1476aa1, esquema v8). L2 entrara despues con v9, asi que tu bump de F5a sera v10. No hace
-  falta rebasar ahora". The fetch before handoff shows `origin/main` one commit ahead (1476aa1,
-  F3, #48). `tools\orca\review.ps1` refuses a branch behind `origin/main`, so **the rebase onto
-  F3 + L2 and the renumbering to v10 come before review** (see "Next action"). Every figure in
-  this report is from the 73d0fa6 base.
-- **Owner coordination note (read before starting):** F3 (PR #48, schema v8) and L2 (schema
-  v9) are in flight; ADRs up to 063 are taken; `world_state.gd` must not grow; new code uses
-  `TileGrid` helpers. Accordingly: the ADR is **064**. The final schema number is **v10**
-  (owner: F3 is v8, L2 will be v9). On this 73d0fa6 base the step is numbered **v7 -> v8**, because a
-  v10 step needs F3's and L2's steps in the chain. At the rebase: `_v7_to_v8` becomes
-  `_v9_to_v10` (same body, it only bumps the version and refuses a zone that already has
-  `groups`/`priority`); `SCHEMA_VERSION := 10`; regenerate the fixture as
-  `save_schema_v10_fixture.json` with `docs/orca/handoffs/F5a-write-save.gd`; and update the
-  contract `const` and title, the `save-system.md` lines, ADR 064's "schema v8" and
-  `test_save_migration.gd` (the v1-v9 fixtures migrate to v10; the v9 -> v10 step check). The F2
-  report describes the same renumbering. `world_state.gd`: 767 -> 767 (three lines edited in place). Distance:
-  `TileGrid.manhattan()`; the only planar step is the clamp to a zone rectangle
-  (`ZoneTable._distance_to()`), noted in ADR 064 for L2.
+- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities`, two commits (the feature, then this rebase and renumbering), **rebased onto
+  `origin/main` 32bfb81** (F3 1476aa1 + two backlog/baseline doc commits), at the owner's
+  request: "rebasa sobre origin/main actual ... tu bump pasa provisionalmente a esquema v9
+  (v8->v9, fixture v9)". Pushed at the owner's request (pause note above).
+- **Rebase onto F3, what changed:** F3 owns v7 -> v8 (colonist skills) and
+  `save_schema_v8_fixture.json`; this branch's step is now `_v8_to_v9` (arm `8:`),
+  `SCHEMA_VERSION := 9`, fixture `save_schema_v9_fixture.json` written by
+  `F5a-write-save.gd` on the rebased build (the same session as F3's v8 fixture; checked: only
+  `schemaVersion` differs). F3's v8 fixture and checks are kept byte for byte. In
+  `test_save_migration.gd` F3's structure is kept (the v1-v6 fixtures migrate to the migrated v7
+  fixture, now at v9); this branch adds the v8 -> v9 check (the v8 fixture loads as exactly the
+  v9 fixture, the step alone turns one into the other, a v8 zone with `groups`/`priority` is
+  refused), the stockpile filter round trip and rejections on the v9 fixture, and moves the
+  "current fixture re-encodes unchanged" check from v8 to v9, as F2 and F3 did. Conflicts
+  resolved keeping both sides: `save_io.gd` `content_rules()` (F3's `skills` + this branch's
+  `itemGroups`), `state_codec.gd` header, the contract description, `save-system.md`,
+  `docs/decisions/README.md` (062 and 064 rows).
+- **Owner coordination note (read before starting):** ADRs up to 063 are taken (this is
+  **064**); `world_state.gd` must not grow (767 -> 767, three lines edited in place); new code
+  uses `TileGrid` helpers (distance: `TileGrid.manhattan()`; the only planar step is the clamp to
+  a zone rectangle, `ZoneTable._distance_to()`, noted in ADR 064 for L2).
+- Before the rebase the branch was one commit on 73d0fa6 with the step numbered v7 -> v8 and
+  `run_tests: all 132 test(s) PASS  [745s]` (main 73d0fa6: 131 tests, `all 131 test(s) PASS
+  [747s]` on a clean `git archive` copy).
 
-## Final suite line (branch head)
+## Final suite line (branch head, after the rebase)
 
 ```
-run_tests: all 132 test(s) PASS  [745s]
+run_tests: all 133 test(s) PASS  [823s]
 ```
 
-`main` (73d0fa6) has 131 `test_*.gd` (baseline run on a clean `git archive` copy of 73d0fa6:
-`run_tests: all 131 test(s) PASS  [747s]`); this branch has 132 (+`test_stockpile_filters.gd`).
+`origin/main` (32bfb81) has 132 `test_*.gd`; this branch has 133 (+`test_stockpile_filters.gd`).
 
 ## Design, line by line
 
@@ -79,9 +109,9 @@ ADR; this report.
 | `game/scripts/core/commands/command_checks.gd` | `check_zone_set_stockpile_command()` + dispatch (shared by `preview()` and `apply()`) |
 | `game/scripts/core/world/command_router.gd` | one `match` arm for `zone_set_stockpile` (command dispatch) |
 | `game/scripts/core/commands/README.md` | the command and its rejections |
-| `game/scripts/core/persistence/state_codec.gd`, `save_io.gd`, `save_migrations.gd`, `validators/object_validator.gd` | v8: encode/decode/validate the optional fields, `_v7_to_v8`, `content_rules()["itemGroups"]` |
-| `game/scripts/tests/fixtures/save_schema_v8_fixture.json`, `docs/orca/handoffs/F5a-write-save.gd` | fixture and the script that writes it |
-| `docs/architecture/contracts/game-state.schema.json`, `docs/architecture/save-system.md` | contract v8 |
+| `game/scripts/core/persistence/state_codec.gd`, `save_io.gd`, `save_migrations.gd`, `validators/object_validator.gd` | v9: encode/decode/validate the optional fields, `_v8_to_v9`, `content_rules()["itemGroups"]` |
+| `game/scripts/tests/fixtures/save_schema_v9_fixture.json`, `docs/orca/handoffs/F5a-write-save.gd` | fixture and the script that writes it |
+| `docs/architecture/contracts/game-state.schema.json`, `docs/architecture/save-system.md` | contract v9 |
 | `game/scripts/viewer/stockpile_panel.gd` (new), `game/scripts/viewer/info_panel.gd` | the panel and its place in the info column |
 | `game/data/text/en.json` | 4 rejection texts (ADR 052: every detail code has text) and the panel strings |
 | `game/scripts/core/world_state.gd` | composition only, 3 lines edited in place, 0 added: `ZoneTable.new(_item_definitions)`, HaulGiver's new Callables, `ToolDropToil` gets `get_stockpile_zones_for_group.bind("tool")` |
@@ -95,11 +125,12 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ## Contract impact
 
-- ADR 064 (new). Save schema **v8**: a stockpile in `zones[]` may carry `groups` (ascending,
-  distinct, the session's item kinds) and `priority` (1-3), each only away from its default;
-  never on a farm zone. Migration `_v7_to_v8` (zones unchanged, version bumped; refuses a v7
-  zone already carrying either key). Fixture `save_schema_v8_fixture.json`: the same session as
-  v1-v7, identical to the v7 fixture but for `schemaVersion` (checked: only that key differs).
+- ADR 064 (new). Save schema **v9** (provisional; v10 after L2): a stockpile in `zones[]` may
+  carry `groups` (ascending, distinct, the session's item kinds) and `priority` (1-3), each only
+  away from its default; never on a farm zone. Migration `_v8_to_v9` (zones unchanged, version
+  bumped; refuses a v8 zone already carrying either key). Fixture `save_schema_v9_fixture.json`:
+  F3's v8 fixture session, identical to it but for `schemaVersion` (checked: only that key
+  differs).
 - Command `zone_set_stockpile` (`commands/README.md`, `orders-and-movement.md`).
 - `state_hash()`: zones were already hashed (`ZoneTable.hash_into()`); a configured stockpile
   hashes its new keys, an unconfigured one hashes as before.
@@ -110,7 +141,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 132 test(s) PASS  [745s]
+tools\run_tests.ps1                                  # run_tests: all 133 test(s) PASS  [823s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2929 warning(s), none above baseline
@@ -118,7 +149,7 @@ python tools/check_core_budgets.py                   # OK (files <= 800 lines, f
 tools\measure_core.ps1 -All                          # figures below
 git diff --check origin/main HEAD                    # clean
 python -m json.tool <each changed .json>             # all valid
-godot --headless --path game --script ../docs/orca/handoffs/F5a-write-save.gd -- <abs path>   # regenerates the v8 fixture
+godot --headless --path game --script ../docs/orca/handoffs/F5a-write-save.gd -- <abs path>   # regenerates the v9 fixture
 ```
 
 What `test_stockpile_filters.gd` proves, through `zone_add`/`zone_set_stockpile` commands, a ripe
@@ -149,38 +180,40 @@ Checked that the acceptance discriminates: with the priority comparison disabled
 to B ("within a day the food must lie in A ..." fails); with `accepts_item_at()` ignoring the
 filter the food is never moved out of A (4 checks fail). Both mutations were reverted.
 
-`test_save_migration.gd`: v1-v7 fixtures migrate to exactly the v8 fixture; the v7 -> v8 step
-alone turns the v7 fixture into the v8 fixture and refuses a v7 zone with `groups` or
-`priority`; a stockpile with `groups` + `priority` loads through `SaveIO.read()`, decodes and
-re-encodes unchanged; unknown, unsorted or repeated groups, non-list groups, priority 0 or 4,
-and a farm zone with a priority are `schema_error`; the v8 fixture re-encodes unchanged (the
-former v7 check, moved to v8 as F2 did).
+`test_save_migration.gd` (F3's checks kept): the v8 fixture loads through `SaveIO.read()` as
+exactly the v9 fixture; the v8 -> v9 step alone turns the v8 fixture into the v9 fixture,
+keeps the zones and refuses a v8 zone with `groups` or `priority`; a stockpile with `groups` +
+`priority` loads through `SaveIO.read()`, decodes and re-encodes unchanged; unknown, unsorted
+or repeated groups, non-list groups, priority 0 or 4, and a farm zone with a priority are
+`schema_error`; the v9 fixture re-encodes unchanged (the former v8 check, moved to v9 as F2 and
+F3 did); the v1-v7 fixtures now load at v9.
 
-Assert sites (`_expect(`/`_fail(`, main -> branch): `test_save_migration` 122 -> 134,
+Assert sites (`_expect(`/`_fail(`, `origin/main` 32bfb81 -> branch): `test_save_migration` 134 -> 149,
 `test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 43. No test removed, skipped
 or loosened.
 
-## `tools\measure_core.ps1 -All` (branch head; main 73d0fa6 in brackets)
+## `tools\measure_core.ps1 -All` (rebased branch head; `origin/main` 32bfb81 in brackets)
 
-Core total: **21,891 lines in 108 files** [21,663 lines, 108 files].
+Core total: **22,258 lines in 109 files** [22,030 lines, 109 files].
 
 | File | Total | Code |
 | --- | --- | --- |
 | `world_state.gd` | 767 [767] | 593 [593] |
-| `persistence/state_codec.gd` | 583 [570] | 430 [419] |
-| `persistence/save_io.gd` | 396 [393] | 307 [305] |
+| `persistence/state_codec.gd` | 584 [571] | 430 [419] |
+| `persistence/save_io.gd` | 399 [396] | 309 [307] |
 | `commands/command_checks.gd` | 261 [236] | 214 [192] |
 | `persistence/validators/object_validator.gd` | 241 [209] | 214 [186] |
 | `objects/zone_table.gd` | 200 [92] | 140 [59] |
-| `persistence/save_migrations.gd` | 168 [152] | 108 [97] |
+| `persistence/save_migrations.gd` | 192 [176] | 127 [116] |
 | `world/command_router.gd` | 155 [152] | 136 [133] |
 | `jobs/givers/haul_giver.gd` | 80 [66] | 64 [53] |
 | `commands/handlers/zone_handler.gd` | 77 [63] | 58 [48] |
 
 `check_core_budgets.py`: OK; no core file above 800 lines, no function above 80; no cap raised.
 
-Warnings gate: 2929 against the committed baseline 2937; `main` itself measures 2927
-(untyped 512, unsafe_call 2163). The branch is untyped 511, unsafe_call 2166. On the lines this
+Warnings gate (rebased head): OK, 2929 against the committed baseline 2937. Before the rebase,
+`main` 73d0fa6 measured 2927 (untyped 512, unsafe_call 2163) and the branch untyped 511,
+unsafe_call 2166; `origin/main` 32bfb81 was not measured separately. On the lines this
 branch adds or edits, the only new warnings are the four argument warnings of the new handler's
 `_event_log.rejection(command["command_id"], ...)` line (`zone_handler.gd:46`), the same line
 `zone_add`/`zone_remove` already have; every other warning on an edited line was there on `main`.
@@ -199,10 +232,5 @@ left it to the owner too).
 
 ## Next action
 
-Once L2 is on `main` (or as the owner decides): rebase onto `origin/main`, renumber the bump to
-**v10** as described under "Branch and commit", regenerate the fixture, rerun the gates and the
-full suite (quoting the new test count), update this report, then `tools\orca\review.ps1`. Expected
-conflicts: F3's `_v7_to_v8` and fixture next to this branch's in `save_migrations.gd`, the
-contract, `save-system.md` and `test_save_migration.gd`; keep both, as F2 did with F1. L2's
-`Vector3i` sweep will touch `ZoneTable._distance_to()`/`_contains()` and HaulGiver's
-`Vector2i(item_x, item_y)`.
+Paused by the owner for a playtest: see "Pendiente al reanudar" at the top (L2 merge -> rebase
+-> renumber to v10 -> gates and suite -> `tools\orca\review.ps1`).
