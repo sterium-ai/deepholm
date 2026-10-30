@@ -15,7 +15,7 @@ const ENTITY_COMPONENT_FIELDS := {
 }
 
 ## "rerouting" is present only while a re-route is in flight.
-static func _valid_entity_route(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_entity_route(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if value == null:
 		return {"ok": true}
 	if not (value is Dictionary):
@@ -30,7 +30,7 @@ static func _valid_entity_route(value, map_width: int, map_height: int) -> Dicti
 			return _fail_missing("missing entity route field '%s'" % key)
 	if not (route["jobId"] is String):
 		return _fail("invalid entity route jobId")
-	var path_check := _valid_tile_array(route["path"], map_width, map_height)
+	var path_check := _valid_tile_array(route["path"], map_width, map_height, layer_count)
 	if not path_check["ok"]:
 		return path_check
 	if (route["path"] as Array).size() < 1:
@@ -38,7 +38,7 @@ static func _valid_entity_route(value, map_width: int, map_height: int) -> Dicti
 	if not _is_int_min(route["step"], 0) or not _is_int_min(route["moveTicksRemaining"], 0):
 		return _fail("invalid entity route step or moveTicksRemaining")
 	if route.has("rerouting") and route["rerouting"] != null:
-		var rerouting_check := SchedulingValidator._valid_route_state(route["rerouting"], map_width, map_height)
+		var rerouting_check := SchedulingValidator._valid_route_state(route["rerouting"], map_width, map_height, layer_count)
 		if not rerouting_check["ok"]:
 			return rerouting_check
 	return {"ok": true}
@@ -94,7 +94,7 @@ static func _valid_skills(value: Variant, skill_rules: Dictionary) -> Dictionary
 	return {"ok": true}
 
 ## "trapped" is validated for every kind (anyone can fall into a trench).
-static func _valid_entity_trapped(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_entity_trapped(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if value == null:
 		return {"ok": true}
 	if not (value is Dictionary):
@@ -102,13 +102,13 @@ static func _valid_entity_trapped(value, map_width: int, map_height: int) -> Dic
 	var trapped: Dictionary = value
 	if not _keys_allowed(trapped, ["tile", "ticksRemaining", "fromTile"]) or not trapped.has("tile"):
 		return _fail_missing("invalid entity trapped fields")
-	var tile_check := _valid_tile(trapped["tile"], map_width, map_height)
+	var tile_check := _valid_tile(trapped["tile"], map_width, map_height, layer_count)
 	if not tile_check["ok"]:
 		return tile_check
 	if trapped.has("ticksRemaining") and not _is_int_min(trapped["ticksRemaining"], 1):
 		return _fail("invalid entity trapped ticksRemaining")
 	if trapped.has("fromTile"):
-		var from_tile_check := _valid_tile(trapped["fromTile"], map_width, map_height)
+		var from_tile_check := _valid_tile(trapped["fromTile"], map_width, map_height, layer_count)
 		if not from_tile_check["ok"]:
 			return from_tile_check
 	return {"ok": true}
@@ -196,24 +196,24 @@ static func _valid_entity_hands(value, capacity: int) -> Dictionary:
 
 ## need_kinds: needs.json's kinds, skill_rules: skills.json, both from the session registry
 ## (SaveIO.content_rules()).
-static func _valid_entities(value, map_width: int, map_height: int, need_kinds: Array[String],
+static func _valid_entities(value, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
 		skill_rules: Dictionary = {}) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entities type")
 	for entity in value:
-		var entity_check := _valid_entity(entity, map_width, map_height, need_kinds, skill_rules)
+		var entity_check := _valid_entity(entity, map_width, map_height, layer_count, need_kinds, skill_rules)
 		if not entity_check["ok"]:
 			return entity_check
 	return {"ok": true}
 
-static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Array[String],
+static func _valid_entity(value, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
 		skill_rules: Dictionary = {}) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity type")
 	var entity: Dictionary = value
-	if not _keys_allowed(entity, ["id", "kind", "x", "y", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor"]):
+	if not _keys_allowed(entity, ["id", "kind", "x", "y", "z", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor"]):
 		return _fail("unexpected entity field")
-	if (not entity.has("id") or not entity.has("kind") or not entity.has("x") or not entity.has("y")
+	if (not entity.has("id") or not entity.has("kind") or not entity.has("x") or not entity.has("y") or not entity.has("z")
 			or not entity.has("factionId") or not entity.has("health") or not entity.has("route") or not entity.has("trapped")):
 		return _fail_missing("missing entity field")
 	if not _matches_id_pattern(entity["id"]) or not ENTITY_COMPONENT_FIELDS.has(entity["kind"]):
@@ -223,7 +223,7 @@ static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Ar
 		if not entity.has(field):
 			return _fail_missing("missing entity field '%s'" % field)
 	if (not _is_int_min(entity["x"], 0) or not _is_int_min(entity["y"], 0)
-			or int(entity["x"]) >= map_width or int(entity["y"]) >= map_height):
+			or int(entity["x"]) >= map_width or int(entity["y"]) >= map_height or not _valid_layer(entity["z"], layer_count)):
 		return _fail("invalid entity position")
 	if not _matches_id_pattern(entity["factionId"]):
 		return _fail("invalid entity factionId")
@@ -241,10 +241,10 @@ static func _valid_entity(value, map_width: int, map_height: int, need_kinds: Ar
 		var skills_check := _valid_skills(entity["skills"], skill_rules)
 		if not skills_check["ok"]:
 			return skills_check
-	var route_check := _valid_entity_route(entity["route"], map_width, map_height)
+	var route_check := _valid_entity_route(entity["route"], map_width, map_height, layer_count)
 	if not route_check["ok"]:
 		return route_check
-	var trapped_check := _valid_entity_trapped(entity["trapped"], map_width, map_height)
+	var trapped_check := _valid_entity_trapped(entity["trapped"], map_width, map_height, layer_count)
 	if not trapped_check["ok"]:
 		return trapped_check
 	if entity.has("work"):

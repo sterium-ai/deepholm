@@ -59,25 +59,29 @@ static func _matches_optional_id_pattern(value) -> bool:
 		return true
 	return _matches_id_pattern(text)
 
-## Every tile is bounded by the map's declared width/height, so a corrupted save cannot smuggle
-## in an out-of-map target.
-static func _valid_tile(value, map_width: int, map_height: int) -> Dictionary:
+## Every tile is bounded by the map's declared width/height and layerCount (ADR 045 §5), so a
+## corrupted save cannot smuggle in an out-of-map target.
+static func _valid_tile(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid tile type")
 	var tile: Dictionary = value
-	var check := _require_fields(tile, ["x", "y"], "tile")
+	var check := _require_fields(tile, ["x", "y", "z"], "tile")
 	if not check["ok"]:
 		return check
 	if (not _is_int_min(tile["x"], 0) or not _is_int_min(tile["y"], 0)
-			or int(tile["x"]) >= map_width or int(tile["y"]) >= map_height):
+			or int(tile["x"]) >= map_width or int(tile["y"]) >= map_height or not _valid_layer(tile["z"], layer_count)):
 		return _fail("invalid tile coordinates")
 	return {"ok": true}
 
-static func _valid_tile_array(value, map_width: int, map_height: int) -> Dictionary:
+## A record's "z" (a tile object's or a flat x/y/z record's): 0 <= z < layerCount.
+static func _valid_layer(value, layer_count: int) -> bool:
+	return _is_int_min(value, 0) and int(value) < layer_count
+
+static func _valid_tile_array(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid tile array type")
 	for tile in value:
-		var check := _valid_tile(tile, map_width, map_height)
+		var check := _valid_tile(tile, map_width, map_height, layer_count)
 		if not check["ok"]:
 			return check
 	return {"ok": true}

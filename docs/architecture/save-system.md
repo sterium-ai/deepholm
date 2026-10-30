@@ -131,7 +131,19 @@ farm zones and the crop growth records (see "Crops" below and
 [ADR 059](../decisions/059-crops-and-farm-zones.md)); v7 saves the workbench targets, orders and
 bills (see "Workbenches" below and [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)); v8 saves every
 colonist's skills (see "Colonist needs, the labour table and skills" below and
-[ADR 062](../decisions/062-skills-and-xp-per-labour.md)).
+[ADR 062](../decisions/062-skills-and-xp-per-labour.md));
+v9 gives every tile a layer (see "Layers" below and
+[ADR 045](../decisions/045-map-layers.md) §5).
+
+**Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
+items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
+layer, `0` the surface, and `0 <= z < map.layerCount`. `map.layerCount` (at least 1, at most
+`TileGrid.MAX_LAYER_COUNT` = 64) counts the layers, all `width × height`, and `map.tiles` holds
+`layerCount × width × height` kinds in flat-index order, `z × width × height + y × width + x`,
+so a one-layer map's array is exactly the v8 one. String tile keys inside the core keep their
+surface format (`"x_y"`, `"tile:x,y"`, ...) and append the layer below it (`"x_y_z"`,
+`"tile:x,y,z"`); the save never stores those keys, only `{x, y, z}` tiles. `state_hash()`
+covers `layer_count` and every layer's tiles.
 
 **Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
 `JSON.stringify` of a write and unpacks it right after the parse of a read (after the
@@ -139,19 +151,22 @@ integer coercion, before migration and validation), so `StateCodec`, the validat
 JSON Schema all see the plain state. Packed:
 
 - `map.tiles` becomes `map.palette` (tile ids in first-appearance order) and `map.tileRuns`
-  (flat `[paletteIndex, runLength, ...]`, row-major).
+  (flat `[paletteIndex, runLength, ...]`, in flat-index order: layer by layer, row-major).
 - A route search (`entities[].route.rerouting`, `scheduling.pending.*.route`) replaces
   `visited`, `cameFrom`, `cost` and `frontier` with `box` (`[x, y, width, height]` around the
   visited tiles), `visitedBits` (bitset over the box, row-major), `cameFromDirs` (2 bits per
   visited tile in that order: the direction to its parent, `RouteSearch.NEIGHBOR_OFFSETS`'
   index; the start's bits are 0 and unused), `costBytes` (one float64 per visited tile in that
-  order) and `frontierTiles` (int32 map tile indices in frontier order), all base64.
+  order) and `frontierTiles` (int32 tile indices within the layer, in frontier order), all
+  base64. A search never leaves its start's layer (L2), so all of these are planar and every
+  unpacked tile takes the start's `z`; a pre-v9 start has no `z`, and neither do the tiles
+  unpacked from it until the v8 → v9 step adds `z: 0`.
 - `entities`, `jobs`, `crops` (v6) and `scheduling.waiting` become a record table: a first element
   `{"$keys": [sorted keys]}`, then one row of values per record.
 
 The packer only packs what comes back exactly: a list of fewer than two records, a record with
 other keys than the first one (kept as a plain object in the table), a route whose `cameFrom`
-is not one adjacent parent per visited tile, or a tile off the map stay plain, and the reader
+is not one adjacent parent per visited tile, or a tile off the map or off the start's layer stay plain, and the reader
 accepts the plain form of any of these fields. After a load the visited tiles of a search are
 in row-major order instead of discovery order; nothing depends on that order.
 
@@ -232,6 +247,11 @@ returns a new dictionary and never mutates its input. Steps today:
   skills; `save_schema_v8_fixture.json` is the same session written by this build
   (`docs/orca/handoffs/F3-write-save.gd`), whose colonists have seeded skills and so work at
   other speeds: it loads and re-encodes unchanged.
+- **v8 → v9** (L2, ADR 045 §5): adds `map.layerCount: 1` and `z: 0` beside every integer
+  `x`/`y` pair (in v8 those are exactly the tiles and the flat x/y records); the tiles are
+  already layer 0's. Nothing else changes, and a v8 state that already has `layerCount` is
+  refused. The v1 to v8 fixtures all migrate exactly to `save_schema_v9_fixture.json` (the same
+  session, written packed by `docs/orca/handoffs/L2-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -318,9 +338,9 @@ on load. Mapgen count/placement budgets scale with the map area relative to
 [ADR 019](../decisions/019-world-dimensions-and-generation.md).
 
 `_validate_state()` rejects a `tiles` array whose length is not
-`width*height` and a `map.width`/`map.height` above `max_world_size`, and
-bounds-checks every persisted tile coordinate in the save against the map's
-declared size: entity, item, object, construction-site, zone, area-order,
+`width*height*layerCount` and a `map.width`/`map.height` above `max_world_size`, and
+bounds-checks every persisted tile coordinate (`z` against `layerCount`) in the save against
+the map's declared size: entity, item, object, construction-site, zone, area-order,
 tool-item, job, queue-entry, route (including nested `start`/`target`/
 `frontier`/`visited`/`cameFrom`/`path`), ground-berry, work-progress and
 giver-association positions.

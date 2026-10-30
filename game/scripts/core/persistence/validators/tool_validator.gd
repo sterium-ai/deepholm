@@ -6,7 +6,7 @@ extends SaveCheck
 
 ## ToolItemStore.items as {nextId, list}, each entry {id, kind, location} (identity-bearing,
 ## not stackable).
-static func _valid_tool_items(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_tool_items(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid toolItems type")
 	var tool_items: Dictionary = value
@@ -19,7 +19,7 @@ static func _valid_tool_items(value, map_width: int, map_height: int) -> Diction
 		return _fail("invalid toolItems.list type")
 	var seen_ids := {}
 	for item in tool_items["list"]:
-		var item_check := _valid_tool_item(item, map_width, map_height)
+		var item_check := _valid_tool_item(item, map_width, map_height, layer_count)
 		if not item_check["ok"]:
 			return item_check
 		var item_id: String = (item as Dictionary)["id"]
@@ -28,7 +28,7 @@ static func _valid_tool_items(value, map_width: int, map_height: int) -> Diction
 		seen_ids[item_id] = true
 	return {"ok": true}
 
-static func _valid_tool_item(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_tool_item(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid toolItems entry type")
 	var item: Dictionary = value
@@ -39,10 +39,10 @@ static func _valid_tool_item(value, map_width: int, map_height: int) -> Dictiona
 		return _fail("invalid toolItems entry id")
 	if not _matches_id_pattern(item["kind"]):
 		return _fail("invalid toolItems entry kind")
-	return _valid_tool_location(item["location"], map_width, map_height)
+	return _valid_tool_location(item["location"], map_width, map_height, layer_count)
 
 ## A ground/stockpile tile or a holder's colonist id, never both.
-static func _valid_tool_location(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_tool_location(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid tool location type")
 	var location: Dictionary = value
@@ -50,11 +50,11 @@ static func _valid_tool_location(value, map_width: int, map_height: int) -> Dict
 		return _fail("invalid tool location type field")
 	match String(location["type"]):
 		"ground", "stockpile":
-			var check := _require_fields(location, ["type", "x", "y"], "tool location")
+			var check := _require_fields(location, ["type", "x", "y", "z"], "tool location")
 			if not check["ok"]:
 				return check
 			if (not _is_int_min(location["x"], 0) or not _is_int_min(location["y"], 0)
-					or int(location["x"]) >= map_width or int(location["y"]) >= map_height):
+					or int(location["x"]) >= map_width or int(location["y"]) >= map_height or not _valid_layer(location["z"], layer_count)):
 				return _fail("invalid tool location position")
 			return {"ok": true}
 		"held":

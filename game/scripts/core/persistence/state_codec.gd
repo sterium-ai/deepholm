@@ -3,7 +3,7 @@ extends RefCounted
 
 ## Converts a live WorldState to and from the JSON-safe Dictionary of
 ## docs/architecture/contracts/game-state.schema.json; no file I/O. The only module that knows
-## both the native Variants (Vector2i keys, route snapshots) and their wire encoding.
+## both the native Variants (Vector3i keys, route snapshots) and their wire encoding.
 ## Invariant: decode(encode(world)) ticks identically to world, and every map is written in
 ## sorted-key order so the same state always yields the same bytes.
 
@@ -18,8 +18,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059);
 ## v7 saves the workbench targets, orders and bills (F2, ADR 061).
 ## v8 saves every colonist's skills (F3, ADR 062).
+## v9 gives every tile a layer: "z" beside every x/y and map.layerCount (L2, ADR 045 §5).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 8
+const SCHEMA_VERSION := 9
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -47,6 +48,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"map": {
 			"width": world.get_map_width(),
 			"height": world.get_map_height(),
+			"layerCount": world._tile_grid.layer_count,
 			"tiles": world._tile_grid.encode()["tiles"],
 			"generatorVersion": world.get_generator_version(),
 		},
@@ -109,6 +111,7 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	# (e.g. a 3x2 fixture), set before the tiles or the row stride is wrong.
 	world._tile_grid.width = width
 	world._tile_grid.height = height
+	world._tile_grid.layer_count = int(map["layerCount"])
 	# NeedGiver/IncidentScheduler were built at the clamped size: rebuild them before use.
 	world._build_dimension_services(false)
 	world._generator_version = int(map.get("generatorVersion", WorldGeneratorType.GENERATOR_VERSION))
@@ -171,9 +174,9 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	# may cancel one (its ownership-gated cleanup needs them).
 	world._progress_table.restore_owners(work_progress_owners, world._colonists, world._needs_system.paused_jobs)
 
-	var bounds_max := Vector2i(width - 1, height - 1)
+	var bounds_max := world._tile_grid.bounds_max()
 	world._scheduler.restore_scheduling(SchedulingCodec._decode_scheduling(scheduling),
-		world._passability.is_passable, Vector2i.ZERO, bounds_max, world._passability.region_reachable)
+		world._passability.is_passable, Vector3i.ZERO, bounds_max, world._passability.region_reachable)
 	# rescuer_id -> job_id needs no save data: each rescue job's restrict_to names its rescuer.
 	world._rescue_giver.restore_pending_assignments(GiverCodec._rescue_pending_from_scheduler(rescue_jobs, world._scheduler))
 	_restore_reroutes(world, bounds_max)
@@ -196,7 +199,7 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 ## same cost function the live search used: plain passability for a carrying haul leg and a
 ## drop_tool leg, snapshot["target"] for a fetch_tool leg (the tool may have moved since), and
 ## the job target's exception with the actor's own faction otherwise.
-static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
+static func _restore_reroutes(world: WorldState, bounds_max: Vector3i) -> void:
 	for colonist in world._colonists:
 		var route: Variant = colonist.get("route")
 		if route == null:
@@ -216,7 +219,7 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 			cost_fn = world._passability.is_passable
 		elif job.get("kind", "") == "craft_fetch" and job.get("cell") != null:
 			# A delivering craft_fetch routes to its bench (impassable): the target-tile exception.
-			cost_fn = world._routable_to(job["site"] as Vector2i, faction_id)
+			cost_fn = world._routable_to(job["site"] as Vector3i, faction_id)
 		elif String(job.get("kind", "")) == "build" and InventoryType.is_carrying(colonist):
 			# The carrying build leg routes to job.site (ToilBindings._toil_go_to_passable()).
 			cost_fn = world._routable_to(job["site"], faction_id)
@@ -225,10 +228,10 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector2i) -> void:
 		elif world._toils.needs_fetch_tool(colonist, job, job_id):
 			cost_fn = world._routable_to(snapshot["target"], faction_id)
 		else:
-			var target: Vector2i = job["target"]
+			var target: Vector3i = job["target"]
 			cost_fn = world._routable_to(target, faction_id)
 		var search: RerouteType = RerouteType.new(snapshot["start"], snapshot["start"],
-			cost_fn, Vector2i.ZERO, bounds_max)
+			cost_fn, Vector3i.ZERO, bounds_max)
 		search.restore(snapshot)
 		world._reroutes[colonist["id"]] = search
 		# Back to the live shape: the full snapshot stays on the search.
@@ -245,11 +248,11 @@ static func _encode_content_packs(packs: Array) -> Array:
 
 # --- tiles ---------------------------------------------------------------
 
-static func _encode_tile(tile: Vector2i) -> Dictionary:
-	return {"x": tile.x, "y": tile.y}
+static func _encode_tile(tile: Vector3i) -> Dictionary:
+	return {"x": tile.x, "y": tile.y, "z": tile.z}
 
-static func _decode_tile(tile: Dictionary) -> Vector2i:
-	return Vector2i(int(tile["x"]), int(tile["y"]))
+static func _decode_tile(tile: Dictionary) -> Vector3i:
+	return TileGrid.tile_of(tile)
 
 static func _encode_tile_array(tiles: Array) -> Array:
 	var encoded: Array = []
@@ -274,7 +277,7 @@ static func _encode_items(items: Dictionary, next_id: int, item_factions: Dictio
 	for key in keys:
 		var item: Dictionary = items[key]
 		list.append({
-			"id": item["id"], "x": item["x"], "y": item["y"],
+			"id": item["id"], "x": item["x"], "y": item["y"], "z": item["z"],
 			"kind": item["kind"], "count": item["count"],
 			"factionId": String(item_factions.get(key, "colony")),
 		})
@@ -286,7 +289,7 @@ static func _decode_items(field: Dictionary) -> Dictionary:
 	for entry in (field["list"] as Array):
 		var id := String(entry["id"])
 		items[id] = {
-			"id": id, "x": int(entry["x"]), "y": int(entry["y"]),
+			"id": id, "x": int(entry["x"]), "y": int(entry["y"]), "z": int(entry["z"]),
 			"kind": String(entry["kind"]), "count": int(entry["count"]),
 		}
 		factions[id] = String(entry.get("factionId", "colony"))
@@ -321,12 +324,12 @@ static func _decode_tool_items(field: Dictionary) -> Dictionary:
 static func _encode_tool_location(location: Dictionary) -> Dictionary:
 	if String(location["type"]) == "held":
 		return {"type": "held", "colonistId": String(location["colonist_id"])}
-	return {"type": String(location["type"]), "x": int(location["x"]), "y": int(location["y"])}
+	return {"type": String(location["type"]), "x": int(location["x"]), "y": int(location["y"]), "z": int(location["z"])}
 
 static func _decode_tool_location(location: Dictionary) -> Dictionary:
 	if String(location["type"]) == "held":
 		return {"type": "held", "colonist_id": String(location["colonistId"])}
-	return {"type": String(location["type"]), "x": int(location["x"]), "y": int(location["y"])}
+	return {"type": String(location["type"]), "x": int(location["x"]), "y": int(location["y"]), "z": int(location["z"])}
 
 # --- zones -------------------------------------------------------------
 
@@ -339,7 +342,7 @@ static func _encode_zones(zones: Dictionary) -> Array:
 	for key in keys:
 		var zone: Dictionary = zones[key]
 		var entry := {
-			"id": zone["id"], "x": zone["x"], "y": zone["y"],
+			"id": zone["id"], "x": zone["x"], "y": zone["y"], "z": zone["z"],
 			"width": zone["width"], "height": zone["height"],
 		}
 		if zone.has("kind"):
@@ -353,7 +356,7 @@ static func _decode_zones(list: Array) -> Dictionary:
 	for entry in list:
 		var id := String(entry["id"])
 		zones[id] = {
-			"id": id, "x": int(entry["x"]), "y": int(entry["y"]),
+			"id": id, "x": int(entry["x"]), "y": int(entry["y"]), "z": int(entry["z"]),
 			"width": int(entry["width"]), "height": int(entry["height"]),
 		}
 		var farm: Dictionary = entry
@@ -403,7 +406,7 @@ static func _decode_objects(objects: Array) -> Array:
 
 # --- ground berries ----------------------------------------------------
 
-## Sorted "%d_%d" keys; berries stay a per-tile counter, not items. factionId (ADR 047)
+## Sorted TileGrid.coord_key() keys; berries stay a per-tile counter, not items. factionId (ADR 047)
 ## defaults to "colony", like an untracked item.
 static func _encode_ground_berries(ground_berries: Dictionary, factions: Dictionary) -> Array:
 	var keys := ground_berries.keys()
@@ -421,14 +424,14 @@ static func _decode_ground_berries(list: Array) -> Dictionary:
 	var factions: Dictionary = {}
 	for entry in list:
 		var tile := _decode_tile(entry["target"])
-		var key := TileGrid.coord_key(tile.x, tile.y)
+		var key := TileGrid.coord_key(tile)
 		berries[key] = int(entry["berries"])
 		factions[key] = String(entry["factionId"])
 	return {"berries": berries, "factions": factions}
 
 # --- work progress (colonist-ai.md 3.6) -------------------------------------
 
-## Keys are "%d_%d", or "<jobId>:%d_%d" for a job-scoped (rescue) key; the wire names tile
+## Keys are TileGrid.coord_key(), or "<jobId>:<coord_key>" for a job-scoped (rescue) key; the wire names tile
 ## and scope ("ownerJobId") explicitly. Sorted by key.
 static func _encode_work_progress(work_progress: Dictionary) -> Array:
 	var keys := work_progress.keys()

@@ -203,7 +203,7 @@ static func _encode_route(route_state):
 		var cost_map: Dictionary = cost_value
 		var visited_map: Dictionary = (route_state as Dictionary)["visited"]
 		var cost: Array = []
-		for tile: Vector2i in visited_map:
+		for tile: Vector3i in visited_map:
 			var g: float = cost_map[tile]
 			cost.append(g)
 		encoded["cost"] = cost

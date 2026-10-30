@@ -90,12 +90,12 @@ static func _valid_rescue_victim_assignment_entry(value) -> Dictionary:
 	return {"ok": true}
 
 ## CombatGiver's [{actorId, tiles}] flee exclusions.
-static func _valid_combat_blocked_targets(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_combat_blocked_targets(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid combatBlockedTargets type")
 	var seen_actors := {}
 	for entry in (value as Array):
-		var entry_check := _valid_combat_blocked_targets_entry(entry, map_width, map_height)
+		var entry_check := _valid_combat_blocked_targets_entry(entry, map_width, map_height, layer_count)
 		if not entry_check["ok"]:
 			return entry_check
 		var actor_id: String = (entry as Dictionary)["actorId"]
@@ -104,7 +104,7 @@ static func _valid_combat_blocked_targets(value, map_width: int, map_height: int
 		seen_actors[actor_id] = true
 	return {"ok": true}
 
-static func _valid_combat_blocked_targets_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_combat_blocked_targets_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid combatBlockedTargets entry type")
 	var entry: Dictionary = value
@@ -113,18 +113,18 @@ static func _valid_combat_blocked_targets_entry(value, map_width: int, map_heigh
 		return check
 	if not _matches_id_pattern(entry["actorId"]):
 		return _fail("invalid combatBlockedTargets entry actorId")
-	var tiles_check := _valid_tile_array(entry["tiles"], map_width, map_height)
+	var tiles_check := _valid_tile_array(entry["tiles"], map_width, map_height, layer_count)
 	if not tiles_check["ok"]:
 		return tiles_check
 	return {"ok": true}
 
 ## ApproachGiver's [{jobId, kind, actorId | tile}] (ADR 033).
-static func _valid_approach_job_targets(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_approach_job_targets(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid approachJobTargets type")
 	var seen_jobs := {}
 	for entry in (value as Array):
-		var entry_check := _valid_approach_job_target_entry(entry, map_width, map_height)
+		var entry_check := _valid_approach_job_target_entry(entry, map_width, map_height, layer_count)
 		if not entry_check["ok"]:
 			return entry_check
 		var job_id: String = (entry as Dictionary)["jobId"]
@@ -133,7 +133,7 @@ static func _valid_approach_job_targets(value, map_width: int, map_height: int) 
 		seen_jobs[job_id] = true
 	return {"ok": true}
 
-static func _valid_approach_job_target_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_approach_job_target_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid approachJobTargets entry type")
 	var entry: Dictionary = value
@@ -149,4 +149,4 @@ static func _valid_approach_job_target_entry(value, map_width: int, map_height: 
 		if not _matches_id_pattern(entry["actorId"]):
 			return _fail("invalid approachJobTargets entry actorId")
 		return {"ok": true}
-	return _valid_tile(entry["tile"], map_width, map_height)
+	return _valid_tile(entry["tile"], map_width, map_height, layer_count)
