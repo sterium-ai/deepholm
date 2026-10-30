@@ -486,9 +486,14 @@ func _drag_preview_changes() -> Array[Vector2i]:
 		# Cells retention dropped unread are unknown: re-validate the whole drag.
 		if bool(dirty["truncated"]):
 			changed.append_array(tiles_in_rectangle(_drag_start, _drag_current))
-		changed.append_array(dirty["cells"])
-		for tile in designations["tiles"]:
-			changed.append(tile)
+		# The viewer draws the surface until L4's active layer (ADR 045 §7): deeper cells are
+		# consumed, not drawn.
+		for cell: Vector3i in dirty["cells"]:
+			if cell.z == TileGrid.SURFACE:
+				changed.append(Vector2i(cell.x, cell.y))
+		for tile: Vector3i in designations["tiles"]:
+			if tile.z == TileGrid.SURFACE:
+				changed.append(Vector2i(tile.x, tile.y))
 	_drag_preview_changes_tick = world.get_tick()
 	_drag_preview_cells_read = int(dirty["next"])
 	_drag_preview_designations_read = int(designations["next"])
@@ -589,7 +594,7 @@ func _commit_zone(start: Vector2i, end: Vector2i) -> void:
 		"command_id": "viewer_zone_add_%d_%d" % [world.get_tick(), _next_zone_command_id],
 		"tick": world.get_tick(),
 		"type": "zone_add",
-		"payload": {"x": min_x, "y": min_y, "width": max_x - min_x + 1, "height": max_y - min_y + 1},
+		"payload": {"x": min_x, "y": min_y, "z": TileGrid.SURFACE, "width": max_x - min_x + 1, "height": max_y - min_y + 1},
 	}
 	command["payload"].merge(_zone_payload)
 	var result: Dictionary = world.apply(command)
@@ -615,7 +620,7 @@ func _commit_build(tile: Vector2i) -> void:
 		"command_id": "viewer_build_%d_%d" % [world.get_tick(), _next_build_command_id],
 		"tick": world.get_tick(),
 		"type": "build",
-		"payload": {"kind": _build_kind, "x": tile.x, "y": tile.y, "orientation": _build_orientation if _build_rotatable else ""},
+		"payload": {"kind": _build_kind, "x": tile.x, "y": tile.y, "z": TileGrid.SURFACE, "orientation": _build_orientation if _build_rotatable else ""},
 	}
 	var result: Dictionary = world.apply(command)
 	build_committed.emit(result)
@@ -669,7 +674,10 @@ func _refresh_tile_map(force_full: bool) -> void:
 		_refresh_tile_map(true)
 		return
 	var touched := 0
-	for cell: Vector2i in dirty["cells"]:
+	for dirty_cell: Vector3i in dirty["cells"]:
+		if dirty_cell.z != TileGrid.SURFACE: # consumed, not drawn (ADR 045 §7)
+			continue
+		var cell := Vector2i(dirty_cell.x, dirty_cell.y)
 		var kind := world.get_tile(cell.x, cell.y)
 		_set_tile_map_cell(cell.x, cell.y, kind)
 		_set_decor_or_object_cell(cell.x, cell.y, kind, world.get_object(cell.x, cell.y))
@@ -921,7 +929,8 @@ func _draw_construction_sites() -> void:
 
 ## The map-local pixel rect of a construction site's footprint tiles.
 static func construction_site_footprint_rect(site: Dictionary) -> Rect2:
-	var origin := Vector2i(site["origin"])
+	var site_origin: Vector3i = site["origin"]
+	var origin := Vector2i(site_origin.x, site_origin.y)
 	var orientation := String(site.get("orientation", "horizontal"))
 	var kind := String(site["kind"])
 	var size := Vector2i(2, 1) if kind == "workbench" and orientation != "vertical" else Vector2i(1, 2) if kind == "workbench" else Vector2i.ONE

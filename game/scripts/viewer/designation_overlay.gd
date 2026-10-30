@@ -46,8 +46,9 @@ func refresh() -> void:
 		var changes: Dictionary = world.get_designation_changes(_cursor)
 		_cursor = int(changes["next"])
 		var tiles: Dictionary = changes["tiles"]
-		for tile in tiles:
-			_image.set_pixelv(tile, fill_color(int(tiles[tile])))
+		for tile: Vector3i in tiles:
+			if tile.z == TileGrid.SURFACE: # the surface until L4's active layer (ADR 045 §7)
+				_image.set_pixel(tile.x, tile.y, fill_color(int(tiles[tile])))
 		if not tiles.is_empty():
 			_texture.update(_image)
 	queue_redraw()
@@ -66,7 +67,7 @@ func _draw() -> void:
 	for job in world.get_jobs(["site_fetch"]):
 		if String(job["status"]) not in PENDING_STATUSES:
 			continue
-		var target: Vector2i = job["target"]
+		var target: Vector3i = job["target"]
 		draw_rect(Rect2(
 			target.x * TILE_SIZE,
 			target.y * TILE_SIZE,
