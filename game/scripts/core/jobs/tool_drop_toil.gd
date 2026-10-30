@@ -200,7 +200,7 @@ func is_dropping(colonist: Dictionary, job_id: String, _job: Dictionary = {}, _h
 	return colonist.get("route") != null and not marked.is_empty() \
 		and marked == String(colonist.get("held_tool", ""))
 
-func _route_effective_target(route: Dictionary) -> Vector2i:
+func _route_effective_target(route: Dictionary) -> Vector3i:
 	var rerouting: Variant = route.get("rerouting")
 	if rerouting != null:
 		return rerouting["target"]
@@ -217,53 +217,52 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		colonist["route"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, ""); return
 	_set_active_item.call(job_id, held_id)
 	var route: Variant = colonist.get("route")
-	var target: Vector2i
+	var target: Vector3i
 	if route == null:
-		var from := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var from := TileGrid.tile_of(colonist)
 		var cell: Variant = _find_drop_cell(from)
 		if cell == null:
-			_drop_tool_ground.call(held_id, from.x, from.y)
+			_drop_tool_ground.call(held_id, from)
 			_record.call(TOIL_DROP_TOOL, "complete")
 			_set_active_item.call(job_id, "")
 			return
 		target = cell
 	else:
 		target = _route_effective_target(route)
-	var passable := func(tile: Vector2i) -> float: return float(_passability.call(tile.x, tile.y)["cost"])
+	var passable := func(tile: Vector3i) -> float: return float(_passability.call(tile)["cost"])
 	var on_arrive := func(_c: Dictionary, _jid: String) -> void:
 		if _cell_still_free(target, colonist.get("id")) and _in_any_zone(target):
-			_drop_tool_stockpile.call(held_id, target.x, target.y)
+			_drop_tool_stockpile.call(held_id, target)
 		else:
-			_drop_tool_ground.call(held_id, int(colonist["x"]), int(colonist["y"]))
+			_drop_tool_ground.call(held_id, TileGrid.tile_of(colonist))
 		_record.call(TOIL_DROP_TOOL, "complete")
 		_set_active_item.call(job_id, "")
 	if _advance_go_to.call(colonist, job_id, target, passable, TOIL_DROP_TOOL, on_arrive) == "unreachable":
-		_drop_tool_ground.call(held_id, int(colonist["x"]), int(colonist["y"]))
+		_drop_tool_ground.call(held_id, TileGrid.tile_of(colonist))
 		_set_active_item.call(job_id, "")
 
 ## Also refuses a cell holding a tool item: the shared cell_occupied callable only checks
 ## colonists and stackable items.
-func _cell_still_free(cell: Vector2i, excluding_colonist_id) -> bool:
-	if not (bool(_is_cell_free.call(cell.x, cell.y)) and bool(_passability.call(cell.x, cell.y)["passable"]) \
-			and not bool(_cell_occupied.call(cell.x, cell.y, excluding_colonist_id))):
+func _cell_still_free(cell: Vector3i, excluding_colonist_id) -> bool:
+	if not (bool(_is_cell_free.call(cell)) and bool(_passability.call(cell)["passable"]) \
+			and not bool(_cell_occupied.call(cell, excluding_colonist_id))):
 		return false
 	for tool_item in (_get_tool_items.call() as Array):
 		var location: Dictionary = tool_item.get("location", {})
-		if String(location.get("type", "")) in ["ground", "stockpile"] \
-				and int(location.get("x", -1)) == cell.x and int(location.get("y", -1)) == cell.y:
+		if String(location.get("type", "")) in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell:
 			return false
 	return true
 
-func _in_any_zone(cell: Vector2i) -> bool:
+func _in_any_zone(cell: Vector3i) -> bool:
 	for zone in (_get_zones.call() as Array):
-		if cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) \
+		if cell.z == int(zone["z"]) and cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) \
 				and cell.y >= int(zone["y"]) and cell.y < int(zone["y"]) + int(zone["height"]):
 			return true
 	return false
 
 ## Nearest free stockpile cell within TOOL_DROP_RADIUS (HaulGiver.find_free_haul_cell()'s
 ## checks, read-only). The job's own target is eligible: is_dropping() reads only the marker.
-func _find_drop_cell(from: Vector2i) -> Variant:
+func _find_drop_cell(from: Vector3i) -> Variant:
 	if not _get_zones.is_valid():
 		return null
 	var best: Variant = null
@@ -271,8 +270,8 @@ func _find_drop_cell(from: Vector2i) -> Variant:
 	for zone in (_get_zones.call() as Array):
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
 			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
-				var cell := Vector2i(x, y)
-				if not _cell_still_free(cell, ""):
+				var cell := Vector3i(x, y, int(zone["z"]))
+				if cell.z != from.z or not _cell_still_free(cell, ""):
 					continue
 				var distance: int = TileGrid.manhattan(cell, from)
 				if distance > TOOL_DROP_RADIUS:

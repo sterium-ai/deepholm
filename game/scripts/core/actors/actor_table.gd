@@ -47,26 +47,27 @@ static func validate_component(name: String, tunables: Dictionary) -> bool:
 		_:
 			return false
 
-## Builds actor def_id at (x, y), every tunable from the registry. "colonist" keeps its exact
+## Builds actor def_id at tile, every tunable from the registry. "colonist" keeps its exact
 ## field set/order; every other kind gets component-keyed fields ("wild"/"visitor" as true flags,
 ## "route" for mover).
-static func spawn(def_id: String, x: int, y: int, registry, id: String) -> Dictionary:
+static func spawn(def_id: String, tile: Vector3i, registry, id: String) -> Dictionary:
 	var definition: Dictionary = registry.get_entry("actors", def_id)
 	var components: Array = definition.get("components", [])
 	var tunables: Dictionary = definition.get("tunables", {})
 	if def_id == "colonist":
-		return _spawn_colonist(x, y, id, tunables, registry)
-	return _spawn_generic_actor(def_id, x, y, id, components, tunables, registry)
+		return _spawn_colonist(tile, id, tunables, registry)
+	return _spawn_generic_actor(def_id, tile, id, components, tunables, registry)
 
-static func _spawn_colonist(x: int, y: int, id: String, tunables: Dictionary, registry) -> Dictionary:
+static func _spawn_colonist(tile: Vector3i, id: String, tunables: Dictionary, registry) -> Dictionary:
 	var worker_tunables: Dictionary = tunables.get("worker", {})
 	var health_tunables: Dictionary = tunables.get("health", {})
 	var labours: Array = worker_tunables.get("labours", [])
 	return {
 		"id": id,
 		"kind": "colonist",
-		"x": x,
-		"y": y,
+		"x": tile.x,
+		"y": tile.y,
+		"z": tile.z,
 		"needs": NeedsType.build_full_needs(registry),
 		"needsAccumulator": NeedsType.build_full_accumulator(registry),
 		"labourTable": WorkerType.default_labour_table(worker_tunables),
@@ -79,9 +80,9 @@ static func _spawn_colonist(x: int, y: int, id: String, tunables: Dictionary, re
 		"health": HealthType.build_full(health_tunables),
 	}
 
-static func _spawn_generic_actor(def_id: String, x: int, y: int, id: String, components: Array,
+static func _spawn_generic_actor(def_id: String, tile: Vector3i, id: String, components: Array,
 		tunables: Dictionary, registry) -> Dictionary:
-	var actor: Dictionary = {"id": id, "kind": def_id, "x": x, "y": y, "route": null}
+	var actor: Dictionary = {"id": id, "kind": def_id, "x": tile.x, "y": tile.y, "z": tile.z, "route": null}
 	if components.has("needs"):
 		actor["needs"] = NeedsType.build_full_needs(registry)
 		actor["needsAccumulator"] = NeedsType.build_full_accumulator(registry)

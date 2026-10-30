@@ -41,11 +41,11 @@ func advance(tick: int) -> void:
 		var site: Variant = job.get("site")
 		if kind in JobQueueType.FETCH_KINDS:
 			committed[job["item_id"]] = true
-		if kind == "craft_fetch" and site is Vector2i:
-			var bench_tile: Vector2i = site
+		if kind == "craft_fetch" and site is Vector3i:
+			var bench_tile: Vector3i = site
 			fetching[CraftingSystemType.bench_key(bench_tile)] = true
 		elif kind == "craft_work":
-			var target: Vector2i = job["target"]
+			var target: Vector3i = job["target"]
 			working[CraftingSystemType.bench_key(target)] = true
 	_crafting.update_bills(committed, fetching)
 	for key: String in _crafting.bench_keys():
@@ -53,14 +53,14 @@ func advance(tick: int) -> void:
 		var bill: Dictionary = record["bill"]
 		if bill.is_empty() or fetching.has(key) or working.has(key):
 			continue
-		var origin: Vector2i = record["origin"]
+		var origin: Vector3i = record["origin"]
 		if _crafting.bill_met(bill):
 			_submit.call(origin, JobQueueType.Priority.NORMAL, tick, "craft_work", "")
 			continue
 		_submit_fetch(origin, bill, committed, tick)
 
 ## One craft_fetch for the first still-short input that has a free stockpiled source.
-func _submit_fetch(origin: Vector2i, bill: Dictionary, committed: Dictionary, tick: int) -> void:
+func _submit_fetch(origin: Vector3i, bill: Dictionary, committed: Dictionary, tick: int) -> void:
 	var recipe_id: String = bill["recipe"]
 	for stack: Dictionary in _crafting.recipes.inputs(recipe_id):
 		var item: String = stack["item"]
@@ -70,9 +70,7 @@ func _submit_fetch(origin: Vector2i, bill: Dictionary, committed: Dictionary, ti
 		if source.is_empty():
 			continue
 		var source_id: String = source["id"]
-		var x: int = source["x"]
-		var y: int = source["y"]
-		var result: Dictionary = _submit.call(Vector2i(x, y), JobQueueType.Priority.NORMAL, tick, "craft_fetch", "")
+		var result: Dictionary = _submit.call(TileGrid.tile_of(source), JobQueueType.Priority.NORMAL, tick, "craft_fetch", "")
 		if result.get("ok", false):
 			var job_id: String = result["job_id"]
 			_attach_item.call(job_id, source_id)

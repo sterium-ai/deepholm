@@ -28,7 +28,7 @@ const REASON_NO_RESCUER_AVAILABLE := "no_rescuer_available"
 const MAX_STALE_RETRIES := 3
 
 var _priority: int
-var _bounds_max: Vector2i
+var _bounds_max: Vector3i
 var _reservation_table
 var _tile_key: Callable
 var _routable_to: Callable
@@ -61,7 +61,7 @@ var _job_victim: Dictionary = {}
 ## reservation_table is only peeked, never acquired. route_budget must be the shared instance,
 ## never a copy. interrupt/resume are the same NeedsSystem wrappers NeedGiver gets.
 ## region_reachable is Passability.region_reachable (ADR 054); invalid means no region check.
-func _init(priority: int, bounds_max: Vector2i, reservation_table, tile_key: Callable,
+func _init(priority: int, bounds_max: Vector3i, reservation_table, tile_key: Callable,
 		routable_to: Callable, rescue_target_candidates: Callable, submit_job: Callable,
 		set_reason: Callable, interrupt_current_job: Callable, resume_interrupted_job: Callable,
 		is_trench: Callable, route_budget: Dictionary, get_job: Callable, retire_job: Callable,
@@ -127,10 +127,10 @@ func advance(candidates: Array[Dictionary], victims: Array[Dictionary], tick: in
 ## The Manhattan pre-sort (ties by id) is only a search order; the choice is by real route.
 func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int) -> void:
 	var victim_id: String = String(victim["id"])
-	var victim_tile := Vector2i(int(victim["x"]), int(victim["y"]))
+	var victim_tile := TileGrid.tile_of(victim)
 	var targets: Array = []
 	for target in (_rescue_target_candidates.call(victim_tile) as Array):
-		if not _reservation_table.is_reserved(String(_tile_key.call(target.x, target.y))):
+		if not _reservation_table.is_reserved(String(_tile_key.call(target))):
 			targets.append(target)
 	if targets.is_empty():
 		_onset_failed(victim_id)
@@ -140,7 +140,7 @@ func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int)
 		var candidate_id: String = String(candidate["id"])
 		if _pending.has(candidate_id):
 			continue
-		pool.append({"id": candidate_id, "pos": Vector2i(int(candidate["x"]), int(candidate["y"]))})
+		pool.append({"id": candidate_id, "pos": TileGrid.tile_of(candidate)})
 	if pool.is_empty():
 		_onset_failed(victim_id)
 		return
@@ -180,7 +180,7 @@ func _advance_search(victim_id: String, candidates: Array[Dictionary], tick: int
 	if live.is_empty():
 		_advance_to_next_candidate(state)
 		return
-	var live_pos := Vector2i(int(live["x"]), int(live["y"]))
+	var live_pos := TileGrid.tile_of(live)
 	if live_pos != candidate["pos"]:
 		var stale_retries: int = int(state.get("stale_retries", 0)) + 1
 		if stale_retries > MAX_STALE_RETRIES:
@@ -196,8 +196,8 @@ func _advance_search(victim_id: String, candidates: Array[Dictionary], tick: int
 		_advance_to_next_candidate(state)
 		return
 	var best: Dictionary = _shortest_found(found)
-	var target: Vector2i = best["target"]
-	if _reservation_table.is_reserved(String(_tile_key.call(target.x, target.y))):
+	var target: Vector3i = best["target"]
+	if _reservation_table.is_reserved(String(_tile_key.call(target))):
 		_advance_to_next_candidate(state)
 		return
 	var rescuer := _find_candidate(candidate_id, candidates)
@@ -219,11 +219,11 @@ func _advance_to_next_candidate(state: Dictionary) -> void:
 func _advance_target_search(state: Dictionary, candidate: Dictionary, target_cursor: int) -> void:
 	var targets: Array = state["targets"]
 	var found: Array = state["found"]
-	var target: Vector2i = targets[target_cursor]
+	var target: Vector3i = targets[target_cursor]
 	var candidate_id: String = String(candidate["id"])
 	var search: RerouteType = state.get("search")
 	if search == null:
-		search = RerouteType.new(candidate["pos"], target, _routable_to.call(target), Vector2i.ZERO, _bounds_max, _region_reachable)
+		search = RerouteType.new(candidate["pos"], target, _routable_to.call(target), Vector3i.ZERO, _bounds_max, _region_reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(candidate_id, false)):
@@ -263,7 +263,7 @@ func _find_candidate(colonist_id: String, candidates: Array[Dictionary]) -> Dict
 	return {}
 
 ## Submit first so a lost race mutates nothing; then interrupt the rescuer and record the victim.
-func _commit(victim_id: String, rescuer: Dictionary, target: Vector2i, tick: int) -> void:
+func _commit(victim_id: String, rescuer: Dictionary, target: Vector3i, tick: int) -> void:
 	var rescuer_id: String = String(rescuer["id"])
 	var result: Dictionary = _submit_job.call(target, _priority, tick, "rescue", rescuer_id)
 	if not result.get("ok", false):

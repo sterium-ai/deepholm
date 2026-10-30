@@ -17,9 +17,9 @@ var suspended: Dictionary = {}
 var _queue: JobQueueType
 ## job kind -> work ticks (content/jobs.json), shared by reference with WorldState.
 var _work_ticks: Dictionary
-## (x: int, y: int) -> String: JobQueue's "tile:%d,%d" reservation key.
+## (tile: Vector3i) -> String: JobQueue's "tile:" reservation key (TileGrid.target_key()).
 var _tile_key: Callable
-## (job: Dictionary) -> Vector2i: the tile a job's `work` toil runs on.
+## (job: Dictionary) -> Vector3i: the tile a job's `work` toil runs on.
 var _work_target_for: Callable
 
 func _init(queue: JobQueueType, work_ticks: Dictionary, tile_key: Callable, work_target_for: Callable) -> void:
@@ -50,13 +50,13 @@ func hash_into(snapshot: Dictionary) -> void:
 	snapshot["suspended_work_progress"] = StateCodec._encode_suspended_work_progress(suspended)
 
 ## The progress key of `tile`: the plain tile key when scope_job_id is empty,
-## else the job-scoped "<job_id>:<x>_<y>".
-static func key_of(tile: Vector2i, scope_job_id: String = "") -> String:
+## else the job-scoped "<job_id>:<x>_<y>" (TileGrid.coord_key()).
+static func key_of(tile: Vector3i, scope_job_id: String = "") -> String:
 	if scope_job_id.is_empty():
-		return TileGrid.coord_key(tile.x, tile.y)
-	return "%s:%s" % [scope_job_id, TileGrid.coord_key(tile.x, tile.y)]
+		return TileGrid.coord_key(tile)
+	return "%s:%s" % [scope_job_id, TileGrid.coord_key(tile)]
 
-## key_of()'s inverse: {tile: Vector2i, scope: String}. Job ids never contain
+## key_of()'s inverse: {tile: Vector3i, scope: String}. Job ids never contain
 ## ":" (the `^[a-z0-9_-]+$` id pattern), so the last ":" separates the scope.
 static func key_parts(progress_key: String) -> Dictionary:
 	var scope := ""
@@ -70,20 +70,20 @@ static func key_parts(progress_key: String) -> Dictionary:
 ## The progress key of a specific job, by its own identity, never the tile's
 ## current reservation owner: terminal cleanup runs after the reservation is released.
 func key_for_job(job_id: String, job: Dictionary) -> String:
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	if String(job.get("kind", "")) != "rescue":
 		return key_of(target)
 	return key_of(target, job_id)
 
 ## The tile-addressed key used mid-work: resolves the tile's reservation owner.
-func key(x: int, y: int) -> String:
-	var owning_job_id: String = _queue.get_reservation_table().owner(_tile_key.call(x, y))
+func key(tile: Vector3i) -> String:
+	var owning_job_id: String = _queue.get_reservation_table().owner(_tile_key.call(tile))
 	if owning_job_id.is_empty():
-		return key_of(Vector2i(x, y))
+		return key_of(tile)
 	# A construction site's footprint is owned by "site:<id>", not a job id.
 	var owning_job := _queue.get_job(owning_job_id)
 	if owning_job.is_empty():
-		return key_of(Vector2i(x, y))
+		return key_of(tile)
 	return key_for_job(owning_job_id, owning_job)
 
 ## Cleanup for a job that just took a terminal transition: a rescue's own key
@@ -97,20 +97,20 @@ func clear_terminated_job(job_id: String, job: Dictionary, was_active: bool) -> 
 
 ## null when the tile has no stored progress, else its ticks remaining,
 ## whatever job wrote it (escape_trench's "already stamped?" check).
-func get_progress(target: Vector2i):
-	var progress_key := key(target.x, target.y)
+func get_progress(target: Vector3i):
+	var progress_key := key(target)
 	if not progress.has(progress_key):
 		return null
 	return int(progress[progress_key])
 
 ## start_work()'s job-scoped lookup: the job's suspended snapshot (consumed), else the
 ## live value only when the job owns it; null (use the kind's duration) otherwise.
-func resume(target: Vector2i, job_id: String):
+func resume(target: Vector3i, job_id: String):
 	if suspended.has(job_id):
 		var value := int(suspended[job_id])
 		suspended.erase(job_id)
 		return value
-	var progress_key := key(target.x, target.y)
+	var progress_key := key(target)
 	if not progress.has(progress_key):
 		return null
 	# An empty owner is an incident's own job_id-less stamp, which start_work() must pick up.
@@ -133,21 +133,21 @@ func suspend(work) -> void:
 	if kind == "incident" or not _work_ticks.has(kind):
 		return
 	suspended[job_id] = int(work.get("ticks_remaining", 0))
-	var target: Vector2i = _work_target_for.call(job)
-	var progress_key := key(target.x, target.y)
+	var target: Vector3i = _work_target_for.call(job)
+	var progress_key := key(target)
 	if String(owners.get(progress_key, "")) == job_id:
 		clear(target)
 
 ## The tile-cache write behind WorldState._set_work_progress(); a non-empty job_id
 ## becomes the key's owner.
-func record(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
-	var progress_key := key(target.x, target.y)
+func record(target: Vector3i, ticks_remaining: int, job_id: String = "") -> void:
+	var progress_key := key(target)
 	progress[progress_key] = ticks_remaining
 	if not job_id.is_empty():
 		owners[progress_key] = job_id
 
-func clear(target: Vector2i) -> void:
-	var progress_key := key(target.x, target.y)
+func clear(target: Vector3i) -> void:
+	var progress_key := key(target)
 	progress.erase(progress_key)
 	owners.erase(progress_key)
 
@@ -157,8 +157,8 @@ func release_owned(job_id: String, job: Dictionary) -> void:
 	if job.is_empty() or not _work_ticks.has(String(job.get("kind", ""))):
 		return
 	suspended.erase(job_id)
-	var target: Vector2i = _work_target_for.call(job)
-	var progress_key := key(target.x, target.y)
+	var target: Vector3i = _work_target_for.call(job)
+	var progress_key := key(target)
 	if String(owners.get(progress_key, "")) == job_id:
 		clear(target)
 
@@ -211,8 +211,8 @@ func active_incident_keys() -> Dictionary:
 	var keys: Dictionary = {}
 	for job in _queue.get_jobs():
 		if String(job.get("kind", "")) == "incident" and String(job.get("status", "")) == "active":
-			var target: Vector2i = _work_target_for.call(job)
-			keys[key(target.x, target.y)] = true
+			var target: Vector3i = _work_target_for.call(job)
+			keys[key(target)] = true
 	return keys
 
 func claim_reconstructed_owner(result: Dictionary, job_id: String) -> void:
@@ -222,8 +222,8 @@ func claim_reconstructed_owner(result: Dictionary, job_id: String) -> void:
 	var kind := String(job.get("kind", ""))
 	if job.is_empty() or kind == "incident" or not _work_ticks.has(kind):
 		return
-	var target: Vector2i = _work_target_for.call(job)
-	var progress_key := key(target.x, target.y)
+	var target: Vector3i = _work_target_for.call(job)
+	var progress_key := key(target)
 	if not progress.has(progress_key):
 		return
 	if result.has(progress_key):

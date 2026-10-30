@@ -41,12 +41,12 @@ func decode(state: Dictionary) -> void:
 	var decoded_origin: Dictionary = {}
 	var decoded_orientation: Dictionary = {}
 	for record in StateCodec._decode_objects(state["objects"]):
-		var origin: Vector2i = record["origin"]
-		var origin_key := _tile_grid.tile_index(origin.x, origin.y)
+		var origin: Vector3i = record["origin"]
+		var origin_key := _tile_grid.index_of(origin)
 		var kind: String = record["kind"]
 		var orientation: String = record["orientation"]
 		for tile in object_footprint_tiles(kind, origin, orientation):
-			var key := _tile_grid.tile_index(tile.x, tile.y)
+			var key := _tile_grid.index_of(tile)
 			decoded_objects[key] = kind
 			decoded_factions[key] = record["factionId"]
 			if key != origin_key:
@@ -68,16 +68,16 @@ func hash_into(snapshot: Dictionary) -> void:
 	snapshot["object_health"] = _keyed(object_health)
 
 ## "" for no object, and for an out-of-bounds tile.
-func get_object(x: int, y: int) -> String:
-	if not _tile_grid.in_bounds(x, y):
+func get_object(tile: Vector3i) -> String:
+	if not _tile_grid.contains(tile):
 		return ""
-	return String(objects.get(_tile_grid.tile_index(x, y), ""))
+	return String(objects.get(_tile_grid.index_of(tile), ""))
 
 ## "" (like get_object()'s own "none") when no object is placed here.
-func get_object_faction_id(x: int, y: int) -> String:
-	if not _tile_grid.in_bounds(x, y):
+func get_object_faction_id(tile: Vector3i) -> String:
+	if not _tile_grid.contains(tile):
 		return ""
-	return String(object_factions.get(_tile_grid.tile_index(x, y), ""))
+	return String(object_factions.get(_tile_grid.index_of(tile), ""))
 
 ## Sorted by object_key().
 func get_objects() -> Array[Dictionary]:
@@ -88,84 +88,82 @@ func get_objects() -> Array[Dictionary]:
 	for key in keys:
 		var tile := TileGridType.coord_of_key(String(key))
 		var index := _tile_grid.index_of(tile)
-		copy.append({"x": tile.x, "y": tile.y, "kind": String(by_key[key]),
+		copy.append({"x": tile.x, "y": tile.y, "z": tile.z, "kind": String(by_key[key]),
 			"faction_id": String(object_factions.get(index, "colony"))})
 	return copy
 
 ## Every tile carrying kind, in placement order (NeedsSystem's "rest" candidates).
-func tiles_of_kind(kind: String) -> Array[Vector2i]:
-	var tiles: Array[Vector2i] = []
+func tiles_of_kind(kind: String) -> Array[Vector3i]:
+	var tiles: Array[Vector3i] = []
 	for index: int in objects:
 		if String(objects[index]) == kind:
 			tiles.append(_tile_grid.coord_of(index))
 	return tiles
 
 ## A generated object (berry bushes) written like decode(): no dirty mark, no region/room hook.
-func place_generated(x: int, y: int, kind: String) -> void:
-	var index := _tile_grid.tile_index(x, y)
+func place_generated(tile: Vector3i, kind: String) -> void:
+	var index := _tile_grid.index_of(tile)
 	objects[index] = kind
 	object_factions[index] = "colony"
 	_tile_grid.reset_cells()
 
-## (x, y)'s footprint origin: (x, y) itself unless it is a non-origin tile of a multi-tile object.
-func object_origin_at(x: int, y: int) -> Vector2i:
-	if not _tile_grid.in_bounds(x, y):
-		return Vector2i(x, y)
-	return object_origin.get(_tile_grid.tile_index(x, y), Vector2i(x, y))
+## tile's footprint origin: tile itself unless it is a non-origin tile of a multi-tile object.
+func object_origin_at(tile: Vector3i) -> Vector3i:
+	if not _tile_grid.contains(tile):
+		return tile
+	return object_origin.get(_tile_grid.index_of(tile), tile)
 
 ## Kind's declared [w, h] footprint (default [1, 1] on a lookup miss), swapped
 ## when orientation is "vertical" and the kind is rotatable.
-func object_footprint_size(kind: String, orientation: String) -> Vector2i:
+func object_footprint_size(kind: String, orientation: String) -> Vector2i: # planar: a rectangle size
 	var definition: Dictionary = _object_definitions.get(kind, {})
 	var footprint: Array = definition.get("footprint", [1, 1])
 	var width := int(footprint[0])
 	var height := int(footprint[1])
 	if orientation == "vertical" and bool(definition.get("rotatable", false)):
-		return Vector2i(height, width)
-	return Vector2i(width, height)
+		return Vector2i(height, width) # planar
+	return Vector2i(width, height) # planar
 
-## Row-major footprint, origin first: the one computation set_object() and validation share.
-func object_footprint_tiles(kind: String, origin: Vector2i, orientation: String) -> Array[Vector2i]:
+## Row-major footprint on the origin's layer, origin first: the one computation set_object()
+## and validation share.
+func object_footprint_tiles(kind: String, origin: Vector3i, orientation: String) -> Array[Vector3i]:
 	var size := object_footprint_size(kind, orientation)
-	var tiles: Array[Vector2i] = []
+	var tiles: Array[Vector3i] = []
 	for dy in size.y:
 		for dx in size.x:
-			tiles.append(Vector2i(origin.x + dx, origin.y + dy))
+			tiles.append(Vector3i(origin.x + dx, origin.y + dy, origin.z))
 	return tiles
 
 ## Places kind's whole footprint at origin, or clears with kind "" (from any footprint
 ## tile, the whole object).
-func set_object(x: int, y: int, kind: String, faction_id: String = "colony", orientation: String = "") -> void:
-	var origin := Vector2i(x, y)
-	var origin_key := _tile_grid.tile_index(x, y)
-	var existing_origin := object_origin_at(x, y)
-	var existing_origin_key := _tile_grid.tile_index(existing_origin.x, existing_origin.y)
+func set_object(origin: Vector3i, kind: String, faction_id: String = "colony", orientation: String = "") -> void:
+	var origin_key := _tile_grid.index_of(origin)
+	var existing_origin := object_origin_at(origin)
+	var existing_origin_key := _tile_grid.index_of(existing_origin)
 	var existing_kind := String(objects.get(existing_origin_key, ""))
-	var clear_tiles: Array[Vector2i] = [origin]
+	var clear_tiles: Array[Vector3i] = [origin]
 	if not existing_kind.is_empty():
 		clear_tiles = object_footprint_tiles(existing_kind, existing_origin, String(object_orientation.get(existing_origin_key, "")))
 		object_orientation.erase(existing_origin_key)
 	for tile in clear_tiles:
-		var clear_key := _tile_grid.tile_index(tile.x, tile.y)
+		var clear_key := _tile_grid.index_of(tile)
 		objects.erase(clear_key)
 		object_factions.erase(clear_key)
 		object_health.erase(clear_key)
 		object_origin.erase(clear_key)
-		_tile_grid.mark_dirty(tile.x, tile.y)
-		_tile_grid.get_regions().on_passability_changed(tile.x, tile.y)
-		_tile_grid.get_rooms().on_passability_changed(tile.x, tile.y)
+		_tile_grid.mark_dirty(tile)
+		_tile_grid.on_passability_changed(tile)
 	if kind.is_empty():
 		return
 	var definition: Dictionary = _object_definitions.get(kind, {})
 	for tile in object_footprint_tiles(kind, origin, orientation):
-		var key := _tile_grid.tile_index(tile.x, tile.y)
+		var key := _tile_grid.index_of(tile)
 		objects[key] = kind
 		object_factions[key] = faction_id
 		if key != origin_key:
 			object_origin[key] = origin
-		_tile_grid.mark_dirty(tile.x, tile.y)
-		_tile_grid.get_regions().on_passability_changed(tile.x, tile.y)
-		_tile_grid.get_rooms().on_passability_changed(tile.x, tile.y)
+		_tile_grid.mark_dirty(tile)
+		_tile_grid.on_passability_changed(tile)
 	if definition.has("max_health"):
 		object_health[origin_key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
 	else:
@@ -174,25 +172,25 @@ func set_object(x: int, y: int, kind: String, faction_id: String = "colony", ori
 		object_orientation[origin_key] = orientation
 
 ## {} without a health pool; every footprint tile reports the origin's pool.
-func object_health_at(x: int, y: int) -> Dictionary:
-	var origin := object_origin_at(x, y)
-	if not _tile_grid.in_bounds(origin.x, origin.y):
+func object_health_at(tile: Vector3i) -> Dictionary:
+	var origin := object_origin_at(tile)
+	if not _tile_grid.contains(origin):
 		return {}
-	return (object_health.get(_tile_grid.tile_index(origin.x, origin.y), {}) as Dictionary).duplicate()
+	return (object_health.get(_tile_grid.index_of(origin), {}) as Dictionary).duplicate()
 
-## Damages the object at (x, y) (any footprint tile), clearing the whole
+## Damages the object at tile (any footprint tile), clearing the whole
 ## object through set_object() at 0 hp. A no-op without a health pool.
-func damage_object(x: int, y: int, amount: int) -> void:
-	var origin := object_origin_at(x, y)
-	if not _tile_grid.in_bounds(origin.x, origin.y):
+func damage_object(tile: Vector3i, amount: int) -> void:
+	var origin := object_origin_at(tile)
+	if not _tile_grid.contains(origin):
 		return
-	var key := _tile_grid.tile_index(origin.x, origin.y)
+	var key := _tile_grid.index_of(origin)
 	if not object_health.has(key):
 		return
 	var health: Dictionary = object_health[key]
 	health["hp"] = maxi(0, int(health["hp"]) - amount)
 	if int(health["hp"]) <= 0:
-		set_object(origin.x, origin.y, "")
+		set_object(origin, "")
 
 ## Backfills full health for an origin whose kind declares max_health but has no entry.
 func ensure_object_health() -> void:
@@ -207,14 +205,14 @@ func ensure_object_health() -> void:
 			continue
 		object_health[key] = {"hp": int(definition.get("health", definition["max_health"])), "maxHp": int(definition["max_health"])}
 
-## The JSON-safe "%d_%d" key the save and state_hash() use for (x, y).
-func object_key(x: int, y: int) -> String:
-	return TileGridType.coord_key(x, y)
+## The JSON-safe "%d_%d" key the save and state_hash() use for tile.
+func object_key(tile: Vector3i) -> String:
+	return TileGridType.coord_key(tile)
 
 ## map re-keyed by object_key(), insertion order kept: the save/state_hash() shape.
 func _keyed(map: Dictionary) -> Dictionary:
 	var keyed: Dictionary = {}
 	for index: int in map:
 		var tile := _tile_grid.coord_of(index)
-		keyed[object_key(tile.x, tile.y)] = map[index]
+		keyed[object_key(tile)] = map[index]
 	return keyed

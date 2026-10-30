@@ -23,8 +23,8 @@ static func seed_world(geography_seed: int, placement_seed: int, width: int, hei
 		content: ContentRegistry, object_table: ObjectTableType, colonist_definitions: Array = []) -> Dictionary:
 	var generated := _generate_map(geography_seed, width, height, mapgen)
 	var tiles: Array[String] = generated["tiles"]
-	var water_tiles: Array[Vector2i] = generated["water_tiles"]
-	var berry_bush_tiles: Array[Vector2i] = generated["berry_bush_tiles"]
+	var water_tiles: Array[Vector3i] = generated["water_tiles"]
+	var berry_bush_tiles: Array[Vector3i] = generated["berry_bush_tiles"]
 	var placement := _spawn_colonists(placement_seed, tiles, width, height, mapgen, content, object_table,
 		water_tiles, berry_bush_tiles)
 	var colonists: Array[Dictionary] = placement["colonists"]
@@ -43,18 +43,18 @@ static func _generate_map(geography_seed: int, width: int, height: int, mapgen: 
 
 ## place_spawn()'s clearing (ADR 020): surviving bushes become objects, positions colonists.
 static func _spawn_colonists(placement_seed: int, map: Array[String], width: int, height: int, mapgen: Dictionary,
-		content: ContentRegistry, object_table: ObjectTableType, water_tiles: Array[Vector2i], berry_bush_tiles: Array[Vector2i]) -> Dictionary:
+		content: ContentRegistry, object_table: ObjectTableType, water_tiles: Array[Vector3i], berry_bush_tiles: Array[Vector3i]) -> Dictionary:
 	var placement_random := RandomNumberGenerator.new()
 	placement_random.seed = placement_seed
 	var placement: Dictionary = WorldGeneratorType.place_spawn(placement_random, map, width, height, mapgen,
 		water_tiles, berry_bush_tiles, int(mapgen["colonist_count"]))
 	for pos in placement["berry_bush_tiles"]:
-		object_table.place_generated(pos.x, pos.y, "berry_bush")
+		object_table.place_generated(pos, "berry_bush")
 	var spawned: Array[Dictionary] = []
 	var positions: Array = placement["colonist_positions"]
 	for i in positions.size():
-		var position: Vector2i = positions[i]
-		var colonist := ActorTableType.spawn("colonist", position.x, position.y, content, "colonist_%d" % i)
+		var position: Vector3i = positions[i]
+		var colonist := ActorTableType.spawn("colonist", position, content, "colonist_%d" % i)
 		# ADR 037's "hands" replaces spawn()'s legacy "carrying" slot.
 		colonist.erase("carrying")
 		colonist["hands"] = []

@@ -124,7 +124,7 @@ func apply_accept_trade_command(command: Dictionary) -> Dictionary:
 	var stock_tile := _item_table.remove_stockpiled_item_unit(stock_item_id)
 	_append_trader_inventory_item(trader, want_item)
 	_remove_trader_offered_item(trader, give_item)
-	_item_table.spawn_item(give_item, stock_tile.x, stock_tile.y)
+	_item_table.spawn_item(give_item, stock_tile)
 	pending_offers.erase(trader_id)
 	var assignment: Variant = _scheduler.get_assignments().get(trader_id)
 	if assignment != null:

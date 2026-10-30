@@ -32,29 +32,29 @@ func get_item(item_id: String) -> Dictionary:
 		return {}
 	return (items[item_id] as Dictionary).duplicate(true)
 
-## A new tool on the ground at (x, y); the caller already checked kind is a tool kind.
-func spawn_ground(kind: String, x: int, y: int) -> String:
+## A new tool on the ground at tile; the caller already checked kind is a tool kind.
+func spawn_ground(kind: String, tile: Vector3i) -> String:
 	var item_id := "tool_%d" % next_id
 	next_id += 1
-	items[item_id] = {"id": item_id, "kind": kind, "location": {"type": "ground", "x": x, "y": y}}
+	items[item_id] = {"id": item_id, "kind": kind, "location": {"type": "ground", "x": tile.x, "y": tile.y, "z": tile.z}}
 	return item_id
 
 ## To the ground, clearing held_tool and releasing its reservation; false when unknown.
-func set_ground(item_id: String, x: int, y: int) -> bool:
+func set_ground(item_id: String, tile: Vector3i) -> bool:
 	if not items.has(item_id):
 		return false
 	_clear_holder(item_id)
 	_release_reservation_for_drop(item_id)
-	items[item_id]["location"] = {"type": "ground", "x": x, "y": y}
+	items[item_id]["location"] = {"type": "ground", "x": tile.x, "y": tile.y, "z": tile.z}
 	return true
 
 ## Onto a stockpile cell, like set_ground().
-func set_stockpile(item_id: String, x: int, y: int) -> bool:
+func set_stockpile(item_id: String, tile: Vector3i) -> bool:
 	if not items.has(item_id):
 		return false
 	_clear_holder(item_id)
 	_release_reservation_for_drop(item_id)
-	items[item_id]["location"] = {"type": "stockpile", "x": x, "y": y}
+	items[item_id]["location"] = {"type": "stockpile", "x": tile.x, "y": tile.y, "z": tile.z}
 	return true
 
 ## Into colonist_id's hand; false when either is unknown or the hand holds another tool.

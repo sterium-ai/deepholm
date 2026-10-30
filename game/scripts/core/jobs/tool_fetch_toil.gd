@@ -118,7 +118,7 @@ func _colonist_busy(colonist_id: String) -> bool:
 	return false
 
 ## The tile a colonist's (possibly still resolving) route walks toward; same as ToolDropToil's.
-func _route_effective_target(route: Dictionary) -> Vector2i:
+func _route_effective_target(route: Dictionary) -> Vector3i:
 	var rerouting: Variant = route.get("rerouting")
 	if rerouting != null:
 		return rerouting["target"]
@@ -170,7 +170,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	var reserved := _reserved_tool_for(job_id)
 	var freshly_reserved := reserved.is_empty()
 	if freshly_reserved:
-		var from := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var from := TileGrid.tile_of(colonist)
 		var excluded: Array = _excluded_for(job_id)
 		var colonist_id := String(colonist["id"])
 		var found := ToolMatchingType.find_nearest_free_tool(kind, from, job_id,
@@ -229,7 +229,7 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 		return
 	var held_id := String(colonist.get("held_tool", ""))
 	if not held_id.is_empty() and held_id != item_id:
-		_drop_tool_ground.call(held_id, int(colonist["x"]), int(colonist["y"]))
+		_drop_tool_ground.call(held_id, TileGrid.tile_of(colonist))
 	if not bool(_pick_up_tool.call(item_id, String(colonist["id"]))):
 		_release_tool.call(item_id, job_id)
 		_report_no_tool_found(job_id, String(colonist["id"]), kind, hooks)
@@ -238,6 +238,6 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 	_record.call(TOIL_FETCH_TOOL, "complete")
 
 ## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
-func _within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
-	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+func _within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
+	var colonist_tile := TileGrid.tile_of(colonist)
 	return TileGrid.chebyshev(colonist_tile, tile) <= 1

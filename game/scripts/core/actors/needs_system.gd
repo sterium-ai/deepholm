@@ -139,7 +139,7 @@ func ensure_needs() -> void:
 		if needs_missing or labour_table_missing or health_missing or accumulator_missing:
 			colonist = {
 				"id": colonist["id"], "kind": colonist["kind"],
-				"x": colonist["x"], "y": colonist["y"],
+				"x": colonist["x"], "y": colonist["y"], "z": colonist["z"],
 				"needs": {} if needs_missing else needs_component,
 				"needsAccumulator": {} if accumulator_missing else accumulator_component,
 				"labourTable": {} if labour_table_missing else worker_component["labourTable"],
@@ -217,7 +217,7 @@ func resume_paused_job(colonist: Dictionary) -> String:
 		return job_id
 	if InventoryType.is_carrying(colonist):
 		return job_id
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	if _colonist_within_reach.call(colonist, target):
 		# Start the timer only when this leg leads into work (a haul/build leg goes to pick_up).
 		if _toils.leads_into_work(String(job["kind"]), true):
@@ -232,9 +232,9 @@ func resume_paused_job(colonist: Dictionary) -> String:
 ## Budgeted re-route under TrenchSystem.rescue_routable_to(). Never starts work: the target's
 ## reservation is reacquired later by resume_assignment(). An unreachable commitment is retired.
 func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary) -> String:
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	colonist["route"] = null
-	if Vector2i(int(colonist["x"]), int(colonist["y"])) == target:
+	if TileGrid.tile_of(colonist) == target:
 		return job_id
 	var passable := _trench.rescue_routable_to(target, String(colonist.get("factionId", "colony")))
 	if _toils.advance_go_to(colonist, job_id, target, passable) == "unreachable":
@@ -288,22 +288,20 @@ func emit_need_unmet_event(colonist_id: String, kind: String) -> void:
 ## floods a whole component for nothing. Every colonist gets the same list (test_combat relies on
 ## it). Reachability is by region id once per source; an impassable source (water) belongs to each
 ## region among its orthogonal neighbours, matching RegionMap.reachable().
-func need_source_candidates(kind: String) -> Array[Vector2i]:
+func need_source_candidates(kind: String) -> Array[Vector3i]:
 	var candidates := _raw_need_sources(kind)
 	if _get_colonists.call().is_empty():
 		return candidates
 	var regions := _tile_grid.get_regions()
 	var colonist_regions: Dictionary = {}
 	for colonist: Dictionary in _get_colonists.call():
-		var x: int = colonist["x"]
-		var y: int = colonist["y"]
-		colonist_regions[regions.region_id(x, y)] = true
+		colonist_regions[regions.region_of(TileGrid.tile_of(colonist))] = true
 	colonist_regions.erase(0) # reachable() is false from a tile with no region
-	return candidates.filter(func(candidate: Vector2i) -> bool:
+	return candidates.filter(func(candidate: Vector3i) -> bool:
 		return _regions_reaching(regions, candidate).any(func(region: int) -> bool: return colonist_regions.has(region)))
 
-func _raw_need_sources(kind: String) -> Array[Vector2i]:
-	var candidates: Array[Vector2i] = []
+func _raw_need_sources(kind: String) -> Array[Vector3i]:
+	var candidates: Array[Vector3i] = []
 	match kind:
 		"food":
 			for key in _item_table.ground_berries.keys():
@@ -317,16 +315,16 @@ func _raw_need_sources(kind: String) -> Array[Vector2i]:
 	return candidates
 
 ## The distinct nonzero region ids `regions.reachable(from, target)` is true from.
-func _regions_reaching(regions: RegionMapType, target: Vector2i) -> Array[int]:
+func _regions_reaching(regions: RegionMapType, target: Vector3i) -> Array[int]:
 	var reached_by: Array[int] = []
-	if target.x < 0 or target.y < 0 or target.x >= _tile_grid.width or target.y >= _tile_grid.height:
+	if not _tile_grid.contains(target):
 		return reached_by
-	var own := regions.region_id(target.x, target.y)
+	var own := regions.region_of(target)
 	if own != 0:
 		reached_by.append(own)
 		return reached_by
-	for offset: Vector2i in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-		var region := regions.region_id(target.x + offset.x, target.y + offset.y)
+	for offset: Vector3i in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+		var region := regions.region_of(target + offset)
 		if region != 0 and not reached_by.has(region):
 			reached_by.append(region)
 	return reached_by
@@ -354,14 +352,14 @@ func consume_source_valid(job_id: String) -> bool:
 	var job := _scheduler.queue.get_job(job_id)
 	if job.is_empty():
 		return false
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	match String(job["kind"]):
 		"eat_food":
-			return _item_table.get_ground_berries(target.x, target.y) > 0
+			return _item_table.get_ground_berries(target) > 0
 		"drink_water":
-			return _tile_grid.get_tile(target.x, target.y) == TILE_WATER
+			return _tile_grid.tile_at(target) == TILE_WATER
 		"sleep":
-			return _object_table.get_object(target.x, target.y) == "bed"
+			return _object_table.get_object(target) == "bed"
 		_:
 			return false
 
@@ -374,11 +372,11 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 	var need_def: Dictionary = _need_definitions.get(need_kind, {})
 	var restore := float(need_def.get("restore", _need_full))
 	if String(job["kind"]) == "sleep":
-		var target: Vector2i = job["target"]
-		if bool(_tile_grid.get_room_at(target.x, target.y).get("has_bed", false)):
+		var target: Vector3i = job["target"]
+		if bool(_tile_grid.get_room_at(target).get("has_bed", false)):
 			restore *= float(need_def.get("bedroom_rest_multiplier", 1.0))
 	var needs: Dictionary = _needs(colonist)
 	needs[need_kind] = mini(_need_full, int(restore))
 	if String(job["kind"]) == "eat_food":
-		var target: Vector2i = job["target"]
-		_item_table.consume_ground_berry(target.x, target.y)
+		var target: Vector3i = job["target"]
+		_item_table.consume_ground_berry(target)

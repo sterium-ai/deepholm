@@ -64,10 +64,9 @@ static func resolve_tick(actors: Array[Dictionary], content, relations, tick: in
 			if bool(victim_health.get("dead", false)):
 				dead_actors.append(victim)
 		else:
-			var x := int(target["x"])
-			var y := int(target["y"])
-			damage_object.call(x, y, damage)
-			insert_event.call(_attacked_by_event(tick, priority, TileGrid.coord_key(x, y), int(next_sequence.call()), attacker_id, damage))
+			var tile := TileGrid.tile_of(target)
+			damage_object.call(tile, damage)
+			insert_event.call(_attacked_by_event(tick, priority, TileGrid.coord_key(tile), int(next_sequence.call()), attacker_id, damage))
 	return {"dead_actors": dead_actors, "fighting": fighting}
 
 static func _attacked_by_event(tick: int, priority: int, entity_id: String, sequence: int, attacker_id: String, damage: int) -> Dictionary:

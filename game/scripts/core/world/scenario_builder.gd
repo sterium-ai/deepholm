@@ -26,7 +26,7 @@ const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 
 const NEW_GAME_SCENARIO_ID := "new_game"
-const NO_TILE := Vector2i(-1, -1)
+const NO_TILE := Vector3i(-1, -1, 0)
 
 ## Lazily computed values several steps share, so each one is taken at the same point of
 ## the build no matter which step asks first.
@@ -62,7 +62,7 @@ static func build(content: ContentRegistryType, scenario_id: String, options: Di
 		var map: Dictionary = scenario["map"]
 		var width: int = map["width"]
 		var height: int = map["height"]
-		size = Vector2i(width, height)
+		size = Vector2i(width, height) # planar: a size
 	var world := WorldStateType.new(seed_value, tick_rate, size.x, size.y, false, content, WorldSetupType.from_scenario(scenario))
 	var roster: Dictionary = scenario.get("roster", {})
 	var roster_count: int = roster.get("count", -1)
@@ -115,7 +115,7 @@ static func _colonists(world: WorldStateType, context: BuildContext) -> Array[Di
 
 ## The till_plot step's target, chosen once: dig_orders runs before it and must not offer
 ## the tile (a dig job would turn the plowed tile back into floor), ground_items after it.
-static func _till_target(world: WorldStateType, context: BuildContext) -> Vector2i:
+static func _till_target(world: WorldStateType, context: BuildContext) -> Vector3i:
 	if not context.till_target_taken:
 		context.till_target = _pick_till_target(world, _colonists(world, context), context.till_search_radius)
 		context.till_target_taken = true
@@ -134,7 +134,7 @@ static func _run_needed_tools(world: WorldStateType, content: ContentRegistryTyp
 	var first := context.pool_cursor
 	var tiles := _claim_starting_tiles(world, mapgen, first + tool_kinds.size())
 	for i in tool_kinds.size():
-		var tile: Vector2i = tiles[first + i] if first + i < tiles.size() else _fallback_anchor(world, mapgen)
+		var tile: Vector3i = tiles[first + i] if first + i < tiles.size() else _fallback_anchor(world, mapgen)
 		world.spawn_ground_tool_item(tool_kinds[i], tile.x, tile.y)
 	context.pool_cursor = first + tool_kinds.size()
 
@@ -159,19 +159,19 @@ static func _run_per_colonist_objects(world: WorldStateType, content: ContentReg
 	var object_tiles := tiles.slice(first, first + colonist_count)
 	context.pool_cursor = first + colonist_count
 	for i in object_tiles.size():
-		var tile: Vector2i = object_tiles[i]
+		var tile: Vector3i = object_tiles[i]
 		world.apply({
 			"actor": "system", "command_id": "starting_%s_%d" % [kind, i], "tick": world.get_tick(),
-			"type": "place_object", "payload": {"x": tile.x, "y": tile.y, "kind": kind},
+			"type": "place_object", "payload": {"x": tile.x, "y": tile.y, "z": tile.z, "kind": kind},
 		})
 
 ## The clearing's land pool; when it is empty (a decoded world never ran place_spawn()),
 ## `needed` copies of mapgen.json's last-resort anchor.
-static func _claim_starting_tiles(world: WorldStateType, mapgen: Dictionary, needed: int) -> Array[Vector2i]:
+static func _claim_starting_tiles(world: WorldStateType, mapgen: Dictionary, needed: int) -> Array[Vector3i]:
 	var clearing := world.get_spawn_clearing()
 	var pool: Array = clearing.get("land_tiles", [])
-	var tiles: Array[Vector2i] = []
-	for entry: Vector2i in pool:
+	var tiles: Array[Vector3i] = []
+	for entry: Vector3i in pool:
 		tiles.append(entry)
 	if not tiles.is_empty() or needed <= 0:
 		return tiles
@@ -180,12 +180,13 @@ static func _claim_starting_tiles(world: WorldStateType, mapgen: Dictionary, nee
 		tiles.append(anchor)
 	return tiles
 
-static func _fallback_anchor(world: WorldStateType, mapgen: Dictionary) -> Vector2i:
+static func _fallback_anchor(world: WorldStateType, mapgen: Dictionary) -> Vector3i:
 	var anchor_x: int = mapgen.get("spawn_area_x", 0)
 	var anchor_y: int = mapgen.get("spawn_area_y", 0)
-	return Vector2i(
+	return Vector3i(
 		clampi(anchor_x, 0, maxi(0, world.get_map_width() - 1)),
-		clampi(anchor_y, 0, maxi(0, world.get_map_height() - 1))
+		clampi(anchor_y, 0, maxi(0, world.get_map_height() - 1)),
+		TileGrid.SURFACE
 	)
 
 # --- object_rows ----------------------------------------------------------------------------
@@ -220,35 +221,35 @@ static func _run_object_rows(world: WorldStateType, step: Dictionary) -> void:
 			_place_object(world, line[i], kinds[i], "%s_%d" % [row_name, i])
 
 ## Up to `count` in-bounds tiles from (start_x, y) along x that are neither tree nor water.
-static func _passable_line(world: WorldStateType, start_x: int, y: int, count: int) -> Array[Vector2i]:
-	var tiles: Array[Vector2i] = []
+static func _passable_line(world: WorldStateType, start_x: int, y: int, count: int) -> Array[Vector3i]:
+	var tiles: Array[Vector3i] = []
 	if y < 0 or y >= world.get_map_height():
 		return tiles
 	var x := start_x
 	while tiles.size() < count and x < world.get_map_width():
 		if world.get_tile(x, y) != WorldStateType.TILE_TREE and world.get_tile(x, y) != WorldStateType.TILE_WATER:
-			tiles.append(Vector2i(x, y))
+			tiles.append(Vector3i(x, y, TileGrid.SURFACE))
 		x += 1
 	return tiles
 
-static func _place_object(world: WorldStateType, tile: Vector2i, kind: String, command_suffix: String) -> void:
+static func _place_object(world: WorldStateType, tile: Vector3i, kind: String, command_suffix: String) -> void:
 	world.apply({
 		"actor": "scenario",
 		"command_id": "scenario_object_%s" % command_suffix,
 		"tick": world.get_tick(),
 		"type": "place_object",
-		"payload": {"x": tile.x, "y": tile.y, "kind": kind},
+		"payload": {"x": tile.x, "y": tile.y, "z": tile.z, "kind": kind},
 	})
 
 # --- dig_orders -----------------------------------------------------------------------------
 
 ## Every order is submitted at tick 0 from its own stream (seed + seed_offset), so the
 ## stream depends only on the seed, never on elapsed ticks. `excluded` is never offered.
-static func _run_dig_orders(world: WorldStateType, step: Dictionary, excluded: Vector2i) -> void:
-	var soil_tiles: Array[Vector2i] = []
+static func _run_dig_orders(world: WorldStateType, step: Dictionary, excluded: Vector3i) -> void:
+	var soil_tiles: Array[Vector3i] = []
 	for y in world.get_map_height():
 		for x in world.get_map_width():
-			var tile := Vector2i(x, y)
+			var tile := Vector3i(x, y, TileGrid.SURFACE)
 			if tile != excluded and world.get_tile(x, y) == WorldStateType.TILE_SOIL:
 				soil_tiles.append(tile)
 	if soil_tiles.is_empty():
@@ -270,27 +271,25 @@ static func _run_dig_orders(world: WorldStateType, step: Dictionary, excluded: V
 			"command_id": "scenario_dig_%d" % i,
 			"tick": world.get_tick(),
 			"type": "dig",
-			"payload": {"x": target.x, "y": target.y, "priority": priority},
+			"payload": {"x": target.x, "y": target.y, "z": target.z, "priority": priority},
 		})
 
 # --- till_plot / ground_items ---------------------------------------------------------------
 
 ## The free soil tile nearest any colonist (colonists id-sorted, each one's rings searched
 ## out to `radius`), so the till job stays short enough to finish before a need interrupts.
-static func _pick_till_target(world: WorldStateType, colonists: Array[Dictionary], radius: int) -> Vector2i:
+static func _pick_till_target(world: WorldStateType, colonists: Array[Dictionary], radius: int) -> Vector3i:
 	return _nearest_to_colonists(world, colonists, radius, func(x: int, y: int) -> bool:
 		return world.get_tile(x, y) == WorldStateType.TILE_SOIL and world.get_object(x, y) == "")
 
-static func _nearest_to_colonists(world: WorldStateType, colonists: Array[Dictionary], radius: int, matches: Callable) -> Vector2i:
+static func _nearest_to_colonists(world: WorldStateType, colonists: Array[Dictionary], radius: int, matches: Callable) -> Vector3i:
 	var sorted_colonists := colonists.duplicate()
 	sorted_colonists.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		var a_id: String = a["id"]
 		var b_id: String = b["id"]
 		return a_id < b_id)
 	for colonist: Dictionary in sorted_colonists:
-		var x: int = colonist["x"]
-		var y: int = colonist["y"]
-		var origin := Vector2i(x, y)
+		var origin := TileGrid.tile_of(colonist)
 		var found := _nearest_matching_tile(world, origin, radius, matches)
 		if found != NO_TILE:
 			return found
@@ -298,7 +297,7 @@ static func _nearest_to_colonists(world: WorldStateType, colonists: Array[Dictio
 
 ## Expanding Chebyshev rings (0, 1, 2, ...) around `origin` up to `radius`, row-major within
 ## each ring: the first in-bounds tile `matches` accepts, or NO_TILE.
-static func _nearest_matching_tile(world: WorldStateType, origin: Vector2i, radius: int, matches: Callable) -> Vector2i:
+static func _nearest_matching_tile(world: WorldStateType, origin: Vector3i, radius: int, matches: Callable) -> Vector3i:
 	for ring in range(0, radius + 1):
 		for y in range(origin.y - ring, origin.y + ring + 1):
 			if y < 0 or y >= world.get_map_height():
@@ -306,10 +305,10 @@ static func _nearest_matching_tile(world: WorldStateType, origin: Vector2i, radi
 			for x in range(origin.x - ring, origin.x + ring + 1):
 				if x < 0 or x >= world.get_map_width():
 					continue
-				if TileGrid.chebyshev(Vector2i(x, y), origin) != ring:
+				if TileGrid.chebyshev(Vector3i(x, y, origin.z), origin) != ring:
 					continue
 				if matches.call(x, y):
-					return Vector2i(x, y)
+					return Vector3i(x, y, origin.z)
 	return NO_TILE
 
 ## Plows `target` the way a player would: a HIGH-priority till order through apply() (claimed
@@ -317,7 +316,7 @@ static func _nearest_matching_tile(world: WorldStateType, origin: Vector2i, radi
 ## ticks so an unreachable target never hangs the build. Bootstrap exception: the colonists'
 ## needs are topped up before each of these ticks, because a need interruption could keep
 ## the job from ever finishing within the budget; nothing else touches needs.
-static func _run_till_plot(world: WorldStateType, content: ContentRegistryType, target: Vector2i, tick_budget: int) -> void:
+static func _run_till_plot(world: WorldStateType, content: ContentRegistryType, target: Vector3i, tick_budget: int) -> void:
 	if target == NO_TILE:
 		return
 	var result: Dictionary = world.apply({
@@ -325,12 +324,12 @@ static func _run_till_plot(world: WorldStateType, content: ContentRegistryType, 
 		"command_id": "scenario_till_starting_plot",
 		"tick": world.get_tick(),
 		"type": "till",
-		"payload": {"x": target.x, "y": target.y, "priority": JobQueueType.Priority.HIGH},
+		"payload": {"x": target.x, "y": target.y, "z": target.z, "priority": JobQueueType.Priority.HIGH},
 	})
 	if not result.get("ok", false):
 		return
 	var ticks := 0
-	while ticks < tick_budget and world.get_tile(target.x, target.y) != WorldStateType.TILE_PLOWED_SOIL:
+	while ticks < tick_budget and world._tile_grid.tile_at(target) != WorldStateType.TILE_PLOWED_SOIL:
 		for colonist: Dictionary in world._colonists:
 			var needs_component: Variant = ActorTableType.get_component(colonist, "needs", content)
 			if needs_component is Dictionary:
@@ -342,16 +341,16 @@ static func _run_till_plot(world: WorldStateType, content: ContentRegistryType, 
 
 ## One stack of `count` `kind` items on the free soil tile nearest a colonist, never `avoid`.
 ## Bootstrap exception: no command spawns a stackable ground item, so this writes the item
-## table directly, in the {id, x, y, kind, count} shape and _next_item_id bookkeeping the
+## table directly, in the {id, x, y, z, kind, count} shape and _next_item_id bookkeeping the
 ## item spawn helpers use, so later spawns still get fresh ids.
-static func _run_ground_items(world: WorldStateType, step: Dictionary, colonists: Array[Dictionary], avoid: Vector2i) -> void:
+static func _run_ground_items(world: WorldStateType, step: Dictionary, colonists: Array[Dictionary], avoid: Vector3i) -> void:
 	var radius: int = step["search_radius"]
 	var tile := _nearest_to_colonists(world, colonists, radius, func(x: int, y: int) -> bool:
-		return Vector2i(x, y) != avoid and world.get_tile(x, y) == WorldStateType.TILE_SOIL and world.get_object(x, y) == "")
+		return Vector3i(x, y, TileGrid.SURFACE) != avoid and world.get_tile(x, y) == WorldStateType.TILE_SOIL and world.get_object(x, y) == "")
 	if tile == NO_TILE:
 		return
 	var item_id := "item_%d" % world._next_item_id
 	world._next_item_id += 1
 	var kind: String = step["kind"]
 	var count: int = step["count"]
-	world._items[item_id] = {"id": item_id, "x": tile.x, "y": tile.y, "kind": kind, "count": count}
+	world._items[item_id] = {"id": item_id, "x": tile.x, "y": tile.y, "z": tile.z, "kind": kind, "count": count}

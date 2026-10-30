@@ -149,4 +149,7 @@ func validate_command(command, record: bool = true) -> Dictionary:
 	if command["tick"] != _clock.tick:
 		return _event_log.reject(command["command_id"], command["actor"], "tick_mismatch",
 			{"detail": "tick_mismatch", "command_tick": command["tick"], "current_tick": _clock.tick}, record)
+	var layer_check: Dictionary = _check.call(CommandChecks.check_command_layer, command)
+	if not layer_check.is_empty():
+		return _event_log.reject(command["command_id"], command["actor"], layer_check["reason"], layer_check["params"], record)
 	return {"ok": true}

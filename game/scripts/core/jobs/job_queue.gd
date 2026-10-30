@@ -56,7 +56,7 @@ var _tool_available: Callable = Callable()
 var _extra_keys_for_job: Callable = Callable()
 
 ## The caller owns/seeds the generator; this queue does not consume random draws.
-## can_reach(target: Vector2i) -> bool must be deterministic and non-mutating.
+## can_reach(target: Vector3i) -> bool must be deterministic and non-mutating.
 func _init(random_source: RandomNumberGenerator, can_reach: Callable) -> void:
 	_random = random_source
 	_can_reach = can_reach
@@ -87,14 +87,14 @@ func _extra_keys_conflict(keys: Array[String], job_id: String) -> String:
 
 ## Pure check shared with CommandChecks' preview, which must not emit events or advance
 ## the sequence. {} when allowed, else submit_dig()'s rejection. Never mutates.
-static func check_submission(target: Vector2i, priority: int) -> Dictionary:
+static func check_submission(target: Vector3i, priority: int) -> Dictionary:
 	if priority not in [Priority.LOW, Priority.NORMAL, Priority.HIGH]:
 		return {"reason": "invalid_priority", "remedy": "choose_supported_priority"}
 	if target.x < 0 or target.y < 0:
 		return {"reason": "invalid_target", "remedy": "choose_valid_target"}
 	return {}
 
-func submit_dig(target: Vector2i, priority: int = Priority.NORMAL, kind: String = "dig") -> Dictionary:
+func submit_dig(target: Vector3i, priority: int = Priority.NORMAL, kind: String = "dig") -> Dictionary:
 	var submission_check := check_submission(target, priority)
 	if not submission_check.is_empty():
 		return _reject("", submission_check["reason"], submission_check["remedy"])
@@ -125,7 +125,7 @@ func attach_item(job_id: String, item_id: String) -> bool:
 
 ## Records the site origin of a queued site_fetch/site_work job (bookkeeping only; the
 ## site already reserves its footprint). Same no-op-false guard as attach_item().
-func attach_site(job_id: String, site: Vector2i) -> bool:
+func attach_site(job_id: String, site: Vector3i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "queued":
 		return false
@@ -135,7 +135,7 @@ func attach_site(job_id: String, site: Vector2i) -> bool:
 ## Moves an active site_fetch job's current source (item_id and target together) after the
 ## caller (ToilBindings/ConstructionSystem) has reserved the new item. The old source's
 ## reservation stays with the job until release_all(). No-op false otherwise.
-func retarget_site_fetch_source(job_id: String, item_id: String, target: Vector2i) -> bool:
+func retarget_site_fetch_source(job_id: String, item_id: String, target: Vector3i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
 		return false
@@ -154,7 +154,7 @@ func mark_site_fetch_delivering(job_id: String) -> bool:
 
 ## Chains a delivering site_fetch job onto another site: "site" and "cell" move together.
 ## Only a delivering-leg transition (cell != null); no new persisted field.
-func retarget_site_fetch_site(job_id: String, site: Vector2i) -> bool:
+func retarget_site_fetch_site(job_id: String, site: Vector3i) -> bool:
 	var job := _find_job(job_id)
 	if job.is_empty() or job["status"] != "active" or String(job["kind"]) != SITE_FETCH_KIND:
 		return false
@@ -164,7 +164,7 @@ func retarget_site_fetch_site(job_id: String, site: Vector2i) -> bool:
 	job["cell"] = site
 	return true
 
-## item_id -> Vector2i free cell, or null when none free (colonist-ai.md 3.4).
+## item_id -> Vector3i free cell, or null when none free (colonist-ai.md 3.4).
 func set_haul_destination_finder(finder: Callable) -> void:
 	_find_haul_destination = finder
 
@@ -217,7 +217,7 @@ func tick() -> void:
 				_tick_site_work(job)
 				continue
 			if ToolMatchingType.gate_backed_off(job, _tick, _tool_requirement_of): continue
-			var target: Vector2i = job["target"]
+			var target: Vector3i = job["target"]
 			var owner: String = _table.owner(_target_key(target))
 			if not owner.is_empty() and owner != job["id"]:
 				_block(job, BLOCKED_TARGET_RESERVED, "wait_for_target_release", owner)
@@ -343,7 +343,7 @@ func suspend(job_id: String) -> Dictionary:
 		return _reject(job_id, "unknown_job", "choose_existing_job")
 	if job["status"] != "active":
 		return _reject(job_id, "job_not_active", "wait_for_activation")
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	for key in _table.release_all(job_id):
 		_emit("reservation_released", job_id, {"target": target, "key": key, "reason": "need_interrupt"})
 	job["status"] = "queued"
@@ -365,7 +365,7 @@ func reactivate(job_id: String) -> bool:
 		_set_reason(job, "", "")
 		_emit("job_active", job_id, {})
 		return true
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	var owner: String = _table.owner(_target_key(target))
 	if not owner.is_empty() and owner != job_id:
 		return false
@@ -478,7 +478,7 @@ func get_job_kinds() -> Dictionary:
 func get_index() -> JobIndexType:
 	return _index
 
-## Vector2i target -> job id for every active job, plus every queued job still in a
+## Vector3i target -> job id for every active job, plus every queued job still in a
 ## retry_at backoff (haul or needs_tool), so its aging score (ADR 004) cannot keep
 ## winning a route-search slot while backed off.
 func get_reservations() -> Dictionary:
@@ -533,12 +533,12 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 	_events.reset(_sequence)
 
 ## Tile keys are namespaced so "item:"/"cell:" keys never collide with them.
-func _target_key(target: Vector2i) -> String:
-	return TileGrid.target_key(target.x, target.y)
+func _target_key(target: Vector3i) -> String:
+	return TileGrid.target_key(target)
 
 ## Same format as WorldState._cell_key(): is_cell_free() must see haul cell reservations.
-func _cell_key(cell: Vector2i) -> String:
-	return TileGrid.cell_key(cell.x, cell.y)
+func _cell_key(cell: Vector3i) -> String:
+	return TileGrid.cell_key(cell)
 
 func _find_job(job_id: String) -> Dictionary:
 	return _index.find(_jobs, job_id)
@@ -560,7 +560,7 @@ func _finish(job_id: String, status: String, reason: String, remedy: String, act
 	if not terminal_check.is_empty():
 		return _reject(job_id, terminal_check["reason"], terminal_check["remedy"])
 	var job := _find_job(job_id)
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	for key in _table.release_all(job_id):
 		_emit("reservation_released", job_id, {"target": target, "key": key, "reason": reason})
 	job["status"] = status

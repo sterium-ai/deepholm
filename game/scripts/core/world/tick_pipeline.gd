@@ -164,8 +164,8 @@ func _phase_combat() -> void:
 
 func _phase_scheduler() -> void:
 	_site_fetch_jobs_before = _construction.active_site_fetch_job_ids()
-	_scheduler.tick(_clock.tick, _scheduler_workers(), _passability.is_passable, Vector2i.ZERO,
-		Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _toils.get_labour, _current_calendar().active_boost, _roster(),
+	_scheduler.tick(_clock.tick, _scheduler_workers(), _passability.is_passable, Vector3i.ZERO,
+		_tile_grid.bounds_max(), _toils.get_labour, _current_calendar().active_boost, _roster(),
 		_committed_jobs(), _tile_grid.get_regions().reachable)
 
 ## Swaps a just-activated site_fetch job's placeholder source before it moves.
@@ -276,7 +276,7 @@ func _advance_colonists() -> void:
 				and not _trench.rescue_activation_safe(colonist, job, assignment.get("path", [])):
 			_trench.retire_rescue_job(job_id, job)
 			continue
-		var tile_before := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var tile_before := TileGrid.tile_of(colonist)
 		_trench.trap_tile_before = tile_before
 		_toils.advance(colonist, job_id, job, assignment.get("path", []), _toil_hooks)
 		_trench.check_trench_arrival(colonist, job_id, tile_before)

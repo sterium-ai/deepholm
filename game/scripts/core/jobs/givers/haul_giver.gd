@@ -42,25 +42,25 @@ func advance(tick: int) -> void:
 		var item_id: String = item["id"]
 		if claimed.has(item_id):
 			continue
-		var x: int = int(item["x"])
-		var y: int = int(item["y"])
-		if bool(_is_in_any_zone.call(x, y)):
+		var tile := TileGrid.tile_of(item)
+		if bool(_is_in_any_zone.call(tile)):
 			continue
-		var result: Dictionary = _submit_job.call(Vector2i(x, y), _priority, tick, "haul")
+		var result: Dictionary = _submit_job.call(tile, _priority, tick, "haul")
 		if result.get("ok", false):
 			_attach_item.call(String(result["job_id"]), item_id)
 
-## First free, passable, unoccupied cell in zone-id then row-major order (deterministic),
-## or null. Ignores item_id; matches JobQueue.set_haul_destination_finder()'s Callable.
+## First free, passable, unoccupied cell in zone-id then row-major order (deterministic) on the
+## zone's layer, or null. Ignores item_id; matches JobQueue.set_haul_destination_finder()'s Callable.
 func find_free_haul_cell(_item_id: String) -> Variant:
 	for zone in (_get_zones.call() as Array):
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
 			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
-				if not bool(_is_cell_free.call(x, y)):
+				var cell := Vector3i(x, y, int(zone["z"]))
+				if not bool(_is_cell_free.call(cell)):
 					continue
-				if not bool((_passability.call(x, y) as Dictionary)["passable"]):
+				if not bool((_passability.call(cell) as Dictionary)["passable"]):
 					continue
-				if bool(_is_cell_occupied.call(x, y, "")):
+				if bool(_is_cell_occupied.call(cell, "")):
 					continue
-				return Vector2i(x, y)
+				return cell
 	return null

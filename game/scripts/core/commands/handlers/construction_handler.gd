@@ -36,7 +36,7 @@ func apply_cancel_site_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_cancel_site_command, command)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
-	var site_id := _construction.construction_site_id_at(int(payload["x"]), int(payload["y"]))
+	var site_id := _construction.construction_site_id_at(TileGrid.tile_of(payload))
 	_construction.cancel_construction_site(site_id)
 	_event_log.collect_queue_events()
 	var applied := _event_log.applied(command)
@@ -49,7 +49,7 @@ func apply_place_object_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_place_object_command, command)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
-	_object_table.set_object(int(payload["x"]), int(payload["y"]), String(payload["kind"]), "colony", String(payload.get("orientation", "")))
+	_object_table.set_object(TileGrid.tile_of(payload), String(payload["kind"]), "colony", String(payload.get("orientation", "")))
 	return _event_log.applied(command)
 
 func apply_remove_object_command(command: Dictionary) -> Dictionary:
@@ -57,5 +57,5 @@ func apply_remove_object_command(command: Dictionary) -> Dictionary:
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
-	_object_table.set_object(int(payload["x"]), int(payload["y"]), "")
+	_object_table.set_object(TileGrid.tile_of(payload), "")
 	return _event_log.applied(command)

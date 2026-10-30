@@ -1,7 +1,7 @@
 class_name ZoneTable
 extends RefCounted
 
-## Zones: id -> {id, x, y, width, height} rectangles and the id counter. A stockpile zone has
+## Zones: id -> {id, x, y, z, width, height} rectangles on layer z and the id counter. A stockpile zone has
 ## no "kind" key; a farm zone (F1) adds {"kind": "farm", "crop": <crops.json id>}.
 ## Invariants:
 ## - Ids are "zone_%d" drawn from next_zone_id and never reused; zones never
@@ -52,10 +52,10 @@ func get_farm_zones() -> Array[Dictionary]:
 	return get_zones().filter(func(zone: Dictionary) -> bool: return zone.get("kind", "") == FARM_KIND)
 
 ## zone_add's mutation: returns the new zone's id. crop is set for a farm zone only.
-func add(x: int, y: int, width: int, height: int, crop: String = "") -> String:
+func add(origin: Vector3i, width: int, height: int, crop: String = "") -> String:
 	var zone_id := "zone_%d" % next_zone_id
 	next_zone_id += 1
-	zones[zone_id] = {"id": zone_id, "x": x, "y": y,
+	zones[zone_id] = {"id": zone_id, "x": origin.x, "y": origin.y, "z": origin.z,
 		"width": width, "height": height}
 	if not crop.is_empty():
 		zones[zone_id]["kind"] = FARM_KIND
@@ -70,19 +70,23 @@ func remove(zone_id: String) -> Dictionary:
 
 ## is_in_any_zone callable for HaulGiver, ConstructionGiver, ItemTable and rooms.gd's has_stockpile:
 ## true inside a stockpile zone (a farm zone stores nothing, see the class doc).
-func is_in_any_zone(x: int, y: int) -> bool:
+func is_in_any_zone(tile: Vector3i) -> bool:
 	for zone: Dictionary in zones.values():
-		if zone.has("kind"):
+		if zone.has("kind") or int(zone["z"]) != tile.z:
 			continue
 		var zx: int = zone["x"]
 		var zy: int = zone["y"]
-		if x >= zx and x < zx + int(zone["width"]) and y >= zy and y < zy + int(zone["height"]):
+		if tile.x >= zx and tile.x < zx + int(zone["width"]) and tile.y >= zy and tile.y < zy + int(zone["height"]):
 			return true
 	return false
 
-## Half-open interval overlap test on both axes.
-func overlaps(x: int, y: int, width: int, height: int) -> bool:
+## Half-open interval overlap test on both axes, on origin's layer.
+func overlaps(origin: Vector3i, width: int, height: int) -> bool:
+	var x := origin.x
+	var y := origin.y
 	for zone in zones.values():
+		if int(zone["z"]) != origin.z:
+			continue
 		var zx: int = zone["x"]
 		var zy: int = zone["y"]
 		var zw: int = zone["width"]

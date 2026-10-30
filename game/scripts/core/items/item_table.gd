@@ -4,9 +4,9 @@ extends RefCounted
 ## Stackable ground items (tools live in tool_item_store.gd), item factions, per-tile ground
 ## berries and the work find roll (ADR 026, 051) with its own seeded RNG.
 ## Invariants:
-## - items[id] is exactly {id, x, y, kind, count}; factions live in item_factions (absent = "colony").
+## - items[id] is exactly {id, x, y, z, kind, count}; factions live in item_factions (absent = "colony").
 ## - Ids come from next_item_id ("item_%d") and are never reused.
-## - ground_berries is a "%d_%d"-keyed counter, not an item; a key is dropped at zero.
+## - ground_berries is a TileGrid.coord_key()-keyed counter, not an item; a key is dropped at zero.
 ## - Hashed: items, next_item_id, ground_berries, the find RNG. Not hashed: item_factions,
 ##   ground_berries_factions (persisted, ADR 047), pending_dig_finds.
 ## - pending_dig_finds is drained in ascending job-id order, one randi_range() per find;
@@ -25,7 +25,7 @@ var ground_berries: Dictionary = {}
 var ground_berries_factions: Dictionary = {}
 var pending_dig_finds: Array[Dictionary] = []
 var dig_find_random: RandomNumberGenerator
-## Vector2i -> Array[String] of ground item ids there; see the class doc.
+## Vector3i -> Array[String] of ground item ids there; see the class doc.
 var _ids_at: Dictionary = {}
 var _ids_at_trusted := false
 
@@ -97,41 +97,38 @@ func begin_tick() -> void:
 	_ids_at.clear()
 	for item: Dictionary in items.values():
 		var item_id: String = item["id"]
-		var x: int = item["x"]
-		var y: int = item["y"]
-		_file(item_id, x, y)
+		_file(item_id, TileGrid.tile_of(item))
 	_ids_at_trusted = true
 
 func end_tick() -> void:
 	_ids_at_trusted = false
 	_ids_at.clear()
 
-func _file(item_id: String, x: int, y: int) -> void:
-	var tile := Vector2i(x, y)
+func _file(item_id: String, tile: Vector3i) -> void:
 	if not _ids_at.has(tile):
 		_ids_at[tile] = []
 	(_ids_at[tile] as Array).append(item_id)
 
-## Sum over ground "wood" items at (x, y).
-func get_ground_wood(x: int, y: int) -> int:
+## Sum over ground "wood" items at tile.
+func get_ground_wood(tile: Vector3i) -> int:
 	var total := 0
 	if _ids_at_trusted:
-		for item_id: String in _ids_at.get(Vector2i(x, y), []):
+		for item_id: String in _ids_at.get(tile, []):
 			var item: Dictionary = items[item_id]
 			if item["kind"] == "wood":
 				var count: int = item["count"]
 				total += count
 		return total
 	for item in items.values():
-		if int(item["x"]) == x and int(item["y"]) == y and String(item["kind"]) == "wood":
+		if TileGrid.tile_of(item) == tile and String(item["kind"]) == "wood":
 			total += int(item["count"])
 	return total
 
-func has_item_at(x: int, y: int) -> bool:
+func has_item_at(tile: Vector3i) -> bool:
 	if _ids_at_trusted:
-		return _ids_at.has(Vector2i(x, y))
+		return _ids_at.has(tile)
 	for item in items.values():
-		if int(item["x"]) == x and int(item["y"]) == y:
+		if TileGrid.tile_of(item) == tile:
 			return true
 	return false
 
@@ -143,10 +140,7 @@ func item_lookup(item_id: String) -> Dictionary:
 
 func _remove_ground_item(item_id: String) -> void:
 	if _ids_at_trusted and items.has(item_id):
-		var item: Dictionary = items[item_id]
-		var x: int = item["x"]
-		var y: int = item["y"]
-		var tile := Vector2i(x, y)
+		var tile := TileGrid.tile_of(items[item_id])
 		var ids: Array = _ids_at.get(tile, [])
 		ids.erase(item_id)
 		if ids.is_empty():
@@ -166,39 +160,39 @@ func remove_ground_item_units(item_id: String, count: int) -> void:
 		_remove_ground_item(item_id)
 
 ## Always "colony": nothing can produce an item of any other faction today.
-func _place_ground_item(item_id: String, kind: String, count: int, x: int, y: int) -> void:
-	items[item_id] = {"id": item_id, "x": x, "y": y, "kind": kind, "count": count}
+func _place_ground_item(item_id: String, kind: String, count: int, tile: Vector3i) -> void:
+	items[item_id] = {"id": item_id, "x": tile.x, "y": tile.y, "z": tile.z, "kind": kind, "count": count}
 	item_factions[item_id] = "colony"
 	if _ids_at_trusted:
-		_file(item_id, x, y)
+		_file(item_id, tile)
 
 ## ToilExecutor's place and every drop: one fresh item per call, off next_item_id.
-func place_new_ground_item(kind: String, count: int, x: int, y: int) -> String:
+func place_new_ground_item(kind: String, count: int, tile: Vector3i) -> String:
 	var item_id: String = "item_%d" % next_item_id
 	next_item_id += 1
-	_place_ground_item(item_id, kind, count, x, y)
+	_place_ground_item(item_id, kind, count, tile)
 	return item_id
 
 ## One unit of any content/items.json id: every work yield and find (ADR 051), trade goods.
-func spawn_item(kind: String, x: int, y: int) -> void:
-	place_new_ground_item(kind, 1, x, y)
+func spawn_item(kind: String, tile: Vector3i) -> void:
+	place_new_ground_item(kind, 1, tile)
 
 ## One unit on the tile's ground-berry counter: berries are not an item (ADR 051).
-func spawn_berries_item(x: int, y: int) -> void:
-	var key := _ground_berries_key(x, y)
+func spawn_berries_item(tile: Vector3i) -> void:
+	var key := _ground_berries_key(tile)
 	ground_berries[key] = int(ground_berries.get(key, 0)) + 1
 	ground_berries_factions[key] = "colony"
 
-func get_ground_berries(x: int, y: int) -> int:
-	return int(ground_berries.get(_ground_berries_key(x, y), 0))
+func get_ground_berries(tile: Vector3i) -> int:
+	return int(ground_berries.get(_ground_berries_key(tile), 0))
 
 ## "" when no berries are on the ground here.
-func get_ground_berries_faction_id(x: int, y: int) -> String:
-	return String(ground_berries_factions.get(_ground_berries_key(x, y), ""))
+func get_ground_berries_faction_id(tile: Vector3i) -> String:
+	return String(ground_berries_factions.get(_ground_berries_key(tile), ""))
 
-## eat_food's effect: one berry less at (x, y), dropping the key at zero.
-func consume_ground_berry(x: int, y: int) -> void:
-	var key := _ground_berries_key(x, y)
+## eat_food's effect: one berry less at tile, dropping the key at zero.
+func consume_ground_berry(tile: Vector3i) -> void:
+	var key := _ground_berries_key(tile)
 	var remaining := maxi(0, int(ground_berries.get(key, 0)) - 1)
 	if remaining == 0:
 		ground_berries.erase(key)
@@ -206,8 +200,8 @@ func consume_ground_berry(x: int, y: int) -> void:
 	else:
 		ground_berries[key] = remaining
 
-func _ground_berries_key(x: int, y: int) -> String:
-	return TileGrid.coord_key(x, y)
+func _ground_berries_key(tile: Vector3i) -> String:
+	return TileGrid.coord_key(tile)
 
 ## sow's blocked_missing_input precondition: on the ground/stockpile or in a colonist's hands.
 func has_item_of_kind(kind: String) -> bool:
@@ -258,7 +252,7 @@ func find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
 		var item: Dictionary = items[id]
 		if String(item["kind"]) != item_kind or int(item.get("count", 1)) < quantity:
 			continue
-		if not _is_in_any_zone.call(int(item["x"]), int(item["y"])):
+		if not _is_in_any_zone.call(TileGrid.tile_of(item)):
 			continue
 		if not table.owner(JobQueueType.ITEM_KEY_PREFIX + String(id)).is_empty():
 			continue
@@ -266,9 +260,9 @@ func find_available_stockpiled_item(item_kind: String, quantity: int) -> String:
 	return ""
 
 ## Takes one unit of an already-resolved stockpiled item; returns its tile.
-func remove_stockpiled_item_unit(item_id: String) -> Vector2i:
+func remove_stockpiled_item_unit(item_id: String) -> Vector3i:
 	var item: Dictionary = items[item_id]
-	var tile := Vector2i(int(item["x"]), int(item["y"]))
+	var tile := TileGrid.tile_of(item)
 	var count := int(item.get("count", 1))
 	if count > 1:
 		item["count"] = count - 1
@@ -283,22 +277,23 @@ func work_effects(kind: String) -> Dictionary:
 	return effects
 
 ## Where a yield lands: "adjacent" uses dig_item_placement(), "target" the tile itself.
-func yield_placement(kind: String, x: int, y: int) -> Vector2i:
+func yield_placement(kind: String, tile: Vector3i) -> Vector3i:
 	var yields: Dictionary = work_effects(kind).get("yields", {})
 	if yields.get("placement", "") == "adjacent":
-		return dig_item_placement(x, y)
-	return Vector2i(x, y)
+		return dig_item_placement(tile)
+	return tile
 
-## ADR 026: the first passable, non-trench neighbour (N, W, E, S), else (x, y) itself.
-func dig_item_placement(x: int, y: int) -> Vector2i:
-	for neighbor in [Vector2i(x, y - 1), Vector2i(x - 1, y), Vector2i(x + 1, y), Vector2i(x, y + 1)]:
-		if bool(_passability.call(neighbor.x, neighbor.y)["passable"]) and _get_tile.call(neighbor.x, neighbor.y) != ContentRegistryType.TILE_TRENCH:
+## ADR 026: the first passable, non-trench neighbour (N, W, E, S) on tile's layer, else tile itself.
+func dig_item_placement(tile: Vector3i) -> Vector3i:
+	for offset: Vector3i in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+		var neighbor := tile + offset
+		if bool(_passability.call(neighbor)["passable"]) and _get_tile.call(neighbor) != ContentRegistryType.TILE_TRENCH:
 			return neighbor
-	return Vector2i(x, y)
+	return tile
 
 ## Stages one completion of a kind with a find_table for this tick's resolve_dig_finds().
-func stage_dig_find(job_id: String, kind: String, x: int, y: int) -> void:
-	pending_dig_finds.append({"job_id": job_id, "kind": kind, "x": x, "y": y})
+func stage_dig_find(job_id: String, kind: String, tile: Vector3i) -> void:
+	pending_dig_finds.append({"job_id": job_id, "kind": kind, "x": tile.x, "y": tile.y, "z": tile.z})
 
 ## kind's effects.yields.find_table (content/jobs.json): the rolled item id, or "" for no find.
 func _roll_dig_find(kind: String) -> String:
@@ -326,7 +321,4 @@ func resolve_dig_finds() -> void:
 		var find_item := _roll_dig_find(kind)
 		if find_item.is_empty():
 			continue
-		var x: int = entry["x"]
-		var y: int = entry["y"]
-		var at := yield_placement(kind, x, y)
-		spawn_item(find_item, at.x, at.y)
+		spawn_item(find_item, yield_placement(kind, TileGrid.tile_of(entry)))

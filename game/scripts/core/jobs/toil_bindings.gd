@@ -129,7 +129,7 @@ func drop_carried_item_from(colonist: Dictionary) -> void:
 func _deposit_carried_item(colonist: Dictionary) -> void:
 	if not InventoryType.is_carrying(colonist):
 		return
-	var result := _toils.place(colonist, Vector2i(int(colonist["x"]), int(colonist["y"])))
+	var result := _toils.place(colonist, TileGrid.tile_of(colonist))
 	if not bool(result.get("ok", false)):
 		_force_drop_carried_item(colonist)
 
@@ -137,7 +137,7 @@ func _deposit_carried_item(colonist: Dictionary) -> void:
 ## bypassing occupancy/passability: conserving the item beats a tidy cell.
 func _force_drop_carried_item(colonist: Dictionary) -> void:
 	for entry in InventoryType.hands_snapshot(colonist):
-		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), int(colonist["x"]), int(colonist["y"]))
+		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), TileGrid.tile_of(colonist))
 	InventoryType.clear_hands(colonist)
 
 ## Drops a haul/build job's cargo at the shared terminal boundary: through the live
@@ -193,7 +193,7 @@ func terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) ->
 
 ## The tile a job's work toil operates on. A passthrough today; every work-progress key
 ## reader calls it so a kind with a second destination has one place to redirect.
-func work_target_for(job: Dictionary) -> Vector2i:
+func work_target_for(job: Dictionary) -> Vector3i:
 	return job["target"]
 
 ## on_arrive for a resumed go_to leg that must not auto-start work (WorldState's
@@ -202,7 +202,7 @@ func toil_no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
 	pass
 
 ## Haul: item tile, then its cell; site_fetch's delivery leg: job["site"]; else the target.
-func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector2i:
+func _toil_go_to_target(job: Dictionary, is_first: bool) -> Vector3i:
 	var kind := String(job["kind"])
 	if kind == "haul":
 		return job["target"] if is_first else job["cell"]
@@ -219,10 +219,10 @@ func _toil_is_first_leg(job: Dictionary, colonist: Dictionary) -> bool:
 
 ## Haul's delivery leg uses plain passability (the cell is known passable); every other leg
 ## keeps the target-tile exception. faction_id (F5) gates doors for a non-colony actor.
-func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector2i, faction_id: String = "colony") -> Callable:
+func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector3i, faction_id: String = "colony") -> Callable:
 	# An incident must genuinely arrive: no impassable-target exception.
 	if String(job["kind"]) == "incident":
-		return func(tile: Vector2i) -> float: return _passability.passable_for_faction(tile, faction_id)
+		return func(tile: Vector3i) -> float: return _passability.passable_for_faction(tile, faction_id)
 	# A rescuer never routes through a trench nor trims off-target.
 	if String(job["kind"]) == "rescue":
 		return _trench.rescue_routable_to(target, faction_id)
@@ -265,7 +265,7 @@ func _toil_item_id_for(job: Dictionary) -> String:
 	return String(job["item_id"])
 
 ## Haul's destination cell (site_fetch ends in deposit, never place).
-func _toil_cell_for(job: Dictionary) -> Vector2i:
+func _toil_cell_for(job: Dictionary) -> Vector3i:
 	return job["cell"]
 
 ## The site a site_fetch (the bench bill a craft_fetch) is delivering to; "" for any other kind.
@@ -273,7 +273,7 @@ func _toil_site_id_for(job: Dictionary) -> String:
 	if job.get("site") == null:
 		return ""
 	if job.get("kind", "") == "craft_fetch":
-		var bench_tile: Vector2i = job["site"]
+		var bench_tile: Vector3i = job["site"]
 		return _crafting.bill_id_at(bench_tile)
 	return _construction.site_table.find_at_origin(job["site"])
 
@@ -296,7 +296,7 @@ func _toil_pick_up_count_for(job: Dictionary, colonist: Dictionary) -> int:
 	_construction.site_fetch_picked_kind[String(job.get("id", ""))] = kind
 	var site := _construction.site_table.get_site(site_id)
 	var need := _construction.site_table.remaining(site, kind)
-	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var current := TileGrid.tile_of(colonist)
 	for sibling in _construction.reachable_short_sibling_sites(colonist, kind, current, site_id):
 		need += _construction.site_table.remaining(sibling, kind)
 	need -= InventoryType.count_of_kind(colonist, kind)
@@ -322,7 +322,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 	var site := _construction.site_table.get_site(site_id)
 	# Not item_lookup(): an exhausting pick_up already deleted the item.
 	var kind := String(_construction.site_fetch_picked_kind.get(job_id, ""))
-	var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var current := TileGrid.tile_of(colonist)
 	if (InventoryType.count_of_kind(colonist, kind) >= _construction.site_table.remaining(site, kind)
 			or InventoryType.free_capacity(colonist, _toils.hands_capacity(colonist)) <= 0):
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
@@ -332,7 +332,7 @@ func _toil_on_pick_up_success(job_id: String) -> void:
 		_scheduler.queue.mark_site_fetch_delivering(job_id)
 		return
 	var next_item := _item_table.item_lookup(next_id)
-	var next_tile := Vector2i(int(next_item["x"]), int(next_item["y"]))
+	var next_tile := TileGrid.tile_of(next_item)
 	var faction_id := String(colonist.get("factionId", "colony"))
 	var site_cost: int = _route_cost.call(current, site["origin"], faction_id)
 	if site_cost < 0: site_cost = _UNREACHABLE_ROUTE_COST
@@ -379,7 +379,7 @@ func _toil_on_deposit_success(job_id: String) -> void:
 		drop_carried_item_from(colonist) # a bill never chains to a sibling: leftovers go down
 	elif not colonist.is_empty() and InventoryType.is_carrying(colonist):
 		var kind := String((InventoryType.hands_snapshot(colonist)[0] as Dictionary)["kind"])
-		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var current := TileGrid.tile_of(colonist)
 		var delivered_site_id := _toil_site_id_for(job)
 		var next_site := _construction.next_site_fetch_site(colonist, kind, current, delivered_site_id)
 		if not next_site.is_empty():
@@ -394,11 +394,11 @@ func _toil_on_deposit_success(job_id: String) -> void:
 ## Dirty-cell/region/room hooks fire only when the tile kind actually changed.
 func _toil_on_work_complete(job_id: String) -> void:
 	var job := _scheduler.queue.get_job(job_id)
-	var target: Vector2i = work_target_for(job)
+	var target: Vector3i = work_target_for(job)
 	# ADR 026: trapping on a same-tick arrival pre-empts the completion effect below.
 	if _trench.trap_on_work_complete(job_id, job, target):
 		return
-	var tile_before: String = _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)]
+	var tile_before: String = _tile_grid.tiles[_tile_grid.index_of(target)]
 	var kind: String = job["kind"]
 	var effects := _item_table.work_effects(kind)
 	if not effects.is_empty():
@@ -425,21 +425,21 @@ func _toil_on_work_complete(job_id: String) -> void:
 			_trench.complete_escape(job_id, target)
 		"rescue":
 			_trench.complete_rescue(job_id)
-	if _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] != tile_before:
-		_tile_grid.update_water_tile_cache(target.x, target.y, tile_before == TILE_WATER, _tile_grid.tiles[_tile_grid.tile_index(target.x, target.y)] == TILE_WATER)
-		_tile_grid.mark_dirty(target.x, target.y)
-		_tile_grid.get_regions().on_passability_changed(target.x, target.y)
-		_tile_grid.get_rooms().on_passability_changed(target.x, target.y)
+
+	if _tile_grid.tiles[_tile_grid.index_of(target)] != tile_before:
+		_tile_grid.update_water_tile_cache(target, tile_before == TILE_WATER, _tile_grid.tiles[_tile_grid.index_of(target)] == TILE_WATER)
+		_tile_grid.mark_dirty(target)
+		_tile_grid.on_passability_changed(target)
 	_complete_job(job_id)
 	resolve_giver_association(job_id, kind)
 
 ## A jobs.json effects block applied at target in its fixed order (ADR 051): the tile check,
 ## the consumed input, the tile transform, the cleared object, the yields at their placement,
 ## then the staged find. {} once applied; else the refusal {reason, remedy}, nothing changed.
-static func apply_work_effects(effects: Dictionary, job_id: String, kind: String, target: Vector2i,
+static func apply_work_effects(effects: Dictionary, job_id: String, kind: String, target: Vector3i,
 		tile_grid: TileGridType, object_table: ObjectTableType, item_table: ItemTableType) -> Dictionary:
 	var requires_tile: String = effects.get("requires_tile", "")
-	if not requires_tile.is_empty() and tile_grid.get_tile(target.x, target.y) != requires_tile:
+	if not requires_tile.is_empty() and tile_grid.tile_at(target) != requires_tile:
 		return {"reason": "invalid_target", "remedy": "resubmit_order"}
 	# The input may have gone to another order or haul after this job committed.
 	var consumes: String = effects.get("consumes", "")
@@ -447,20 +447,20 @@ static func apply_work_effects(effects: Dictionary, job_id: String, kind: String
 		return {"reason": "blocked_missing_input", "remedy": "resubmit_order"}
 	var set_tile: String = effects.get("set_tile", "")
 	if not set_tile.is_empty():
-		tile_grid.tiles[tile_grid.tile_index(target.x, target.y)] = set_tile
+		tile_grid.tiles[tile_grid.index_of(target)] = set_tile
 	var clear_object: bool = effects.get("clear_object", false)
 	if clear_object:
-		object_table.set_object(target.x, target.y, "")
+		object_table.set_object(target, "")
 	var yields: Dictionary = effects.get("yields", {})
 	for item_id: String in (yields.get("always", []) as Array):
-		var at := item_table.yield_placement(kind, target.x, target.y)
-		item_table.spawn_item(item_id, at.x, at.y)
+		var at := item_table.yield_placement(kind, target)
+		item_table.spawn_item(item_id, at)
 	var ground_berries: int = yields.get("ground_berries", 0)
 	for _unit in ground_berries:
-		var at := item_table.yield_placement(kind, target.x, target.y)
-		item_table.spawn_berries_item(at.x, at.y)
+		var at := item_table.yield_placement(kind, target)
+		item_table.spawn_berries_item(at)
 	if yields.has("find_table"):
-		item_table.stage_dig_find(job_id, kind, target.x, target.y)
+		item_table.stage_dig_find(job_id, kind, target)
 	return {}
 
 ## Tells the giver owning job_id (NeedGiver, RescueGiver, the site's builder slot) that it
@@ -491,7 +491,7 @@ func _toil_on_no_tool_found(job_id: String, colonist_id: String, kind: String) -
 ## JobQueue's tool gate: a matching tool is free or already reserved by job_id itself
 ## (reserve_tool_item() may reserve ahead of activation).
 func tool_exists(job_id: String, kind: String) -> bool:
-	return bool(ToolMatchingType.find_nearest_free_tool(kind, Vector2i.ZERO, job_id,
+	return bool(ToolMatchingType.find_nearest_free_tool(kind, Vector3i.ZERO, job_id,
 		_tool_store.get_items(), _tool_store.reservation_of, ToolMatchingType.colonist_position_map(_get_colonists.call())).get("found", false))
 
 ## {} for a kind with no needs_tool requirement.
