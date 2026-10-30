@@ -8,7 +8,7 @@ extends SaveCheck
 
 const MAX_COUNT := preload("res://scripts/core/crafting/recipe_book.gd").MAX_COUNT
 
-static func _valid_crafting(value: Variant, map_width: int, map_height: int) -> Dictionary:
+static func _valid_crafting(value: Variant, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid crafting type")
 	var crafting: Dictionary = value
@@ -25,21 +25,20 @@ static func _valid_crafting(value: Variant, map_width: int, map_height: int) -> 
 		if not (entry is Dictionary):
 			return _fail("invalid crafting bench type")
 		var bench: Dictionary = entry
-		var bench_check := _valid_bench(bench, map_width, map_height)
+		var bench_check := _valid_bench(bench, map_width, map_height, layer_count)
 		if not bench_check["ok"]:
 			return bench_check
-		var x: int = bench["x"]
-		var y: int = bench["y"]
-		if seen.has(Vector2i(x, y)):
+		var origin := TileGrid.tile_of(bench)
+		if seen.has(origin):
 			return _fail("duplicate crafting bench")
-		seen[Vector2i(x, y)] = true
+		seen[origin] = true
 	return {"ok": true}
 
-static func _valid_bench(bench: Dictionary, map_width: int, map_height: int) -> Dictionary:
-	var check := _require_fields(bench, ["x", "y", "targets", "orders", "bill"], "crafting bench")
+static func _valid_bench(bench: Dictionary, map_width: int, map_height: int, layer_count: int) -> Dictionary:
+	var check := _require_fields(bench, ["x", "y", "z", "targets", "orders", "bill"], "crafting bench")
 	if not check["ok"]:
 		return check
-	if not _int_in(bench["x"], 0, map_width - 1) or not _int_in(bench["y"], 0, map_height - 1):
+	if not _int_in(bench["x"], 0, map_width - 1) or not _int_in(bench["y"], 0, map_height - 1) or not _valid_layer(bench["z"], layer_count):
 		return _fail("invalid crafting bench tile")
 	var lists := {"targets": ["recipe", "count"], "orders": ["id", "recipe", "remaining"]}
 	for list_name: String in lists:

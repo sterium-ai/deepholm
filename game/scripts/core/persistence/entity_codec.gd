@@ -12,7 +12,7 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 	for colonist in colonists:
 		var entity: Dictionary = {
 			"id": colonist["id"], "kind": colonist["kind"],
-			"x": colonist["x"], "y": colonist["y"],
+			"x": colonist["x"], "y": colonist["y"], "z": colonist["z"],
 			"route": _encode_route_field(colonist.get("route"), reroutes.get(colonist["id"])),
 			"factionId": String(colonist.get("factionId", "colony")),
 			"health": _encode_health(colonist.get("health", {})),
@@ -52,7 +52,7 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 	for entity in entities:
 		var colonist: Dictionary = {
 			"id": entity["id"], "kind": entity["kind"],
-			"x": int(entity["x"]), "y": int(entity["y"]),
+			"x": int(entity["x"]), "y": int(entity["y"]), "z": int(entity["z"]),
 			"route": _decode_route_field(entity.get("route")),
 			"factionId": String(entity.get("factionId", "colony")),
 			"health": _decode_health(entity.get("health", {})),

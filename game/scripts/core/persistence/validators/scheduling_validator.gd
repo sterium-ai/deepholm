@@ -5,7 +5,7 @@ extends SaveCheck
 ## "scheduling" (queue entries, pending route searches, assignments) and the world "rng".
 
 ## "autonomous" (ADR 014 amendment) is optional; absent decodes as false.
-static func _valid_queue_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_queue_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid queue entry type")
 	var entry: Dictionary = value
@@ -18,7 +18,7 @@ static func _valid_queue_entry(value, map_width: int, map_height: int) -> Dictio
 			return _fail_missing("missing queue entry field '%s'" % key)
 	if not _matches_id_pattern(entry["id"]):
 		return _fail("invalid queue entry id")
-	var target_check := _valid_tile(entry["target"], map_width, map_height)
+	var target_check := _valid_tile(entry["target"], map_width, map_height, layer_count)
 	if not target_check["ok"]:
 		return target_check
 	if not _is_int(entry["base"]) or not _is_int_min(entry["submittedTick"], 0) or not _is_int_min(entry["ordinal"], 0):
@@ -29,7 +29,7 @@ static func _valid_queue_entry(value, map_width: int, map_height: int) -> Dictio
 		return _fail("invalid queue entry autonomous")
 	return {"ok": true}
 
-static func _valid_route_state(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_route_state(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid route state type")
 	var route: Dictionary = value
@@ -40,21 +40,21 @@ static func _valid_route_state(value, map_width: int, map_height: int) -> Dictio
 	for key: String in required:
 		if not route.has(key):
 			return _fail_missing("missing route state field '%s'" % key)
-	var start_check := _valid_tile(route["start"], map_width, map_height)
+	var start_check := _valid_tile(route["start"], map_width, map_height, layer_count)
 	if not start_check["ok"]:
 		return start_check
-	var target_check := _valid_tile(route["target"], map_width, map_height)
+	var target_check := _valid_tile(route["target"], map_width, map_height, layer_count)
 	if not target_check["ok"]:
 		return target_check
 	if not (route["status"] is String) or not ["searching", "found", "unreachable"].has(route["status"]):
 		return _fail("invalid route status")
-	var frontier_check := _valid_tile_array(route["frontier"], map_width, map_height)
+	var frontier_check := _valid_tile_array(route["frontier"], map_width, map_height, layer_count)
 	if not frontier_check["ok"]:
 		return frontier_check
-	var visited_check := _valid_tile_array(route["visited"], map_width, map_height)
+	var visited_check := _valid_tile_array(route["visited"], map_width, map_height, layer_count)
 	if not visited_check["ok"]:
 		return visited_check
-	var path_check := _valid_tile_array(route["path"], map_width, map_height)
+	var path_check := _valid_tile_array(route["path"], map_width, map_height, layer_count)
 	if not path_check["ok"]:
 		return path_check
 	if not (route["cameFrom"] is Array):
@@ -65,10 +65,10 @@ static func _valid_route_state(value, map_width: int, map_height: int) -> Dictio
 		var pair_check := _require_fields(pair, ["child", "parent"], "cameFrom entry")
 		if not pair_check["ok"]:
 			return pair_check
-		var child_check := _valid_tile(pair["child"], map_width, map_height)
+		var child_check := _valid_tile(pair["child"], map_width, map_height, layer_count)
 		if not child_check["ok"]:
 			return child_check
-		var parent_check := _valid_tile(pair["parent"], map_width, map_height)
+		var parent_check := _valid_tile(pair["parent"], map_width, map_height, layer_count)
 		if not parent_check["ok"]:
 			return parent_check
 	if not _is_int_min(route["expansions"], 0) or not _is_int_min(route["resumeCalls"], 0):
@@ -89,7 +89,7 @@ static func _valid_route_cost(value: Variant, visited_count: int) -> Dictionary:
 			return _fail("invalid route cost")
 	return {"ok": true}
 
-static func _valid_found_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_found_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid found entry type")
 	var found: Dictionary = value
@@ -99,14 +99,14 @@ static func _valid_found_entry(value, map_width: int, map_height: int) -> Dictio
 		return check
 	if not (found["worker"] is String):
 		return _fail("invalid found entry worker")
-	var entry_check := _valid_queue_entry(found["entry"], map_width, map_height)
+	var entry_check := _valid_queue_entry(found["entry"], map_width, map_height, layer_count)
 	if not entry_check["ok"]:
 		return entry_check
 	if not _is_int_min(found["travel"], 0):
 		return _fail("invalid found entry travel")
 	return {"ok": true}
 
-static func _valid_pending_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_pending_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid pending entry type")
 	var pending: Dictionary = value
@@ -117,7 +117,7 @@ static func _valid_pending_entry(value, map_width: int, map_height: int) -> Dict
 	if not (pending["candidates"] is Array):
 		return _fail("invalid pending candidates type")
 	for candidate in pending["candidates"]:
-		var candidate_check := _valid_queue_entry(candidate, map_width, map_height)
+		var candidate_check := _valid_queue_entry(candidate, map_width, map_height, layer_count)
 		if not candidate_check["ok"]:
 			return candidate_check
 	if not _is_int_min(pending["cursor"], 0):
@@ -125,18 +125,18 @@ static func _valid_pending_entry(value, map_width: int, map_height: int) -> Dict
 	if not (pending["found"] is Array):
 		return _fail("invalid pending found type")
 	for found in pending["found"]:
-		var found_check := _valid_found_entry(found, map_width, map_height)
+		var found_check := _valid_found_entry(found, map_width, map_height, layer_count)
 		if not found_check["ok"]:
 			return found_check
-	var start_check := _valid_tile(pending["start"], map_width, map_height)
+	var start_check := _valid_tile(pending["start"], map_width, map_height, layer_count)
 	if not start_check["ok"]:
 		return start_check
 	var route: Variant = pending["route"]
 	if route == null:
 		return {"ok": true}
-	return _valid_route_state(route, map_width, map_height)
+	return _valid_route_state(route, map_width, map_height, layer_count)
 
-static func _valid_assignment_entry(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_assignment_entry(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid assignment entry type")
 	var assignment: Dictionary = value
@@ -146,13 +146,13 @@ static func _valid_assignment_entry(value, map_width: int, map_height: int) -> D
 		return check
 	if not (assignment["jobId"] is String) or not _is_int_min(assignment["startedTick"], 0) or not _is_int_min(assignment["travelTicks"], 0):
 		return _fail("invalid assignment fields")
-	var path_check := _valid_tile_array(assignment["path"], map_width, map_height)
+	var path_check := _valid_tile_array(assignment["path"], map_width, map_height, layer_count)
 	if not path_check["ok"]:
 		return path_check
 	return {"ok": true}
 
 ## job_kinds: jobs.json's kinds from the session registry (SaveIO.content_rules()).
-static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array[String]) -> Dictionary:
+static func _valid_jobs(value, map_width: int, map_height: int, layer_count: int, job_kinds: Array[String]) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid jobs type")
 	var job_required := ["id", "kind", "status", "priority", "target", "reason", "remedy", "blockingJobId",
@@ -176,7 +176,7 @@ static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array
 			return _fail("invalid job status")
 		if not _is_int(job["priority"]) or not [0, 1, 2].has(int(job["priority"])):
 			return _fail("invalid job priority")
-		var job_target_check := _valid_tile(job["target"], map_width, map_height)
+		var job_target_check := _valid_tile(job["target"], map_width, map_height, layer_count)
 		if not job_target_check["ok"]:
 			return job_target_check
 		if not (job["reason"] is String) or not (job["remedy"] is String) or not (job["blockingJobId"] is String):
@@ -184,13 +184,13 @@ static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array
 		if not (job["itemId"] is String) or not _matches_optional_id_pattern(job["itemId"]):
 			return _fail("invalid job itemId")
 		if job["cell"] != null:
-			var cell_check := _valid_tile(job["cell"], map_width, map_height)
+			var cell_check := _valid_tile(job["cell"], map_width, map_height, layer_count)
 			if not cell_check["ok"]:
 				return cell_check
 		if not _is_int_min(job["retryAt"], 0) or not _is_int_min(job["backoffTicks"], 0):
 			return _fail("invalid job retryAt or backoffTicks")
 		if job.get("site") != null:
-			var site_check := _valid_tile(job["site"], map_width, map_height)
+			var site_check := _valid_tile(job["site"], map_width, map_height, layer_count)
 			if not site_check["ok"]:
 				return site_check
 		# A site_fetch/site_work/craft_fetch job's site is mandatory: activation and delivery need it.
@@ -198,7 +198,7 @@ static func _valid_jobs(value, map_width: int, map_height: int, job_kinds: Array
 			return _fail("site job missing site")
 	return {"ok": true}
 
-static func _valid_scheduling(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_scheduling(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid scheduling type")
 	var scheduling: Dictionary = value
@@ -224,7 +224,7 @@ static func _valid_scheduling(value, map_width: int, map_height: int) -> Diction
 	if not (scheduling["waiting"] is Array):
 		return _fail("invalid scheduling.waiting type")
 	for entry in scheduling["waiting"]:
-		var waiting_check := _valid_queue_entry(entry, map_width, map_height)
+		var waiting_check := _valid_queue_entry(entry, map_width, map_height, layer_count)
 		if not waiting_check["ok"]:
 			return waiting_check
 	if not (scheduling["cursors"] is Dictionary):
@@ -235,13 +235,13 @@ static func _valid_scheduling(value, map_width: int, map_height: int) -> Diction
 	if not (scheduling["pending"] is Dictionary):
 		return _fail("invalid scheduling.pending type")
 	for key in scheduling["pending"].keys():
-		var pending_check := _valid_pending_entry(scheduling["pending"][key], map_width, map_height)
+		var pending_check := _valid_pending_entry(scheduling["pending"][key], map_width, map_height, layer_count)
 		if not pending_check["ok"]:
 			return pending_check
 	if not (scheduling["assignments"] is Dictionary):
 		return _fail("invalid scheduling.assignments type")
 	for key in scheduling["assignments"].keys():
-		var assignment_check := _valid_assignment_entry(scheduling["assignments"][key], map_width, map_height)
+		var assignment_check := _valid_assignment_entry(scheduling["assignments"][key], map_width, map_height, layer_count)
 		if not assignment_check["ok"]:
 			return assignment_check
 	if not (scheduling["activatedEntries"] is Dictionary):
@@ -249,7 +249,7 @@ static func _valid_scheduling(value, map_width: int, map_height: int) -> Diction
 	for key in scheduling["activatedEntries"].keys():
 		if not _matches_id_pattern(key):
 			return _fail("invalid scheduling.activatedEntries key")
-		var activated_entry_check := _valid_queue_entry(scheduling["activatedEntries"][key], map_width, map_height)
+		var activated_entry_check := _valid_queue_entry(scheduling["activatedEntries"][key], map_width, map_height, layer_count)
 		if not activated_entry_check["ok"]:
 			return activated_entry_check
 	return {"ok": true}

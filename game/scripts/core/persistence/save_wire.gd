@@ -7,14 +7,17 @@ extends RefCounted
 ## a packed field never reaches the validators or decode().
 ##
 ## - "map": "tiles" becomes "palette" (tile ids in first-appearance order) plus "tileRuns"
-##   (flat [paletteIndex, runLength, ...] in row-major order).
+##   (flat [paletteIndex, runLength, ...] in flat-index order: layer by layer, row-major).
 ## - A route search ("entities[].route.rerouting", "scheduling.pending.*.route") keeps start,
 ##   target, status, path and its counters, and replaces "visited"/"cameFrom"/"cost"/"frontier"
 ##   with "box" ([x, y, width, height] around the visited tiles), "visitedBits" (a bitset over
 ##   the box in row-major order), "cameFromDirs" (2 bits per visited tile, in that order: the
 ##   direction to its parent, NEIGHBOR_OFFSETS' index), "costBytes" (one float64 per visited
-##   tile, in that order) and "frontierTiles" (int32 map tile indices, in frontier order), all
-##   base64. The start tile's 2 bits are written as 0 and never read.
+##   tile, in that order) and "frontierTiles" (int32 tile indices within the layer, in frontier
+##   order), all base64. The start tile's 2 bits are written as 0 and never read. A route search
+##   never leaves its start's layer (L2, ADR 045), so the box, bits and indices are planar and
+##   every unpacked tile takes the start's "z"; a pre-v9 start has no "z" (legacy {x, y} tiles),
+##   and neither do the tiles unpacked from it, which SaveMigrations then gives "z": 0.
 ## - "entities", "jobs", "crops" (F1, v6) and "scheduling.waiting" (lists of same-shaped records)
 ##   become a table:
 ##   a first element {"$keys": [sorted keys]}, then one row [values in key order] per record. A
@@ -23,7 +26,7 @@ extends RefCounted
 ##
 ## pack() never changes its argument and only packs what it can restore exactly: a route whose
 ## cameFrom is not one adjacent parent per visited tile (a hand-built state), or with a tile off
-## the map, stays in the plain form, which unpack() leaves alone; so does a plain "tiles" list.
+## the map or off the start's layer or shape, stays in the plain form, which unpack() leaves alone; so does a plain "tiles" list.
 ## Unpacked visited tiles come back in row-major order instead of discovery order: no reader
 ## depends on that order (state_hash() stringifies with sorted keys, see RouteSearch.restore()).
 
@@ -33,7 +36,7 @@ const TABLE_KEYS := "$keys"
 const RECORD_LISTS: Array[String] = ["entities", "jobs", "crops"]
 const PLAIN_ROUTE_FIELDS: Array[String] = ["visited", "cameFrom", "cost", "frontier"]
 ## Parent minus child, indexed by the 2-bit code; RouteSearch.NEIGHBOR_OFFSETS' order.
-const DIRECTIONS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]
+const DIRECTIONS: Array[Vector3i] = [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]
 
 ## A copy of state with the map, every route search and the record lists packed; untouched
 ## subtrees are shared.
@@ -237,15 +240,19 @@ static func _unpack_map(map: Dictionary, max_world_size: int) -> Dictionary:
 	# MapValidator's own message: the same refusal, before anything is allocated.
 	if width > max_world_size or height > max_world_size:
 		return _fail("map dimensions exceed the supported maximum")
+	# A pre-v9 map has no layerCount: one layer.
+	var layers_value: Variant = map.get("layerCount", 1)
+	if typeof(layers_value) != TYPE_INT or int(layers_value) < 1 or int(layers_value) > TileGrid.MAX_LAYER_COUNT:
+		return _fail("invalid map layerCount")
 	var palette_value: Variant = map.get("palette")
 	var runs_value: Variant = map.get("tileRuns")
 	if not (palette_value is Array) or not (runs_value is Array) or (runs_value as Array).size() % 2 != 0:
 		return _fail("invalid map palette or tileRuns")
 	var palette: Array = palette_value
 	var runs: Array = runs_value
-	# Never more than width*height (at most max_world_size squared) tiles; the validator then
-	# checks the count is exact.
-	var max_tiles := width * height
+	# Never more than width*height*layerCount (at most max_world_size squared times
+	# MAX_LAYER_COUNT) tiles; the validator then checks the count is exact.
+	var max_tiles := width * height * int(layers_value)
 	var tiles: Array = []
 	var i := 0
 	while i < runs.size():
@@ -257,7 +264,7 @@ static func _unpack_map(map: Dictionary, max_world_size: int) -> Dictionary:
 			return _fail("invalid map tileRuns entry")
 		# Compared as a remainder: tiles.size() + length could overflow int64 on a hostile length.
 		if length > max_tiles - tiles.size():
-			return _fail("map tiles length does not match width*height")
+			return _fail("map tiles length does not match width*height*layerCount")
 		var tile: Variant = palette[index]
 		for _r in length:
 			tiles.append(tile)
@@ -285,14 +292,17 @@ static func _pack_entity_route(entity: Variant, width: int, height: int) -> Vari
 ## The packed form of one plain route state, or route itself when it cannot be packed exactly.
 static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary:
 	var start := _tile_of(route.get("start"), width, height)
-	var visited_value: Variant = _tiles_of(route.get("visited"), width, height)
-	var frontier_value: Variant = _tiles_of(route.get("frontier"), width, height)
-	var came_from_value: Variant = route.get("cameFrom")
-	if start.x < 0 or visited_value == null or frontier_value == null or not (came_from_value is Array):
+	if start.x < 0:
 		return route
-	var visited: Array[Vector2i] = visited_value
-	var frontier: Array[Vector2i] = frontier_value
-	var parents := _parents_of(came_from_value as Array, width, height)
+	var shape := (route["start"] as Dictionary).size()
+	var visited_value: Variant = _tiles_of(route.get("visited"), width, height, start.z, shape)
+	var frontier_value: Variant = _tiles_of(route.get("frontier"), width, height, start.z, shape)
+	var came_from_value: Variant = route.get("cameFrom")
+	if visited_value == null or frontier_value == null or not (came_from_value is Array):
+		return route
+	var visited: Array[Vector3i] = visited_value
+	var frontier: Array[Vector3i] = frontier_value
+	var parents := _parents_of(came_from_value as Array, width, height, start.z, shape)
 	if parents.is_empty() and not (came_from_value as Array).is_empty():
 		return route
 	var order: Dictionary = {}
@@ -311,18 +321,18 @@ static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary
 		packed.erase(key)
 	var box := _box_of(visited)
 	var sorted := visited.duplicate()
-	sorted.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
+	sorted.sort_custom(func(a: Vector3i, b: Vector3i) -> bool: return a.y < b.y or (a.y == b.y and a.x < b.x))
 	var bits := PackedByteArray()
 	bits.resize((box.z * box.w + 7) >> 3)
 	var dirs := PackedByteArray()
 	dirs.resize((sorted.size() + 3) >> 2)
 	var cost_values := PackedFloat64Array()
 	for i in sorted.size():
-		var tile: Vector2i = sorted[i]
+		var tile: Vector3i = sorted[i]
 		var bit := TileGrid.flat_index(tile.x - box.x, tile.y - box.y, box.z)
 		bits[bit >> 3] |= 1 << (bit & 7)
 		if tile != start:
-			var parent: Vector2i = parents[tile]
+			var parent: Vector3i = parents[tile]
 			dirs[i >> 2] |= DIRECTIONS.find(parent - tile) << ((i & 3) * 2)
 		if cost_of != null:
 			var cost: float = (cost_of as Dictionary)[tile]
@@ -340,20 +350,22 @@ static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary
 
 ## child -> parent for a cameFrom list of distinct children, each next to its parent on the
 ## map; {} when any pair is not.
-static func _parents_of(pairs: Array, width: int, height: int) -> Dictionary:
+static func _parents_of(pairs: Array, width: int, height: int, layer: int, shape: int) -> Dictionary:
 	var parents: Dictionary = {}
 	for pair: Variant in pairs:
 		if not (pair is Dictionary):
 			return {}
-		var child := _tile_of((pair as Dictionary).get("child"), width, height)
-		var parent := _tile_of((pair as Dictionary).get("parent"), width, height)
+		var child := _tile_of((pair as Dictionary).get("child"), width, height, shape)
+		var parent := _tile_of((pair as Dictionary).get("parent"), width, height, shape)
+		if child.z != layer or parent.z != layer:
+			return {}
 		if child.x < 0 or parent.x < 0 or parents.has(child) or not DIRECTIONS.has(parent - child):
 			return {}
 		parents[child] = parent
 	return parents
 
 ## tile -> cost for a "cost" list matching visited, or null when absent or malformed.
-static func _costs_of(value: Variant, visited: Array[Vector2i]) -> Variant:
+static func _costs_of(value: Variant, visited: Array[Vector3i]) -> Variant:
 	if not (value is Array) or (value as Array).size() != visited.size():
 		return null
 	var costs: Array = value
@@ -380,6 +392,7 @@ static func unpack_route(route: Dictionary, width: int, height: int) -> Dictiona
 	var box := _box_from(route["box"], width, height)
 	if start.x < 0 or box.x < 0:
 		return _fail("invalid packed route start or box")
+	var with_z := (route["start"] as Dictionary).has("z")
 	var bits := _bytes_of(route["visitedBits"])
 	var dirs := _bytes_of(route["cameFromDirs"])
 	var frontier_bytes := _bytes_of(route["frontierTiles"])
@@ -394,15 +407,15 @@ static func unpack_route(route: Dictionary, width: int, height: int) -> Dictiona
 			bit += 1
 			if not set_bit:
 				continue
-			var tile := Vector2i(x, y)
+			var tile := Vector3i(x, y, start.z)
 			var i := visited.size()
-			visited.append(_encode_tile(tile))
+			visited.append(_encode_tile(tile, with_z))
 			if tile == start:
 				continue
 			if (i >> 2) >= dirs.size():
 				return _fail("invalid packed route cameFromDirs")
-			var parent: Vector2i = tile + DIRECTIONS[(dirs[i >> 2] >> ((i & 3) * 2)) & 3]
-			came_from.append({"child": _encode_tile(tile), "parent": _encode_tile(parent)})
+			var parent: Vector3i = tile + DIRECTIONS[(dirs[i >> 2] >> ((i & 3) * 2)) & 3]
+			came_from.append({"child": _encode_tile(tile, with_z), "parent": _encode_tile(parent, with_z)})
 	if dirs.size() != (visited.size() + 3) >> 2:
 		return _fail("invalid packed route cameFromDirs")
 	var plain := route.duplicate()
@@ -419,21 +432,22 @@ static func unpack_route(route: Dictionary, width: int, height: int) -> Dictiona
 	for index in frontier_bytes.to_int32_array():
 		if index < 0 or index >= width * height:
 			return _fail("invalid packed route frontier tile")
-		frontier.append(_encode_tile(TileGrid.flat_coord(index, width)))
+		var planar := TileGrid.flat_coord(index, width)
+		frontier.append(_encode_tile(Vector3i(planar.x, planar.y, start.z), with_z))
 	plain["frontier"] = frontier
 	return {"ok": true, "route": plain}
 
 # --- helpers -----------------------------------------------------------------------
 
-## (x, y, width, height) of the box around tiles; zero for none.
-static func _box_of(tiles: Array[Vector2i]) -> Vector4i:
+## (x, y, width, height) of the planar box around tiles (one layer); zero for none.
+static func _box_of(tiles: Array[Vector3i]) -> Vector4i:
 	if tiles.is_empty():
 		return Vector4i.ZERO
 	var low := tiles[0]
 	var high := tiles[0]
 	for tile in tiles:
-		low = Vector2i(mini(low.x, tile.x), mini(low.y, tile.y))
-		high = Vector2i(maxi(high.x, tile.x), maxi(high.y, tile.y))
+		low = Vector3i(mini(low.x, tile.x), mini(low.y, tile.y), low.z)
+		high = Vector3i(maxi(high.x, tile.x), maxi(high.y, tile.y), high.z)
 	return Vector4i(low.x, low.y, high.x - low.x + 1, high.y - low.y + 1)
 
 ## A packed "box" as (x, y, width, height), or x = -1 unless it is four ints inside the map.
@@ -456,27 +470,36 @@ static func _box_from(value: Variant, width: int, height: int) -> Vector4i:
 		return Vector4i(-1, 0, 0, 0)
 	return Vector4i(parts[0], parts[1], parts[2], parts[3])
 
-## Vector2i(-1, -1) unless value is an {x, y} int tile on the map.
-static func _tile_of(value: Variant, width: int, height: int) -> Vector2i:
-	if not (value is Dictionary) or (value as Dictionary).size() != 2:
-		return Vector2i(-1, -1)
+## Vector3i(-1, -1, -1) unless value is an {x, y, z} int tile on the map's width and height (z
+## >= 0; the validator bounds it by layerCount), or a legacy {x, y} one (z 0, pre-v9). shape
+## (2 or 3 keys, 0 for either) pins the form.
+static func _tile_of(value: Variant, width: int, height: int, shape: int = 0) -> Vector3i:
+	var invalid := Vector3i(-1, -1, -1)
+	if not (value is Dictionary):
+		return invalid
 	var tile: Dictionary = value
+	if (shape != 0 and tile.size() != shape) or (tile.size() != 2 and tile.size() != 3):
+		return invalid
 	if typeof(tile.get("x")) != TYPE_INT or typeof(tile.get("y")) != TYPE_INT:
-		return Vector2i(-1, -1)
+		return invalid
+	if tile.size() == 3 and typeof(tile.get("z")) != TYPE_INT:
+		return invalid
 	var x: int = tile["x"]
 	var y: int = tile["y"]
-	if x < 0 or y < 0 or x >= width or y >= height:
-		return Vector2i(-1, -1)
-	return Vector2i(x, y)
+	var z: int = tile.get("z", 0)
+	if x < 0 or y < 0 or z < 0 or x >= width or y >= height:
+		return invalid
+	return Vector3i(x, y, z)
 
-## The tiles of an {x, y} list, or null when one is not a tile on the map.
-static func _tiles_of(value: Variant, width: int, height: int) -> Variant:
+## The tiles of a tile list on one layer and in one shape (see _tile_of()), or null when one is
+## not a tile on the map, sits on another layer or has another shape.
+static func _tiles_of(value: Variant, width: int, height: int, layer: int, shape: int) -> Variant:
 	if not (value is Array):
 		return null
-	var tiles: Array[Vector2i] = []
+	var tiles: Array[Vector3i] = []
 	for item: Variant in value:
-		var tile := _tile_of(item, width, height)
-		if tile.x < 0:
+		var tile := _tile_of(item, width, height, shape)
+		if tile.x < 0 or tile.z != layer:
 			return null
 		tiles.append(tile)
 	return tiles
@@ -487,8 +510,9 @@ static func _bytes_of(value: Variant) -> PackedByteArray:
 	var text: String = value
 	return Marshalls.base64_to_raw(text)
 
-static func _encode_tile(tile: Vector2i) -> Dictionary:
-	return {"x": tile.x, "y": tile.y}
+## {x, y, z}, or the legacy {x, y} of a pre-v9 route (see the class doc).
+static func _encode_tile(tile: Vector3i, with_z: bool) -> Dictionary:
+	return {"x": tile.x, "y": tile.y, "z": tile.z} if with_z else {"x": tile.x, "y": tile.y}
 
 static func _is_size(map: Dictionary) -> bool:
 	if typeof(map.get("width")) != TYPE_INT or typeof(map.get("height")) != TYPE_INT:
