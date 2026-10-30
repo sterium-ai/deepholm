@@ -224,12 +224,9 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 	# One slot per worker before any second slot; real route distances decide activation.
 	for slot in ROUTE_CANDIDATES_PER_WORKER:
 		for scanned: Dictionary in proposals:
-			var scanned_job: String = scanned["entry"]["id"]
-			var scanned_worker: String = scanned["worker"]
-			if claimed_jobs.has(scanned_job) or _slot_taken(batches, scanned_worker, slot):
+			var proposal := _most_skilled_free(scanned, proposals_by_job, claimed_jobs, batches, slot)
+			if proposal.is_empty():
 				continue
-			var job_proposals: Array = proposals_by_job[scanned_job]
-			var proposal := _most_skilled_free(job_proposals, batches, slot)
 			var worker: String = proposal["worker"]
 			var entry: Dictionary = proposal["entry"]
 			if not batches.has(worker):
@@ -380,11 +377,18 @@ func _slot_taken(batches: Dictionary, worker: String, slot: int) -> bool:
 	var candidates: Array = batches[worker]["candidates"]
 	return candidates.size() > slot
 
-## F3 (ADR 062): the batching pass hands a job, when its turn comes, to the most skilled of its
-## proposers whose `slot` is still free; equal skill keeps the first in _pair_before() order
-## (the best score: travel and aging as before), so all-equal skills batch exactly as before.
-func _most_skilled_free(job_proposals: Array, batches: Dictionary, slot: int) -> Dictionary:
+## F3 (ADR 062): the batching pass hands a job, when its turn comes (the scanned proposal's job
+## is unclaimed and its worker's `slot` is free; else {}), to the most skilled of its proposers
+## whose `slot` is still free; equal skill keeps the first in _pair_before() order (the best
+## score: travel and aging as before), so all-equal skills batch exactly as before.
+func _most_skilled_free(scanned: Dictionary, proposals_by_job: Dictionary, claimed_jobs: Dictionary,
+		batches: Dictionary, slot: int) -> Dictionary:
+	var job_id: String = scanned["entry"]["id"]
+	var scanned_worker: String = scanned["worker"]
 	var best: Dictionary = {}
+	if claimed_jobs.has(job_id) or _slot_taken(batches, scanned_worker, slot):
+		return best
+	var job_proposals: Array = proposals_by_job[job_id]
 	var best_skill := -1
 	for proposal: Dictionary in job_proposals:
 		var worker: String = proposal["worker"]
