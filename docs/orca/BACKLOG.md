@@ -1037,6 +1037,27 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   hook so that a finished site's other builders complete through `ToilBindings._complete_job()`
   and earn their build XP.
   ADR 062; evidence `docs/orca/handoffs/F3.md`.
+- **Exception (owner, 2026-10-30, after the third review):** construction does not scale with
+  skill in v1. A `site_work` job's duration is its site's remaining `build_ticks`, and every
+  builder adds one progress per tick at every level. Build XP is still earned. The scaling is
+  follow-up task F3b.
+
+### F3b — Build speed scales with skill · `todo` · after F3 · Design: owner exception to F3, 2026-10-30
+
+- **Goal:** a builder adds construction progress at its work speed (70 % at build level 0 to
+  160 % at level 10, ADR 062's curve) instead of 1 per tick, so that skill speeds up
+  construction like every other work toil.
+- **Owned paths:** `core/objects/construction_system.gd` (`add_site_work()` progress per
+  builder), the work-progress hook it is called from, the colonist's saved work state or the
+  site record for a per-builder fractional remainder (schema bump + migration + fixture; next
+  free number), `content/skills.json` if a separate build curve is wanted, tests, an ADR
+  062 amendment, `docs/orca/handoffs/F3b.md`.
+- **Acceptance:** headless: one builder at build 8 and one at build 0 each build the same site
+  alone; the level-8 builder finishes in ~49 % of the level-0 time. Two builders add up their
+  speeds. Progress and the remainder survive save/load mid-build, and a replay reproduces it.
+  Each builder still earns its `site_work` XP exactly once (F3's test). `world_state.gd` does
+  not grow. Suite green.
+- **Non-goals:** build quality, per-object skill requirements, faster material fetching.
 
 ### L1 — `TileGrid` as the only index owner · `review (antonelmejor50-hub/l1-tilegrid-as-the-only)` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2
 

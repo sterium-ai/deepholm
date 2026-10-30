@@ -41,7 +41,8 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
   place of `world/scenario_builder.gd`). After review, the owner also approved
   `core/actors/actor_table.gd` (`spawn("colonist")` builds the zero skills, item 2). After the
   second review, the owner also approved `core/objects/construction_system.gd` (the
-  `complete_builder` hook, item 4).
+  `complete_builder` hook, item 4). After the third review, the owner approved an exception to
+  the speed line: construction does not scale with skill in v1 (item 3; follow-up task F3b).
 
 ## Decision
 
@@ -67,8 +68,8 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
    colonist has no record for (forage, need jobs) keeps `work_ticks`. A resumed job keeps its
    stored remainder (not rescaled). A `site_work` job's duration always comes from its site
    (the site's remaining `build_ticks`, `WorldState._resume_work_progress()`), and every
-   builder adds one progress per tick, so building speed does not change with skill
-   (limitation, see below).
+   builder adds one progress per tick, so building speed does not change with skill. This is
+   an owner-approved exception to the design's speed line (follow-up F3b; see Limitations).
 4. **XP.** Every toil-driven completion goes through `ToilBindings._complete_job()`: once
    `finish(complete_job)` accepts it, the colonist that held the job earns
    `xp_per_job.by_kind[kind]` (else `default`) in the kind's labour
@@ -88,7 +89,10 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
    job's turn comes (its best-scored proposal from a worker whose slot is free), the job goes
    to the most skilled of its proposers whose slot is still free; equal skill keeps the first in
    the old `_pair_before()` order, which is the old choice (best score: priority, aging,
-   travel). With all skills equal the batching is exactly ADR 004's. Proposals are grouped by
+   travel). A proposer more skilled than the old choice replaces it only if its start
+   reaches the job's target region, using the same region check as the routing phase. A
+   colonist walled off from the target therefore never takes the job from the old choice tick
+   after tick. With all skills equal the batching is exactly ADR 004's. Proposals are grouped by
    job once per tick, so the pass stays linear in the number of proposals. Labour eligibility,
    the priority bracket, aging and activation are unchanged.
 7. **Starting skills.** `WorldSeeding` seeds every new world's colonists from a local RNG
@@ -125,8 +129,9 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
 
 ## Limitations
 
-- Building speed does not scale. A site_work job lasts until its site is built, and each
-  builder adds one progress per tick at every level. Build XP is one `site_work` award per
+- Building speed does not scale (owner exception, 2026-10-30, after review; follow-up task
+  F3b). A site_work job lasts until its site is built, and each builder adds one progress per
+  tick at every level. Build XP is one `site_work` award per
   builder per site, plus one per `site_fetch` delivery.
 - No skill-up event or message; XP gained by an interrupted job is earned only at completion.
 - Migrated (v6 and older) colonists start at level 0 in every labour.

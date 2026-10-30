@@ -199,12 +199,16 @@ the level rises at the content thresholds; nothing lowers it. The skill changes 
 and nothing else:
 
 - **Work speed.** The work toil lasts `round(work_ticks * 100 / speed)` ticks, `speed` linear
-  from 70 % (level 0) to 160 % (level 10) — `ToilExecutor.start_work()`.
+  from 70 % (level 0) to 160 % (level 10) — `ToilExecutor.start_work()`. Construction is the
+  exception in v1 (owner, 2026-10-30): a site gains one progress per builder per tick at every
+  level (follow-up F3b).
 - **Hands.** Capacity is 4 plus one per 5 levels of `haul` — `ToilExecutor.hands_capacity()`.
 - **Who gets a job.** Scoring, eligibility, the priority bracket and aging are unchanged; in
   the batching pass a job, when its turn comes, goes to the most skilled of its proposers whose
   route slot is free, equal skill keeping the old best-scored (nearest) proposer —
-  `GlobalAssignment._most_skilled_free()`. All-equal skills batch exactly as before.
+  `GlobalAssignment._most_skilled_free()`. A more skilled proposer replaces the old choice only
+  if its region reaches the target, so an unreachable expert cannot hold a job every tick.
+  All-equal skills batch exactly as before.
 
 A new world seeds each colonist's levels from the world seed (two labours at 3–6, the rest at
 0–2); a scenario roster may fix them. The work table shows each level and an XP bar.

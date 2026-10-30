@@ -5,6 +5,7 @@ extends SceneTree
 ## - two colonists, chop 8 (farther) and chop 0 (nearer), one tree order: the level-8 colonist
 ##   gets it and its work toil lasts ~49 % of the level-0 one (owner, 2026-10-30: the curve
 ##   70 % -> 160 % stays, so the entry's "~62 %" became ~49 %); equal skills keep the nearer one;
+##   an expert walled off from the tree never takes the order from a reachable novice;
 ## - completed chops raise XP and cross the first threshold after xp_to_next[0] jobs;
 ## - a level-5 hauler carries one more unit than a level-0 one;
 ## - starting skills for seed 42 are identical across runs and through a save, two labours at
@@ -42,6 +43,7 @@ var _next_command := 0
 func _init() -> void:
 	_check_skilled_colonist_is_picked_and_faster()
 	_check_equal_skills_keep_the_nearer_colonist()
+	_check_unreachable_expert_does_not_starve_the_job()
 	_check_xp_crosses_the_first_threshold()
 	_check_level_five_hauler_carries_one_more()
 	_check_starting_skills_are_seeded_and_stable()
@@ -100,6 +102,30 @@ func _check_equal_skills_keep_the_nearer_colonist() -> void:
 	world.spawn_ground_tool_item("axe", 14, 11)
 	var run := _run_chop(world, tree)
 	_expect(run["worker"] == "c_near", "with equal chop skill the nearer colonist must take the order, got '%s'" % run["worker"])
+
+## Review of F3 (round 3): a chop-8 colonist walled in by rock (another region than the tree)
+## and a reachable chop-0 one, one tree order. The skill pick only considers proposers whose
+## region reaches the target, so the novice gets the order and chops the tree; before the fix
+## the expert won the batching every tick, its route failed, and the order never ran.
+func _check_unreachable_expert_does_not_starve_the_job() -> void:
+	var world := _arena()
+	var expert := _add_worker(world, "c_walled_expert", 20, 20, {"chop": 8})
+	var novice := _add_worker(world, "c_novice", 13, 10, {"chop": 0})
+	for dx in range(-1, 2):
+		for dy in range(-1, 2):
+			if dx != 0 or dy != 0:
+				TestAccess.set_tile(world, 20 + dx, 20 + dy, WorldStateType.TILE_ROCK)
+	var tree := Vector2i(10, 10)
+	TestAccess.set_tile(world, tree.x, tree.y, WorldStateType.TILE_TREE)
+	_reset_caches(world)
+	world.spawn_ground_tool_item("axe", 13, 11)
+	var run := _run_chop(world, tree)
+	_expect(world.get_tile(tree.x, tree.y) != WorldStateType.TILE_TREE,
+		"the tree must be chopped although the walled-in expert is more skilled (%d ticks)" % run["ticks"])
+	_expect(run["worker"] == "c_novice", "the reachable novice must take the order, got '%s'" % run["worker"])
+	_expect(int(novice["skills"]["chop"]["xp"]) == 1, "the novice must earn the chop XP, got %s" % [novice["skills"]["chop"]])
+	_expect(int(expert["skills"]["chop"]["xp"]) == 0, "the walled-in expert must earn nothing")
+	_expect(int(expert["x"]) == 20 and int(expert["y"]) == 20, "the walled-in expert cannot have moved")
 
 ## Acceptance: each completed chop earns xp_per_job's default (1); the level rises exactly when
 ## the count reaches xp_to_next[0], with XP restarting at 0.

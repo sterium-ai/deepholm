@@ -224,7 +224,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 	# One slot per worker before any second slot; real route distances decide activation.
 	for slot in ROUTE_CANDIDATES_PER_WORKER:
 		for scanned: Dictionary in proposals:
-			var proposal := _most_skilled_free(scanned, proposals_by_job, claimed_jobs, batches, slot)
+			var proposal := _most_skilled_free(scanned, proposals_by_job, claimed_jobs, batches, slot, region_check)
 			if proposal.is_empty():
 				continue
 			var worker: String = proposal["worker"]
@@ -378,26 +378,31 @@ func _slot_taken(batches: Dictionary, worker: String, slot: int) -> bool:
 	return candidates.size() > slot
 
 ## F3 (ADR 062): the batching pass hands a job, when its turn comes (the scanned proposal's job
-## is unclaimed and its worker's `slot` is free; else {}), to the most skilled of its proposers
-## whose `slot` is still free; equal skill keeps the first in _pair_before() order (the best
-## score: travel and aging as before), so all-equal skills batch exactly as before.
+## is unclaimed and its worker's `slot` is free; else {}), to the scanned proposal (ADR 004's
+## old choice: the best score, travel and aging as before) unless a strictly more skilled
+## proposer whose `slot` is free and whose start region_check() says reaches the target exists;
+## then to the most skilled such one, the first in _pair_before() order on equal skill. Skill
+## ties therefore batch exactly as before, and an unreachable expert never takes the job from
+## the old choice tick after tick.
 func _most_skilled_free(scanned: Dictionary, proposals_by_job: Dictionary, claimed_jobs: Dictionary,
-		batches: Dictionary, slot: int) -> Dictionary:
+		batches: Dictionary, slot: int, region_check: Callable) -> Dictionary:
 	var job_id: String = scanned["entry"]["id"]
 	var scanned_worker: String = scanned["worker"]
-	var best: Dictionary = {}
 	if claimed_jobs.has(job_id) or _slot_taken(batches, scanned_worker, slot):
-		return best
+		return {}
 	var job_proposals: Array = proposals_by_job[job_id]
-	var best_skill := -1
+	var best := scanned
+	var best_skill: int = scanned["skill"]
+	var target: Vector2i = scanned["entry"]["target"]
 	for proposal: Dictionary in job_proposals:
 		var worker: String = proposal["worker"]
 		var skill: int = proposal["skill"]
-		if _slot_taken(batches, worker, slot):
+		if _slot_taken(batches, worker, slot) or skill <= best_skill:
 			continue
-		if skill > best_skill:
-			best = proposal
-			best_skill = skill
+		if region_check.is_valid() and not bool(region_check.call(proposal["start"], target)):
+			continue
+		best = proposal
+		best_skill = skill
 	return best
 
 ## Marks queued jobs labour_disabled when no colonist in `colony` has the labour on.
