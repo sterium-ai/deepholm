@@ -1187,7 +1187,62 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   deterministic; save/load/replay identical; suite green.
 - **Non-goals:** depression/breakdowns (F5d), relations, room-quality thoughts (F9).
 
-### F6 — Farm/forest/pasture zones, animals · `todo` · Design: *pending*
+### F6 — Forest zone, wild fauna ecosystem, pasture · split 2026-10-30 into F6a / F6b / F6c
+
+### F6a — Forest zone: plant and grow · `todo` · after F1 · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** a **`forest` zone** (same zone machinery as F1's farm zone).
+  Colonists with the `farm` labour **plant saplings** on empty soil tiles inside the zone (job
+  kind `plant_sapling`, no seed item needed in v1); a sapling grows through **3 stages over
+  ~8 days** (content value) into a normal tree. Felling stays the manual `chop` order (no
+  automatic felling inside the zone). Trees chopped inside the zone leave the tile free so the
+  zone replants it. Growth runs in the F1 farming tick phase.
+- **Owned paths:** `game/scripts/core/zones/**` (forest zone), `game/scripts/core/farming/**`
+  (tree growth), `game/data/content/**` (sapling stages), viewer zone tool for `forest`,
+  tests `test_forest_zone*.gd`, migration + fixture for the schema bump, ADR.
+- **Acceptance:** scenario: forest zone of 3×3 empty soil + one farmer → all 9 tiles have a
+  sapling within 2 days; after ~8 days the tiles are trees; chopping one tree → it is replanted
+  within a day; deterministic `state_hash()`; save/load and replay identical; suite green.
+- **Non-goals:** automatic felling, wood yield changes, seasons, pasture, animals.
+
+### F6b — Wild fauna ecosystem and hunting · `todo` · after F6a and F5a · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** wild animals roam the surface as **actors** (same actor table
+  as colonists, own kind). **Realistic ecosystem, 5+ species in two food chains**, data-driven in
+  content: *chain A* grasshopper → bird → fox; *chain B* rabbit, deer → wolf (boar as a large
+  omnivore is optional). Each species has: diet (grass / crops / prey species), reproduction
+  rate when fed, starvation death, a population cap per map, and combat stats. Populations
+  self-regulate through the chain (predators eat prey; no prey → predators starve/leave).
+  **Imbalance effects (all three chosen):** (1) grasshoppers near a farm **eat growing crops**;
+  (2) overpopulated tiles **lose soil fertility** (slower growth, slow recovery) — fertility is
+  a new tile value; (3) a plague **raises colonist disease chance** — the hook is defined now
+  but the disease itself lands with health in F8 (record the hook, no effect until F8).
+  **Hunting with minimal combat (chosen):** colonists and animals get `health` and `attack`
+  (defence optional); a `hunt` order on an animal sends the most skilled free colonist (new
+  `hunt` labour/skill slot) to fight it: each tick both deal `attack` damage until one reaches
+  0 health. A dead animal drops a **meat item** (`food` group, amount per species). A colonist
+  at 0 health **dies** (removed from the colony; burial is F8). Predators may attack colonists
+  that come close (species flag). F7 reuses this combat core for raids.
+- **Owned paths:** `game/scripts/core/fauna/**` (new: species registry, population/ecosystem
+  tick, animal AI), `game/scripts/core/combat/**` (new: minimal combat resolution),
+  `game/data/content/**` (species, meat), actor table extension (kind, health, attack),
+  tile fertility in the world layer owner, `hunt` labour in the labour table, viewer: animals
+  drawn and `hunt` order, tests `test_fauna_*.gd` / `test_combat_*.gd`, migration + fixture,
+  ADR(s). Split into packages if the core budgets need it (ecosystem first, combat second).
+- **Acceptance:** (1) scenario with grass, 20 grasshoppers, 0 predators, a 3×3 growing farm →
+  within 10 days crops are eaten and fertility of the grazed tiles drops; (2) same scenario
+  plus 2 birds → grasshopper population stays under the cap and the farm survives; (3) a
+  predator with no prey dies within its starvation window; (4) `hunt` on a rabbit → meat on the
+  ground, hunter unharmed; `hunt` on a wolf with a weak colonist → the colonist can die and the
+  colony count drops; deterministic `state_hash()` with the fauna included; replay identical;
+  1000-colonist tick budget (A14) still met with 200 animals; suite green.
+- **Non-goals:** domestic animals/pasture (F6c), real disease effects (F8), weapons/armour
+  items, ranged combat, squads and raids (F7), animal taming, seasons/migration.
+
+### F6c — Pasture and domestic animals · `todo` · after F6b · Design: *pending*
+
+- Deferred by the owner (2026-10-30): pasture zone and domestic produce (eggs, milk) come after
+  the wild ecosystem; capturing a wild animal into a pasture is the likely route.
 
 ### F7 — Squads, raids, traps · `todo` · Design: *pending*
 
