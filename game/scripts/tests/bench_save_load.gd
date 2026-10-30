@@ -7,9 +7,14 @@ extends SceneTree
 ## SaveIO.write_atomic(), SaveIO.read() (parse + integrity) and
 ## StateCodec.decode(), prints the file size, and checks that the decoded
 ## world's state_hash() equals the original's.
+## A7: also times the threaded save, SaveIO.begin_write(): "main-thread save" is
+## encode() plus begin_write() (SaveWire.pack() and the one JSON.stringify), the
+## part the game waits for; "worker" is the wait() for hash, write, read-back
+## and rename on the SaveWrite thread.
 ## Also measures whether a dropped WorldState is freed: the Object count
-## before building worlds and after releasing them (RefCounted cycles through
-## bound Callables would keep them alive).
+## before building worlds and after releasing them, once dropped as they are
+## and once after WorldState.dispose() (RefCounted cycles through bound
+## Callables keep an undisposed world alive).
 ##
 ## Evidence, not a gate: always exits 0. Run:
 ##   & $env:GODOT --headless --path game --script res://scripts/tests/bench_save_load.gd
@@ -24,6 +29,7 @@ const SIZE := 256
 const ACTOR_COUNTS := [10, 100, 1000]
 const TICKS := 10
 const SAVE_PATH := "user://bench-save-load.json"
+const THREADED_PATH := "user://bench-save-load-threaded.json"
 
 func _init() -> void:
 	print(BenchCommon.header("bench_save_load"))
@@ -60,18 +66,37 @@ func _run(actor_count: int) -> void:
 		var loaded := StateCodecType.decode(read_result["state"])
 		decode_usec = Time.get_ticks_usec() - t
 		hash_match = loaded != null and loaded.state_hash() == world.state_hash()
+	# The threaded save the game uses (SaveManager.begin_save_*()): encode() and
+	# begin_write() on this thread, the rest on the SaveWrite worker.
+	t = Time.get_ticks_usec()
+	var threaded_state := StateCodecType.encode(world)
+	var begin := SaveIOType.begin_write(THREADED_PATH, threaded_state)
+	var main_thread_usec := Time.get_ticks_usec() - t
+	t = Time.get_ticks_usec()
+	var threaded_result := begin.wait()
+	var worker_wait_usec := Time.get_ticks_usec() - t
+	var threaded_read := SaveIOType.read(THREADED_PATH)
+	var threaded_match: bool = threaded_read.get("ok", false) and StateCodecType.decode(threaded_read["state"]).state_hash() == world.state_hash()
+	if FileAccess.file_exists(THREADED_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(THREADED_PATH))
+	print("bench_save_load: actors=%d threaded save: main_thread(encode+begin_write)=%.1fms worker_wait=%.1fms write=%s hash_match=%s" % [
+		TestAccess.colonists(world).size(), main_thread_usec / 1000.0, worker_wait_usec / 1000.0, _short(threaded_result), threaded_match])
+	BenchCommon.row("bench_save_load", "threaded save", "actors=%d" % TestAccess.colonists(world).size(), {
+		"main-thread save ms": "%.1f" % (main_thread_usec / 1000.0), "worker wait ms": "%.1f" % (worker_wait_usec / 1000.0),
+		"write": _short(threaded_result), "hash match": threaded_match})
 	# Pieces of write_atomic() timed on their own: schema validation and one
-	# JSON.stringify of the state (write_atomic stringifies three times and
-	# parses once, then read-back-verifies the file).
+	# JSON.stringify of the packed state (A7: write_atomic() stringifies and
+	# hashes once, then read-back-verifies the file).
 	t = Time.get_ticks_usec()
 	TestAccess.save_validate_state(state)
 	var validate_usec := Time.get_ticks_usec() - t
 	t = Time.get_ticks_usec()
-	JSON.stringify(state)
+	SaveIOType.state_text(state)
 	var stringify_usec := Time.get_ticks_usec() - t
 	print("bench_save_load: actors=%d write_atomic parts: _validate_state=%.1fms one JSON.stringify=%.1fms" % [
 		TestAccess.colonists(world).size(), validate_usec / 1000.0, stringify_usec / 1000.0])
-	var sections := _section_sizes(state)
+	# As written: the SaveWire-packed state (A7).
+	var sections := _section_sizes(SaveWire.pack(state))
 	print("bench_save_load: actors=%d ticks=%d file=%.1fKB encode=%.1fms write_atomic=%.1fms read+integrity=%.1fms decode=%.1fms total_save=%.1fms total_load=%.1fms read_ok=%s hash_match=%s write=%s" % [
 		TestAccess.colonists(world).size(), TICKS, file_bytes / 1024.0, encode_usec / 1000.0, write_usec / 1000.0,
 		read_usec / 1000.0, decode_usec / 1000.0, (encode_usec + write_usec) / 1000.0,
@@ -86,7 +111,7 @@ func _run(actor_count: int) -> void:
 		"hash match": hash_match, "write": _short(write_result), "largest sections": sections})
 	_remove_save()
 
-## The five largest top-level (and one level down) sections of the encoded state.
+## The five largest top-level (and one level down) sections of the packed state.
 func _section_sizes(state: Dictionary) -> String:
 	var sizes: Array = []
 	for key in state:
@@ -106,17 +131,22 @@ func _leak_check() -> void:
 	# One warm-up world first, so one-time script/resource loads are not counted.
 	var warm := WorldStateType.new(SEED, 10, 64, 64)
 	warm.tick()
+	warm.dispose()
 	warm = null
-	var before := int(Performance.get_monitor(Performance.OBJECT_COUNT))
-	for i in 3:
-		var world := WorldStateType.new(SEED + i, 10, 64, 64)
-		world.tick()
-		world = null
-	var after := int(Performance.get_monitor(Performance.OBJECT_COUNT))
-	print("bench_save_load: leak check: Object count before=%d after building+dropping 3 WorldStates=%d (delta=%d)" % [
-		before, after, after - before])
-	BenchCommon.row("bench_save_load", "leak check", "build and drop 3 WorldStates (64x64)", {
-		"objects before": before, "objects after": after, "delta": after - before})
+	for disposed in [false, true]:
+		var before := int(Performance.get_monitor(Performance.OBJECT_COUNT))
+		for i in 3:
+			var world := WorldStateType.new(SEED + i, 10, 64, 64)
+			world.tick()
+			if disposed:
+				world.dispose()
+			world = null
+		var after := int(Performance.get_monitor(Performance.OBJECT_COUNT))
+		var label := "after dispose()" if disposed else "without dispose()"
+		print("bench_save_load: leak check (%s): Object count before=%d after building+dropping 3 WorldStates=%d (delta=%d)" % [
+			label, before, after, after - before])
+		BenchCommon.row("bench_save_load", "leak check", "build and drop 3 WorldStates (64x64), %s" % label, {
+			"objects before": before, "objects after": after, "delta": after - before})
 
 func _short(value) -> String:
 	if value is Dictionary:

@@ -7,6 +7,7 @@ extends RefCounted
 ## - v1 -> v2 (A5, ADR 053): terminal jobs leave the save.
 ## - v2 -> v3 (A13b, ADR 010 amendment 2): the save records its content packs.
 ## - v3 -> v4 (A16b, ADR 057): the scenario calendar and incident list are saved.
+## - v4 -> v5 (A7, ADR 058): compact file encoding (SaveWire) and saved route-search costs.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -34,6 +35,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v2_to_v3(state)
 		3:
 			return _v3_to_v4(state)
+		4:
+			return _v4_to_v5(state)
 		_:
 			return {
 				"ok": false,
@@ -83,6 +86,17 @@ static func _v3_to_v4(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["scenarioStart"] = {"calendar": null, "enabledIncidents": []}
 	migrated["schemaVersion"] = 4
+	return {"ok": true, "state": migrated}
+
+## v4 -> v5 (A7, ADR 058): SaveIO already unpacked the file (SaveWire.unpack() leaves a v4
+## file's plain map and routes alone), so the state keeps its shape. A v4 route search has no
+## "cost": it stays absent, and RouteSearch.restore() rebuilds the costs from the current map,
+## exactly as every v4 load did. Nothing else differs.
+static func _v4_to_v5(state: Dictionary) -> Dictionary:
+	if not (state.get("map") is Dictionary) or not (state["map"] as Dictionary).has("tiles"):
+		return {"ok": false, "code": "schema_error", "message": "v4 save has no map tiles"}
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 5
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

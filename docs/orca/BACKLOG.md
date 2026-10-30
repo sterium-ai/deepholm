@@ -526,7 +526,7 @@ one.
   logs stay below their bound in `bench_long_session`; the viewer tests pass.
 - **Non-goals:** persisting events; an event bus for module-to-module calls.
 
-#### A7 — Save pipeline: one registry, one pass, compact tiles and routes, off the main thread · `todo` · after A5 (best after R14, still with a migration)
+#### A7 — Save pipeline: one registry, one pass, compact tiles and routes, off the main thread · `review (antonelmejor50-hub/a7-save-pipeline-one-registry)` · after A5 (best after R14, still with a migration)
 
 - **Goal:** one `ContentRegistry` per session, injected into `StateCodec`/`SaveIO` instead of
   rebuilt from disk per save and per validation. `write_atomic()` stringifies and hashes
@@ -558,6 +558,25 @@ one.
   ≤ 50% of baseline (1,408 KB), `hash_match=true`; leak check delta 0.
 - **Non-goals:** changing what is saved, beyond the encoding and the accumulated route
   costs that make the continuation exact; cloud saves.
+- **Owner decisions (2026-10-29, in the A7 terminal and `C:\dev\tmp\a7-owner-note.md`):** the
+  "one registry per session" half was already done by A13b and is not repeated; the bump is
+  the next free number: after A16b landed with v4 and ADR 057, this is v4 -> v5 and ADR 058;
+  `world_state.gd` must not grow, so `dispose()` lives in a new `world/world_disposer.gd`; the
+  worker thread never touches the world after `encode()`. Asked how to wire the thread
+  without `boot.gd`/`viewer/autosave_trigger.gd` (outside the owned paths, and A9 is editing
+  `boot.gd`), the owner chose "API asíncrona en el core": `begin_save_*()` handles, the
+  blocking `save_*()` kept, viewer polling and `dispose()` in `boot.gd` as a follow-up.
+- **Done in this branch:** schema v5 (ADR 058): saved route costs (`RouteSearch.snapshot()`
+  `cost`, `restore()` without rebuild), the `SaveWire` file encoding (tiles as palette and
+  runs, route searches as base64 bitset/2-bit directions/float64 costs/int32 frontier, record
+  tables for `entities`, `jobs` and `scheduling.waiting`), one stringify and one hash per
+  write, `SaveIO.begin_write()`/`SaveWrite` on a worker thread, `WorldState.dispose()`; v4 ->
+  v5 migration and `save_schema_v5_fixture.json`; `test_save_route_continuation.gd`. Also
+  changed, as part of the owned save path: `persistence/validators/scheduling_validator.gd`
+  (`cost`), `save_json_ints.gd` (the state span), `warnings-baseline.txt` (lowered with
+  `-Update`), and the version lines of `test_save_migration.gd` (as A5, A13b and A16b did for
+  their bumps).
+  See `docs/orca/handoffs/A7.md`.
 
 #### A8 — A* and region-aware routing · `review (antonelmejor50-hub/a8-a-and-region-aware)` · after A3 · ADR (paths may change)
 

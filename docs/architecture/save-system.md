@@ -67,11 +67,27 @@ re-enables it, and so does loading a save (`_replace_world()`).
 
 ## Atomic writes and errors
 
-`SaveIO.write_atomic()` validates the state, writes the envelope JSON to
-`<target>.tmp`, flushes and closes it, reads the temporary file back, and
+`SaveIO.write_atomic()` validates the state, packs it (`SaveWire.pack()`, see "Wire
+encoding" below) and stringifies it once, hashes that text once, writes the envelope
+around it to `<target>.tmp`, flushes and closes it, reads the temporary file back, and
 verifies its integrity and schema before one rename replaces the target. Any
-failure removes the temporary file and leaves the previous target intact. The
-typed result codes are:
+failure removes the temporary file and leaves the previous target intact.
+
+**Off the main thread (A7, [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)).**
+`SaveIO.begin_write()` does only the pack and the one `JSON.stringify` on the calling thread
+and returns a `SaveWrite` handle; hashing, the temporary write, the read-back (the same checks
+as `read()`, which is also where a state that does not validate is refused before the target
+changes) and the rename run on the handle's `Thread`. The worker gets the text, the path and
+`SaveIO.content_check()`'s plain copy of the session registry's version, packs and whitelists:
+never the state Dictionary or the world, so the world may tick on as soon as `begin_write()`
+returns. `SaveWrite.wait()` joins and returns the `write_atomic()` result; `is_done()` polls.
+`SaveManager.begin_save_manual()`/`begin_save_autosave()` encode the world and call it, and
+advance the last-known-good pointer inside `wait()`; `save_manual()`/`save_autosave()` are the
+same followed by `wait()`. A manager runs one write at a time (a new save or `load_best()`
+waits for the one in flight). `boot.gd` and `AutosaveTrigger` still call the blocking form;
+polling the handle from the viewer is a follow-up (see `docs/orca/handoffs/A7.md`).
+
+The typed result codes are:
 
 - `write_failed` — temporary file could not be opened or flushed/closed.
 - `write_interrupted` — writing was interrupted before replacement.
@@ -96,8 +112,10 @@ typed result codes are:
 ## Schema version, pre-release saves and migration
 
 A save file is the envelope `{format: "deepholm-save", integrity, state}`
-(`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text.
-The state carries `schemaVersion: 4` (`StateCodec.SCHEMA_VERSION`) and is
+(`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
+written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
+SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
+The state carries `schemaVersion: 5` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -106,7 +124,31 @@ jobs (see "Jobs" below and [ADR 053](../decisions/053-job-storage-retired-histor
 v3 records the content packs the save was made on (see "Content packs" below and
 [ADR 010](../decisions/010-content-registry.md), amendment 2); v4 saves the
 scenario's calendar and incident list (see "Scenario start" below and
-[ADR 057](../decisions/057-scenario-start-fields.md)).
+[ADR 057](../decisions/057-scenario-start-fields.md)); v5 writes the compact wire
+encoding and saves each in-flight route search's accumulated costs (see "Wire encoding" and
+"Route searches" below and [ADR 058](../decisions/058-save-pipeline-wire-encoding.md)).
+
+**Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
+`JSON.stringify` of a write and unpacks it right after the parse of a read (after the
+integer coercion, before migration and validation), so `StateCodec`, the validators and the
+JSON Schema all see the plain state. Packed:
+
+- `map.tiles` becomes `map.palette` (tile ids in first-appearance order) and `map.tileRuns`
+  (flat `[paletteIndex, runLength, ...]`, row-major).
+- A route search (`entities[].route.rerouting`, `scheduling.pending.*.route`) replaces
+  `visited`, `cameFrom`, `cost` and `frontier` with `box` (`[x, y, width, height]` around the
+  visited tiles), `visitedBits` (bitset over the box, row-major), `cameFromDirs` (2 bits per
+  visited tile in that order: the direction to its parent, `RouteSearch.NEIGHBOR_OFFSETS`'
+  index; the start's bits are 0 and unused), `costBytes` (one float64 per visited tile in that
+  order) and `frontierTiles` (int32 map tile indices in frontier order), all base64.
+- `entities`, `jobs` and `scheduling.waiting` become a record table: a first element
+  `{"$keys": [sorted keys]}`, then one row of values per record.
+
+The packer only packs what comes back exactly: a list of fewer than two records, a record with
+other keys than the first one (kept as a plain object in the table), a route whose `cameFrom`
+is not one adjacent parent per visited tile, or a tile off the map stay plain, and the reader
+accepts the plain form of any of these fields. After a load the visited tiles of a search are
+in row-major order instead of discovery order; nothing depends on that order.
 
 **Content packs.** `contentPacks` is the saving world's `ContentRegistry.packs()` in load
 order, `[{id, version}]`, empty on the base bundle. `SaveIO.read()` and `write_atomic()` take
@@ -158,6 +200,11 @@ returns a new dictionary and never mutates its input. Steps today:
   already has the field is refused. The v1, v2 and v3 fixtures all migrate exactly
   to `save_schema_v4_fixture.json` (the same session written at v4,
   `docs/orca/handoffs/A16b-write-save.gd`).
+- **v4 → v5** (A7, ADR 058): the unpacked shape is unchanged; a v4 route search has no
+  `cost`, which stays absent, so `RouteSearch.restore()` rebuilds its costs from the current
+  map exactly as every v4 load did. The v1 to v4 fixtures all migrate exactly to
+  `save_schema_v5_fixture.json` (the same session, written packed by
+  `docs/orca/handoffs/A7-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -210,7 +257,15 @@ fresh dig-find stream, and so on).
 **Fixtures and tests.** `game/scripts/tests/fixtures/save_schema_v1_fixture.json`
 is a v1 save and `pre_release_save_v27.json` a real save written before the
 reset; `game/scripts/tests/test_save_migration.gd` covers both, the empty
-chain, content renames and the optional fields.
+chain, content renames and the optional fields. `test_save_route_continuation.gd` covers
+the saved route costs (see "Route searches").
+
+**Route searches.** A route state (`rerouting`, `scheduling.pending.*.route`) is
+`{start, target, status, frontier, visited, cameFrom, cost?, path, expansions, resumeCalls}`;
+`cost` (v5) is the accumulated cost of each `visited` tile, in `visited` order. A search can
+span a map change, so `RouteSearch.restore()` takes these costs as they were instead of
+recomputing them from the current map (which reordered the frontier, A0 audit §4.4); only a
+state without `cost` (a migrated v4 save) is rebuilt. `state_hash()` covers the costs.
 
 ## World dimensions and generation
 
