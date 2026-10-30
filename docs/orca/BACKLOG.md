@@ -1006,18 +1006,82 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   tests either unchanged or updated with the ADR quoted (skill ties = old behaviour); suite green.
 - **Non-goals:** passions/traits, skill decay, learning from others, UI beyond the labour table.
 
-### F4 — Underground layers, tunnel, ores, supports and cave-ins · `todo` · Design: *pending*
+### L1 — `TileGrid` as the only index owner · `todo` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2
 
-The largest gap and the game's identity. Needs a map model that supports several layers
-(prepared by R3's `TileGrid`).
+- **Goal:** every tile key, index and planar distance in the core goes through `TileGrid`
+  (`index_of`/`coord_of`/`in_bounds`, `manhattan`/`chebyshev`/`distance_sq` kept as separate
+  formulas — ADR 045 §4 forbids merging them). No save change.
+- **Owned paths:** `core/map/tile_grid.gd`, every core file that still computes an index or a
+  distance by hand (list them in the handoff from `git grep`), tests, `docs/orca/handoffs/L1.md`.
+- **Acceptance:** `git grep` finds no `y * width + x`-style index math or ad-hoc distance
+  outside `tile_grid.gd`; R-plan scenario dumps and `state_hash()` byte-identical to `main`;
+  suite green; `measure_core` budgets respected.
+- **Non-goals:** `Vector3i` (L2), any behaviour change.
 
-- **Coordinate model:** [ADR 045](../decisions/045-map-layers.md) (A12; *accepted* by the owner
-  on 2026-10-27). Tiles are `Vector3i(x, y, layer)`, stored by one flat index owned by
-  `TileGrid`; layers move only through vertical links (stairs, ramps, tunnel). The ADR's
-  steps A2 → L1 (one index owner) → L2 (`Vector3i` sweep, save bump and single-layer
-  migration) → L3 (links, region graph, routing) → L4 (viewer active layer) come before F4's
-  gameplay. The Design block cites the ADR and answers what it leaves to F4: how many layers,
-  when a layer is discovered, the tunnel building and drill item, ores, supports, cave-ins.
+### L2 — `Vector2i` → `Vector3i` sweep, `layer_count = 1`, save bump · `todo` · after L1 · core-wide (serialize with other core merges)
+
+- **Goal:** ADR 045 §1–§2 and §5: tiles are `Vector3i(x, y, z)` everywhere in rules, commands
+  and events; `TileGrid` stores `layer_count` (1 for now) and grows by `layer_size`; saves carry
+  `z` and `layerCount` with a schema bump, a single-layer migration and a fixture;
+  `game-state.schema.json`, examples and the migration test updated.
+- **Owned paths:** `core/**` (mechanical sweep; 526 sites per the ADR), `viewer/**` and
+  `boot.gd` (216 sites), persistence + schema + fixtures, `docs/architecture/contracts/`,
+  tests, `docs/orca/handoffs/L2.md`.
+- **Acceptance:** scenario dumps identical apart from the schema version and the added
+  `z`/`layerCount` fields (quote the diff); an out-of-range `z` is rejected like an out-of-map
+  tile; suite green; the sweep leaves no `Vector2i` naming a map tile in core (`git grep` in
+  the report).
+- **Non-goals:** a second layer, links, viewer layer switch.
+
+### L3 — Vertical links, region graph and link edges in routing · `todo` · after L2
+
+- **Goal:** ADR 045 §3–§4: `VerticalLinks` (stairs/ramps/tunnel as content flags, straight
+  up/down only), the region graph across layers, link edges in `RouteSearch` (A8's A* keeps
+  its heuristic and tie-break), rescue/dig targets reachable across layers.
+- **Owned paths:** new `core/map/vertical_links.gd`, `core/map/regions.gd`, `routing/*`,
+  `content/objects.json` (stair/ramp flags; no gameplay objects yet), persistence for links
+  (bump + migration + fixture if the save changes), tests, an ADR amendment if a §4 detail
+  changes, `docs/orca/handoffs/L3.md`.
+- **Acceptance:** the five ADR test cases on a hand-built two-layer map with a stair pair
+  (wall splits a region so one half loses its stair; wall removed → merge; stair removed;
+  impassable dig target with its only reachable neighbour on its own layer; two rescues on
+  one target keeping separate progress); single-layer dumps unchanged; suite green.
+- **Non-goals:** layer generation, tunnel building, viewer.
+
+### L4 — Viewer: one active layer · `todo` · after L3 · viewer only
+
+- **Goal:** ADR 045 §7: the viewer draws one active layer, switches with keys/buttons, shows
+  stairs/links and the layer number; commands sent from the viewer carry the active `z`.
+- **Owned paths:** `viewer/**`, `boot.gd`, `core/world/view_snapshot.gd` (per-layer slice),
+  tests (viewer purity + a headless switch test), `docs/orca/handoffs/L4.md`.
+- **Acceptance:** headless: a two-layer world renders layer 0 and layer 1 slices with the
+  right tiles and actors; switching does not touch the world (`state_hash()` unchanged);
+  owner visual check after merge; suite green.
+- **Non-goals:** gameplay objects.
+
+### F4 — Underground layers: generation, discovery, tunnel, drill and ores · `todo` · after L1–L4 · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** the surface plus **3 underground layers**. A layer is
+  discovered by finishing a **tunnel building** on the current layer (one per layer; needs a
+  **drill** item crafted at the workbench — recipe in content, F2's pattern); on completion the
+  layer below is generated from the world seed (ADR 045 §5: discovering it on day 3 or day 30
+  gives the same rock), the event "layer N discovered" is logged, and a stair pair links the
+  tunnel to the new layer. **Ores are objects in rock veins, by layer, from content**: layer 1
+  copper, tin and coal; layer 2 iron and silver; layer 3 gold and gems. Mining a vein (dig with
+  a pick) yields the raw ore item (new `ore` item group); smelting is later (F2b/F9). **No
+  cave-ins or supports in v1** (F4b: a radius-from-support rule was discussed and deferred).
+- **Owned paths:** `core/worldgen/` (layer generation by seed, veins), new `core/underground/`
+  (discovery, tunnel completion → generate + link), `content/objects.json` (tunnel, stairs,
+  ore veins), `content/items.json` (drill, ores + `ore` group), `content/recipes.json` (drill),
+  `content/jobs.json` (mine), persistence (bump + migration + fixture), viewer labels/art
+  (pack if available, else placeholder), an ADR, tests, `docs/orca/handoffs/F4.md`.
+- **Acceptance:** headless: build a tunnel with a drill → layer 1 exists, is reachable through
+  the stairs, and its tiles for seed 42 are identical whether discovered at tick 100 or tick
+  10,000; a colonist mines a copper vein and the ore reaches a stockpile; three tunnels reach
+  layer 3 with the content-defined veins per layer; save/load with discovered layers continues
+  identically; replay reproduces; suite green; `measure_core` and A1 benches within budgets
+  (one discovered layer must not slow the tick measurably when empty).
+- **Non-goals:** cave-ins/supports (F4b), smelting, deep-only metal, fog of war.
 
 ### F5 — Stockpile filters, remaining labours, happiness/thoughts · `todo` · Design: *pending*
 
