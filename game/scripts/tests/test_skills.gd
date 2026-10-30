@@ -10,7 +10,9 @@ extends SceneTree
 ## - starting skills for seed 42 are identical across runs and through a save, two labours at
 ##   3..6 and the rest at 0..2; a roster's skills override them;
 ## - save/load mid-XP keeps ticking in step (state_hash every tick); a replay reproduces it;
-## - the view snapshot carries {level, xp, next} per labour.
+## - the view snapshot carries {level, xp, next} per labour;
+## - xp_per_job.by_kind overrides must be integers >= 0 naming a job kind (content loading
+##   fails otherwise), and a completed job earns its valid override.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -19,12 +21,17 @@ const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const WorldSeedingType = preload("res://scripts/core/worldgen/world_seeding.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
+const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
 const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
 
 const SEED := 6201
 const TICK_BUDGET := 3000
 const SAVE_PATH := "user://test-skills-mid-xp.json"
+const OVERRIDE_CONTENT_DIR := "user://test-skills-xp-override-content"
+## by_kind fragments content loading must reject: not an integer, negative, a float, a
+## string, an unknown job kind.
+const INVALID_BY_KIND := ['{"chop": {}}', '{"chop": -1}', '{"chop": 1.5}', '{"chop": "2"}', '{"no_such_kind": 1}']
 const LABOURS := ["mine", "chop", "farm", "haul", "build", "craft", "cook"]
 
 var _failed := false
@@ -40,6 +47,8 @@ func _init() -> void:
 	_check_save_load_mid_xp_continues_identically()
 	_check_replay_reproduces_skill_gains()
 	_check_view_snapshot_carries_skill_progress()
+	_check_invalid_xp_overrides_fail_loading()
+	_check_valid_xp_override_is_earned()
 	if _failed:
 		quit(1)
 		return
@@ -249,7 +258,62 @@ func _check_view_snapshot_carries_skill_progress() -> void:
 	_expect(int(skills["c_viewed"]["mine"]["next"]) == 0, "the top level must report next 0")
 	_expect(not world.get_view_snapshot([])["skills"].has("c_viewed"), "only detailed workers carry skills")
 
+## Review of F3: an xp_per_job.by_kind value that is not an integer >= 0, or a key that is not
+## a job kind, fails ContentRegistry construction as a schema violation of skills.json, so it
+## never reaches ActorSkills.xp_for_kind()'s typed read at job completion.
+func _check_invalid_xp_overrides_fail_loading() -> void:
+	for by_kind: String in INVALID_BY_KIND:
+		var registry := _content_with_by_kind(by_kind)
+		_expect(not registry.is_valid(), "by_kind %s must fail content loading" % by_kind)
+		var error := registry.get_error()
+		_expect(error.get("code") == ContentRegistryType.ERROR_SCHEMA_VIOLATION,
+			"by_kind %s must be a schema_violation, got %s" % [by_kind, error])
+		_expect(String(error.get("file", "")).ends_with("skills.json"),
+			"by_kind %s's error must name skills.json, got %s" % [by_kind, error])
+
+## A valid override (chop 3) loads, and one completed chop earns 3 chop XP, not the default 1.
+func _check_valid_xp_override_is_earned() -> void:
+	var registry := _content_with_by_kind('{"chop": 3}')
+	_expect(registry.is_valid(), "by_kind {\"chop\": 3} must load, got %s" % [registry.get_error()])
+	if not registry.is_valid():
+		return
+	var world := WorldStateType.new(SEED, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false, registry)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.object_table(world).objects.clear()
+	var worker := _add_worker(world, "c_learner", 4, 4, {"chop": 0})
+	world.spawn_ground_tool_item("axe", 4, 5)
+	var tree := Vector2i(6, 8)
+	TestAccess.set_tile(world, tree.x, tree.y, WorldStateType.TILE_TREE)
+	_reset_caches(world)
+	var run := _run_chop(world, tree)
+	_expect(run["worker"] == "c_learner", "the override chop must be done by the learner")
+	var record: Dictionary = worker["skills"]["chop"]
+	_expect(int(record["level"]) == 0 and int(record["xp"]) == 3,
+		"one chop with by_kind chop 3 must give level 0 with 3 XP, got %s" % [record])
+
 # --- helpers ---------------------------------------------------------------
+
+## The base bundle copied to OVERRIDE_CONTENT_DIR with skills.json's by_kind replaced by the
+## `by_kind` JSON text (text-level, so integers stay integers), loaded, then the copy removed.
+func _content_with_by_kind(by_kind: String) -> ContentRegistryType:
+	DirAccess.make_dir_recursive_absolute(OVERRIDE_CONTENT_DIR)
+	for file_name: String in DirAccess.get_files_at(ContentRegistryType.DEFAULT_CONTENT_DIR):
+		if not file_name.ends_with(".json"):
+			continue
+		var text := FileAccess.get_file_as_string(ContentRegistryType.DEFAULT_CONTENT_DIR + file_name)
+		if file_name == "skills.json":
+			_expect(text.contains('"by_kind": {}'), "skills.json must ship an empty by_kind")
+			text = text.replace('"by_kind": {}', '"by_kind": %s' % by_kind)
+		var file := FileAccess.open(OVERRIDE_CONTENT_DIR + "/" + file_name, FileAccess.WRITE)
+		file.store_string(text)
+		file.close()
+	var registry := ContentRegistryType.new(OVERRIDE_CONTENT_DIR)
+	for file_name: String in DirAccess.get_files_at(OVERRIDE_CONTENT_DIR):
+		DirAccess.remove_absolute(OVERRIDE_CONTENT_DIR + "/" + file_name)
+	DirAccess.remove_absolute(OVERRIDE_CONTENT_DIR)
+	return registry
+
 
 ## A floor world, no colonists or objects, needs decaying normally (topped up by the loops).
 func _arena() -> WorldStateType:

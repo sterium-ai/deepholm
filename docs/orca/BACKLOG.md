@@ -1030,6 +1030,9 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   `"skills"` key {id: {labour: {level, xp, next}}} so the viewer draws the XP bar without
   reading content, ADR 055) and `core/worldgen/world_seeding.gd` in place of
   `world/scenario_builder.gd` (colonists are created and the A16b roster applied there).
+  After review (owner, 2026-10-30): also `core/actors/actor_table.gd`, so
+  `ActorTable.spawn("colonist")` builds every labour's skill at level 0 (the actor component
+  pattern; colonists who arrive later start tracked at 0).
   ADR 062; evidence `docs/orca/handoffs/F3.md`.
 
 ### L1 — `TileGrid` as the only index owner · `review (antonelmejor50-hub/l1-tilegrid-as-the-only)` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2

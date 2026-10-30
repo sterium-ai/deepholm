@@ -30,7 +30,7 @@ starting skills (two labours at 3–6, the rest at 0–2) that a scenario roster
 skilled free colonist with the labour enabled is preferred, ties broken by distance as before;
 no decay; skills saved and shown in the labour table.
 
-Two owner decisions taken while implementing (2026-10-30, in the author's terminal):
+Owner decisions taken while implementing and after review (2026-10-30, in the author's terminal):
 
 - **Speed figure.** The entry's acceptance said a level-8 colonist finishes "in ~62 %" of the
   level-0 time, but the closed curve gives 70 / 142 ≈ 49 %. The owner kept the curve
@@ -38,7 +38,8 @@ Two owner decisions taken while implementing (2026-10-30, in the author's termin
 - **Scope.** The owner extended F3's owned paths to `core/jobs/toil_bindings.gd` (XP at job
   completion), `core/world/view_snapshot.gd` (skill progress for the viewer) and
   `core/worldgen/world_seeding.gd` (where colonists are created and the roster applied, in
-  place of `world/scenario_builder.gd`).
+  place of `world/scenario_builder.gd`). After review, the owner also approved
+  `core/actors/actor_table.gd` (`spawn("colonist")` builds the zero skills, item 2).
 
 ## Decision
 
@@ -47,7 +48,10 @@ Two owner decisions taken while implementing (2026-10-30, in the author's termin
    135, 175, 220, 270, 325]`; its length, 10, is the top level), `speed_percent_at_min` 70,
    `speed_percent_at_max` 160, `carry_labour` "haul", `carry_bonus_every` 5,
    `xp_per_job` `{default: 1, by_kind: {}}` and `starting` `{major_count: 2, major_min: 3,
-   major_max: 6, minor_min: 0, minor_max: 2}`. A bundle without the file (a test fixture) has
+   major_max: 6, minor_min: 0, minor_max: 2}`. The schema types each `by_kind` value as an
+   integer >= 0 by listing every job kind of `jobs.json` (the loader's schema subset checks
+   values only through named properties), so a bad or unknown override fails content loading;
+   a job kind added later needs a schema line before it can be overridden. A bundle without the file (a test fixture) has
    empty rules: base speed, no XP, no bonus, no seeding.
 2. **State.** A worker carries `skills`, `{labour: {level, xp}}` for its declared labours;
    `xp` is the progress inside the current level and restarts at 0 on a level up (the
