@@ -108,7 +108,8 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 		return
 
 	# ADR 060: one complete day or month range per calendar window (the schema's oneOf).
-	var calendar_error := CalendarServiceType.window_range_error(raw_by_kind["calendar"])
+	var calendar_document: Dictionary = raw_by_kind["calendar"]
+	var calendar_error := CalendarServiceType.window_range_error(calendar_document)
 	if not calendar_error.is_empty():
 		_fail(ERROR_SCHEMA_VIOLATION, calendar_error, "calendar.json")
 		return

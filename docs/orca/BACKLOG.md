@@ -912,7 +912,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Scope extension (owner, 2026-10-29):** the date reaches the viewer through the A9 view
   snapshot, not a new getter: `core/world/view_snapshot.gd` gains a `"date"` key computed by the
   world's own `CalendarService`, and `world_state.gd` changes one existing line (the calendar is
-  passed in `get_view_snapshot()`'s `sources`; no line added, 782 lines after A16b).
+  passed in `get_view_snapshot()`'s `sources`; no line added, 780 lines after A7).
 - **Scope extension (owner, 2026-10-30, after review round 1):** `game/data/text/en.json` (two
   keys for the date line; ADR 052: no player text in code) and `core/content/content_registry.gd`
   (one preload and one call to `CalendarService.window_range_error()` in `_init()`, so a calendar
