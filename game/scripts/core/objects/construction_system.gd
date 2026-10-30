@@ -53,6 +53,9 @@ var _colonist_at: Callable
 var _find_job_colonist: Callable
 ## (job_id: String, status: String) -> Dictionary: WorldState's terminal-transition boundary.
 var _finish_job: Callable
+## (job_id: String) -> void: completes a builder job a finished site ends, awarding its XP
+## (F3, ADR 062: ToilBindings sets it); unset, the job is finished as complete_job.
+var complete_builder: Callable
 ## (job_id: String) -> void: drops a site_fetch job's carried item on the colonist's tile.
 var _drop_carried_haul_item: Callable
 ## (from: Vector2i, to: Vector2i, faction_id: String) -> int: route cost, -1 when unreachable.
@@ -488,15 +491,19 @@ func cancel_construction_site(site_id: String) -> void:
 	_scheduler.queue.get_reservation_table().release_all(site_table.owner_key(site_id))
 	site_table.remove(site_id)
 
-## Completion: finishes every other builder, releases the footprint reservation,
-## places the object (ObjectTable.set_object() handles footprint and regions)
-## and removes the record; held materials are spent by definition.
+## Completion: completes every other builder (complete_builder), releases the
+## footprint reservation, places the object (ObjectTable.set_object() handles
+## footprint and regions) and removes the record; held materials are spent by definition.
 func _finalize_construction_site(site_id: String, completing_job_id: String) -> void:
 	var site := site_table.get_site(site_id)
 	if site.is_empty():
 		return
 	for other_job_id in (site["builder_ids"] as Array):
-		if String(other_job_id) != completing_job_id:
+		if String(other_job_id) == completing_job_id:
+			continue
+		if complete_builder.is_valid():
+			complete_builder.call(String(other_job_id))
+		else:
 			_finish_job.call(String(other_job_id), "complete_job")
 	_scheduler.queue.get_reservation_table().release_all(site_table.owner_key(site_id))
 	var origin: Vector2i = site["origin"]

@@ -81,6 +81,8 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 	_object_table = object_table
 	_passability = passability
 	_construction = construction
+	# F3 (ADR 062): builders a finished site completes earn XP like every toil completion.
+	_construction.complete_builder = _complete_job
 	_trench = trench
 	_needs_system = needs_system
 	_reroutes = reroutes

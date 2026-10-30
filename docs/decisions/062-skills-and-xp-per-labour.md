@@ -39,7 +39,9 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
   completion), `core/world/view_snapshot.gd` (skill progress for the viewer) and
   `core/worldgen/world_seeding.gd` (where colonists are created and the roster applied, in
   place of `world/scenario_builder.gd`). After review, the owner also approved
-  `core/actors/actor_table.gd` (`spawn("colonist")` builds the zero skills, item 2).
+  `core/actors/actor_table.gd` (`spawn("colonist")` builds the zero skills, item 2). After the
+  second review, the owner also approved `core/objects/construction_system.gd` (the
+  `complete_builder` hook, item 4).
 
 ## Decision
 
@@ -62,12 +64,20 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
    `max(1, round(work_ticks * 100 / speed))`, `speed = at_min + (at_max - at_min) * level / 10`
    (integer division). Chop (40 ticks): 57 ticks at level 0, 28 at level 8. A labour the
    colonist has no record for (forage, need jobs) keeps `work_ticks`. A resumed job keeps its
-   stored remainder (not rescaled). `site_work` has `work_ticks` 1, so building speed does not
-   change with skill (limitation, see below).
+   stored remainder (not rescaled). A `site_work` job's duration always comes from its site
+   (the site's remaining `build_ticks`, `WorldState._resume_work_progress()`), and every
+   builder adds one progress per tick, so building speed does not change with skill
+   (limitation, see below).
 4. **XP.** Every toil-driven completion goes through `ToilBindings._complete_job()`: once
    `finish(complete_job)` accepts it, the colonist that held the job earns
    `xp_per_job.by_kind[kind]` (else `default`) in the kind's labour
-   (`ToilExecutor.award_job_xp()`). A player `complete_job` command earns nothing. No event is
+   (`ToilExecutor.award_job_xp()`). A builder works on a site until the site is built, so a
+   `site_work` job earns its XP once per builder per site. The site can complete on a tick
+   that ends no builder's own countdown, because the builders' progress adds up. When it
+   does, `ConstructionSystem._finalize_construction_site()` completes the other builders
+   itself, through its `complete_builder` hook, which `ToilBindings` sets to
+   `_complete_job()`. Each builder therefore earns its XP exactly once. `site_fetch` (build
+   labour) earns per delivery. A player `complete_job` command earns nothing. No event is
    emitted (the labour table shows the level).
 5. **Hands.** Capacity is `ActorInventory.HANDS_CAPACITY` (4) plus `haul level / 5`
    (`ToilExecutor.hands_capacity()`); `pick_up` and site-fetch's "hands full" rule read it, and
@@ -111,8 +121,9 @@ Owner decisions taken while implementing and after review (2026-10-30, in the au
 
 ## Limitations
 
-- Building speed does not scale (site_work's `work_ticks` is 1; a site's progress is one per
-  builder per tick); build XP is earned per site_work job, i.e. per tick of building.
+- Building speed does not scale. A site_work job lasts until its site is built, and each
+  builder adds one progress per tick at every level. Build XP is one `site_work` award per
+  builder per site, plus one per `site_fetch` delivery.
 - No skill-up event or message; XP gained by an interrupted job is earned only at completion.
 - Migrated (v5) colonists start at level 0 in every labour.
 

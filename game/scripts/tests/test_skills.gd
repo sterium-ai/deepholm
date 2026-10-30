@@ -12,7 +12,9 @@ extends SceneTree
 ## - save/load mid-XP keeps ticking in step (state_hash every tick); a replay reproduces it;
 ## - the view snapshot carries {level, xp, next} per labour;
 ## - xp_per_job.by_kind overrides must be integers >= 0 naming a job kind (content loading
-##   fails otherwise), and a completed job earns its valid override.
+##   fails otherwise), and a completed job earns its valid override;
+## - every builder of a finished site earns its site_work XP exactly once, alone or two on a
+##   workbench (where the site completes on a tick that is no builder's own last tick).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
@@ -49,6 +51,7 @@ func _init() -> void:
 	_check_view_snapshot_carries_skill_progress()
 	_check_invalid_xp_overrides_fail_loading()
 	_check_valid_xp_override_is_earned()
+	_check_every_builder_earns_build_xp_once()
 	if _failed:
 		quit(1)
 		return
@@ -277,10 +280,7 @@ func _check_valid_xp_override_is_earned() -> void:
 	_expect(registry.is_valid(), "by_kind {\"chop\": 3} must load, got %s" % [registry.get_error()])
 	if not registry.is_valid():
 		return
-	var world := WorldStateType.new(SEED, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false, registry)
-	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
-	TestAccess.colonists(world).clear()
-	TestAccess.object_table(world).objects.clear()
+	var world := _floor_world_with(registry)
 	var worker := _add_worker(world, "c_learner", 4, 4, {"chop": 0})
 	world.spawn_ground_tool_item("axe", 4, 5)
 	var tree := Vector2i(6, 8)
@@ -292,7 +292,58 @@ func _check_valid_xp_override_is_earned() -> void:
 	_expect(int(record["level"]) == 0 and int(record["xp"]) == 3,
 		"one chop with by_kind chop 3 must give level 0 with 3 XP, got %s" % [record])
 
+## Review of F3 (round 2): a site_work job lasts until its site is built (its duration is the
+## site's remaining build_ticks), and a finished site completes its other builders itself.
+## With site_fetch at 0 XP and site_work at 5, each builder must end at exactly 5 build XP:
+## one builder on a wooden wall, and two builders on a workbench (max_builders 2), whose
+## summed progress completes the site through ConstructionSystem's complete_builder.
+func _check_every_builder_earns_build_xp_once() -> void:
+	var registry := _content_with_by_kind('{"site_fetch": 0, "site_work": 5}')
+	_expect(registry.is_valid(), "the build XP override must load, got %s" % [registry.get_error()])
+	if not registry.is_valid():
+		return
+	for kind: String in ["wooden_wall", "workbench"]:
+		var world := _floor_world_with(registry)
+		var ids: Array[String] = ["c_builder_0"]
+		if kind == "workbench":
+			ids.append("c_builder_1")
+		var workers: Array[Dictionary] = []
+		for i in ids.size():
+			workers.append(_add_worker(world, ids[i], i, 0, {"build": 0}))
+		world.apply(_command(world, "zone_add", {"x": 0, "y": 0, "width": 2, "height": 1}))
+		Scenarios.add_stock(world, "wood", 3, 0, 0)
+		Scenarios.add_stock(world, "stone", 4, 1, 0)
+		var origin := Vector2i(10, 10)
+		var built := world.apply(_command(world, "build", {"kind": kind, "x": origin.x, "y": origin.y}))
+		_expect(bool(built.get("ok", false)), "build %s must be accepted: %s" % [kind, built])
+		var builders := {}
+		var done := false
+		for _i in TICK_BUDGET:
+			_top_up_needs(world)
+			world.tick()
+			var site := world.get_construction_site(origin.x, origin.y)
+			if site.is_empty():
+				done = true
+				break
+			for job_id: String in site["builder_ids"]:
+				builders[job_id] = true
+		_expect(done, "the %s site must be built within the tick budget" % kind)
+		_expect(builders.size() == ids.size(), "the %s must be built by %d builder job(s), got %s" % [kind, ids.size(), builders.keys()])
+		for worker in workers:
+			var record: Dictionary = worker["skills"]["build"]
+			_expect(int(record["level"]) == 0 and int(record["xp"]) == 5,
+				"%s on the %s must earn its site_work XP (5) exactly once, got %s" % [worker["id"], kind, record])
+
 # --- helpers ---------------------------------------------------------------
+
+## A floor world on `registry`, no colonists or objects (Scenarios.empty_floor_world's shape).
+func _floor_world_with(registry: ContentRegistryType) -> WorldStateType:
+	var world := WorldStateType.new(SEED, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false, registry)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.object_table(world).objects.clear()
+	return world
+
 
 ## The base bundle copied to OVERRIDE_CONTENT_DIR with skills.json's by_kind replaced by the
 ## `by_kind` JSON text (text-level, so integers stay integers), loaded, then the copy removed.
