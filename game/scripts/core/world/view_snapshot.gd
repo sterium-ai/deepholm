@@ -10,6 +10,8 @@ extends RefCounted
 ## copied only for the `detail_ids` the panels ask for. Every Dictionary and Array in it is read-only. Never persisted,
 ## never hashed. Keys:
 ##   tick             int
+##   date             {day, month, year, window_label}: CalendarService.date_of_tick(tick)
+##                    of the world's own calendar (F0, ADR 060)
 ##   ids              String column, every actor in actor-table order; row i of
 ##                    every column below is ids[i]
 ##   kinds, factions  String columns: "kind", "factionId" ("colony" when absent)
@@ -36,14 +38,16 @@ extends RefCounted
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
+const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 
 ## `actors` is the live actor table, read and never written. `sources` holds the
-## live read-only views job_kinds ({job id: kind}) and need_status ({id: reason}) and
-## the Callables get_job, need_job_id and rescue_reason (WorldState's getters); `parts`
-## the already-copied collections listed above.
+## live read-only views job_kinds ({job id: kind}) and need_status ({id: reason}), the
+## Callables get_job, need_job_id and rescue_reason (WorldState's getters) and the world's
+## CalendarService as calendar; `parts` the already-copied collections listed above.
 static func build(tick: int, actors: Array, content: ContentRegistryType, sources: Dictionary, parts: Dictionary,
 		detail_ids: Array) -> Dictionary:
-	var snapshot := {"tick": tick}
+	var calendar: CalendarServiceType = sources["calendar"]
+	var snapshot := {"tick": tick, "date": calendar.date_of_tick(tick)}
 	snapshot.merge(parts)
 	# The tool store records which worker holds each tool (location "held"), so the
 	# tool_kinds column needs no per-actor read of the worker's held_tool.

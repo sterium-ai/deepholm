@@ -504,7 +504,7 @@ func get_colonists() -> Array[Dictionary]:
 func get_view_snapshot(detail_ids: Array = []) -> Dictionary:
 	return ViewSnapshotType.build(_clock.tick, _colonists, _content, {"job_kinds": _scheduler.queue.get_job_kinds(),
 		"need_status": _needs_system.need_status, "get_job": get_job, "need_job_id": get_active_need_job_id,
-		"rescue_reason": get_colonist_rescue_reason}, {"assignments": get_assignments(), "queued_job_summary":
+		"rescue_reason": get_colonist_rescue_reason, "calendar": _calendar}, {"assignments": get_assignments(), "queued_job_summary":
 		get_queued_job_summary(), "tool_items": get_tool_items(), "items": get_items(), "construction_sites":
 		get_construction_sites(), "zones": get_zones(), "pending_trade_offers": get_pending_trade_offers()}, detail_ids)
 
