@@ -9,15 +9,16 @@ extends RefCounted
 ## _zone_table, _passability, _construction, _scheduler, ...) as its command-rule companion.
 
 ## ADR 045 §6, run by CommandRouter.validate_command() for every command: a payload (or a
-## build_line tile) that names a tile with "x" carries "z"; a missing "z" means the surface and
-## is filled in here, at the command boundary only. An out-of-range layer is an out-of-map tile.
+## build_line tile) that names a tile with "x" and "y" carries "z"; a missing "z" means the
+## surface and is filled in here, at the command boundary only. An out-of-range layer is an
+## out-of-map tile.
 static func check_command_layer(world: WorldState, command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var tiles: Array = [payload]
 	if command["type"] == "build_line" and payload.get("tiles") is Array:
 		tiles.append_array(payload["tiles"])
 	for tile: Variant in tiles:
-		if not (tile is Dictionary) or not (tile as Dictionary).has("x"):
+		if not (tile is Dictionary) or not (tile as Dictionary).has("x") or not (tile as Dictionary).has("y"):
 			continue
 		var entry: Dictionary = tile
 		if not entry.has("z"):
