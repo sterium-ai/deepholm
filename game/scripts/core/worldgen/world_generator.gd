@@ -161,7 +161,7 @@ static func _scatter_tree_groves(random: RandomNumberGenerator, map: Array[Strin
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if offset_x * offset_x + offset_y * offset_y > radius * radius:
+			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)
@@ -255,7 +255,7 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if offset_x * offset_x + offset_y * offset_y > radius * radius:
+			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)

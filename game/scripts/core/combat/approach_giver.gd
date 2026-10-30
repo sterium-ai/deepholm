@@ -225,7 +225,7 @@ func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dic
 			continue
 		if _relations.relation(own_faction, String(_object_faction_at.call(x, y))) != "hostile":
 			continue
-		targets.append({"kind": "object", "tile_key": "%d_%d" % [x, y], "tile": Vector2i(x, y)})
+		targets.append({"kind": "object", "tile_key": TileGrid.coord_key(x, y), "tile": Vector2i(x, y)})
 	return targets
 
 ## The Chebyshev-adjacent tile of target_tile nearest `start` that is in bounds, passable, reservable,

@@ -353,8 +353,7 @@ static func _encode_objects(objects: Dictionary, object_factions: Dictionary, ob
 	for key in keys:
 		if object_origin.has(key):
 			continue
-		var coords := String(key).split("_")
-		var tile := Vector2i(int(coords[0]), int(coords[1]))
+		var tile := TileGrid.coord_of_key(String(key))
 		var entry := {"target": _encode_tile(tile), "kind": String(objects[key]),
 			"factionId": String(object_factions.get(key, "colony"))}
 		if object_orientation.has(key):
@@ -387,8 +386,7 @@ static func _encode_ground_berries(ground_berries: Dictionary, factions: Diction
 	keys.sort()
 	var encoded: Array = []
 	for key in keys:
-		var coords := String(key).split("_")
-		var tile := Vector2i(int(coords[0]), int(coords[1]))
+		var tile := TileGrid.coord_of_key(String(key))
 		encoded.append({"target": _encode_tile(tile), "berries": int(ground_berries[key]),
 			"factionId": String(factions.get(key, "colony"))})
 	return encoded
@@ -399,7 +397,7 @@ static func _decode_ground_berries(list: Array) -> Dictionary:
 	var factions: Dictionary = {}
 	for entry in list:
 		var tile := _decode_tile(entry["target"])
-		var key := "%d_%d" % [tile.x, tile.y]
+		var key := TileGrid.coord_key(tile.x, tile.y)
 		berries[key] = int(entry["berries"])
 		factions[key] = String(entry["factionId"])
 	return {"berries": berries, "factions": factions}

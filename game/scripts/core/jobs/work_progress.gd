@@ -53,8 +53,8 @@ func hash_into(snapshot: Dictionary) -> void:
 ## else the job-scoped "<job_id>:<x>_<y>".
 static func key_of(tile: Vector2i, scope_job_id: String = "") -> String:
 	if scope_job_id.is_empty():
-		return "%d_%d" % [tile.x, tile.y]
-	return "%s:%d_%d" % [scope_job_id, tile.x, tile.y]
+		return TileGrid.coord_key(tile.x, tile.y)
+	return "%s:%s" % [scope_job_id, TileGrid.coord_key(tile.x, tile.y)]
 
 ## key_of()'s inverse: {tile: Vector2i, scope: String}. Job ids never contain
 ## ":" (the `^[a-z0-9_-]+$` id pattern), so the last ":" separates the scope.
@@ -65,8 +65,7 @@ static func key_parts(progress_key: String) -> Dictionary:
 	if colon_index >= 0:
 		scope = progress_key.substr(0, colon_index)
 		coord_part = progress_key.substr(colon_index + 1)
-	var coords := coord_part.split("_")
-	return {"tile": Vector2i(int(coords[0]), int(coords[1])), "scope": scope}
+	return {"tile": TileGrid.coord_of_key(coord_part), "scope": scope}
 
 ## The progress key of a specific job, by its own identity, never the tile's
 ## current reservation owner: terminal cleanup runs after the reservation is released.

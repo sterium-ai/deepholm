@@ -318,7 +318,7 @@ static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary
 	var cost_values := PackedFloat64Array()
 	for i in sorted.size():
 		var tile: Vector2i = sorted[i]
-		var bit := (tile.y - box.y) * box.z + (tile.x - box.x)
+		var bit := TileGrid.flat_index(tile.x - box.x, tile.y - box.y, box.z)
 		bits[bit >> 3] |= 1 << (bit & 7)
 		if tile != start:
 			var parent: Vector2i = parents[tile]

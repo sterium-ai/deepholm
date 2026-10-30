@@ -167,7 +167,7 @@ func remaining_tiles(id: int) -> int:
 ## The per-tile command for `tile`, or {} when there is nothing to order (never a rejection).
 func tile_command(order: Dictionary, tile: Vector2i) -> Dictionary:
 	var type: String = order["order"]
-	var command := {"actor": order["actor"], "command_id": "%s:%d,%d" % [order["commandId"], tile.x, tile.y],
+	var command := {"actor": order["actor"], "command_id": "%s:%s" % [order["commandId"], TileGrid.comma_key(tile.x, tile.y)],
 		"tick": _clock.tick}
 	if type in JOB_ORDERS:
 		command["type"] = type

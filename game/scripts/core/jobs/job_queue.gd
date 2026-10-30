@@ -19,7 +19,6 @@ const BLOCKED_DESTINATION_FULL := "blocked_destination_full"
 const BLOCKED_LABOUR_DISABLED := "labour_disabled"
 const BLOCKED_NO_TOOL := "blocked_no_tool"
 const SYSTEM_PRIORITY := 50
-const TARGET_KEY_PREFIX := "tile:"
 const ITEM_KEY_PREFIX := "item:"
 const HAUL_KIND := "haul"
 ## site_fetch reserves only its source item; site_work reserves nothing. A site's footprint
@@ -532,11 +531,11 @@ func restore(jobs: Array[Dictionary], tick_value: int, next_id: int, sequence: i
 
 ## Tile keys are namespaced so "item:"/"cell:" keys never collide with them.
 func _target_key(target: Vector2i) -> String:
-	return "%s%d,%d" % [TARGET_KEY_PREFIX, target.x, target.y]
+	return TileGrid.target_key(target.x, target.y)
 
 ## Same format as WorldState._cell_key(): is_cell_free() must see haul cell reservations.
 func _cell_key(cell: Vector2i) -> String:
-	return "cell:%d,%d" % [cell.x, cell.y]
+	return TileGrid.cell_key(cell.x, cell.y)
 
 func _find_job(job_id: String) -> Dictionary:
 	return _index.find(_jobs, job_id)

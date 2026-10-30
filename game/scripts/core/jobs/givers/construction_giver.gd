@@ -35,7 +35,7 @@ func _site_key(origin) -> String:
 	if origin == null:
 		return ""
 	var tile: Vector2i = origin
-	return "%d,%d" % [tile.x, tile.y]
+	return TileGrid.comma_key(tile.x, tile.y)
 
 ## Runs once per tick (TickPipeline). The submitted source is a position-agnostic seed:
 ## ConstructionSystem swaps it for the nearest reachable one when a colonist activates the job.

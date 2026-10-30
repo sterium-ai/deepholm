@@ -2,7 +2,8 @@ extends SceneTree
 
 ## TileGrid as the only owner of the flat tile index and the planar metrics (ADR 045 §2/§4, L1):
 ## the index is row-major (layer 0 keeps y * width + x), coord_of() inverts it, and manhattan,
-## chebyshev and distance_sq stay three different formulas.
+## chebyshev and distance_sq stay three different formulas; the String tile keys keep the
+## exact formats saves, events and reservations carry.
 
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 
@@ -11,6 +12,7 @@ var _failed := false
 func _init() -> void:
 	_check_index_is_row_major()
 	_check_metrics_stay_distinct()
+	_check_keys_keep_their_formats()
 	if _failed:
 		quit(1)
 		return
@@ -43,6 +45,13 @@ func _check_metrics_stay_distinct() -> void:
 	# The "next to" test (8 neighbours) is chebyshev <= 1; manhattan would drop the diagonals.
 	_expect(TileGridType.chebyshev(Vector2i(3, 3), Vector2i(4, 4)) == 1, "a diagonal neighbour is not chebyshev 1")
 	_expect(TileGridType.manhattan(Vector2i(3, 3), Vector2i(4, 4)) == 2, "a diagonal neighbour is not manhattan 2")
+
+func _check_keys_keep_their_formats() -> void:
+	_expect(TileGridType.coord_key(12, 3) == "12_3", "coord_key(12, 3) = %s" % TileGridType.coord_key(12, 3))
+	_expect(TileGridType.coord_of_key("12_3") == Vector2i(12, 3), "coord_of_key(\"12_3\") is not coord_key()'s inverse")
+	_expect(TileGridType.target_key(12, 3) == "tile:12,3", "target_key(12, 3) = %s" % TileGridType.target_key(12, 3))
+	_expect(TileGridType.cell_key(12, 3) == "cell:12,3", "cell_key(12, 3) = %s" % TileGridType.cell_key(12, 3))
+	_expect(TileGridType.comma_key(12, 3) == "12,3", "comma_key(12, 3) = %s" % TileGridType.comma_key(12, 3))
 
 func _expect(condition: bool, message: String) -> void:
 	if not condition:

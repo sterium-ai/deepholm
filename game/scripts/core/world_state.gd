@@ -734,8 +734,8 @@ func _job_restricted_to(job_id: String) -> String:
 	return _scheduler.waiting_restrict_to(job_id)
 
 ## JobQueue's "tile:" target keys and is_cell_free()'s distinct "cell:" keys (colonist-ai.md 3.4).
-func _tile_key(x: int, y: int) -> String: return "tile:%d,%d" % [x, y]
-func _cell_key(x: int, y: int) -> String: return "cell:%d,%d" % [x, y]
+func _tile_key(x: int, y: int) -> String: return TileGridType.target_key(x, y)
+func _cell_key(x: int, y: int) -> String: return TileGridType.cell_key(x, y)
 
 ## ActorTable.spawn()'s default labourTable, also NeedsSystem.ensure_needs()'s backfill.
 func _default_labour_table() -> Dictionary:

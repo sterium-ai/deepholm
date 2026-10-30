@@ -106,6 +106,34 @@ func coord_of(index: int) -> Vector2i:
 func tile_index(x: int, y: int) -> int:
 	return flat_index(x, y, width)
 
+## The String tile keys (ADR 045 §2). Saves, events, reservations and state_hash() carry them,
+## so L1 keeps every format byte for byte and only gives each one owner; replacing them with
+## flat-index ints is a save change for a later task.
+const TARGET_KEY_PREFIX := "tile:"
+const CELL_KEY_PREFIX := "cell:"
+
+## "x_y": objects, ground berries, work progress, combat targets and the save/hash boundary.
+static func coord_key(x: int, y: int) -> String:
+	return "%d_%d" % [x, y]
+
+## coord_key()'s inverse.
+static func coord_of_key(key: String) -> Vector2i:
+	var coords := key.split("_")
+	return Vector2i(int(coords[0]), int(coords[1]))
+
+## "tile:x,y": a reservation on a work or build target (namespaced against "item:"/"cell:").
+static func target_key(x: int, y: int) -> String:
+	return "%s%d,%d" % [TARGET_KEY_PREFIX, x, y]
+
+## "cell:x,y": a haul destination cell's reservation.
+static func cell_key(x: int, y: int) -> String:
+	return "%s%d,%d" % [CELL_KEY_PREFIX, x, y]
+
+## "x,y": a construction site's origin (ConstructionGiver) and the tile part of an area order's
+## expanded command id ("<commandId>:x,y").
+static func comma_key(x: int, y: int) -> String:
+	return "%d,%d" % [x, y]
+
 ## The three planar metrics (ADR 045 §4) stay three formulas, never merged into one distance.
 ## Manhattan: nearest-candidate ranking and travel penalties.
 static func manhattan(a: Vector2i, b: Vector2i) -> int:

@@ -257,7 +257,7 @@ func _build_site_terrain_valid(site: Vector2i) -> bool:
 
 ## The same "tile:" key work jobs reserve: sites and jobs contend through one ledger.
 func _build_site_key(build_target: Vector2i) -> String:
-	return "%s%d,%d" % [JobQueueType.TARGET_KEY_PREFIX, build_target.x, build_target.y]
+	return TileGridType.target_key(build_target.x, build_target.y)
 
 ## A detached copy with builder_ids translated from job ids to the colonist
 ## currently driving each job (one no longer found is omitted).
