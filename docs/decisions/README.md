@@ -71,6 +71,7 @@ all with one size rule.
 | [060](060-calendar-months-and-years.md) | Calendar months and years derived from the day |
 | [061](061-workbench-recipes-and-craft-labour.md) | Workbench recipes, the craft labour and item groups |
 | [062](062-skills-and-xp-per-labour.md) | Skills and XP per labour |
+| [063](063-map-layers-l2-implementation.md) | Map layers, step L2: key formats, surface shorthands, layer cap |
 
 ## Renumbered records (redirects)
 

@@ -1071,7 +1071,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   suite green; `measure_core` budgets respected.
 - **Non-goals:** `Vector3i` (L2), any behaviour change.
 
-### L2 — `Vector2i` → `Vector3i` sweep, `layer_count = 1`, save bump · `todo` · after L1 · core-wide (serialize with other core merges)
+### L2 — `Vector2i` → `Vector3i` sweep, `layer_count = 1`, save bump · `review (antonelmejor50-hub/l2-vector2i-vector3i-sweep-layer)` · after L1 · core-wide (serialize with other core merges)
 
 - **Goal:** ADR 045 §1–§2 and §5: tiles are `Vector3i(x, y, z)` everywhere in rules, commands
   and events; `TileGrid` stores `layer_count` (1 for now) and grows by `layer_size`; saves carry
