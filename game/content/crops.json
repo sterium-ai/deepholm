@@ -1,0 +1,6 @@
+{
+  "crops": [
+    {"id": "carrot", "label": "crop.carrot", "seed_item": "seed", "sow_job": "sow", "harvest_job": "harvest", "window": "sow", "grow_days": 4,
+      "stages": ["planted", "crop_grown", "crop_ripe"], "wither_days_after_window": 1, "withered_tile": "plowed_soil"}
+  ]
+}

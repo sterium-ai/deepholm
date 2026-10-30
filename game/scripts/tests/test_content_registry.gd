@@ -73,6 +73,7 @@ func _init() -> void:
 	_check_fixtures_with_invalid_wild_trench_climb_ticks_fail_construction()
 	_check_fixture_with_build_cost_dangling_reference_fails_construction()
 	_check_fixture_with_missing_build_cost_fails_construction()
+	_check_fixture_with_crop_dangling_tile_fails_construction()
 
 	if _failed:
 		quit(1)
@@ -164,7 +165,13 @@ func _check_real_bundle_loads_and_resolves() -> void:
 	_expect(not wildlife_wander.is_empty() and String((wildlife_wander.get("spawn", {}) as Dictionary).get("actor_def", "")) == "wolf",
 		"incidents collection must declare 'wildlife_wander' spawning a declared 'wolf' actor")
 
-	_expect(registry.list("tiles").size() == 9, "tiles collection must contain exactly the 9 tile kinds")
+	_expect(registry.list("tiles").size() == 11, "tiles collection must contain exactly the 11 tile kinds (9 + F1's crop_grown/crop_ripe)")
+	# F1 (ADR 059): the optional crops kind loads, and every crop's stages are declared tiles.
+	_expect(registry.list("crops").size() == 1, "crops collection must contain the one v1 crop")
+	for crop in registry.list("crops"):
+		for stage in (crop.get("stages", []) as Array):
+			_expect(not registry.get_entry("tiles", String(stage)).is_empty(),
+				"crop '%s' stage '%s' must resolve to a declared tile" % [crop.get("id"), stage])
 	var trench_tile := registry.get_entry("tiles", "trench")
 	var soil_tile := registry.get_entry("tiles", "soil")
 	_expect(not trench_tile.is_empty() and bool(trench_tile.get("passable", false)) and not bool(trench_tile.get("diggable", true)),
@@ -469,6 +476,27 @@ func _write_yields_dangling_fixture_bundle() -> void:
 			"effects": {"yields": {"placement": "target", "always": [], "find_table": [{"item": "does_not_exist", "weight": 100}]}}},
 	]})
 	_write_required_tiles_and_mapgen(YIELDS_DANGLING_FIXTURE_DIR)
+
+## F1 (ADR 059): a crops.json entry naming a tile the bundle does not declare fails construction
+## as a dangling_reference on crops.json (CropContent.check()). Its unknown calendar window is not
+## an error: a calendar (or a scenario's, ADR 057) without the crop's window leaves it no season.
+func _check_fixture_with_crop_dangling_tile_fails_construction() -> void:
+	_write_yields_dangling_fixture_bundle()
+	_write_json(YIELDS_DANGLING_FIXTURE_DIR + "/jobs.json", {"jobs": [
+		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"]},
+	]})
+	_write_json(YIELDS_DANGLING_FIXTURE_DIR + "/crops.json", {"crops": [
+		{"id": "test_crop", "label": "crop.test", "seed_item": "axe", "sow_job": "sow", "harvest_job": "harvest",
+			"window": "no_such_window", "grow_days": 1,
+			"stages": ["floor", "floor"], "wither_days_after_window": 0, "withered_tile": "no_such_tile"},
+	]})
+	var registry := ContentRegistryType.new(YIELDS_DANGLING_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
+	_cleanup_dir(YIELDS_DANGLING_FIXTURE_DIR)
+	_expect(not registry.is_valid(), "a crop naming an unknown withered tile must fail construction")
+	var error := registry.get_error()
+	_expect(error.get("code") == ContentRegistryType.ERROR_DANGLING_REFERENCE and String(error.get("file", "")).ends_with("crops.json")
+		and String(error.get("message", "")).contains("no_such_tile"),
+		"the dangling crop tile must be a dangling_reference on crops.json naming the id, got %s" % error)
 
 ## Same otherwise-valid bundle as _write_float_integer_fixture_bundle() (an
 ## integer move_cost), with incidents.json replaced by the single given row.

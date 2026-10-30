@@ -576,12 +576,16 @@ reads `RescueGiver`'s own `_job_victim` record directly, not this
 
 ### Zone commands: `zone_add`, `zone_remove`
 
-Stockpile zones are player-drawn axis-aligned rectangles, applied
+Stockpile and farm zones are player-drawn axis-aligned rectangles, applied
 immediately with no job queue involved (mirroring `place_object`/
 `remove_object`'s "no job queue" framing above):
 
-- `zone_add` — `{x: int, y: int, width: int, height: int}`. Rejected
-  `invalid_payload` for a non-integer field; rejected `invalid_target` for a
+- `zone_add` — `{x: int, y: int, width: int, height: int}`, plus
+  `kind: "farm"` and `crop: <crops.json id>` for a farm zone (F1, ADR 059;
+  `kind` defaults to `"stockpile"`, which names no crop). Rejected
+  `invalid_payload` for a non-integer field, an unknown `kind`, a farm zone
+  without a crop or a stockpile with one, and `invalid_payload`
+  (`unknown_crop`) for a crop the content does not declare; rejected `invalid_target` for a
   degenerate (zero width/height) rectangle, one extending past the map
   edge, or one overlapping an existing zone (touching an edge with no
   shared cell is allowed). On success returns `{ok: true, zone_id}`
@@ -593,10 +597,13 @@ immediately with no job queue involved (mirroring `place_object`/
   with no leaked `cell:` reservation, rather than leaving the colonist
   walking toward a cell that no longer belongs to any zone.
 
-`WorldState.get_zones()`/`get_zone(id)` return detached, id-sorted copies;
-`HaulGiver.find_free_haul_cell()` scans every zone's cells in zone-id then
-row-major order for haul destination selection, so cell assignment is
-deterministic for a given zone/reservation state.
+`WorldState.get_zones()`/`get_zone(id)` return detached, id-sorted copies of
+every zone; `HaulGiver.find_free_haul_cell()` scans every *stockpile* zone's
+cells (`ZoneTable.get_stockpile_zones()`) in zone-id then row-major order for
+haul destination selection, so cell assignment is deterministic for a given
+zone/reservation state. A farm zone stores nothing: an item on a farm tile is
+loose (hauled away), and the zone only drives `FarmGiver`'s till/sow jobs
+(colonist-ai.md, "Crops and farm zones").
 
 ### Haul backoff
 

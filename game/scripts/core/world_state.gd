@@ -51,6 +51,7 @@ const ActorHandlerType = preload("res://scripts/core/commands/handlers/actor_han
 const IncidentHandlerType = preload("res://scripts/core/commands/handlers/incident_handler.gd")
 const ActorIndexType = preload("res://scripts/core/actors/actor_index.gd")
 const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
+const FarmSystemType = preload("res://scripts/core/farming/farm_system.gd")
 
 ## Default/fixture map size; a new game's size comes from mapgen.json via boot.gd.
 const MAP_WIDTH := 48
@@ -160,6 +161,7 @@ var _construction: ConstructionSystemType
 var _construction_giver: ConstructionGiverType
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
+var _farm: FarmSystemType # crop growth + FarmGiver (F1, ADR 059)
 
 ## The start a world was built with (ADR 057); its calendar and incident list are saved ("scenarioStart").
 var _setup: WorldSetupType
@@ -249,6 +251,8 @@ func _build_systems() -> void:
 		func(job_id: String) -> void: _rescue_giver.resolve_job(job_id))
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
+	_farm = FarmSystemType.new(_content, _calendar, _clock, _tile_grid, _zone_table.get_farm_zones, _item_table.get_items,
+		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, passability)
 	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:
@@ -270,7 +274,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		_resume_work_progress, _set_work_progress, _progress_table.clear, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
 		set_tool_item_held, set_tool_item_ground, _worker_view, _route_budget,
-		get_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
+		_zone_table.get_stockpile_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
 		_work_target_for, _construction.construction_site_exists, _construction.construction_site_deposit)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
@@ -300,7 +304,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
-		_scheduler.queue.attach_item, get_zones, is_cell_free, passability, _is_cell_occupied)
+		_scheduler.queue.attach_item, _zone_table.get_stockpile_zones, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
@@ -338,7 +342,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_combat_system, _combat_giver, _construction, _scheduler, _passability, _tile_grid, _toils, func() -> CalendarServiceType: return _calendar, _rescue_giver,
 		_trench, _incidents, _approach_giver, _item_table, _event_log, _calendar_alert_giver, _progress_table, _reroutes,
 		_toil_hooks, func() -> Array[Dictionary]: return _colonists, func() -> Dictionary: return _calendar_alerts_fired,
-		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index)
+		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index, _farm.advance)
 
 var command_observer: Callable # optional (command, result) listener after each apply() from outside the core (area-order expansion bypasses it); never mutates (A11)
 ## apply() and tick() are the only mutators; preview() is apply()'s read-only dry run.
@@ -386,6 +390,7 @@ func state_hash(include_incidents: bool = true) -> int:
 	_item_table.hash_into(snapshot)
 	_progress_table.hash_into(snapshot)
 	_construction.hash_into(snapshot)
+	_farm.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 
@@ -420,6 +425,7 @@ func get_construction_sites() -> Array[Dictionary]: return _construction.get_con
 func get_construction_site(x: int, y: int) -> Dictionary: return _construction.get_construction_site(x, y)
 func get_zones() -> Array[Dictionary]: return _zone_table.get_zones()
 func get_zone(id: String) -> Dictionary: return _zone_table.get_zone(id)
+func get_crop_at(x: int, y: int) -> Dictionary: return _farm.crop_at(x, y) # {} or {crop, growth, ripe_growth}
 func get_actors_with_health() -> Array[Dictionary]: return _combat_system.get_actors_with_health()
 func get_pending_trade_offers() -> Array[Dictionary]: return _trade.get_pending_trade_offers()
 func get_queued_job_summary() -> Dictionary: return _scheduler.queue.get_index().queued_summary()

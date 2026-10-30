@@ -15,9 +15,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## The schema was reset to v1 before release (R14, ADR 049); v2 drops terminal jobs (A5,
 ## ADR 053); v3 records the content packs (A13b, ADR 010 amendment 2); v4 saves the scenario's
 ## calendar and enabled incidents (A16b, ADR 057); v5 saves route-search costs and SaveIO writes
-## the compact SaveWire encoding (A7, ADR 058). Every later shape change bumps this and adds a
-## SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 5
+## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059).
+## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
+const SCHEMA_VERSION := 6
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -60,6 +60,8 @@ static func encode(world: WorldState) -> Dictionary:
 		"constructionSites": world._construction.encode()["constructionSites"],
 		"zones": zone_table["zones"],
 		"nextZoneId": zone_table["nextZoneId"],
+		# F1 (ADR 059): growth of every sown tile, in tile-key order.
+		"crops": world._farm.encode()["crops"],
 		"groundBerries": item_table["groundBerries"],
 		"workProgress": work_progress["workProgress"],
 		# The exact owning job_id per key, so decode() never guesses ownership from job targets.
@@ -115,6 +117,8 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	# Absent "constructionSites" restores an empty table (ConstructionSystem.decode()).
 	world._construction.decode(state)
 	world._zone_table.decode(state)
+	# After the tiles: reconciles the records with the decoded stage tiles (FarmSystem.decode()).
+	world._farm.decode(state)
 	# Owners are applied by restore_owners() below, once jobs exist.
 	var work_progress_owners := world._progress_table.decode(state)
 	world._needs_system.decode(state)
@@ -317,17 +321,22 @@ static func _decode_tool_location(location: Dictionary) -> Dictionary:
 
 # --- zones -------------------------------------------------------------
 
-## Sorted by zone id; the next-id counter travels as the top-level "nextZoneId".
+## Sorted by zone id; the next-id counter travels as the top-level "nextZoneId". A farm zone
+## (F1) also carries "kind": "farm" and its "crop"; a stockpile carries neither.
 static func _encode_zones(zones: Dictionary) -> Array:
 	var keys := zones.keys()
 	keys.sort()
 	var list: Array = []
 	for key in keys:
 		var zone: Dictionary = zones[key]
-		list.append({
+		var entry := {
 			"id": zone["id"], "x": zone["x"], "y": zone["y"],
 			"width": zone["width"], "height": zone["height"],
-		})
+		}
+		if zone.has("kind"):
+			entry["kind"] = zone["kind"]
+			entry["crop"] = zone["crop"]
+		list.append(entry)
 	return list
 
 static func _decode_zones(list: Array) -> Dictionary:
@@ -338,6 +347,12 @@ static func _decode_zones(list: Array) -> Dictionary:
 			"id": id, "x": int(entry["x"]), "y": int(entry["y"]),
 			"width": int(entry["width"]), "height": int(entry["height"]),
 		}
+		var farm: Dictionary = entry
+		if farm.has("kind"):
+			var kind: String = farm["kind"]
+			var crop: String = farm["crop"]
+			zones[id]["kind"] = kind
+			zones[id]["crop"] = crop
 	return zones
 
 # --- objects ---------------------------------------------------------------

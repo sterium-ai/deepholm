@@ -920,7 +920,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   `docs/architecture/warnings-baseline.txt` is no longer changed.
   ADR 060; evidence `docs/orca/handoffs/F0.md`.
 
-### F1 — Crops: growth stages, harvest and farm zones · `todo` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29
+### F1 — Crops: growth stages, harvest and farm zones · `review (antonelmejor50-hub/f1-crops-growth-stages-harvest)` · after F0 (may start in parallel; calendar via days) · Design: closed 2026-10-29
 
 - **Design (owner, 2026-10-29):** one crop in v1 (content-defined so more can be added as data);
   a sown tile goes through three visible stages (sprout → grown → ripe) over ~4 days inside the
@@ -948,6 +948,15 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   (`test_toils_dig_chop_regression` and friends pass); `measure_core` budgets respected; suite green.
 - **Non-goals:** drought and fertilise (later F1b), several crops shipped (only content-ready),
   animals, food processing, farm zone priorities/UI beyond painting the zone.
+- **Owner decisions in review (2026-10-30):** (1) scope extension approved for
+  `core/world/tick_pipeline.gd` (the `farming` phase), `core/commands/command_checks.gd`
+  (`zone_add` kind/crop checks), `core/content/content_registry.gd` (the `crops` kind),
+  `viewer/order_input.gd` + `viewer/control_bar.gd` (the Farm Zone tool),
+  `tools/generate_placeholder_art.py` + `scripts/tools/build_terrain_tileset.gd` (placeholder
+  stage art) and `core/jobs/toil_executor.gd` (job definitions from the session ContentRegistry,
+  so a pack's crop jobs run); (2) the seed criterion is revised to "stockpiled seeds + seeds still
+  sown ≥ the starting count" (the zone resows every harvested seed while the window is open);
+  (3) each crop's sow/harvest effects come from its own jobs (crops.json `sow_job`/`harvest_job`).
 
 ### F2 — Workbench recipes, craft labour and item groups · `todo` · after F1 (uses the same haul/yield patterns) · Design: closed 2026-10-29
 

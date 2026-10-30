@@ -34,6 +34,8 @@ const TILE_COLORS := {
 	"water": Color(0.16, 0.40, 0.78),
 	"plowed_soil": Color(0.45, 0.32, 0.16),
 	"planted": Color(0.30, 0.42, 0.18),
+	"crop_grown": Color(0.26, 0.50, 0.16),
+	"crop_ripe": Color(0.80, 0.48, 0.14),
 }
 const UNKNOWN_TILE_COLOR := Color.MAGENTA
 const COLONIST_COLOR := Color(1.0, 0.95, 0.15)
@@ -124,6 +126,7 @@ var _preview_cache_key: Array = []
 ## rectangle_committed signal, since a zone is one command per drag, not one
 ## per tile.
 var _zone_tool_enabled: bool = false
+var _zone_payload: Dictionary = {}
 var _next_zone_command_id: int = 0
 
 ## Build tool state, mirroring the zone tool's own pair of
@@ -315,6 +318,11 @@ func is_art_enabled() -> bool:
 ## after set_world().
 func set_zone_tool_enabled(enabled: bool) -> void:
 	_zone_tool_enabled = enabled
+
+## Extra zone_add payload fields for the next drags ({"kind": "farm", "crop"} for the farm
+## zone tool, F1; {} for a stockpile).
+func set_zone_payload(extra: Dictionary) -> void:
+	_zone_payload = extra.duplicate()
 
 func toggle_zone_tool_enabled() -> void:
 	set_zone_tool_enabled(not _zone_tool_enabled)
@@ -583,6 +591,7 @@ func _commit_zone(start: Vector2i, end: Vector2i) -> void:
 		"type": "zone_add",
 		"payload": {"x": min_x, "y": min_y, "width": max_x - min_x + 1, "height": max_y - min_y + 1},
 	}
+	command["payload"].merge(_zone_payload)
 	var result: Dictionary = world.apply(command)
 	zone_add_committed.emit(result)
 	refresh()
@@ -988,14 +997,17 @@ static func fit_rect(box: Rect2, content: Vector2) -> Rect2:
 	var fitted := content * factor
 	return Rect2(box.position + (box.size - fitted) / 2.0, fitted)
 
-## The cells of `counts` inside a zone, ordered by zone (get_zones() order),
-## then row-major -- each cell once, under the first zone containing it.
+## The cells of `counts` inside a stockpile zone, ordered by zone (get_zones() order),
+## then row-major -- each cell once, under the first zone containing it. A farm zone (F1)
+## stores nothing, so its cells are skipped.
 func _zoned_cells_in_draw_order(counts: Dictionary) -> Array[Vector2i]:
 	var zones: Array = _snapshot["zones"]
 	var keyed: Array = []
 	for cell in counts:
 		for zone_index in zones.size():
 			var zone: Dictionary = zones[zone_index]
+			if zone.has("kind"):
+				continue
 			if Rect2i(int(zone["x"]), int(zone["y"]), int(zone["width"]), int(zone["height"])).has_point(cell):
 				keyed.append([zone_index, cell.y, cell.x, cell])
 				break

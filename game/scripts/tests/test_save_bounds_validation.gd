@@ -129,7 +129,7 @@ func _base_state() -> Dictionary:
 		"rng": {"seed": 1, "state": 0},
 		"items": {"nextId": 1, "list": []},
 		"objects": [{"target": _tile(2, 2), "kind": "wall", "factionId": "colony"}],
-		"zones": [], "nextZoneId": 1,
+		"zones": [], "nextZoneId": 1, "crops": [],
 		"groundBerries": [{"target": _tile(3, 3), "berries": 1, "factionId": "colony"}],
 		"workProgress": [{"target": _tile(4, 4), "ticksRemaining": 1}],
 		"pausedJobs": [], "toolItems": {"nextId": 1, "list": []},

@@ -1,14 +1,16 @@
 extends SceneTree
 
-## The save format after the R14 reset (ADR 049), now at schema v5 (A5, ADR 053:
+## The save format after the R14 reset (ADR 049), now at schema v6 (A5, ADR 053:
 ## terminal jobs leave the save; A13b, ADR 010 amendment 2: the save records its
 ## content packs; A16b, ADR 057: the scenario calendar and incident list are saved;
-## A7, ADR 058: compact file encoding and saved route costs).
+## A7, ADR 058: compact file encoding and saved route costs; F1, ADR 059: farm zones
+## and crop growth).
 ## Proves a save written before the reset is rejected with a clear message, the
-## committed v1, v2, v3 and v4 fixtures migrate to exactly the v5 fixture, a v1 save
+## committed v1, v2, v3, v4 and v5 fixtures migrate to exactly the v6 fixture, a v1 save
 ## holding terminal jobs loads without them and with the original state_hash, the
-## v3 -> v4 step adds the base start and nothing else, a malformed scenarioStart is
-## rejected, the committed v5 fixture loads and re-encodes unchanged, a
+## v3 -> v4 step adds the base start and nothing else, the v5 -> v6 step adds an empty
+## crops list and nothing else, a malformed scenarioStart is
+## rejected, the committed v6 fixture loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
 ## live beside the old migration chain.
@@ -16,6 +18,7 @@ const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
 const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
 const SaveMigrationsType = preload("res://scripts/core/persistence/save_migrations.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
+const SaveWireType = preload("res://scripts/core/persistence/save_wire.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 
 ## Written on main at 63d3d5f (before R14) by docs/orca/handoffs/R14-write-save.gd:
@@ -30,14 +33,17 @@ const V2_FIXTURE := "res://scripts/tests/fixtures/save_schema_v2_fixture.json"
 const V3_FIXTURE := "res://scripts/tests/fixtures/save_schema_v3_fixture.json"
 ## The same session written by docs/orca/handoffs/A16b-write-save.gd: schemaVersion 4.
 const V4_FIXTURE := "res://scripts/tests/fixtures/save_schema_v4_fixture.json"
-## The same session written by this build (docs/orca/handoffs/A7-write-save.gd): schemaVersion 5,
-## in the compact SaveWire file encoding.
+## The same session written by docs/orca/handoffs/A7-write-save.gd: schemaVersion 5, in the
+## compact SaveWire file encoding.
 const V5_FIXTURE := "res://scripts/tests/fixtures/save_schema_v5_fixture.json"
+## The same session written by this build (docs/orca/handoffs/F1-write-save.gd): schemaVersion 6,
+## in the SaveWire encoding.
+const V6_FIXTURE := "res://scripts/tests/fixtures/save_schema_v6_fixture.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
 const FRESH_SAVE_PATH := "user://test-save-migration-fresh.json"
-const V5_RESAVE_PATH := "user://test-save-migration-v5-resave.json"
+const V6_RESAVE_PATH := "user://test-save-migration-v6-resave.json"
 const MALFORMED_FIXTURE_DIR := "user://test-save-migration-malformed-fixture"
 ## Proves SaveIO.read() rejects a save whose contentVersion has no
 ## registered rename with the new typed content_version_mismatch code, never
@@ -59,11 +65,12 @@ var _failed := false
 
 func _init() -> void:
 	_check_pre_release_save_is_rejected()
-	_check_older_fixtures_migrate_to_v5_fixture()
+	_check_older_fixtures_migrate_to_v6_fixture()
 	_check_v1_terminal_jobs_leave_the_save()
 	_check_v3_to_v4_adds_only_the_base_start()
+	_check_v5_to_v6_adds_only_empty_crops()
 	_check_malformed_scenario_start_rejected_through_save_io()
-	_check_v5_fixture_loads_and_reencodes_unchanged()
+	_check_v6_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -113,25 +120,27 @@ func _check_pre_release_save_is_rejected() -> void:
 		"load_best() must report the pre-release slot as skipped with unsupported_pre_release_save: %s" % [skipped])
 	_cleanup_dir(PRE_RELEASE_SLOT_DIR)
 
-## Acceptance (A5, A13b, A16b, A7): the committed v1, v2, v3 and v4 fixtures load through
-## SaveIO.read() migrated to v5 and equal the v5 fixture (the same session written by this
-## build) exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the v2 fixture.
-func _check_older_fixtures_migrate_to_v5_fixture() -> void:
-	var v5 := SaveIOType.read(V5_FIXTURE)
-	_expect(v5["ok"], "the v5 fixture must load through SaveIO.read(): %s" % v5)
-	if not v5["ok"]:
+## Acceptance (A5, A13b, A16b, A7, F1): the committed v1, v2, v3, v4 and v5 fixtures load
+## through SaveIO.read() migrated to v6 and equal the v6 fixture (the same session written by
+## this build) exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the v2
+## fixture.
+func _check_older_fixtures_migrate_to_v6_fixture() -> void:
+	var v6 := SaveIOType.read(V6_FIXTURE)
+	_expect(v6["ok"], "the v6 fixture must load through SaveIO.read(): %s" % v6)
+	if not v6["ok"]:
 		return
-	for fixture: String in [V1_FIXTURE, V2_FIXTURE, V3_FIXTURE, V4_FIXTURE]:
+	for fixture: String in [V1_FIXTURE, V2_FIXTURE, V3_FIXTURE, V4_FIXTURE, V5_FIXTURE]:
 		var result := SaveIOType.read(fixture)
 		_expect(result["ok"], "%s must load through SaveIO.read(): %s" % [fixture, result])
 		if not result["ok"]:
 			continue
-		_expect(int(result["state"]["schemaVersion"]) == 5, "%s must load as schemaVersion 5" % fixture)
+		_expect(int(result["state"]["schemaVersion"]) == 6, "%s must load as schemaVersion 6" % fixture)
 		_expect(result["state"]["contentPacks"] == [], "%s must load with no content packs" % fixture)
 		_expect(JSON.stringify(result["state"]["scenarioStart"]) == JSON.stringify({"calendar": null, "enabledIncidents": []}),
 			"%s must load with the base scenario start" % fixture)
-		_expect(JSON.stringify(result["state"]) == JSON.stringify(v5["state"]),
-			"the migrated %s must equal the v5 fixture exactly" % fixture)
+		_expect(result["state"]["crops"] == [], "%s must load with no crop records" % fixture)
+		_expect(JSON.stringify(result["state"]) == JSON.stringify(v6["state"]),
+			"the migrated %s must equal the v6 fixture exactly" % fixture)
 	var v1_raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V1_FIXTURE))["state"]
 	var v2_raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V2_FIXTURE))["state"]
 	var step := SaveMigrationsType.migrate(v1_raw, 1, 2)
@@ -161,6 +170,33 @@ func _check_v3_to_v4_adds_only_the_base_start() -> void:
 	var twice := raw.duplicate(true)
 	twice["scenarioStart"] = {"calendar": null, "enabledIncidents": []}
 	_expect(not SaveMigrationsType.migrate(twice, 3, 4)["ok"], "a v3 state already holding scenarioStart must be refused")
+
+## Acceptance (F1): the v5 -> v6 step adds an empty "crops" list (every v5 zone is already a
+## v6 stockpile) and changes nothing else; it turns the v5 fixture into exactly the v6 fixture
+## (both unpacked from SaveWire), and a v5 state that already has crops is refused.
+func _check_v5_to_v6_adds_only_empty_crops() -> void:
+	var raw := _unpacked_fixture_state(V5_FIXTURE)
+	var v6_raw := _unpacked_fixture_state(V6_FIXTURE)
+	var migrated := SaveMigrationsType.migrate(raw, 5, 6)
+	_expect(migrated["ok"], "v5 -> v6 must migrate: %s" % migrated)
+	if not migrated["ok"]:
+		return
+	var state: Dictionary = migrated["state"]
+	_expect(state["crops"] == [], "v5 -> v6 must add an empty crops list, got %s" % [state["crops"]])
+	_expect(JSON.stringify(state) == JSON.stringify(v6_raw),
+		"the v5 -> v6 step alone must turn the v5 fixture into exactly the v6 fixture")
+	_expect(not raw.has("crops"), "the migration must not mutate its argument")
+	var twice := raw.duplicate(true)
+	twice["crops"] = []
+	_expect(not SaveMigrationsType.migrate(twice, 5, 6)["ok"], "a v5 state already holding crops must be refused")
+
+## A fixture's state as SaveIO.read() sees it before migrating: ints coerced, SaveWire unpacked.
+func _unpacked_fixture_state(path: String) -> Dictionary:
+	var state: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))["state"]
+	SaveIOType._coerce_ints(state)
+	var unpacked := SaveWireType.unpack(state, 4096)
+	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
+	return state
 
 ## A malformed scenarioStart fails SaveIO.read() as schema_error; a missing one as the
 ## migration error (a v4 save always has it).
@@ -213,9 +249,10 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	var live_jobs: Array = v1_state["jobs"]
 	v1_state["jobs"] = TestAccess.scheduling_encode_jobs(TestAccess.scheduler(world).queue.get_jobs())
 	v1_state["schemaVersion"] = 1
-	# A v1 save predates contentPacks (schema v3) and scenarioStart (v4); the steps add them back.
+	# A v1 save predates contentPacks (schema v3), scenarioStart (v4) and crops (v6); the steps add them back.
 	v1_state.erase("contentPacks")
 	v1_state.erase("scenarioStart")
+	v1_state.erase("crops")
 	_expect(v1_state["jobs"].size() > live_jobs.size(), "the v1 state must really list terminal jobs for this to prove anything")
 	var path := _write_state_fixture(V1_TERMINAL_JOBS_DIR, v1_state)
 	var result := SaveIOType.read(path)
@@ -233,33 +270,33 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		loaded.tick()
 	_expect(loaded.state_hash() == world.state_hash(), "the migrated world must keep ticking in step with the original")
 
-## The committed v5 fixture loads through SaveIO.read(), decodes, and re-encodes to
+## The committed v6 fixture loads through SaveIO.read(), decodes, and re-encodes to
 ## exactly the state it was read from (the unpacked shape is the codec's shape), and
 ## the decoded world keeps its state_hash through a second write/read.
-func _check_v5_fixture_loads_and_reencodes_unchanged() -> void:
-	var result := SaveIOType.read(V5_FIXTURE)
-	_expect(result["ok"], "the v5 fixture must load through SaveIO.read(): %s" % result)
+func _check_v6_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V6_FIXTURE)
+	_expect(result["ok"], "the v6 fixture must load through SaveIO.read(): %s" % result)
 	if not result["ok"]:
 		return
 	var state: Dictionary = result["state"]
-	_expect(int(state["schemaVersion"]) == 5 and StateCodecType.SCHEMA_VERSION == 5,
-		"the v5 fixture and this build must both be schemaVersion 5")
-	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V5_FIXTURE))["state"]["map"]
+	_expect(int(state["schemaVersion"]) == 6 and StateCodecType.SCHEMA_VERSION == 6,
+		"the v6 fixture and this build must both be schemaVersion 6")
+	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V6_FIXTURE))["state"]["map"]
 	_expect(raw_map.has("palette") and raw_map.has("tileRuns") and not raw_map.has("tiles"),
-		"the v5 fixture must hold its tiles as a palette plus runs (SaveWire)")
+		"the v6 fixture must hold its tiles as a palette plus runs (SaveWire)")
 	var world := StateCodecType.decode(state)
 	var reencoded := StateCodecType.encode(world)
 	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
-		"decode() -> encode() of the v5 fixture must reproduce its state exactly")
-	_remove(V5_RESAVE_PATH)
-	var write_result := SaveIOType.write_atomic(V5_RESAVE_PATH, reencoded)
-	_expect(write_result["ok"], "the re-encoded v5 fixture must save: %s" % write_result)
-	var reread := SaveIOType.read(V5_RESAVE_PATH)
-	_expect(reread["ok"], "the re-saved v5 fixture must load: %s" % reread)
+		"decode() -> encode() of the v6 fixture must reproduce its state exactly")
+	_remove(V6_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V6_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v6 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V6_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v6 fixture must load: %s" % reread)
 	if reread["ok"]:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
-			"a second write/read of the v5 fixture must keep the decoded state_hash")
-	_remove(V5_RESAVE_PATH)
+			"a second write/read of the v6 fixture must keep the decoded state_hash")
+	_remove(V6_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.
@@ -885,7 +922,7 @@ func _minimal_current_schema_state(content_version: String, item_kind: String) -
 		},
 		"rng": {"seed": 1, "state": 0},
 		"items": {"nextId": 2, "list": [{"id": "item_1", "x": 0, "y": 0, "kind": item_kind, "count": 1, "factionId": "colony"}]},
-		"objects": [], "zones": [], "nextZoneId": 1, "groundBerries": [],
+		"objects": [], "zones": [], "nextZoneId": 1, "crops": [], "groundBerries": [],
 		"workProgress": [], "pausedJobs": [], "toolItems": {"nextId": 1, "list": []},
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],

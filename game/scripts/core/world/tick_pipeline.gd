@@ -17,6 +17,8 @@ extends RefCounted
 ## - approach_giver runs after advance_colonists, so it sees post-movement positions and traps.
 ## - dig_finds drains after advance_colonists, in ascending job-id order
 ##   whatever order colonists completed in (ADR 026).
+## - farming runs after advance_colonists, so a sow or harvest completed this tick has its
+##   crop record before tick() returns (a save never sees a sown tile without one, ADR 059).
 ## - refused_reservations drains after advance_colonists: a need resolving
 ##   there can trigger a further refusal, which must drain before tick() returns.
 ## - Rebuilt by WorldState._build_dimension_services() together with the
@@ -27,7 +29,7 @@ const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.
 const PHASES: Array[String] = ["caches_begin", "area_orders", "clock", "needs_decay", "need_giver", "haul_giver",
 	"construction_giver", "combat", "scheduler", "site_fetch_resolve", "rescue_giver",
 	"incidents_activate", "escapes_activate", "advance_colonists", "approach_giver", "dig_finds",
-	"refused_reservations", "collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event", "caches_end"]
+	"farming", "refused_reservations", "collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event", "caches_end"]
 
 var _clock: SeededClock
 var _area_orders: AreaOrders
@@ -59,6 +61,7 @@ var _calendar_alerts_fired: Callable # () -> Dictionary, the live fired-window s
 var _resolve_refused_reservations: Callable # () -> void
 var _route: Callable # (colonist) -> the mover component's route or null
 var _tick_priority: int
+var _farming: Callable # () -> void, FarmSystem.advance (growth, then FarmGiver)
 ## A4's per-tick lookup caches: trusted only between caches_begin and caches_end.
 var _actor_index: ActorIndex
 ## Same order as PHASES.
@@ -74,7 +77,8 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 		approach_giver: ApproachGiver, item_table: ItemTable, event_log: EventLog,
 		calendar_alert_giver: CalendarAlertGiver, progress_table: WorkProgress, reroutes: Dictionary,
 		toil_hooks: Dictionary, colonists: Callable, calendar_alerts_fired: Callable,
-		resolve_refused_reservations: Callable, route: Callable, tick_priority: int, actor_index: ActorIndex) -> void:
+		resolve_refused_reservations: Callable, route: Callable, tick_priority: int, actor_index: ActorIndex,
+		farming: Callable) -> void:
 	_clock = clock
 	_area_orders = area_orders
 	_needs_system = needs_system
@@ -105,10 +109,11 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 	_route = route
 	_tick_priority = tick_priority
 	_actor_index = actor_index
+	_farming = farming
 	_phases = [_phase_caches_begin, _area_orders.advance, _phase_clock, _needs_system.decay_needs, _phase_need_giver,
 		_phase_haul_giver, _phase_construction_giver, _phase_combat, _phase_scheduler, _phase_site_fetch_resolve,
 		_phase_rescue_giver, _incidents.activate_pending, _trench.activate_pending_escapes, _advance_colonists,
-		_phase_approach_giver, _item_table.resolve_dig_finds, _resolve_refused_reservations,
+		_phase_approach_giver, _item_table.resolve_dig_finds, _farming, _resolve_refused_reservations,
 		_event_log.collect_queue_events, _phase_calendar_alerts, _phase_incidents_advance, _phase_tick_event, _phase_caches_end]
 	assert(_phases.size() == PHASES.size(), "TickPipeline: one Callable per PHASES entry")
 

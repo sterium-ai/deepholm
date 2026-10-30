@@ -390,7 +390,7 @@ func _minimal_state_at_size(width: int, height: int, seed_value: int) -> Diction
 		},
 		"rng": {"seed": seed_value, "state": 0},
 		"items": {"nextId": 1, "list": []},
-		"objects": [], "zones": [], "nextZoneId": 1, "groundBerries": [],
+		"objects": [], "zones": [], "nextZoneId": 1, "crops": [], "groundBerries": [],
 		"workProgress": [], "pausedJobs": [], "toolItems": {"nextId": 1, "list": []},
 		"toolReservations": {}, "needJobAssignments": [], "calendarAlerts": {"fired": []},
 		"toolFetchExcluded": [],

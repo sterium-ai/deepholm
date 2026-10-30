@@ -16,7 +16,7 @@ const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.
 const SaveWireType = preload("res://scripts/core/persistence/save_wire.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Always written by StateCodec.encode().
-const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
+const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
 const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders"]
@@ -247,13 +247,15 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		return map_check
 	var w := int(state["map"]["width"])
 	var h := int(state["map"]["height"])
+	var crop_ids: Array[String] = rules["crops"]
 	var checks: Array[Callable] = [
 		func() -> Dictionary: return ItemValidator._valid_items(state.get("items"), w, h),
 		func() -> Dictionary: return ObjectValidator._valid_objects(state["objects"], w, h),
 		func() -> Dictionary: return _optional(state, "constructionSites", func(v: Variant) -> Dictionary: return ObjectValidator._valid_construction_sites(v, w, h)),
 		func() -> Dictionary: return _optional(state, "areaOrders", func(v: Variant) -> Dictionary: return ObjectValidator._valid_area_orders(v, w, h)),
-		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h),
+		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h, crop_ids),
 		func() -> Dictionary: return {"ok": true} if _is_int_min(state.get("nextZoneId"), 1) else _fail("invalid nextZoneId"),
+		func() -> Dictionary: return FarmValidator._valid_crops(state.get("crops"), w, h, crop_ids),
 		func() -> Dictionary: return ItemValidator._valid_ground_berries(state.get("groundBerries"), w, h),
 		func() -> Dictionary: return WorkProgressValidator._valid_work_progress(state.get("workProgress"), w, h),
 		func() -> Dictionary: return _optional(state, "workProgressOwners", func(v: Variant) -> Dictionary: return WorkProgressValidator._valid_work_progress_owners(v, w, h)),
@@ -289,6 +291,7 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		"tiles": _ids(registry, "tiles"),
 		"jobKinds": _ids(registry, "jobs"),
 		"needs": _ids(registry, "needs"),
+		"crops": _ids(registry, "crops"),
 		# A saved map keeps its exact size on load, so only WorldGenerator's upper bound applies.
 		"maxWorldSize": int(registry.document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE)),
 	}
