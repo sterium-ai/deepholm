@@ -4,8 +4,8 @@
 total 2803
 untyped_declaration 509
 unsafe_property_access 0
-unsafe_method_access 227
-unsafe_call_argument 2040
+unsafe_method_access 226
+unsafe_call_argument 2041
 other 27
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -50,7 +50,7 @@ file game/scripts/core/jobs/job_queue.gd 68
 file game/scripts/core/jobs/reservation_invariants.gd 16
 file game/scripts/core/jobs/reservation_table.gd 5
 file game/scripts/core/jobs/toil_bindings.gd 38
-file game/scripts/core/jobs/toil_executor.gd 64
+file game/scripts/core/jobs/toil_executor.gd 63
 file game/scripts/core/jobs/tool_drop_toil.gd 59
 file game/scripts/core/jobs/tool_fetch_toil.gd 42
 file game/scripts/core/jobs/tool_handover.gd 10
@@ -61,7 +61,7 @@ file game/scripts/core/map/regions.gd 3
 file game/scripts/core/map/rooms.gd 26
 file game/scripts/core/map/tile_grid.gd 9
 file game/scripts/core/objects/construction_site.gd 26
-file game/scripts/core/objects/construction_system.gd 109
+file game/scripts/core/objects/construction_system.gd 110
 file game/scripts/core/objects/object_table.gd 23
 file game/scripts/core/objects/zone_table.gd 8
 file game/scripts/core/persistence/entity_codec.gd 106

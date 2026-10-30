@@ -8,7 +8,7 @@ extends SceneTree
 ## - test_toils_dig_chop_regression.gd (its _build_world()/_run_scenario() copied verbatim
 ##   below, 260 ticks): 1312885732 / 4178825690;
 ## - test_world_state_determinism.gd's _check_incidents_disabled_matches_pre_incident_baseline()
-##   (seed 20260922, default size, incidents off, 650 ticks), state_hash(false): 2193816304.
+##   (seed 20260922, default size, incidents off, 650 ticks), state_hash(false): 3266324817 (F3's literal).
 ## Run from the repo root (exit 0 when both projections match):
 ##   godot --headless --path game --script ../docs/orca/handoffs/L2-hash_projection.gd
 
@@ -18,7 +18,7 @@ const CombatSystemType = preload("res://scripts/core/actors/combat_system.gd")
 
 const PRE_L2_HASH := 1312885732
 const PRE_L2_COLONY_HASH := 4178825690
-const PRE_L2_BASELINE_HASH := 2193816304
+const PRE_L2_BASELINE_HASH := 3266324817
 const TOTAL_TICKS := 260
 
 func _init() -> void:

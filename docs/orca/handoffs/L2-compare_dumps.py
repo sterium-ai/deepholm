@@ -2,7 +2,7 @@
 
 Both trees' SaveWire record tables ({"$keys": [...]} then rows) are expanded to records first,
 then every branch file is read in the pre-L2 shape before comparing: "z" beside every x/y is
-dropped, map "layerCount" is dropped, "schemaVersion" 8 reads as 7, and a layer-0 tile printed
+dropped, map "layerCount" is dropped, "schemaVersion" 9 reads as 8, and a layer-0 tile printed
 as "(x, y, 0)" (a Vector3i) reads as "(x, y)" (the Vector2i it was). A JSON file is compared as
 data; a text dump line by line, with the JSON part of "key value" lines compared as data.
 Anything still different is printed with its path; a value under a "hash"/"state_hash" key, a
@@ -41,8 +41,8 @@ def pre_l2(value):
                 continue
             if key == 'layerCount' and ('tiles' in value or 'palette' in value):
                 continue
-            if key == 'schemaVersion' and item == 8:
-                item = 7
+            if key == 'schemaVersion' and item == 9:
+                item = 8
             out[pre_l2(key)] = pre_l2(item)
         return out
     if isinstance(value, list):

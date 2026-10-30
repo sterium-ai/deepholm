@@ -1,9 +1,10 @@
 # ADR 063: Map layers, step L2 — the details ADR 045 left to the sweep
 
-> **In short:** L2 makes every map tile a `Vector3i(x, y, z)` and saves `z` with schema v8,
-> as ADR 045 decided. This records the few choices that ADR left open: surface tiles keep
-> their String key formats, the `(x, y)` read helpers mean the surface, regions and rooms
-> still cover only the surface until L3, and a save may declare at most 64 layers.
+> **In short:** L2 makes every map tile a `Vector3i(x, y, z)` and saves `z` with schema v9
+> (ADR 045 named v8; F3 took v8 first), as ADR 045 decided. This records the few choices that
+> ADR left open: surface tiles keep their String key formats, the `(x, y)` read helpers mean
+> the surface, regions and rooms still cover only the surface until L3, and a save may declare
+> at most 64 layers.
 
 - **Status:** proposed (owner sign-off pending; L2 handoff)
 - **Date:** 2026-10-30
@@ -49,8 +50,8 @@ mechanical sweep that applies it with one layer. A few details were left to it:
    out-of-range one as `invalid_target` with the out-of-map detail `target_outside_map`. The
    viewer sends `z = TileGrid.SURFACE` until L4's active layer.
 6. **Route wire encoding.** A packed route stays planar (box, bits and frontier indices within
-   the start's layer); unpacked tiles take the start's `z`. A pre-v8 file's `{x, y}` tiles
-   unpack as they were and the v7 → v8 step adds `z: 0`.
+   the start's layer); unpacked tiles take the start's `z`. A pre-v9 file's `{x, y}` tiles
+   unpack as they were and the v8 → v9 step adds `z: 0`.
 
 ## Alternatives considered
 
@@ -73,10 +74,10 @@ mechanical sweep that applies it with one layer. A few details were left to it:
 
 ## Acceptance criteria
 
-- [x] The affected canonical document is updated (`save-system.md` "Layers (v8)",
-      `game-state.schema.json` v8).
+- [x] The affected canonical document is updated (`save-system.md` "Layers (v9)",
+      `game-state.schema.json` v9).
 - [x] Contracts, examples, and tests are updated (`test_map_layers.gd`, `test_save_migration.gd`).
-- [x] Save/migration impact is handled (schema v8, `SaveMigrations._v7_to_v8()`,
-      `save_schema_v8_fixture.json`).
+- [x] Save/migration impact is handled (schema v9, `SaveMigrations._v8_to_v9()`,
+      `save_schema_v9_fixture.json`).
 - [x] The source-of-truth index still points to the authoritative location (`docs/decisions/`
       is indexed as a folder).
