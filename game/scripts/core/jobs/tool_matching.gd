@@ -26,7 +26,7 @@ static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
 		var target: Variant = item_target(item, colonist_positions)
 		if target == null:
 			continue
-		var distance: int = absi(target.x - from.x) + absi(target.y - from.y)
+		var distance: int = TileGrid.manhattan(target, from)
 		if best_id.is_empty() or distance < best_distance or (distance == best_distance and item_id < best_id):
 			best_id = item_id
 			best_target = target

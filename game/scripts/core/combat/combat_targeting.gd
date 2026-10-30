@@ -80,7 +80,7 @@ static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -
 			continue
 		if not _is_hostile(relations, own_faction, actor_faction(other)):
 			continue
-		var distance := absi(int(other["x"]) - ax) + absi(int(other["y"]) - ay)
+		var distance := TileGrid.manhattan(Vector2i(int(other["x"]), int(other["y"])), Vector2i(ax, ay))
 		if best.is_empty() or distance < best_distance or (distance == best_distance and String(other["id"]) < String(best["id"])):
 			best = other
 			best_distance = distance

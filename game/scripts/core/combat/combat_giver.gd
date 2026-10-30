@@ -203,13 +203,13 @@ func _pick_flee_target(actor: Dictionary, actors: Array[Dictionary], threat: Dic
 	if away == Vector2i.ZERO:
 		away = Vector2i(1, 1)
 	var hostile_tiles := _hostile_occupied_tiles(actor, actors)
-	var start_distance := _distance_sq(start, threat_pos)
+	var start_distance := TileGrid.distance_sq(start, threat_pos)
 	for direction in _ranked_directions(away):
 		for distance in range(FLEE_DISTANCE, 0, -1):
 			var candidate := Vector2i(clampi(ax + direction.x * distance, 0, _bounds_max.x), clampi(ay + direction.y * distance, 0, _bounds_max.y))
 			if candidate == start or hostile_tiles.has(candidate) or excluded.has(candidate):
 				continue
-			if _distance_sq(candidate, threat_pos) <= start_distance:
+			if TileGrid.distance_sq(candidate, threat_pos) <= start_distance:
 				continue
 			if not bool((_passable_for_actor.call(actor_id, candidate.x, candidate.y) as Dictionary)["passable"]):
 				continue
@@ -221,11 +221,6 @@ func _pick_flee_target(actor: Dictionary, actors: Array[Dictionary], threat: Dic
 				continue
 			return candidate
 	return null
-
-## Integer, deterministic; only relative comparisons matter.
-static func _distance_sq(a: Vector2i, b: Vector2i) -> int:
-	var delta := a - b
-	return delta.x * delta.x + delta.y * delta.y
 
 ## Tiles occupied by living actors hostile to `actor` (never a flee destination).
 func _hostile_occupied_tiles(actor: Dictionary, actors: Array[Dictionary]) -> Dictionary:

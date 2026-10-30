@@ -240,4 +240,4 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 ## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
 func _within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
 	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	return maxi(absi(colonist_tile.x - tile.x), absi(colonist_tile.y - tile.y)) <= 1
+	return TileGrid.chebyshev(colonist_tile, tile) <= 1

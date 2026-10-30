@@ -217,9 +217,9 @@ func _step(index: int, direction: int) -> int:
 		0:
 			return index - _width if index >= _width else -1
 		1:
-			return index - 1 if index % _width > 0 else -1
+			return index - 1 if TileGrid.flat_coord(index, _width).x > 0 else -1
 		2:
-			return index + 1 if index % _width < _width - 1 else -1
+			return index + 1 if TileGrid.flat_coord(index, _width).x < _width - 1 else -1
 		_:
 			return index + _width if index < _region_of.size() - _width else -1
 
@@ -235,7 +235,7 @@ func _orthogonal(tile: Vector2i) -> Array[Vector2i]:
 		Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]
 
 func _index(x: int, y: int) -> int:
-	return y * _width + x
+	return TileGrid.flat_index(x, y, _width)
 
 func _in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and x < _width and y >= 0 and y < _height

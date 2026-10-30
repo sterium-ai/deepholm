@@ -97,7 +97,7 @@ func tiles_of_kind(kind: String) -> Array[Vector2i]:
 	var tiles: Array[Vector2i] = []
 	for index: int in objects:
 		if String(objects[index]) == kind:
-			tiles.append(_tile_grid.tile_at(index))
+			tiles.append(_tile_grid.coord_of(index))
 	return tiles
 
 ## A generated object (berry bushes) written like decode(): no dirty mark, no region/room hook.
@@ -215,6 +215,6 @@ func object_key(x: int, y: int) -> String:
 func _keyed(map: Dictionary) -> Dictionary:
 	var keyed: Dictionary = {}
 	for index: int in map:
-		var tile := _tile_grid.tile_at(index)
+		var tile := _tile_grid.coord_of(index)
 		keyed[object_key(tile.x, tile.y)] = map[index]
 	return keyed

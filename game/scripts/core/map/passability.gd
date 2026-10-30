@@ -93,7 +93,7 @@ func room_cell_flags() -> PackedByteArray:
 ## TileGrid.mark_dirty()'s hook: (x, y)'s tile kind or object changed.
 func refresh_cell(x: int, y: int) -> void:
 	if _built:
-		_write_cell(y * _width + x)
+		_write_cell(TileGridType.flat_index(x, y, _width))
 
 ## TileGrid.reset_cells()'s hook: rebuilt on the next query.
 func reset_cells() -> void:
@@ -103,7 +103,7 @@ func reset_cells() -> void:
 func _fresh_index(x: int, y: int) -> int:
 	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size():
 		_build()
-	var index := y * _width + x
+	var index := TileGridType.flat_index(x, y, _width)
 	if _tile_grid.tiles[index] != _kind[index]:
 		_write_cell(index)
 	return index
@@ -199,7 +199,7 @@ func is_passable(tile: Vector2i) -> float:
 	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
 		return 0.0
 	# _fresh_index() inlined: this runs four times per route expansion.
-	var index := tile.y * _width + tile.x
+	var index := TileGridType.flat_index(tile.x, tile.y, _width)
 	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size() or _tile_grid.tiles[index] != _kind[index]:
 		index = _fresh_index(tile.x, tile.y)
 	return float(_colony_cost[index])

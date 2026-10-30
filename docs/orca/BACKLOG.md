@@ -1006,7 +1006,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   tests either unchanged or updated with the ADR quoted (skill ties = old behaviour); suite green.
 - **Non-goals:** passions/traits, skill decay, learning from others, UI beyond the labour table.
 
-### L1 — `TileGrid` as the only index owner · `todo` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2
+### L1 — `TileGrid` as the only index owner · `review (antonelmejor50-hub/l1-tilegrid-as-the-only)` · *parallel-safe (behaviour-preserving)* · from ADR 045 step 2
 
 - **Goal:** every tile key, index and planar distance in the core goes through `TileGrid`
   (`index_of`/`coord_of`/`in_bounds`, `manhattan`/`chebyshev`/`distance_sq` kept as separate

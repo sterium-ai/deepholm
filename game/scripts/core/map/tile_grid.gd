@@ -4,7 +4,7 @@ extends RefCounted
 ## Terrain: map size, row-major tile kinds, the water-tile cache, the dirty-cell log and the
 ## region/room maps (regions.gd/rooms.gd).
 ## Invariants:
-## - tiles[y * width + x] is (x, y)'s kind; width/height change only in StateCodec.decode().
+## - tiles[tile_index(x, y)] is (x, y)'s kind; width/height change only in StateCodec.decode().
 ## - regions, rooms and the water cache are built on first use, never in _init().
 ## - dirty_cells is append-only and never persisted; past MAX_DIRTY_CELLS it is trimmed to
 ##   RETAINED_DIRTY_CELLS and dirty_base (absolute cursor of dirty_cells[0]) moves on (A6).
@@ -86,12 +86,40 @@ func get_tile(x: int, y: int) -> String:
 func get_tiles() -> Array[String]:
 	return tiles.duplicate()
 
-func tile_index(x: int, y: int) -> int:
-	return y * width + x
+## The only flat-index formula in the core (ADR 045 §2, L1): row-major on one layer, so
+## layer 0's indices are y * width + x. Static for callers that hold a width, not a grid
+## (regions, rooms, passability, worldgen, saves, area orders).
+static func flat_index(x: int, y: int, grid_width: int) -> int:
+	return y * grid_width + x
 
-## tile_index()'s inverse.
-func tile_at(index: int) -> Vector2i:
-	return Vector2i(index % width, index / width)
+## flat_index()'s inverse.
+static func flat_coord(index: int, grid_width: int) -> Vector2i:
+	return Vector2i(index % grid_width, index / grid_width)
+
+func index_of(tile: Vector2i) -> int:
+	return flat_index(tile.x, tile.y, width)
+
+## index_of()'s inverse.
+func coord_of(index: int) -> Vector2i:
+	return flat_coord(index, width)
+
+func tile_index(x: int, y: int) -> int:
+	return flat_index(x, y, width)
+
+## The three planar metrics (ADR 045 §4) stay three formulas, never merged into one distance.
+## Manhattan: nearest-candidate ranking and travel penalties.
+static func manhattan(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)
+
+## Chebyshev: the <= 1 "next to" test (8 neighbours) and square rings.
+static func chebyshev(a: Vector2i, b: Vector2i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+## Squared Euclidean: flee-candidate comparison.
+static func distance_sq(a: Vector2i, b: Vector2i) -> int:
+	var dx := a.x - b.x
+	var dy := a.y - b.y
+	return dx * dx + dy * dy
 
 func in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and x < width and y >= 0 and y < height

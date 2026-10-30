@@ -102,7 +102,7 @@ func _expand(position: int, budget: int, skipped: Array[Dictionary]) -> int:
 			done.erase(index)
 			continue
 		used += 1
-		var tile := Vector2i(int(order["x"]) + index % width, int(order["y"]) + index / width)
+		var tile := Vector2i(int(order["x"]), int(order["y"])) + TileGrid.flat_coord(index, width)
 		for earlier in position:
 			_pull_forward(_orders[earlier], tile)
 		_expand_tile(order, tile, skipped)
@@ -117,7 +117,7 @@ func _pull_forward(order: Dictionary, tile: Vector2i) -> void:
 	var local := tile - Vector2i(int(order["x"]), int(order["y"]))
 	if not Rect2i(0, 0, int(order["width"]), int(order["height"])).has_point(local):
 		return
-	var index: int = local.y * int(order["width"]) + local.x
+	var index: int = TileGrid.flat_index(local.x, local.y, int(order["width"]))
 	if index < int(order["next"]) or (order["done"] as Array).has(index):
 		return
 	order["done"].append(index)

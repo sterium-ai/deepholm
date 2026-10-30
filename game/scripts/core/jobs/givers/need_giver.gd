@@ -217,8 +217,8 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 		if not _reservation_table.is_reserved(String(_tile_key.call(tile.x, tile.y))):
 			candidates.append(tile)
 	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
-		var da := absi(a.x - start.x) + absi(a.y - start.y)
-		var db := absi(b.x - start.x) + absi(b.y - start.y)
+		var da := TileGrid.manhattan(a, start)
+		var db := TileGrid.manhattan(b, start)
 		if da != db:
 			return da < db
 		if a.y != b.y:
@@ -229,7 +229,7 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 		return
 	var distances: Array[int] = []
 	for candidate in candidates:
-		distances.append(absi(candidate.x - start.x) + absi(candidate.y - start.y))
+		distances.append(TileGrid.manhattan(candidate, start))
 	_searching[colonist_id] = {"kind": kind, "candidates": candidates, "distances": distances,
 		"cursor": 0, "search": null, "found": []}
 	_set_reason.call(colonist_id, "")
