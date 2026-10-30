@@ -318,7 +318,7 @@ static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary
 	var cost_values := PackedFloat64Array()
 	for i in sorted.size():
 		var tile: Vector2i = sorted[i]
-		var bit := (tile.y - box.y) * box.z + (tile.x - box.x)
+		var bit := TileGrid.flat_index(tile.x - box.x, tile.y - box.y, box.z)
 		bits[bit >> 3] |= 1 << (bit & 7)
 		if tile != start:
 			var parent: Vector2i = parents[tile]
@@ -328,7 +328,7 @@ static func pack_route(route: Dictionary, width: int, height: int) -> Dictionary
 			cost_values.append(cost)
 	var frontier_indices := PackedInt32Array()
 	for tile in frontier:
-		frontier_indices.append(tile.y * width + tile.x)
+		frontier_indices.append(TileGrid.flat_index(tile.x, tile.y, width))
 	packed["box"] = [box.x, box.y, box.z, box.w]
 	packed["visitedBits"] = Marshalls.raw_to_base64(bits)
 	packed["cameFromDirs"] = Marshalls.raw_to_base64(dirs)
@@ -418,7 +418,7 @@ static func unpack_route(route: Dictionary, width: int, height: int) -> Dictiona
 	for index in frontier_bytes.to_int32_array():
 		if index < 0 or index >= width * height:
 			return _fail("invalid packed route frontier tile")
-		frontier.append(_encode_tile(Vector2i(index % width, floori(float(index) / width))))
+		frontier.append(_encode_tile(TileGrid.flat_coord(index, width)))
 	plain["frontier"] = frontier
 	return {"ok": true, "route": plain}
 

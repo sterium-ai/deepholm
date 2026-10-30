@@ -169,7 +169,7 @@ func _rebuild_area(id: int, seed: Vector2i) -> void:
 const _OFFSETS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]
 
 func _index(x: int, y: int) -> int:
-	return y * _width + x
+	return TileGrid.flat_index(x, y, _width)
 
 func _in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and x < _width and y >= 0 and y < _height

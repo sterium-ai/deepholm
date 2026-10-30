@@ -350,10 +350,9 @@ func _score_candidate(worker: String, colonist: Dictionary, entry: Dictionary, j
 		labour_table: Dictionary, tick_number: int, get_job_labour: Callable, get_calendar_boost: Callable) -> Dictionary:
 	var bracket := _priority_bracket(entry, job_kinds, labour_table, tick_number, get_job_labour, get_calendar_boost)
 	var start := Vector2i(colonist["x"], colonist["y"])
-	var delta: Vector2i = entry["target"] - start
 	var ticks_waiting := tick_number - int(entry["submitted_tick"])
 	return {"worker": worker, "entry": entry, "start": start,
-		"score": PRIORITY_WEIGHT * bracket + ticks_waiting - mini(MAX_TRAVEL_PENALTY, absi(delta.x) + absi(delta.y))}
+		"score": PRIORITY_WEIGHT * bracket + ticks_waiting - mini(MAX_TRAVEL_PENALTY, TileGrid.manhattan(entry["target"], start))}
 
 ## Marks queued jobs labour_disabled when no colonist in `colony` has the labour on.
 ## `colony` must be the full roster, not tick()'s filtered list.

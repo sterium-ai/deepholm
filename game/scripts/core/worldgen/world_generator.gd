@@ -109,9 +109,6 @@ static func generate_with_decorations(random: RandomNumberGenerator, width: int,
 	var berry_bush_tiles := _scatter_berry_bush_groves(random, map, width, height, mapgen, scale)
 	return {"tiles": map, "water_tiles": water_tiles, "berry_bush_tiles": berry_bush_tiles}
 
-static func _index(x: int, y: int, width: int) -> int:
-	return y * width + x
-
 static func _carve_rock_veins(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary, scale: float) -> void:
 	var count := _scaled(int(mapgen["rock_vein_count"]), scale)
 	for vein_index in count:
@@ -119,7 +116,7 @@ static func _carve_rock_veins(random: RandomNumberGenerator, map: Array[String],
 		var y := random.randi_range(0, height - 1)
 		var length := random.randi_range(int(mapgen["rock_vein_min_length"]), int(mapgen["rock_vein_max_length"]))
 		for step in length:
-			map[_index(x, y, width)] = TILE_ROCK
+			map[TileGrid.flat_index(x, y, width)] = TILE_ROCK
 			match random.randi_range(0, 3):
 				0: x += 1
 				1: x -= 1
@@ -137,7 +134,7 @@ static func _scatter_hazards(random: RandomNumberGenerator, map: Array[String], 
 		attempts += 1
 		var x := random.randi_range(0, width - 1)
 		var y := random.randi_range(0, height - 1)
-		var index := _index(x, y, width)
+		var index := TileGrid.flat_index(x, y, width)
 		if map[index] == TILE_SOIL:
 			map[index] = TILE_HAZARD
 			placed += 1
@@ -164,11 +161,11 @@ static func _scatter_tree_groves(random: RandomNumberGenerator, map: Array[Strin
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if offset_x * offset_x + offset_y * offset_y > radius * radius:
+			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)
-			var index := _index(x, y, width)
+			var index := TileGrid.flat_index(x, y, width)
 			if map[index] == TILE_SOIL:
 				map[index] = TILE_TREE
 				placed += 1
@@ -199,7 +196,7 @@ static func _scatter_rock_outcrops(random: RandomNumberGenerator, map: Array[Str
 static func _grow_rock_outcrop(random: RandomNumberGenerator, map: Array[String], width: int, height: int, min_size: int, max_size: int, placement_attempts: int, compactness: float) -> void:
 	var seed_x := random.randi_range(0, width - 1)
 	var seed_y := random.randi_range(0, height - 1)
-	var seed_index := _index(seed_x, seed_y, width)
+	var seed_index := TileGrid.flat_index(seed_x, seed_y, width)
 	if map[seed_index] != TILE_SOIL:
 		return
 	var target_size := random.randi_range(min_size, max_size)
@@ -220,15 +217,14 @@ static func _grow_rock_outcrop(random: RandomNumberGenerator, map: Array[String]
 
 ## -1 when no soil neighbour outside the blob exists.
 static func _random_soil_neighbor(random: RandomNumberGenerator, map: Array[String], width: int, height: int, index: int, blob_lookup: Dictionary) -> int:
-	var x := index % width
-	var y := index / width
+	var tile := TileGrid.flat_coord(index, width)
 	var candidates: Array[int] = []
 	for offset in NEI4:
-		var nx := x + offset.x
-		var ny := y + offset.y
+		var nx := tile.x + offset.x
+		var ny := tile.y + offset.y
 		if nx < 0 or nx >= width or ny < 0 or ny >= height:
 			continue
-		var nindex := _index(nx, ny, width)
+		var nindex := TileGrid.flat_index(nx, ny, width)
 		if map[nindex] == TILE_SOIL and not blob_lookup.has(nindex):
 			candidates.append(nindex)
 	if candidates.is_empty():
@@ -259,11 +255,11 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if offset_x * offset_x + offset_y * offset_y > radius * radius:
+			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)
-			var index := _index(x, y, width)
+			var index := TileGrid.flat_index(x, y, width)
 			if map[index] != TILE_SOIL or used.has(index):
 				continue
 			used[index] = true
@@ -330,7 +326,7 @@ static func _carve_river(random: RandomNumberGenerator, map: Array[String], widt
 		for cross in range(cross_start, cross_end + 1):
 			var x := pos if horizontal else cross
 			var y := cross if horizontal else pos
-			map[_index(x, y, width)] = TILE_WATER
+			map[TileGrid.flat_index(x, y, width)] = TILE_WATER
 			water_tiles.append(Vector2i(x, y))
 
 	return water_tiles
@@ -346,7 +342,7 @@ static func _distance_field(map: Array[String], width: int, height: int, is_targ
 	var queue: Array[int] = []
 	for y in height:
 		for x in width:
-			var index := _index(x, y, width)
+			var index := TileGrid.flat_index(x, y, width)
 			if map[index] != TILE_SOIL or extra_blocked.has(index):
 				continue
 			for offset in NEI4:
@@ -363,14 +359,13 @@ static func _distance_field(map: Array[String], width: int, height: int, is_targ
 		var index: int = queue[head]
 		head += 1
 		var next_distance: int = dist[index] + 1
-		var x := index % width
-		var y := index / width
+		var tile := TileGrid.flat_coord(index, width)
 		for offset in NEI4:
-			var nx := x + offset.x
-			var ny := y + offset.y
+			var nx := tile.x + offset.x
+			var ny := tile.y + offset.y
 			if nx < 0 or nx >= width or ny < 0 or ny >= height:
 				continue
-			var nindex := _index(nx, ny, width)
+			var nindex := TileGrid.flat_index(nx, ny, width)
 			if dist[nindex] != -1:
 				continue
 			if map[nindex] != TILE_SOIL or extra_blocked.has(nindex):
@@ -393,14 +388,13 @@ static func _qualifying_outcrop_tiles(map: Array[String], width: int, height: in
 		while head < component.size():
 			var index: int = component[head]
 			head += 1
-			var x := index % width
-			var y := index / width
+			var tile := TileGrid.flat_coord(index, width)
 			for offset in NEI4:
-				var nx := x + offset.x
-				var ny := y + offset.y
+				var nx := tile.x + offset.x
+				var ny := tile.y + offset.y
 				if nx < 0 or nx >= width or ny < 0 or ny >= height:
 					continue
-				var nindex := _index(nx, ny, width)
+				var nindex := TileGrid.flat_index(nx, ny, width)
 				if visited.has(nindex) or map[nindex] != TILE_ROCK:
 					continue
 				visited[nindex] = true
@@ -427,7 +421,7 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 	var visited: Dictionary = {}
 	var queue: Array[Vector2i] = []
 	for pos in footprint:
-		var index := _index(pos.x, pos.y, width)
+		var index := TileGrid.flat_index(pos.x, pos.y, width)
 		if not visited.has(index):
 			visited[index] = 0
 			queue.append(pos)
@@ -436,7 +430,7 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 	while head < queue.size():
 		var current: Vector2i = queue[head]
 		head += 1
-		var dist: int = visited[_index(current.x, current.y, width)]
+		var dist: int = visited[TileGrid.flat_index(current.x, current.y, width)]
 		var next_dist := dist + 1
 		if next_dist > limit:
 			continue
@@ -445,7 +439,7 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 			var ny := current.y + offset.y
 			if nx < 0 or nx >= width or ny < 0 or ny >= height:
 				continue
-			var nindex := _index(nx, ny, width)
+			var nindex := TileGrid.flat_index(nx, ny, width)
 			if bush_lookup.has(nindex):
 				candidate_bushes[nindex] = true
 				continue
@@ -459,11 +453,11 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 
 	var footprint_lookup: Dictionary = {}
 	for pos in footprint:
-		footprint_lookup[_index(pos.x, pos.y, width)] = true
+		footprint_lookup[TileGrid.flat_index(pos.x, pos.y, width)] = true
 
 	var confirmed := 0
 	for bush_index in candidate_bushes.keys():
-		var bush := Vector2i(int(bush_index) % width, int(bush_index) / width)
+		var bush := TileGrid.flat_coord(int(bush_index), width)
 		if _reaches_every_tile(map, width, height, bush, footprint_lookup, bush_lookup, limit):
 			confirmed += 1
 	return confirmed
@@ -481,7 +475,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 		var ny := bush.y + offset.y
 		if nx < 0 or nx >= width or ny < 0 or ny >= height:
 			continue
-		var nindex := _index(nx, ny, width)
+		var nindex := TileGrid.flat_index(nx, ny, width)
 		if map[nindex] != TILE_SOIL or bush_lookup.has(nindex) or visited.has(nindex):
 			continue
 		visited[nindex] = 1
@@ -494,7 +488,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 	while head < queue.size():
 		var current: Vector2i = queue[head]
 		head += 1
-		var dist: int = visited[_index(current.x, current.y, width)]
+		var dist: int = visited[TileGrid.flat_index(current.x, current.y, width)]
 		var next_dist := dist + 1
 		if next_dist > limit:
 			continue
@@ -503,7 +497,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 			var ny := current.y + offset.y
 			if nx < 0 or nx >= width or ny < 0 or ny >= height:
 				continue
-			var nindex := _index(nx, ny, width)
+			var nindex := TileGrid.flat_index(nx, ny, width)
 			if visited.has(nindex) or map[nindex] != TILE_SOIL or bush_lookup.has(nindex):
 				continue
 			visited[nindex] = next_dist
@@ -533,15 +527,15 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 
 	var bush_lookup: Dictionary = {}
 	for pos in berry_bush_tiles:
-		bush_lookup[_index(pos.x, pos.y, width)] = true
+		bush_lookup[TileGrid.flat_index(pos.x, pos.y, width)] = true
 
-	var water_dist := _distance_field(map, width, height, func(x, y): return map[_index(x, y, width)] == TILE_WATER, bush_lookup)
-	var tree_dist := _distance_field(map, width, height, func(x, y): return map[_index(x, y, width)] == TILE_TREE, bush_lookup)
-	var food_dist := _distance_field(map, width, height, func(x, y): return bush_lookup.has(_index(x, y, width)), bush_lookup)
+	var water_dist := _distance_field(map, width, height, func(x, y): return map[TileGrid.flat_index(x, y, width)] == TILE_WATER, bush_lookup)
+	var tree_dist := _distance_field(map, width, height, func(x, y): return map[TileGrid.flat_index(x, y, width)] == TILE_TREE, bush_lookup)
+	var food_dist := _distance_field(map, width, height, func(x, y): return bush_lookup.has(TileGrid.flat_index(x, y, width)), bush_lookup)
 	# Outcrops share spawn_tree_step_limit; only qualifying (min-size) outcrops count.
 	var outcrop_min_size := maxi(1, int(mapgen.get("outcrop_min_size", DEFAULT_OUTCROP_MIN_SIZE)))
 	var qualifying_outcrop_tiles := _qualifying_outcrop_tiles(map, width, height, outcrop_min_size)
-	var outcrop_dist := _distance_field(map, width, height, func(x, y): return qualifying_outcrop_tiles.has(_index(x, y, width)), bush_lookup)
+	var outcrop_dist := _distance_field(map, width, height, func(x, y): return qualifying_outcrop_tiles.has(TileGrid.flat_index(x, y, width)), bush_lookup)
 	var outcrop_limit := tree_limit
 	var required_food_sources := colonist_count * FOOD_SOURCES_PER_COLONIST
 
@@ -618,15 +612,15 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 		# Never overwrites water, whatever tier chose the anchor.
 		for y in range(clearing_y, clearing_y + clearing_height):
 			for x in range(clearing_x, clearing_x + clearing_width):
-				var index := _index(x, y, width)
+				var index := TileGrid.flat_index(x, y, width)
 				if map[index] != TILE_WATER:
 					map[index] = TILE_FLOOR
-				if map[_index(x, y, width)] == TILE_FLOOR:
+				if map[TileGrid.flat_index(x, y, width)] == TILE_FLOOR:
 					land_tiles.append(Vector2i(x, y))
 	else:
 		var reserved: Array[Vector2i] = repaired.get("land_tiles", [])
 		for pos in reserved:
-			map[_index(pos.x, pos.y, width)] = TILE_FLOOR
+			map[TileGrid.flat_index(pos.x, pos.y, width)] = TILE_FLOOR
 			land_tiles.append(pos)
 		# A scattered selection, not a rectangle: report a 1x1 at the first floor tile.
 		if land_tiles.is_empty():
@@ -646,10 +640,10 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 	# Drop bushes inside the clearing; WorldSeeding places objects from the returned list.
 	var land_lookup: Dictionary = {}
 	for pos in land_tiles:
-		land_lookup[_index(pos.x, pos.y, width)] = true
+		land_lookup[TileGrid.flat_index(pos.x, pos.y, width)] = true
 	var remaining_berry_bush_tiles: Array[Vector2i] = []
 	for pos in berry_bush_tiles:
-		if not land_lookup.has(_index(pos.x, pos.y, width)):
+		if not land_lookup.has(TileGrid.flat_index(pos.x, pos.y, width)):
 			remaining_berry_bush_tiles.append(pos)
 
 	_shuffle_positions(random, land_tiles)
@@ -727,7 +721,7 @@ static func _repair_land_clearing(map: Array[String], width: int, height: int, c
 		var tree_unreachable := false
 		var outcrop_unreachable := false
 		for pos in reserved:
-			var index := _index(pos.x, pos.y, width)
+			var index := TileGrid.flat_index(pos.x, pos.y, width)
 			var wd: int = water_dist[index]
 			var fd: int = food_dist[index]
 			var td: int = tree_dist[index]
@@ -782,7 +776,7 @@ static func _land_components(map: Array[String], width: int, height: int, bush_l
 	var components: Array = []
 	for y in height:
 		for x in width:
-			var index := _index(x, y, width)
+			var index := TileGrid.flat_index(x, y, width)
 			if map[index] != TILE_SOIL or bush_lookup.has(index) or visited.has(index):
 				continue
 			var component: Array[Vector2i] = []
@@ -792,15 +786,14 @@ static func _land_components(map: Array[String], width: int, height: int, bush_l
 			while head < queue.size():
 				var current: int = queue[head]
 				head += 1
-				var cx := current % width
-				var cy := current / width
-				component.append(Vector2i(cx, cy))
+				var tile := TileGrid.flat_coord(current, width)
+				component.append(tile)
 				for offset in NEI4:
-					var nx := cx + offset.x
-					var ny := cy + offset.y
+					var nx := tile.x + offset.x
+					var ny := tile.y + offset.y
 					if nx < 0 or nx >= width or ny < 0 or ny >= height:
 						continue
-					var nindex := _index(nx, ny, width)
+					var nindex := TileGrid.flat_index(nx, ny, width)
 					if visited.has(nindex) or map[nindex] != TILE_SOIL or bush_lookup.has(nindex):
 						continue
 					visited[nindex] = true
@@ -820,9 +813,9 @@ static func _expanding_soil_search(map: Array[String], width: int, height: int, 
 			for x in range(origin_x - radius, origin_x + radius + 1):
 				if x < 0 or x >= width:
 					continue
-				if maxi(absi(x - origin_x), absi(y - origin_y)) != radius:
+				if TileGrid.chebyshev(Vector2i(x, y), Vector2i(origin_x, origin_y)) != radius:
 					continue
-				var index := _index(x, y, width)
+				var index := TileGrid.flat_index(x, y, width)
 				if map[index] == TILE_SOIL and not bush_lookup.has(index):
 					found.append(Vector2i(x, y))
 					if found.size() >= max_needed:
@@ -843,7 +836,7 @@ static func _evaluate_clearing(map: Array[String], anchor_x: int, anchor_y: int,
 	var worst_outcrop := 0
 	for y in range(anchor_y, anchor_y + clearing_height):
 		for x in range(anchor_x, anchor_x + clearing_width):
-			var index := _index(x, y, width)
+			var index := TileGrid.flat_index(x, y, width)
 			if map[index] != TILE_SOIL or bush_lookup.has(index):
 				return {}
 			var wd: int = water_dist[index]

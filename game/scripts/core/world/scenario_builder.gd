@@ -306,7 +306,7 @@ static func _nearest_matching_tile(world: WorldStateType, origin: Vector2i, radi
 			for x in range(origin.x - ring, origin.x + ring + 1):
 				if x < 0 or x >= world.get_map_width():
 					continue
-				if maxi(absi(x - origin.x), absi(y - origin.y)) != ring:
+				if TileGrid.chebyshev(Vector2i(x, y), origin) != ring:
 					continue
 				if matches.call(x, y):
 					return Vector2i(x, y)

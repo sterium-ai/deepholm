@@ -342,7 +342,7 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 		return {"ok": false, "reason": REASON_ITEM_NOT_FOUND}
 	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
 	var item_tile := Vector2i(int(item["x"]), int(item["y"]))
-	if maxi(absi(colonist_tile.x - item_tile.x), absi(colonist_tile.y - item_tile.y)) > 1:
+	if TileGrid.chebyshev(colonist_tile, item_tile) > 1:
 		return {"ok": false, "reason": REASON_ITEM_OUT_OF_REACH}
 	var hands_free := InventoryType.free_capacity(colonist)
 	if hands_free <= 0:
@@ -397,7 +397,7 @@ func consume(colonist: Dictionary, job_id: String) -> Dictionary:
 		return {"ok": false, "reason": REASON_SOURCE_GONE}
 	var target: Vector2i = job["target"]
 	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	if maxi(absi(colonist_tile.x - target.x), absi(colonist_tile.y - target.y)) > 1:
+	if TileGrid.chebyshev(colonist_tile, target) > 1:
 		return {"ok": false, "reason": REASON_SOURCE_OUT_OF_REACH}
 	if _source_valid.is_valid() and not bool(_source_valid.call(job_id)):
 		return {"ok": false, "reason": REASON_SOURCE_GONE}
@@ -583,7 +583,7 @@ func _no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
 ## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
 func _within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
 	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	return maxi(absi(colonist_tile.x - tile.x), absi(colonist_tile.y - tile.y)) <= 1
+	return TileGrid.chebyshev(colonist_tile, tile) <= 1
 
 ## Read-only counterpart of _tool_fetch.satisfied() for NeedsSystem.resume_paused_job() and StateCodec:
 ## decides whether to route/start work directly or defer to fetch_tool.

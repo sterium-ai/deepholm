@@ -241,7 +241,7 @@ func _in_bounds(tile: Vector2i) -> bool:
 
 ## Opens tile (or re-opens it at a lower g) with the next insertion number.
 func _frontier_push(tile: Vector2i, g: float) -> void:
-	var h := float(absi(tile.x - _target.x) + absi(tile.y - _target.y)) * _min_cost
+	var h := float(TileGrid.manhattan(tile, _target)) * _min_cost
 	var seq := _entry_tile.size()
 	_entry_f.append(g + h)
 	_entry_h.append(h)

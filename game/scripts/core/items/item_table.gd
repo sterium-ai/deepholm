@@ -207,7 +207,7 @@ func consume_ground_berry(x: int, y: int) -> void:
 		ground_berries[key] = remaining
 
 func _ground_berries_key(x: int, y: int) -> String:
-	return "%d_%d" % [x, y]
+	return TileGrid.coord_key(x, y)
 
 ## sow's blocked_missing_input precondition: on the ground/stockpile or in a colonist's hands.
 func has_item_of_kind(kind: String) -> bool:

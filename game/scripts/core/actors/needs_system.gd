@@ -309,8 +309,7 @@ func _raw_need_sources(kind: String) -> Array[Vector2i]:
 			for key in _item_table.ground_berries.keys():
 				if int(_item_table.ground_berries[key]) <= 0:
 					continue
-				var coords := String(key).split("_")
-				candidates.append(Vector2i(int(coords[0]), int(coords[1])))
+				candidates.append(TileGrid.coord_of_key(String(key)))
 		"water":
 			candidates = _tile_grid.get_water_tiles()
 		"rest":

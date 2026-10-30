@@ -274,7 +274,7 @@ func _find_drop_cell(from: Vector2i) -> Variant:
 				var cell := Vector2i(x, y)
 				if not _cell_still_free(cell, ""):
 					continue
-				var distance: int = absi(x - from.x) + absi(y - from.y)
+				var distance: int = TileGrid.manhattan(cell, from)
 				if distance > TOOL_DROP_RADIUS:
 					continue
 				if best == null or distance < best_distance or (distance == best_distance and (x < best.x or (x == best.x and y < best.y))):

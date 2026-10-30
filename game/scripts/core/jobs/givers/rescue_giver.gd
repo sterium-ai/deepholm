@@ -145,8 +145,8 @@ func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int)
 		_onset_failed(victim_id)
 		return
 	pool.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var da: int = absi(a["pos"].x - victim_tile.x) + absi(a["pos"].y - victim_tile.y)
-		var db: int = absi(b["pos"].x - victim_tile.x) + absi(b["pos"].y - victim_tile.y)
+		var da: int = TileGrid.manhattan(a["pos"], victim_tile)
+		var db: int = TileGrid.manhattan(b["pos"], victim_tile)
 		if da != db:
 			return da < db
 		return String(a["id"]) < String(b["id"]))

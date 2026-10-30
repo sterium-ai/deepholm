@@ -225,7 +225,7 @@ func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dic
 			continue
 		if _relations.relation(own_faction, String(_object_faction_at.call(x, y))) != "hostile":
 			continue
-		targets.append({"kind": "object", "tile_key": "%d_%d" % [x, y], "tile": Vector2i(x, y)})
+		targets.append({"kind": "object", "tile_key": TileGrid.coord_key(x, y), "tile": Vector2i(x, y)})
 	return targets
 
 ## The Chebyshev-adjacent tile of target_tile nearest `start` that is in bounds, passable, reservable,
@@ -245,7 +245,7 @@ func _best_adjacent_tile(actor_id: String, start: Vector2i, target_tile: Vector2
 			continue
 		if not bool(_reachable.call(start, candidate)):
 			continue
-		var distance := absi(candidate.x - start.x) + absi(candidate.y - start.y)
+		var distance := TileGrid.manhattan(candidate, start)
 		if best == null or distance < best_distance:
 			best = candidate
 			best_distance = distance
@@ -270,7 +270,7 @@ func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary
 		var tile: Variant = _best_adjacent_tile(actor_id, start, target["tile"])
 		if tile == null:
 			continue
-		var distance: int = maxi(absi(tile.x - start.x), absi(tile.y - start.y))
+		var distance: int = TileGrid.chebyshev(tile, start)
 		candidates.append({"tile": tile, "target": target, "distance": distance})
 	if candidates.is_empty():
 		return

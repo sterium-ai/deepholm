@@ -86,9 +86,9 @@ func get_objects() -> Array[Dictionary]:
 	keys.sort()
 	var copy: Array[Dictionary] = []
 	for key in keys:
-		var coords := String(key).split("_")
-		var index := _tile_grid.tile_index(int(coords[0]), int(coords[1]))
-		copy.append({"x": int(coords[0]), "y": int(coords[1]), "kind": String(by_key[key]),
+		var tile := TileGridType.coord_of_key(String(key))
+		var index := _tile_grid.index_of(tile)
+		copy.append({"x": tile.x, "y": tile.y, "kind": String(by_key[key]),
 			"faction_id": String(object_factions.get(index, "colony"))})
 	return copy
 
@@ -97,7 +97,7 @@ func tiles_of_kind(kind: String) -> Array[Vector2i]:
 	var tiles: Array[Vector2i] = []
 	for index: int in objects:
 		if String(objects[index]) == kind:
-			tiles.append(_tile_grid.tile_at(index))
+			tiles.append(_tile_grid.coord_of(index))
 	return tiles
 
 ## A generated object (berry bushes) written like decode(): no dirty mark, no region/room hook.
@@ -209,12 +209,12 @@ func ensure_object_health() -> void:
 
 ## The JSON-safe "%d_%d" key the save and state_hash() use for (x, y).
 func object_key(x: int, y: int) -> String:
-	return "%d_%d" % [x, y]
+	return TileGridType.coord_key(x, y)
 
 ## map re-keyed by object_key(), insertion order kept: the save/state_hash() shape.
 func _keyed(map: Dictionary) -> Dictionary:
 	var keyed: Dictionary = {}
 	for index: int in map:
-		var tile := _tile_grid.tile_at(index)
+		var tile := _tile_grid.coord_of(index)
 		keyed[object_key(tile.x, tile.y)] = map[index]
 	return keyed
