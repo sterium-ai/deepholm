@@ -11,6 +11,7 @@ extends RefCounted
 ## - v5 -> v6 (F1, ADR 059): farm zones and the "crops" growth records.
 ## - v6 -> v7 (F2, ADR 061): workbench targets, orders and bills ("crafting").
 ## - v7 -> v8 (F3, ADR 062): every colonist saves its skills.
+## - v8 -> v9 (F5a, ADR 064): a stockpile zone may carry "groups" and "priority".
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -46,6 +47,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v6_to_v7(state)
 		7:
 			return _v7_to_v8(state)
+		8:
+			return _v8_to_v9(state)
 		_:
 			return {
 				"ok": false,
@@ -148,6 +151,19 @@ static func _v7_to_v8(state: Dictionary) -> Dictionary:
 			skills[labour] = {"level": 0, "xp": 0}
 		entity["skills"] = skills
 	migrated["schemaVersion"] = 8
+	return {"ok": true, "state": migrated}
+
+## v8 -> v9 (F5a, ADR 064): a v8 stockpile accepted every item and had no priority, which is a
+## v9 stockpile with neither optional key (every group, priority 2): the zones keep their shape.
+## A v8 zone that already carries either key is refused.
+static func _v8_to_v9(state: Dictionary) -> Dictionary:
+	if not (state.get("zones") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v8 save has no zones array"}
+	for zone: Variant in state["zones"]:
+		if zone is Dictionary and ((zone as Dictionary).has("groups") or (zone as Dictionary).has("priority")):
+			return {"ok": false, "code": "schema_error", "message": "v8 zone already has groups or priority"}
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 9
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

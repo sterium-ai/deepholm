@@ -204,7 +204,7 @@ func _build_map(p_width: int, p_height: int) -> void:
 	_tile_definitions = ContentTablesType.index_by_field(_content.list("tiles"), "id")
 	_mapgen = _content.document("mapgen").duplicate(true)
 	var resolved_size := WorldGeneratorType.resolve_size(p_width, p_height, _mapgen)
-	_zone_table = ZoneTableType.new()
+	_zone_table = ZoneTableType.new(_item_definitions)
 	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, get_object, _zone_table.is_in_any_zone)
 	_object_table = ObjectTableType.new(_object_definitions, _tile_grid)
 	_passability = PassabilityType.new(_content, _tile_grid, _object_table, _object_definitions, _tile_definitions,
@@ -278,7 +278,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		_resume_work_progress, _set_work_progress, _progress_table.clear, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
 		set_tool_item_held, set_tool_item_ground, _worker_view, _route_budget,
-		_zone_table.get_stockpile_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
+		_zone_table.get_stockpile_zones_for_group.bind("tool"), is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
 		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
@@ -307,8 +307,8 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_toil_hooks = _toil_bindings.hooks
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
-	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
-		_scheduler.queue.attach_item, _zone_table.get_stockpile_zones, is_cell_free, passability, _is_cell_occupied)
+	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.accepts_item_at, _scheduler.submit,
+		_scheduler.queue.attach_item, _zone_table.stockpiles_for_item, _item_table.item_lookup, is_cell_free, passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,

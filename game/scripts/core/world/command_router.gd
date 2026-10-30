@@ -109,6 +109,9 @@ func apply(command) -> Dictionary:
 			return _zones.apply_zone_add_command(command)
 		"zone_remove":
 			return _zones.apply_zone_remove_command(command)
+		"zone_set_stockpile":
+			var zone_command: Dictionary = command
+			return _zones.apply_zone_set_stockpile_command(zone_command)
 		"craft_set_target", "craft_add_order", "craft_cancel_order":
 			var craft_command: Dictionary = command
 			return _crafting.apply_craft_command(craft_command)

@@ -103,13 +103,15 @@ static func _valid_material_entry(value) -> Dictionary:
 		return _fail("invalid constructionSites entry material quantity")
 	return {"ok": true}
 
-## crop_ids: the session's crops.json ids, which a farm zone's "crop" must name (F1).
-static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
+## crop_ids: the session's crops.json ids, which a farm zone's "crop" must name (F1); item_groups:
+## the groups a stockpile's "groups" may name (F5a).
+static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array[String] = [],
+		item_groups: Array[String] = []) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid zones type")
 	var seen_ids := {}
 	for zone in (value as Array):
-		var zone_check := _valid_zone(zone, map_width, map_height, crop_ids)
+		var zone_check := _valid_zone(zone, map_width, map_height, crop_ids, item_groups)
 		if not zone_check["ok"]:
 			return zone_check
 		var zone_id: String = (zone as Dictionary)["id"]
@@ -118,8 +120,11 @@ static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array
 		seen_ids[zone_id] = true
 	return {"ok": true}
 
-## A stockpile is exactly {id, x, y, width, height}; a farm zone adds "kind": "farm" and a known "crop".
-static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
+## A stockpile is {id, x, y, width, height} plus optional "groups" (ascending distinct
+## item_groups names) and "priority" (1-3) (F5a); a farm zone adds "kind": "farm" and a known
+## "crop" and never a filter.
+static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[String] = [],
+		item_groups: Array[String] = []) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid zone type")
 	var zone: Dictionary = value
@@ -128,6 +133,13 @@ static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[
 		required.append_array(["kind", "crop"])
 		if not zone.has("kind") or zone["kind"] != "farm" or not zone.has("crop") or not crop_ids.has(zone["crop"]):
 			return _fail("invalid farm zone kind or crop")
+	else:
+		var filter_check := _valid_stockpile_filter(zone, item_groups)
+		if not filter_check["ok"]:
+			return filter_check
+		for key: String in ["groups", "priority"]:
+			if zone.has(key):
+				required.append(key)
 	var check := _require_fields(zone, required, "zone")
 	if not check["ok"]:
 		return check
@@ -139,6 +151,26 @@ static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[
 		return _fail("invalid zone dimensions")
 	if int(zone["x"]) + int(zone["width"]) > map_width or int(zone["y"]) + int(zone["height"]) > map_height:
 		return _fail("invalid zone bounds")
+	return {"ok": true}
+
+static func _valid_stockpile_filter(zone: Dictionary, item_groups: Array[String]) -> Dictionary:
+	if zone.has("priority"):
+		var priority: Variant = zone["priority"]
+		if typeof(priority) != TYPE_INT or not (priority >= ZoneTable.MIN_PRIORITY and priority <= ZoneTable.MAX_PRIORITY):
+			return _fail("invalid stockpile priority")
+	if not zone.has("groups"):
+		return {"ok": true}
+	if not (zone["groups"] is Array):
+		return _fail("invalid stockpile groups")
+	var previous := ""
+	var groups: Array = zone["groups"]
+	for group: Variant in groups:
+		if typeof(group) != TYPE_STRING or not item_groups.has(group):
+			return _fail("invalid stockpile group")
+		var name: String = group
+		if not previous.is_empty() and name <= previous:
+			return _fail("invalid stockpile group")
+		previous = name
 	return {"ok": true}
 
 ## "areaOrders" (ADR 044): {nextId, list, created}. Each list entry has a known kind, a

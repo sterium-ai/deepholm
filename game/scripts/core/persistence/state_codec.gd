@@ -18,8 +18,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## the compact SaveWire encoding (A7, ADR 058); v6 adds farm zones and crop growth (F1, ADR 059);
 ## v7 saves the workbench targets, orders and bills (F2, ADR 061).
 ## v8 saves every colonist's skills (F3, ADR 062).
+## v9 lets a stockpile carry its item-group filter and priority (F5a, ADR 064).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 8
+const SCHEMA_VERSION := 9
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -331,7 +332,8 @@ static func _decode_tool_location(location: Dictionary) -> Dictionary:
 # --- zones -------------------------------------------------------------
 
 ## Sorted by zone id; the next-id counter travels as the top-level "nextZoneId". A farm zone
-## (F1) also carries "kind": "farm" and its "crop"; a stockpile carries neither.
+## (F1) also carries "kind": "farm" and its "crop"; a stockpile carries neither. A stockpile
+## carries "groups" and "priority" (F5a, v8) only when set away from the default.
 static func _encode_zones(zones: Dictionary) -> Array:
 	var keys := zones.keys()
 	keys.sort()
@@ -345,6 +347,9 @@ static func _encode_zones(zones: Dictionary) -> Array:
 		if zone.has("kind"):
 			entry["kind"] = zone["kind"]
 			entry["crop"] = zone["crop"]
+		for optional: String in ["groups", "priority"]:
+			if zone.has(optional):
+				entry[optional] = zone[optional]
 		list.append(entry)
 	return list
 
@@ -362,6 +367,14 @@ static func _decode_zones(list: Array) -> Dictionary:
 			var crop: String = farm["crop"]
 			zones[id]["kind"] = kind
 			zones[id]["crop"] = crop
+		if farm.has("groups"):
+			var saved_groups: Array = farm["groups"]
+			var groups: Array[String] = []
+			groups.assign(saved_groups)
+			zones[id]["groups"] = groups
+		var priority: int = farm.get("priority", ZoneTable.DEFAULT_PRIORITY)
+		if priority != ZoneTable.DEFAULT_PRIORITY:
+			zones[id]["priority"] = priority
 	return zones
 
 # --- objects ---------------------------------------------------------------

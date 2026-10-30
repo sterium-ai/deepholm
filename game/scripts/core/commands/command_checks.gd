@@ -35,6 +35,8 @@ static func check(world: WorldState, command: Dictionary) -> Dictionary:
 			return check_zone_add_command(world, command)
 		"zone_remove":
 			return check_zone_remove_command(world, command)
+		"zone_set_stockpile":
+			return check_zone_set_stockpile_command(world, command)
 		"area_order":
 			# Previews acceptance of the order itself; each expanded tile is
 			# judged later by its own command (commands/area_orders.gd).
@@ -192,6 +194,29 @@ static func check_zone_remove_command(world: WorldState, command: Dictionary) ->
 		return {"reason": "invalid_payload", "params": {"detail": "zone_remove_payload"}}
 	if not world._zone_table.zones.has(String(payload["id"])):
 		return {"reason": "invalid_target", "params": {"detail": "unknown_zone", "id": payload["id"]}}
+	return {}
+
+## zone_set_stockpile rule (F5a, ADR 064) -- mirrors ZoneHandler.apply_zone_set_stockpile_command():
+## "groups" is a comma-separated list of distinct item groups ("" accepts nothing), "priority" 1-3.
+static func check_zone_set_stockpile_command(world: WorldState, command: Dictionary) -> Dictionary:
+	var payload: Dictionary = command["payload"]
+	if (typeof(payload.get("id")) != TYPE_STRING or typeof(payload.get("groups")) != TYPE_STRING
+			or typeof(payload.get("priority")) != TYPE_INT):
+		return {"reason": "invalid_payload", "params": {"detail": "zone_set_stockpile_payload"}}
+	var zone_id: String = payload["id"]
+	var zone: Dictionary = world._zone_table.get_zone(zone_id)
+	if zone.is_empty():
+		return {"reason": "invalid_target", "params": {"detail": "unknown_zone", "id": payload["id"]}}
+	if zone.has("kind"):
+		return {"reason": "invalid_target", "params": {"detail": "zone_not_stockpile", "id": payload["id"]}}
+	var priority: int = payload["priority"]
+	if priority < ZoneTable.MIN_PRIORITY or priority > ZoneTable.MAX_PRIORITY:
+		return {"reason": "invalid_payload", "params": {"detail": "stockpile_priority_out_of_range"}}
+	var groups_text: String = payload["groups"]
+	var groups := ZoneTable.parse_groups(groups_text)
+	for group in groups:
+		if groups.count(group) > 1 or not world._zone_table.item_groups.has(group):
+			return {"reason": "invalid_payload", "params": {"detail": "unknown_item_group", "group": group}}
 	return {}
 
 ## set_labour payload/target rule -- mirrors ActorHandler.apply_set_labour_command().

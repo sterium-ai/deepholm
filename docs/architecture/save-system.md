@@ -131,7 +131,9 @@ farm zones and the crop growth records (see "Crops" below and
 [ADR 059](../decisions/059-crops-and-farm-zones.md)); v7 saves the workbench targets, orders and
 bills (see "Workbenches" below and [ADR 061](../decisions/061-workbench-recipes-and-craft-labour.md)); v8 saves every
 colonist's skills (see "Colonist needs, the labour table and skills" below and
-[ADR 062](../decisions/062-skills-and-xp-per-labour.md)).
+[ADR 062](../decisions/062-skills-and-xp-per-labour.md));
+v9 lets a stockpile carry its item-group filter and priority (see "Stockpile zones" below and
+[ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
 
 **Wire encoding.** `persistence/save_wire.gd` packs the state right before the one
 `JSON.stringify` of a write and unpacks it right after the parse of a read (after the
@@ -232,6 +234,11 @@ returns a new dictionary and never mutates its input. Steps today:
   skills; `save_schema_v8_fixture.json` is the same session written by this build
   (`docs/orca/handoffs/F3-write-save.gd`), whose colonists have seeded skills and so work at
   other speeds: it loads and re-encodes unchanged.
+- **v8 → v9** (F5a, ADR 064): the unpacked shape is unchanged; a v8 stockpile accepted every
+  item at one priority, which is a v9 stockpile with neither optional key. A v8 zone that
+  already carries `groups` or `priority` is refused. `save_schema_v8_fixture.json` migrates
+  exactly to `save_schema_v9_fixture.json` (the same session, written packed by
+  `docs/orca/handoffs/F5a-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -497,6 +504,13 @@ for the same reason as `items.nextId`. `WorldState` exposes zones through
 `get_zones() -> Array[Dictionary]` (id-sorted, detached copies) and
 `get_zone(id) -> Dictionary` (`{}` for an unknown id). `state_hash()` covers
 the zones and the next-id counter.
+
+Since v9 ([ADR 064](../decisions/064-stockpile-filters-and-priorities.md)) a stockpile may also
+carry `groups`, the ascending list of item groups it accepts (an item's group is its
+`items.json` `kind`; SaveIO accepts only the session's kinds), and `priority`, 1 to 3. Each key
+is written only when set away from its default (every group, priority 2), so a stockpile nobody
+configured is the v8 record byte for byte. A farm zone never carries either. The
+`zone_set_stockpile` command sets both.
 
 ## Area orders
 

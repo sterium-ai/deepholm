@@ -87,8 +87,8 @@ the rule set both `preview()` and (for every type but `complete_job`/
 a hover/drag preview can never disagree with what committing the same command
 would do. `dig`, `chop`, `forage`, `till`, `sow`, `mine`, `complete_job`,
 `cancel_job`, `fail_job`, `invalidate_job`, `place_object`, `remove_object`,
-`set_labour`, `set_faction`, `spawn_incident`, `zone_add` and `zone_remove`
-each have a check function. `build` and `build_line` are previewed through
+`set_labour`, `set_faction`, `spawn_incident`, `zone_add`, `zone_remove` and
+`zone_set_stockpile` each have a check function. `build` and `build_line` are previewed through
 `ConstructionSystem`'s own checks, and `cancel_site` through
 `CommandChecks.check_cancel_site_command()`: the same functions their `apply()`
 handlers run. The workbench commands (`craft_set_target`, `craft_add_order`,
@@ -137,6 +137,21 @@ Rejections (`reason`/`params.detail`): `invalid_target`/`not_a_workbench`,
 `invalid_payload`/`craft_payload` (a missing or mistyped field) and
 `invalid_payload`/`craft_extra_field` (`field`). `WorldState.get_crafting_benches()` lists every
 colony workbench with its `targets`, `orders` and `bill`.
+
+## Stockpile command
+
+F5a ([ADR 064](../../../../docs/decisions/064-stockpile-filters-and-priorities.md)), handled by
+`handlers/zone_handler.gd`:
+
+| type | payload | effect |
+|------|---------|--------|
+| `zone_set_stockpile` | `{id, groups, priority}`: `groups` a comma-separated list of distinct item groups (`""` accepts nothing), `priority` 1..3 | the stockpile accepts only items of those groups; haulers fill the highest priority first. Items it no longer accepts are hauled out |
+
+Rejections: `invalid_payload`/`zone_set_stockpile_payload` (a missing or mistyped field),
+`invalid_target`/`unknown_zone` (`id`), `invalid_target`/`zone_not_stockpile` (a farm zone),
+`invalid_payload`/`stockpile_priority_out_of_range`, `invalid_payload`/`unknown_item_group`
+(`group`: not an items.json kind, or listed twice). A new stockpile accepts every group at
+priority 2; `get_zone()` shows `groups`/`priority` only when they differ from that default.
 
 ## Reads (non-mutating)
 

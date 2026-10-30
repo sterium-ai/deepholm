@@ -7,32 +7,36 @@ extends RefCounted
 var _priority: int
 var _get_jobs: Callable
 var _get_items: Callable
-var _is_in_any_zone: Callable
+var _accepts_item_at: Callable
 var _submit_job: Callable
 var _attach_item: Callable
-var _get_zones: Callable
+var _stockpiles_for_item: Callable
+var _item_lookup: Callable
 var _is_cell_free: Callable
 var _passability: Callable
 var _is_cell_occupied: Callable
 
 ## priority comes from jobs.json; get_jobs is the read-only JobQueue.view_jobs_of_kinds(["haul"])
-## (A5, never mutated); is_in_any_zone is ZoneTable's; the rest are WorldState/scheduler entry points.
-func _init(priority: int, get_jobs: Callable, get_items: Callable, is_in_any_zone: Callable,
-		submit_job: Callable, attach_item: Callable, get_zones: Callable, is_cell_free: Callable,
-		passability: Callable, is_cell_occupied: Callable) -> void:
+## (A5, never mutated); accepts_item_at and stockpiles_for_item are ZoneTable's (F5a filters and
+## priorities); item_lookup is ItemTable's; the rest are WorldState/scheduler entry points.
+func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_at: Callable,
+		submit_job: Callable, attach_item: Callable, stockpiles_for_item: Callable, item_lookup: Callable,
+		is_cell_free: Callable, passability: Callable, is_cell_occupied: Callable) -> void:
 	_priority = priority
 	_get_jobs = get_jobs
 	_get_items = get_items
-	_is_in_any_zone = is_in_any_zone
+	_accepts_item_at = accepts_item_at
 	_submit_job = submit_job
 	_attach_item = attach_item
-	_get_zones = get_zones
+	_stockpiles_for_item = stockpiles_for_item
+	_item_lookup = item_lookup
 	_is_cell_free = is_cell_free
 	_passability = passability
 	_is_cell_occupied = is_cell_occupied
 
 ## Runs once per tick (TickPipeline, before the scheduler). "Unreserved" is derived from the
-## job list, so a terminated job frees its item next tick; items already in a zone are skipped.
+## job list, so a terminated job frees its item next tick. An item already in a stockpile that
+## accepts its group is skipped; one in a stockpile that no longer accepts it is hauled out.
 func advance(tick: int) -> void:
 	var claimed: Dictionary = {}
 	for job in (_get_jobs.call() as Array):
@@ -44,16 +48,26 @@ func advance(tick: int) -> void:
 			continue
 		var x: int = int(item["x"])
 		var y: int = int(item["y"])
-		if bool(_is_in_any_zone.call(x, y)):
+		var kind: String = item["kind"]
+		var stored: bool = _accepts_item_at.call(x, y, kind)
+		if stored:
 			continue
 		var result: Dictionary = _submit_job.call(Vector2i(x, y), _priority, tick, "haul")
 		if result.get("ok", false):
 			_attach_item.call(String(result["job_id"]), item_id)
 
-## First free, passable, unoccupied cell in zone-id then row-major order (deterministic),
-## or null. Ignores item_id; matches JobQueue.set_haul_destination_finder()'s Callable.
-func find_free_haul_cell(_item_id: String) -> Variant:
-	for zone in (_get_zones.call() as Array):
+## First free, passable, unoccupied cell of the first stockpile in ZoneTable.stockpiles_for_item()
+## order (highest priority, nearest to the item, zone id) that has one, row-major inside it
+## (deterministic), or null. Matches JobQueue.set_haul_destination_finder()'s Callable.
+func find_free_haul_cell(item_id: String) -> Variant:
+	var item: Dictionary = _item_lookup.call(item_id)
+	if item.is_empty():
+		return null
+	var kind: String = item["kind"]
+	var item_x: int = item["x"]
+	var item_y: int = item["y"]
+	var zones: Array[Dictionary] = _stockpiles_for_item.call(kind, Vector2i(item_x, item_y))
+	for zone: Dictionary in zones:
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
 			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
 				if not bool(_is_cell_free.call(x, y)):
