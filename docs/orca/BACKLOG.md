@@ -970,7 +970,31 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** more workshops, production statistics/annual targets, stockpile filter UI (F5),
   tool quality/durability, recipes needing skills (F3).
 
-### F3 — Skills and XP per labour · `todo` · Design: *pending*
+### F3 — Skills and XP per labour · `todo` · after F1/F2 (touches the scheduler's pick and work speed) · Design: closed 2026-10-30
+
+- **Design (owner, 2026-10-30):** every colonist has a skill level 0–10 per labour. **XP is
+  earned per completed job** of that labour (amount per job kind in content; default 1); level
+  thresholds grow (content table, e.g. 10, 25, 45, 70, 100, …). Work speed scales linearly from
+  **70 % at level 0 to 160 % at level 10** (applied to `work_ticks`); **haul capacity gains one
+  extra item every 5 levels**. **Starting skills are seeded**: each colonist gets two labours at
+  3–6 and the rest at 0–2, deterministic from the world seed; a scenario roster (A16b) may fix
+  them explicitly. **Assignment prefers the most skilled available colonist** among those with
+  the labour enabled and free; ties break by distance as today — deterministic. **No skill decay
+  in v1.** Skills and XP are saved (schema bump) and shown in the colonist panel's labour table.
+- **Owned paths:** new `core/actors/skills.gd` (or a `components/` entry, following the actor
+  component pattern), `content/skills.json` + schema (thresholds, speed curve, XP per job kind,
+  starting ranges), `core/jobs/toil_executor.gd` (speed factor at `work`), the giver/scheduler
+  pick (`core/jobs/givers/*` or `job_queue.gd` where the candidate is chosen — minimal, documented),
+  haul capacity where it is read, `world/scenario_builder.gd` (roster skills), persistence (bump
+  + migration + fixture; next free number), viewer labour table rows (skill + XP bar), an ADR
+  (next free number), tests, `docs/orca/handoffs/F3.md`.
+- **Acceptance:** headless: two colonists, one at chop 8 and one at chop 0, one tree order →
+  the level-8 colonist is picked and finishes in ~62 % of the level-0 time; completing jobs
+  raises XP and crosses the first threshold after the content-defined count; a level-5 hauler
+  carries one more item than a level-0 one; starting skills for seed 42 are identical across
+  runs and saves; save/load mid-XP continues identically; replay reproduces; existing scheduler
+  tests either unchanged or updated with the ADR quoted (skill ties = old behaviour); suite green.
+- **Non-goals:** passions/traits, skill decay, learning from others, UI beyond the labour table.
 
 ### F4 — Underground layers, tunnel, ores, supports and cave-ins · `todo` · Design: *pending*
 
