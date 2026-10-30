@@ -16,9 +16,9 @@ const BLOCKED_TARGET_RESERVED := "blocked_target_reserved"
 const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
 
 ## Away from the threat's dominant axis first; the fixed order backs _ranked_directions()' tie-break.
-const CANDIDATE_DIRECTIONS: Array[Vector2i] = [
-	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1),
-	Vector2i(1, 1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(-1, -1),
+const CANDIDATE_DIRECTIONS: Array[Vector3i] = [
+	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0),
+	Vector3i(1, 1, 0), Vector3i(1, -1, 0), Vector3i(-1, 1, 0), Vector3i(-1, -1, 0),
 ]
 
 var _submit_job: Callable
@@ -30,7 +30,7 @@ var _resume: Callable
 var _passable_for_actor: Callable
 var _may_reserve_target: Callable
 var _reachable: Callable
-var _bounds_max: Vector2i
+var _bounds_max: Vector3i
 var _content
 var _relations
 var _is_target_reserved: Callable
@@ -40,7 +40,7 @@ var _cancel_job: Callable
 ## `_episodes`, not this map, says whether an actor is mid-flee.
 var _fleeing: Dictionary = {}
 
-## actor_id -> Dictionary[Vector2i, true]: the open flee episode and its excluded destinations.
+## actor_id -> Dictionary[Vector3i, true]: the open flee episode and its excluded destinations.
 ## Opened when `_interrupt` is called for the first leg; survives blocked legs, destination
 ## exhaustion and save/load (persisted as `combatBlockedTargets`, hashed); closed only by recovery
 ## or forget(). Exclusions accumulate for the whole episode.
@@ -52,7 +52,7 @@ var _episodes: Dictionary = {}
 ## boundary, a no-op for a job already terminal.
 func _init(submit_job: Callable, get_job: Callable, list_jobs: Callable, restrict_to_for: Callable,
 		interrupt: Callable, resume: Callable, passable_for_actor: Callable, may_reserve_target: Callable,
-		reachable: Callable, bounds_max: Vector2i, content, relations,
+		reachable: Callable, bounds_max: Vector3i, content, relations,
 		is_target_reserved: Callable, cancel_job: Callable) -> void:
 	_submit_job = submit_job
 	_get_job = get_job
@@ -194,28 +194,28 @@ func _adopt_existing_flee_job(actor_id: String) -> bool:
 ## loop). A candidate must strictly increase the distance from `threat` and must not be impassable,
 ## unreachable, unreservable, hostile-occupied, already reserved or in `excluded`. null when none.
 func _pick_flee_target(actor: Dictionary, actors: Array[Dictionary], threat: Dictionary, excluded: Dictionary = {}):
-	var ax := int(actor["x"])
-	var ay := int(actor["y"])
 	var actor_id: String = String(actor["id"])
-	var start := Vector2i(ax, ay)
-	var threat_pos := Vector2i(int(threat["x"]), int(threat["y"]))
-	var away := Vector2i(signi(ax - threat_pos.x), signi(ay - threat_pos.y))
-	if away == Vector2i.ZERO:
-		away = Vector2i(1, 1)
+	var start := TileGrid.tile_of(actor)
+	var ax := start.x
+	var ay := start.y
+	var threat_pos := TileGrid.tile_of(threat)
+	var away := Vector3i(signi(ax - threat_pos.x), signi(ay - threat_pos.y), 0)
+	if away == Vector3i.ZERO:
+		away = Vector3i(1, 1, 0)
 	var hostile_tiles := _hostile_occupied_tiles(actor, actors)
 	var start_distance := TileGrid.distance_sq(start, threat_pos)
 	for direction in _ranked_directions(away):
 		for distance in range(FLEE_DISTANCE, 0, -1):
-			var candidate := Vector2i(clampi(ax + direction.x * distance, 0, _bounds_max.x), clampi(ay + direction.y * distance, 0, _bounds_max.y))
+			var candidate := Vector3i(clampi(ax + direction.x * distance, 0, _bounds_max.x), clampi(ay + direction.y * distance, 0, _bounds_max.y), start.z)
 			if candidate == start or hostile_tiles.has(candidate) or excluded.has(candidate):
 				continue
 			if TileGrid.distance_sq(candidate, threat_pos) <= start_distance:
 				continue
-			if not bool((_passable_for_actor.call(actor_id, candidate.x, candidate.y) as Dictionary)["passable"]):
+			if not bool((_passable_for_actor.call(actor_id, candidate) as Dictionary)["passable"]):
 				continue
 			if not bool(_may_reserve_target.call(actor_id, candidate)):
 				continue
-			if bool(_is_target_reserved.call(candidate.x, candidate.y)):
+			if bool(_is_target_reserved.call(candidate)):
 				continue
 			if not bool(_reachable.call(start, candidate)):
 				continue
@@ -233,20 +233,20 @@ func _hostile_occupied_tiles(actor: Dictionary, actors: Array[Dictionary]) -> Di
 			continue
 		if _relations.relation(own_faction, TargetingType.actor_faction(other)) != "hostile":
 			continue
-		occupied[Vector2i(int(other["x"]), int(other["y"]))] = true
+		occupied[TileGrid.tile_of(other)] = true
 	return occupied
 
 ## CANDIDATE_DIRECTIONS by descending dot product with `away`, ties by fixed index (no floats).
-static func _ranked_directions(away: Vector2i) -> Array[Vector2i]:
+static func _ranked_directions(away: Vector3i) -> Array[Vector3i]:
 	var scored: Array = []
 	for i in CANDIDATE_DIRECTIONS.size():
-		var direction: Vector2i = CANDIDATE_DIRECTIONS[i]
+		var direction: Vector3i = CANDIDATE_DIRECTIONS[i]
 		scored.append({"direction": direction, "dot": direction.x * away.x + direction.y * away.y, "index": i})
 	scored.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		if int(a["dot"]) != int(b["dot"]):
 			return int(a["dot"]) > int(b["dot"])
 		return int(a["index"]) < int(b["index"]))
-	var ranked: Array[Vector2i] = []
+	var ranked: Array[Vector3i] = []
 	for entry in scored:
 		ranked.append(entry["direction"])
 	return ranked

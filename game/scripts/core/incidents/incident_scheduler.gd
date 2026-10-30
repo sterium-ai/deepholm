@@ -20,7 +20,7 @@ const EDGE_SOUTH := "south"
 const EDGE_EAST := "east"
 const EDGE_WEST := "west"
 const JOB_KIND := "incident"
-const NO_TILE := Vector2i(-1, -1)
+const NO_TILE := Vector3i(-1, -1, 0)
 const ACTOR_ID_PREFIX := "incident_actor_"
 ## A staged job its faction-aware bounded search could not route is retired, never spawned.
 const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
@@ -147,7 +147,7 @@ func staged_actor(actor_id: String) -> Dictionary:
 
 ## Submits the actor's walk/wait job and stages it; "" when the queue rejected it. Public so tests
 ## can drive staging with a chosen target. `lingers` carries spawn.lingers to activate_pending().
-func propose(actor: Dictionary, target: Vector2i, wait_ticks: int, lingers: bool = false) -> String:
+func propose(actor: Dictionary, target: Vector3i, wait_ticks: int, lingers: bool = false) -> String:
 	var job_id: String = String(_submit_job.call(String(actor["id"]), target))
 	if job_id.is_empty():
 		return ""
@@ -215,7 +215,7 @@ func reconcile_after_load(jobs: Array, restrict_to_for: Callable, actor_exists: 
 
 ## The spawn tile is still bare and passable for the actor's faction (rechecked before spawning).
 func _spawn_tile_still_valid(actor: Dictionary) -> bool:
-	var tile := Vector2i(int(actor["x"]), int(actor["y"]))
+	var tile := TileGrid.tile_of(actor)
 	return _cost_of(tile, String(actor.get("factionId", ""))) > 0.0 and bool(_is_bare_tile.call(tile))
 
 func _staged_job_ids() -> Array:
@@ -271,7 +271,7 @@ func _spawn_one(actor_def: String, faction_id: String, edge: String, wait_ticks:
 	if target == NO_TILE:
 		return ""
 	var actor_id := "%s%d" % [ACTOR_ID_PREFIX, _next_actor_ordinal]
-	var actor := ActorTableType.spawn(actor_def, spawn_tile.x, spawn_tile.y, _content, actor_id)
+	var actor := ActorTableType.spawn(actor_def, spawn_tile, _content, actor_id)
 	actor["factionId"] = faction_id
 	var job_id := propose(actor, target, wait_ticks, lingers)
 	if job_id.is_empty():
@@ -281,12 +281,12 @@ func _spawn_one(actor_def: String, faction_id: String, edge: String, wait_ticks:
 
 ## One uniformly random bare tile in the spawn tile's region, passable for the faction. Region is
 ## only a pre-filter: the job's faction-aware search may still prove it unreachable (then retired).
-func _pick_reachable_target(from: Vector2i, faction_id: String) -> Vector2i:
+func _pick_reachable_target(from: Vector3i, faction_id: String) -> Vector3i:
 	var regions: Variant = _get_regions.call()
-	var candidates: Array[Vector2i] = []
+	var candidates: Array[Vector3i] = []
 	for y in _map_height:
 		for x in _map_width:
-			var candidate := Vector2i(x, y)
+			var candidate := Vector3i(x, y, from.z)
 			if candidate == from:
 				continue
 			if _cost_of(candidate, faction_id) > 0.0 and bool(_is_bare_tile.call(candidate)) and regions.same_region(from, candidate):
@@ -295,31 +295,31 @@ func _pick_reachable_target(from: Vector2i, faction_id: String) -> Vector2i:
 		return NO_TILE
 	return candidates[_random.randi_range(0, candidates.size() - 1)]
 
-func _cost_of(tile: Vector2i, faction_id: String) -> float:
+func _cost_of(tile: Vector3i, faction_id: String) -> float:
 	return float(_passable_for_faction.call(tile, faction_id))
 
-func _pick_edge_tile(edge: String, faction_id: String) -> Vector2i:
+func _pick_edge_tile(edge: String, faction_id: String) -> Vector3i:
 	var candidates := _edge_line(edge)
 	if candidates.is_empty():
 		return NO_TILE
 	var start_index := _random.randi_range(0, candidates.size() - 1)
 	for offset in candidates.size():
-		var candidate: Vector2i = candidates[(start_index + offset) % candidates.size()]
+		var candidate: Vector3i = candidates[(start_index + offset) % candidates.size()]
 		if _cost_of(candidate, faction_id) > 0.0 and bool(_is_bare_tile.call(candidate)):
 			return candidate
 	return NO_TILE
 
-func _edge_line(edge: String) -> Array[Vector2i]:
-	var tiles: Array[Vector2i] = []
+func _edge_line(edge: String) -> Array[Vector3i]:
+	var tiles: Array[Vector3i] = []
 	match edge:
 		EDGE_NORTH:
-			for x in _map_width: tiles.append(Vector2i(x, 0))
+			for x in _map_width: tiles.append(Vector3i(x, 0, TileGrid.SURFACE))
 		EDGE_SOUTH:
-			for x in _map_width: tiles.append(Vector2i(x, _map_height - 1))
+			for x in _map_width: tiles.append(Vector3i(x, _map_height - 1, TileGrid.SURFACE))
 		EDGE_WEST:
-			for y in _map_height: tiles.append(Vector2i(0, y))
+			for y in _map_height: tiles.append(Vector3i(0, y, TileGrid.SURFACE))
 		EDGE_EAST:
-			for y in _map_height: tiles.append(Vector2i(_map_width - 1, y))
+			for y in _map_height: tiles.append(Vector3i(_map_width - 1, y, TileGrid.SURFACE))
 		_:
 			pass
 	return tiles

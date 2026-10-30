@@ -30,10 +30,10 @@ const PassabilityType = preload("res://scripts/core/map/passability.gd")
 const BILL_PREFIX := "bench:"
 const COMMAND_TYPES: Array[String] = ["craft_set_target", "craft_add_order", "craft_cancel_order"]
 const MAX_COUNT := RecipeBookType.MAX_COUNT
-const NO_BENCH := Vector2i(-1, -1)
+const NO_BENCH := Vector3i(-1, -1, 0)
 
 var recipes: RecipeBookType
-## "x,y" -> {origin: Vector2i, targets: {recipe: int}, orders: [{id, recipe, remaining}],
+## "x,y" -> {origin: Vector3i, targets: {recipe: int}, orders: [{id, recipe, remaining}],
 ## bill: {} or {recipe, order_id, held: [{item, quantity}]}}.
 var _benches: Dictionary = {}
 var _next_order_id: int = 1
@@ -44,7 +44,7 @@ var _tile_grid: TileGridType
 var _passability: PassabilityType
 var _scheduler: AssignmentType
 var _is_in_any_zone: Callable
-## (kind) -> bool, (kind, x, y) -> String, (item_id, x, y) -> bool, () -> Array[Dictionary].
+## (kind) -> bool, (kind, tile: Vector3i) -> String, (item_id, tile: Vector3i) -> bool, () -> Array[Dictionary].
 var _is_tool_kind: Callable
 var _spawn_ground_tool: Callable
 var _set_tool_stockpile: Callable
@@ -79,8 +79,8 @@ func _init(recipe_list: Array, object_table: ObjectTableType, item_table: ItemTa
 	_site_deposit = site_deposit
 
 ## TileGrid.comma_key(): the same "x,y" format as a construction site's origin (L1).
-static func bench_key(origin: Vector2i) -> String:
-	return TileGridType.comma_key(origin.x, origin.y)
+static func bench_key(origin: Vector3i) -> String:
+	return TileGridType.comma_key(origin)
 
 # --- persistence -----------------------------------------------------------
 
@@ -101,9 +101,9 @@ func encode() -> Dictionary:
 		if not bill.is_empty():
 			var held: Array = bill["held"]
 			wire_bill = {"recipe": bill["recipe"], "orderId": bill["order_id"], "held": held.duplicate(true)}
-		var origin: Vector2i = record["origin"]
+		var origin: Vector3i = record["origin"]
 		var orders: Array = record["orders"]
-		benches.append({"x": origin.x, "y": origin.y, "targets": targets, "orders": orders.duplicate(true), "bill": wire_bill})
+		benches.append({"x": origin.x, "y": origin.y, "z": origin.z, "targets": targets, "orders": orders.duplicate(true), "bill": wire_bill})
 	return {"crafting": {"benches": benches, "nextOrderId": _next_order_id}}
 
 ## Absent "crafting" (no bench configured) restores an empty table.
@@ -113,8 +113,7 @@ func decode(state: Dictionary) -> void:
 	_next_order_id = crafting.get("nextOrderId", 1)
 	var entries: Array = crafting.get("benches", [])
 	for entry: Dictionary in entries:
-		var x: int = entry["x"]
-		var y: int = entry["y"]
+		var origin := TileGrid.tile_of(entry)
 		var targets: Dictionary = {}
 		for target: Dictionary in (entry["targets"] as Array):
 			var recipe_id: String = target["recipe"]
@@ -132,7 +131,7 @@ func decode(state: Dictionary) -> void:
 				var quantity: int = stack["quantity"]
 				held.append({"item": stack["item"], "quantity": quantity})
 			bill = {"recipe": wire_bill["recipe"], "order_id": wire_bill["orderId"], "held": held}
-		_benches[bench_key(Vector2i(x, y))] = {"origin": Vector2i(x, y), "targets": targets, "orders": orders, "bill": bill}
+		_benches[bench_key(origin)] = {"origin": origin, "targets": targets, "orders": orders, "bill": bill}
 
 ## Only once a bench is configured, so a world without crafting keeps its pre-F2 hash.
 func hash_into(snapshot: Dictionary) -> void:
@@ -141,11 +140,11 @@ func hash_into(snapshot: Dictionary) -> void:
 
 # --- benches ----------------------------------------------------------------
 
-## The bench origin covering (x, y), or NO_BENCH when no colony bench is there.
-func bench_origin_at(x: int, y: int) -> Vector2i:
-	var origin := _object_table.object_origin_at(x, y)
-	var kind := _object_table.get_object(origin.x, origin.y)
-	if not recipes.is_bench_kind(kind) or _object_table.get_object_faction_id(origin.x, origin.y) != "colony":
+## The bench origin covering tile, or NO_BENCH when no colony bench is there.
+func bench_origin_at(tile: Vector3i) -> Vector3i:
+	var origin := _object_table.object_origin_at(tile)
+	var kind := _object_table.get_object(origin)
+	if not recipes.is_bench_kind(kind) or _object_table.get_object_faction_id(origin) != "colony":
 		return NO_BENCH
 	return origin
 
@@ -154,9 +153,7 @@ func get_benches() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	var seen: Dictionary = {}
 	for object: Dictionary in _object_table.get_objects():
-		var x: int = object["x"]
-		var y: int = object["y"]
-		var origin := bench_origin_at(x, y)
+		var origin := bench_origin_at(TileGrid.tile_of(object))
 		if origin == NO_BENCH or seen.has(origin):
 			continue
 		seen[origin] = true
@@ -164,7 +161,7 @@ func get_benches() -> Array[Dictionary]:
 		var targets: Dictionary = record.get("targets", {})
 		var orders: Array = record.get("orders", [])
 		var bill: Dictionary = record.get("bill", {})
-		out.append({"x": origin.x, "y": origin.y, "kind": _object_table.get_object(origin.x, origin.y),
+		out.append({"x": origin.x, "y": origin.y, "z": origin.z, "kind": _object_table.get_object(origin),
 			"targets": targets.duplicate(), "orders": orders.duplicate(true), "bill": bill.duplicate(true)})
 	return out
 
@@ -181,16 +178,16 @@ func bench_record(key: String) -> Dictionary:
 	return _benches.get(key, {})
 
 ## The bill of the bench at origin, or {} (no record, no bill).
-func _bill_at(origin: Vector2i) -> Dictionary:
+func _bill_at(origin: Vector3i) -> Dictionary:
 	var record: Dictionary = _benches.get(bench_key(origin), {})
 	return record.get("bill", {})
 
 ## "" when the bench at origin has no bill.
-func bill_id_at(origin: Vector2i) -> String:
+func bill_id_at(origin: Vector3i) -> String:
 	return "" if _bill_at(origin).is_empty() else BILL_PREFIX + bench_key(origin)
 
 ## How many more units of item the bill at origin still needs (0 without a bill).
-func remaining(origin: Vector2i, item: String) -> int:
+func remaining(origin: Vector3i, item: String) -> int:
 	var bill := _bill_at(origin)
 	return 0 if bill.is_empty() else _bill_remaining(bill, item)
 
@@ -247,10 +244,10 @@ func pick_up_count(job: Dictionary, colonist: Dictionary) -> int:
 	var item_id: String = job.get("item_id", "")
 	var item := _item_table.item_lookup(item_id)
 	var site: Variant = job.get("site")
-	if item.is_empty() or not (site is Vector2i):
+	if item.is_empty() or not (site is Vector3i):
 		return -1
 	var kind: String = item["kind"]
-	var bench_tile: Vector2i = site
+	var bench_tile: Vector3i = site
 	var need := remaining(bench_tile, kind) - InventoryType.count_of_kind(colonist, kind)
 	return need if need > 0 else -1
 
@@ -270,9 +267,7 @@ func stock_count(kind: String) -> int:
 		if job["status"] in ["queued", "active"] and reason.is_empty():
 			hauling[job["item_id"]] = true
 	for item: Dictionary in _item_table.items.values():
-		var x: int = item["x"]
-		var y: int = item["y"]
-		var stocked: bool = _is_in_any_zone.call(x, y)
+		var stocked: bool = _is_in_any_zone.call(TileGrid.tile_of(item))
 		if item["kind"] == kind and (stocked or hauling.has(item["id"])):
 			var count: int = item["count"]
 			total += count
@@ -289,9 +284,7 @@ func stock_count(kind: String) -> int:
 			if tool_item["kind"] != kind or location.get("type", "") != "stockpile":
 				continue
 			# The location type outlives a zone_remove: count it only while a stockpile covers it.
-			var tool_x: int = location["x"]
-			var tool_y: int = location["y"]
-			var still_stocked: bool = _is_in_any_zone.call(tool_x, tool_y)
+			var still_stocked: bool = _is_in_any_zone.call(TileGrid.tile_of(location))
 			if still_stocked:
 				total += 1
 	return total
@@ -323,9 +316,7 @@ func _sorted_item_ids() -> Array[String]:
 
 func _is_free_source(item: Dictionary, committed: Dictionary) -> bool:
 	var id: String = item["id"]
-	var x: int = item["x"]
-	var y: int = item["y"]
-	var in_zone: bool = _is_in_any_zone.call(x, y)
+	var in_zone: bool = _is_in_any_zone.call(TileGrid.tile_of(item))
 	if committed.has(id) or not in_zone:
 		return false
 	return _scheduler.queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + id).is_empty()
@@ -338,12 +329,11 @@ func stock_tools() -> void:
 		var is_tool: bool = _is_tool_kind.call(kind)
 		if not is_tool or not _is_free_source(item, {}):
 			continue
-		var x: int = item["x"]
-		var y: int = item["y"]
+		var tile := TileGrid.tile_of(item)
 		var count: int = item["count"]
 		for _unit in count:
-			var tool_id: String = _spawn_ground_tool.call(kind, x, y)
-			_set_tool_stockpile.call(tool_id, x, y)
+			var tool_id: String = _spawn_ground_tool.call(kind, tile)
+			_set_tool_stockpile.call(tool_id, tile)
 		_item_table.remove_ground_item_units(id, count)
 
 # --- bills ---------------------------------------------------------------------
@@ -355,8 +345,8 @@ func stock_tools() -> void:
 func update_bills(committed: Dictionary, fetching: Dictionary) -> void:
 	for key: String in bench_keys():
 		var record: Dictionary = _benches[key]
-		var origin: Vector2i = record["origin"]
-		if bench_origin_at(origin.x, origin.y) != origin:
+		var origin: Vector3i = record["origin"]
+		if bench_origin_at(origin) != origin:
 			cancel_bench_jobs(origin)
 			_drop_held(record)
 			_benches.erase(key)
@@ -426,7 +416,7 @@ func _inputs_available(bill: Dictionary, committed: Dictionary, claimed: Diction
 
 ## craft_work's completion at origin: spends the held inputs, places the outputs on one
 ## free tile next to the bench, counts the order down and clears the bill.
-func complete_craft(origin: Vector2i) -> void:
+func complete_craft(origin: Vector3i) -> void:
 	var record: Dictionary = _benches.get(bench_key(origin), {})
 	var bill := _bill_at(origin)
 	if bill.is_empty() or not bill_met(bill):
@@ -436,7 +426,7 @@ func complete_craft(origin: Vector2i) -> void:
 	for stack: Dictionary in recipes.outputs(recipe_id):
 		var item: String = stack["item"]
 		var quantity: int = stack["quantity"]
-		_item_table.place_new_ground_item(item, quantity, at.x, at.y)
+		_item_table.place_new_ground_item(item, quantity, at)
 	var orders: Array = record["orders"]
 	for i in orders.size():
 		var order: Dictionary = orders[i]
@@ -449,7 +439,7 @@ func complete_craft(origin: Vector2i) -> void:
 	record["bill"] = {}
 
 ## Ends every live craft job of the bench at origin (a carried load is dropped first).
-func cancel_bench_jobs(origin: Vector2i) -> void:
+func cancel_bench_jobs(origin: Vector3i) -> void:
 	for job: Dictionary in _scheduler.queue.view_jobs_of_kinds(["craft_fetch", "craft_work"]):
 		var job_id: String = job["id"]
 		var is_fetch: bool = job["kind"] == "craft_fetch"
@@ -470,33 +460,33 @@ func _drop_held(record: Dictionary) -> void:
 		var quantity: int = stack["quantity"]
 		if quantity <= 0:
 			continue
-		var origin: Vector2i = record["origin"]
+		var origin: Vector3i = record["origin"]
 		var item: String = stack["item"]
 		var at := _tile_next_to(origin, used)
 		used[at] = true
-		_item_table.place_new_ground_item(item, quantity, at.x, at.y)
+		_item_table.place_new_ground_item(item, quantity, at)
 		stack["quantity"] = 0
 
 ## The first passable, non-trench, item-free tile next to the bench footprint (N/W/E/S per
 ## footprint tile, row-major) not in exclude; else the first passable neighbour, else origin.
-func _tile_next_to(origin: Vector2i, exclude: Dictionary) -> Vector2i:
-	var kind := _object_table.get_object(origin.x, origin.y)
+func _tile_next_to(origin: Vector3i, exclude: Dictionary) -> Vector3i:
+	var kind := _object_table.get_object(origin)
 	var orientation: String = _object_table.object_orientation.get(_tile_grid.index_of(origin), "")
-	var footprint: Array[Vector2i] = [origin]
+	var footprint: Array[Vector3i] = [origin]
 	if not kind.is_empty():
 		footprint = _object_table.object_footprint_tiles(kind, origin, orientation)
 	var fallback := NO_BENCH
 	for tile in footprint:
-		for offset: Vector2i in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
+		for offset: Vector3i in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
 			var neighbour := tile + offset
-			if footprint.has(neighbour) or exclude.has(neighbour) or not _tile_grid.in_bounds(neighbour.x, neighbour.y):
+			if footprint.has(neighbour) or exclude.has(neighbour) or not _tile_grid.contains(neighbour):
 				continue
-			var passable: bool = _passability.passability(neighbour.x, neighbour.y)["passable"]
-			if not passable or _tile_grid.get_tile(neighbour.x, neighbour.y) == "trench":
+			var passable: bool = _passability.passability(neighbour)["passable"]
+			if not passable or _tile_grid.tile_at(neighbour) == "trench":
 				continue
 			if fallback == NO_BENCH:
 				fallback = neighbour
-			if not _item_table.has_item_at(neighbour.x, neighbour.y):
+			if not _item_table.has_item_at(neighbour):
 				return neighbour
 	return fallback if fallback != NO_BENCH else origin
 
@@ -512,15 +502,13 @@ func check_command(command: Dictionary) -> Dictionary:
 	if type == "craft_cancel_order":
 		fields = ["x", "y", "order_id"]
 	for key: Variant in payload.keys():
-		if not fields.has(key):
+		if not fields.has(key) and key != "z": # "z": filled at the command boundary (ADR 045 §6)
 			return {"reason": "invalid_payload", "params": {"detail": "craft_extra_field", "field": str(key)}}
 	for key: String in fields:
 		var want := TYPE_INT if key in ["x", "y", "count"] else TYPE_STRING
 		if typeof(payload.get(key)) != want:
 			return {"reason": "invalid_payload", "params": {"detail": "craft_payload"}}
-	var x: int = payload["x"]
-	var y: int = payload["y"]
-	var origin := bench_origin_at(x, y)
+	var origin := bench_origin_at(TileGrid.tile_of(payload))
 	if origin == NO_BENCH:
 		return {"reason": "invalid_target", "params": {"detail": "not_a_workbench"}}
 	if type == "craft_cancel_order":
@@ -532,7 +520,7 @@ func check_command(command: Dictionary) -> Dictionary:
 	var recipe_id: String = payload["recipe"]
 	if not recipes.has(recipe_id):
 		return {"reason": "invalid_payload", "params": {"detail": "unknown_recipe", "recipe": recipe_id}}
-	if recipes.bench_of(recipe_id) != _object_table.get_object(origin.x, origin.y):
+	if recipes.bench_of(recipe_id) != _object_table.get_object(origin):
 		return {"reason": "invalid_target", "params": {"detail": "recipe_wrong_bench", "recipe": recipe_id}}
 	var count: int = payload["count"]
 	if count < (0 if type == "craft_set_target" else 1) or count > MAX_COUNT:
@@ -543,9 +531,7 @@ func check_command(command: Dictionary) -> Dictionary:
 ## (craft_add_order: "order_id").
 func apply_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
-	var x: int = payload["x"]
-	var y: int = payload["y"]
-	var origin := bench_origin_at(x, y)
+	var origin := bench_origin_at(TileGrid.tile_of(payload))
 	var key := bench_key(origin)
 	if not _benches.has(key):
 		_benches[key] = {"origin": origin, "targets": {}, "orders": [], "bill": {}}

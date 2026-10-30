@@ -63,7 +63,7 @@ func advance(tick: int) -> void:
 			var so_far: int = promised.get(seed_kind, 0)
 			promised[seed_kind] = so_far + 1
 	for harvest: Array in (_ripe_harvests.call() as Array):
-		var tile: Vector2i = harvest[0]
+		var tile: Vector3i = harvest[0]
 		var harvest_job: String = harvest[1]
 		if not claimed.has(tile):
 			_submit_at(tile, tick, harvest_job, claimed)
@@ -92,12 +92,12 @@ func _advance_zone(zone: Dictionary, tick: int, claimed: Dictionary, free_seeds:
 	var rect := Rect2i(zone_x, zone_y, width, height)
 	for y in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
-			var tile := Vector2i(x, y)
+			var tile := Vector3i(x, y, int(zone["z"]))
 			if claimed.has(tile):
 				continue
-			var kind: String = _get_tile.call(x, y)
+			var kind: String = _get_tile.call(tile)
 			if kind == ContentRegistry.TILE_SOIL:
-				var passability: Dictionary = _passability.call(x, y)
+				var passability: Dictionary = _passability.call(tile)
 				if passability["passable"]:
 					_submit_at(tile, tick, TILL_JOB, claimed)
 			elif kind == ContentRegistry.TILE_PLOWED_SOIL and may_sow:
@@ -105,7 +105,7 @@ func _advance_zone(zone: Dictionary, tick: int, claimed: Dictionary, free_seeds:
 				if units > 0 and _submit_at(tile, tick, sow_job, claimed):
 					free_seeds[seed_kind] = units - 1
 
-func _submit_at(tile: Vector2i, tick: int, kind: String, claimed: Dictionary) -> bool:
+func _submit_at(tile: Vector3i, tick: int, kind: String, claimed: Dictionary) -> bool:
 	var result: Dictionary = _submit.call(tile, PRIORITY, tick, kind)
 	if result.get("ok", false):
 		claimed[tile] = true

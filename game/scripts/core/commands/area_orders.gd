@@ -41,7 +41,7 @@ func _init(apply: Callable, get_construction_site: Callable, get_job_index: Call
 ## area_order payload rule shared by apply_command() and preview(); {} when valid.
 static func check(payload: Dictionary, map_width: int, map_height: int) -> Dictionary:
 	for key in payload.keys():
-		if key not in ["order", "x", "y", "width", "height", "priority"]:
+		if key not in ["order", "x", "y", "z", "width", "height", "priority"]:
 			return {"reason": "invalid_payload", "params": {"detail": "area_order_extra_field", "field": str(key)}}
 	if typeof(payload.get("order")) != TYPE_STRING or String(payload["order"]) not in ORDERS:
 		return {"reason": "invalid_payload", "params": {"detail": "area_order_unknown_order", "orders": str(ORDERS)}}
@@ -56,7 +56,7 @@ static func check(payload: Dictionary, map_width: int, map_height: int) -> Dicti
 	return {}
 
 ## Queues the order and expands its first TILES_PER_STEP tiles now; the envelope adds
-## "area_order_id", "remaining" and "skipped" ({x, y, reason} per rejected tile).
+## "area_order_id", "remaining" and "skipped" ({x, y, z, reason} per rejected tile).
 func apply_command(command: Dictionary, map_width: int, map_height: int) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var rejection := check(payload, map_width, map_height)
@@ -64,7 +64,7 @@ func apply_command(command: Dictionary, map_width: int, map_height: int) -> Dict
 		return _event_log.rejection(command["command_id"], command["actor"], rejection["reason"], rejection["params"])
 	var order := {
 		"id": _next_id, "order": String(payload["order"]), "actor": String(command["actor"]),
-		"commandId": String(command["command_id"]), "x": int(payload["x"]), "y": int(payload["y"]),
+		"commandId": String(command["command_id"]), "x": int(payload["x"]), "y": int(payload["y"]), "z": int(payload["z"]),
 		"width": int(payload["width"]), "height": int(payload["height"]),
 		"priority": int(payload.get("priority", 1)), "next": 0, "done": [],
 		"jobLimit": int(_next_job_number.call()), "siteLimit": int(_next_site_number.call()),
@@ -102,7 +102,8 @@ func _expand(position: int, budget: int, skipped: Array[Dictionary]) -> int:
 			done.erase(index)
 			continue
 		used += 1
-		var tile := Vector2i(int(order["x"]), int(order["y"])) + TileGrid.flat_coord(index, width)
+		var offset := TileGrid.flat_coord(index, width)
+		var tile := TileGrid.tile_of(order) + Vector3i(offset.x, offset.y, 0)
 		for earlier in position:
 			_pull_forward(_orders[earlier], tile)
 		_expand_tile(order, tile, skipped)
@@ -113,9 +114,9 @@ func _expand(position: int, budget: int, skipped: Array[Dictionary]) -> int:
 	return used
 
 ## Expands `tile` of the earlier `order` now, unless outside it or already done.
-func _pull_forward(order: Dictionary, tile: Vector2i) -> void:
-	var local := tile - Vector2i(int(order["x"]), int(order["y"]))
-	if not Rect2i(0, 0, int(order["width"]), int(order["height"])).has_point(local):
+func _pull_forward(order: Dictionary, tile: Vector3i) -> void:
+	var local := tile - TileGrid.tile_of(order)
+	if local.z != 0 or not Rect2i(0, 0, int(order["width"]), int(order["height"])).has_point(Vector2i(local.x, local.y)): # planar: rect-local
 		return
 	var index: int = TileGrid.flat_index(local.x, local.y, int(order["width"]))
 	if index < int(order["next"]) or (order["done"] as Array).has(index):
@@ -124,14 +125,14 @@ func _pull_forward(order: Dictionary, tile: Vector2i) -> void:
 	var ignored: Array[Dictionary] = []
 	_expand_tile(order, tile, ignored)
 
-func _expand_tile(order: Dictionary, tile: Vector2i, skipped: Array[Dictionary]) -> void:
+func _expand_tile(order: Dictionary, tile: Vector3i, skipped: Array[Dictionary]) -> void:
 	var command := tile_command(order, tile)
 	if command.is_empty():
 		return
 	var first := int(_next_job_number.call())
 	var result: Dictionary = _apply.call(command)
 	if not result.get("ok", false):
-		skipped.append({"x": tile.x, "y": tile.y, "reason": String(result["rejection"]["reason"])})
+		skipped.append({"x": tile.x, "y": tile.y, "z": tile.z, "reason": String(result["rejection"]["reason"])})
 	var end := int(_next_job_number.call())
 	if end == first or not _has_pending_cancel(int(order["id"])):
 		return
@@ -165,21 +166,22 @@ func remaining_tiles(id: int) -> int:
 	return 0
 
 ## The per-tile command for `tile`, or {} when there is nothing to order (never a rejection).
-func tile_command(order: Dictionary, tile: Vector2i) -> Dictionary:
+func tile_command(order: Dictionary, tile: Vector3i) -> Dictionary:
 	var type: String = order["order"]
-	var command := {"actor": order["actor"], "command_id": "%s:%s" % [order["commandId"], TileGrid.comma_key(tile.x, tile.y)],
+	var command := {"actor": order["actor"], "command_id": "%s:%s" % [order["commandId"], TileGrid.comma_key(tile)],
 		"tick": _clock.tick}
 	if type in JOB_ORDERS:
 		command["type"] = type
-		command["payload"] = {"x": tile.x, "y": tile.y, "priority": order["priority"]}
+		command["payload"] = {"x": tile.x, "y": tile.y, "z": tile.z, "priority": order["priority"]}
 	elif type == "remove_object":
 		command["type"] = "remove_object"
-		command["payload"] = {"x": tile.x, "y": tile.y}
+		command["payload"] = {"x": tile.x, "y": tile.y, "z": tile.z}
 	else:
-		var site: Dictionary = _get_construction_site.call(tile.x, tile.y)
+		var site: Dictionary = _get_construction_site.call(tile)
 		if not site.is_empty() and _number(String(site["id"])) < int(order["siteLimit"]):
 			command["type"] = "cancel_site"
-			command["payload"] = {"x": int(site["origin"].x), "y": int(site["origin"].y)}
+			var origin: Vector3i = site["origin"]
+			command["payload"] = {"x": origin.x, "y": origin.y, "z": origin.z}
 			return command
 		var candidates: Array = []
 		for job in _get_job_index.call().pending_at(tile):

@@ -22,7 +22,7 @@ var _watched: Dictionary = {}
 var _labour_disabled: Dictionary = {}
 var _designations: Dictionary = {}
 var _pending_by_target: Dictionary = {}
-var _designation_log: Array[Vector2i] = []
+var _designation_log: Array[Vector3i] = []
 var _next_position: int = 0
 ## Jobs removed since the last compaction.
 var _removed: int = 0
@@ -164,11 +164,11 @@ func designation_changes(from: int) -> Dictionary:
 	return {"next": _designation_log.size(), "tiles": tiles}
 
 ## The live pending non-site jobs targeting tile (see _pending_by_target).
-func pending_at(tile: Vector2i) -> Array:
+func pending_at(tile: Vector3i) -> Array:
 	return _pending_by_target.get(tile, [])
 
 ## The ids of pending_at(tile), in list order.
-func pending_ids_at(tile: Vector2i) -> Array[String]:
+func pending_ids_at(tile: Vector3i) -> Array[String]:
 	var ids: Array[String] = []
 	for job in pending_at(tile):
 		ids.append(String(job["id"]))
@@ -177,7 +177,7 @@ func pending_ids_at(tile: Vector2i) -> Array[String]:
 func _track_pending(job: Dictionary, pending: bool) -> void:
 	if String(job.get("kind", "")) in ["site_fetch", "craft_fetch", "site_work"]:
 		return
-	var tile: Vector2i = job["target"]
+	var tile: Vector3i = job["target"]
 	var jobs: Array = _pending_by_target.get(tile, [])
 	if pending:
 		jobs.append(job)
@@ -190,7 +190,7 @@ func _track_pending(job: Dictionary, pending: bool) -> void:
 func _designate(job: Dictionary, delta: int) -> void:
 	if String(job.get("kind", "")) in ["site_fetch", "craft_fetch"]:
 		return
-	var tile: Vector2i = job["target"]
+	var tile: Vector3i = job["target"]
 	var count := int(_designations.get(tile, 0)) + delta
 	if count > 0:
 		_designations[tile] = count

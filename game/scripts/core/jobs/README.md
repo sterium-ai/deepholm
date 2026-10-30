@@ -11,7 +11,7 @@ tick.
 ## Inputs and transitions
 
 Construct with an injected, seeded `RandomNumberGenerator` and a deterministic
-`Callable(target: Vector2i) -> bool`. The callable must not mutate this queue;
+`Callable(target: Vector3i) -> bool`. The callable must not mutate this queue;
 it reads caller-owned reachability state, which may change between ticks.
 No random draws are needed: IDs and arbitration use submission order.
 
@@ -27,7 +27,7 @@ No random draws are needed: IDs and arbitration use submission order.
   the shared `ReservationTable` (colonist-ai.md 3.4; see `reservation_table.gd`
   and the reusable `reservation_invariants.gd` helper), namespaced with a
   `tile:` key. `get_reservations()` still returns the read model as a
-  `Dictionary[Vector2i -> String job_id]`, one entry per active job.
+  `Dictionary[Vector3i -> String job_id]`, one entry per active job.
   `get_reservation_table()` returns the actual shared `ReservationTable`
   instance (not a copy), so a future item/cell reservation acquired through
   it belongs to this same ledger and this queue's own terminal transitions.
@@ -49,7 +49,7 @@ All `get_*` job getters return detached deep copies; `get_jobs(false)` lists
 live jobs only (what the save and `state_hash()` read). Core readers that only
 read use `view_job()`/`view_jobs_of_kinds()`, the live records themselves,
 which they must never mutate. `get_job(unknown_id)` returns `{}`.
-A job contains `id`, `kind: dig`, `status`, `priority`, `target: Vector2i`,
+A job contains `id`, `kind: dig`, `status`, `priority`, `target: Vector3i`,
 `reason`, `remedy`, and `blocking_job_id` (empty when inapplicable).
 Statuses are exactly `queued/active/completed/failed/cancelled`, matching the
 minimum vocabulary in `game-state.schema.json`. Blocking is queued state with
@@ -92,9 +92,9 @@ Rejection codes are `invalid_priority`, `invalid_target`, `unknown_job`,
 ```gdscript
 var rng := RandomNumberGenerator.new()
 rng.seed = 45
-var queue := JobQueue.new(rng, func(_tile: Vector2i) -> bool: return true)
-var first: String = queue.submit_dig(Vector2i(3, 2))["job_id"]
-var second: String = queue.submit_dig(Vector2i(3, 2))["job_id"]
+var queue := JobQueue.new(rng, func(_tile: Vector3i) -> bool: return true)
+var first: String = queue.submit_dig(Vector3i(3, 2, 0))["job_id"]
+var second: String = queue.submit_dig(Vector3i(3, 2, 0))["job_id"]
 queue.tick() # first active; second queued / blocked_target_reserved
 queue.cancel(first) # reservation released immediately
 queue.tick() # second active without resubmission
@@ -115,7 +115,7 @@ documented in
 defaults (`""`, `null`, `0`, `0`) on every kind: `item_id` (the ground item to
 carry, attached post-submission via `attach_item()` since
 `GlobalAssignment.submit()`'s fixed signature has no room for it), `cell`
-(the reserved destination `Vector2i`, chosen by the injected
+(the reserved destination `Vector3i`, chosen by the injected
 `set_haul_destination_finder()` callable and set at activation), `backoff_ticks`
 and `retry_at` (see below). `job["target"]` stays the item's tile, used only
 for the scheduler's own routing/`get_reservations()` bookkeeping exactly like

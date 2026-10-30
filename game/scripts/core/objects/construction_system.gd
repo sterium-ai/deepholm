@@ -47,7 +47,7 @@ var _scheduler: AssignmentType
 var _event_log: EventLogType
 ## () -> Array[Dictionary]: the live colonist list (StateCodec.decode() reassigns it).
 var _get_colonists: Callable
-## (x: int, y: int) -> bool: a colonist stands on the tile.
+## (tile: Vector3i) -> bool: a colonist stands on the tile.
 var _colonist_at: Callable
 ## (job_id: String) -> Dictionary: the colonist assigned to the job, or {}.
 var _find_job_colonist: Callable
@@ -58,7 +58,7 @@ var _finish_job: Callable
 var complete_builder: Callable
 ## (job_id: String) -> void: drops a site_fetch job's carried item on the colonist's tile.
 var _drop_carried_haul_item: Callable
-## (from: Vector2i, to: Vector2i, faction_id: String) -> int: route cost, -1 when unreachable.
+## (from: Vector3i, to: Vector3i, faction_id: String) -> int: route cost, -1 when unreachable.
 var _route_cost: Callable
 
 func _init(object_definitions: Dictionary, tile_grid: TileGridType, passability: PassabilityType,
@@ -94,7 +94,7 @@ func hash_into(snapshot: Dictionary) -> void:
 	snapshot["construction_sites"] = site_table.list()
 
 ## A site_work job's remaining duration, always re-derived from its site.
-func site_work_ticks_remaining(job: Dictionary, target: Vector2i) -> int:
+func site_work_ticks_remaining(job: Dictionary, target: Vector3i) -> int:
 	var site_id := site_table.find_at_origin(job.get("site", target))
 	if site_id.is_empty():
 		return 0
@@ -104,7 +104,7 @@ func site_work_ticks_remaining(job: Dictionary, target: Vector2i) -> int:
 ## One tick of a builder's work on the site at origin; finalizes the site once
 ## the summed progress meets build_ticks. completing_job_id "" (a non-final
 ## tick crossing build_ticks) finishes every builder, this one included.
-func add_site_work(origin: Vector2i, completing_job_id: String) -> void:
+func add_site_work(origin: Vector3i, completing_job_id: String) -> void:
 	var site_id := site_table.find_at_origin(origin)
 	if not site_id.is_empty():
 		var progress := site_table.add_progress(site_id, 1)
@@ -120,7 +120,7 @@ func apply_construction_submission(command: Dictionary) -> Dictionary:
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var kind: String = payload["kind"]
 	var orientation := String(payload.get("orientation", ""))
-	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
+	var origin := TileGrid.tile_of(payload)
 	var definition: Dictionary = _object_definitions[kind]
 	var site := site_table.create(kind, origin, orientation, definition["build_cost"] as Array,
 		int(definition["build_ticks"]), int(definition["max_builders"]))
@@ -138,7 +138,7 @@ func apply_construction_submission(command: Dictionary) -> Dictionary:
 ## the enclosure check (blocked_target_unreachable).
 func check_construction_command(payload: Dictionary) -> Dictionary:
 	for key in payload.keys():
-		if not (key == "kind" or key == "x" or key == "y" or key == "orientation"):
+		if not (key == "kind" or key == "x" or key == "y" or key == "z" or key == "orientation"):
 			return {"reason": "invalid_payload", "params": {"detail": "build_extra_field", "field": str(key)}}
 	if (typeof(payload.get("kind")) != TYPE_STRING or String(payload.get("kind")).is_empty()
 			or typeof(payload.get("x")) != TYPE_INT or typeof(payload.get("y")) != TYPE_INT
@@ -150,7 +150,7 @@ func check_construction_command(payload: Dictionary) -> Dictionary:
 	var orientation := String(payload.get("orientation", ""))
 	if not orientation.is_empty() and orientation != "horizontal" and orientation != "vertical":
 		return {"reason": "invalid_payload", "params": {"detail": "invalid_orientation"}}
-	var origin := Vector2i(int(payload["x"]), int(payload["y"]))
+	var origin := TileGrid.tile_of(payload)
 	var footprint_tiles := _object_table.object_footprint_tiles(kind, origin, orientation)
 	var occupancy_check := _construction_footprint_check(footprint_tiles)
 	if not occupancy_check.is_empty():
@@ -161,10 +161,10 @@ func check_construction_command(payload: Dictionary) -> Dictionary:
 
 ## Per-tile rule shared by build and build_line so both agree on validity and reason;
 ## the enclosure check is left to each caller.
-func _construction_footprint_check(footprint_tiles: Array[Vector2i]) -> Dictionary:
+func _construction_footprint_check(footprint_tiles: Array[Vector3i]) -> Dictionary:
 	var table := _scheduler.queue.get_reservation_table()
 	for tile in footprint_tiles:
-		if (_colonist_at.call(tile.x, tile.y) or not _object_table.get_object(tile.x, tile.y).is_empty()
+		if (_colonist_at.call(tile) or not _object_table.get_object(tile).is_empty()
 				or not _build_site_terrain_valid(tile)):
 			return {"reason": "invalid_target", "params": {"detail": "build_tile_blocked"}}
 		if not table.owner(_build_site_key(tile)).is_empty():
@@ -188,24 +188,24 @@ func classify_build_line_command(payload: Dictionary) -> Dictionary:
 	if typeof(payload.get("tiles")) != TYPE_ARRAY or (payload["tiles"] as Array).is_empty():
 		return {"reason": "invalid_payload", "params": {"detail": "build_line_tiles"}}
 	var seen := {}
-	var canonical: Array[Vector2i] = []
+	var canonical: Array[Vector3i] = []
 	for entry in (payload["tiles"] as Array):
 		if typeof(entry) != TYPE_DICTIONARY or typeof(entry.get("x")) != TYPE_INT or typeof(entry.get("y")) != TYPE_INT:
 			return {"reason": "invalid_payload", "params": {"detail": "build_line_tile_payload"}}
-		var tile := Vector2i(int(entry["x"]), int(entry["y"]))
+		var tile := TileGrid.tile_of(entry)
 		if not seen.has(tile):
 			seen[tile] = true
 			canonical.append(tile)
-	canonical.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+	canonical.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
 		return a.y < b.y or (a.y == b.y and a.x < b.x))
-	var surviving: Array[Vector2i] = []
+	var surviving: Array[Vector3i] = []
 	var skipped: Array[Dictionary] = []
 	var claimed_footprint := {}
 	for tile in canonical:
 		var footprint := _object_table.object_footprint_tiles(kind, tile, orientation)
 		var occupancy_check := _construction_footprint_check(footprint)
 		if not occupancy_check.is_empty():
-			skipped.append({"x": tile.x, "y": tile.y, "reason": occupancy_check["reason"]})
+			skipped.append({"x": tile.x, "y": tile.y, "z": tile.z, "reason": occupancy_check["reason"]})
 			continue
 		var overlaps_earlier_survivor := false
 		for footprint_tile in footprint:
@@ -213,13 +213,13 @@ func classify_build_line_command(payload: Dictionary) -> Dictionary:
 				overlaps_earlier_survivor = true
 				break
 		if overlaps_earlier_survivor:
-			skipped.append({"x": tile.x, "y": tile.y, "reason": "invalid_target"})
+			skipped.append({"x": tile.x, "y": tile.y, "z": tile.z, "reason": "invalid_target"})
 			continue
 		for footprint_tile in footprint:
 			claimed_footprint[footprint_tile] = true
 		surviving.append(tile)
 	if not surviving.is_empty() and not bool(_object_definitions[kind].get("passable", true)):
-		var combined_footprint: Array[Vector2i] = []
+		var combined_footprint: Array[Vector3i] = []
 		for tile in surviving:
 			combined_footprint.append_array(_object_table.object_footprint_tiles(kind, tile, orientation))
 		if _would_enclose_tiles(combined_footprint):
@@ -236,13 +236,13 @@ func apply_build_line_command(command: Dictionary) -> Dictionary:
 	var definition: Dictionary = _object_definitions[kind]
 	var table := _scheduler.queue.get_reservation_table()
 	var sites: Array[Dictionary] = []
-	for tile in (classification["surviving"] as Array[Vector2i]):
+	for tile in (classification["surviving"] as Array[Vector3i]):
 		var site := site_table.create(kind, tile, orientation, definition["build_cost"] as Array,
 			int(definition["build_ticks"]), int(definition["max_builders"]))
 		var owner := site_table.owner_key(String(site["id"]))
 		for footprint_tile in _object_table.object_footprint_tiles(kind, tile, orientation):
 			table.acquire(_build_site_key(footprint_tile), owner)
-		sites.append({"id": site["id"], "x": tile.x, "y": tile.y})
+		sites.append({"id": site["id"], "x": tile.x, "y": tile.y, "z": tile.z})
 	var applied := _event_log.applied(command)
 	applied["sites"] = sites
 	applied["skipped"] = classification["skipped"]
@@ -250,17 +250,17 @@ func apply_build_line_command(command: Dictionary) -> Dictionary:
 
 ## Terrain a site may occupy: in bounds, passable, not tree, not trench (a pit
 ## is passable but no foundation). place_object keeps its own looser rule.
-func _build_site_terrain_valid(site: Vector2i) -> bool:
-	if site.x < 0 or site.x >= _tile_grid.width or site.y < 0 or site.y >= _tile_grid.height:
+func _build_site_terrain_valid(site: Vector3i) -> bool:
+	if not _tile_grid.contains(site):
 		return false
-	var tile_kind := _tile_grid.get_tile(site.x, site.y)
+	var tile_kind := _tile_grid.tile_at(site)
 	if tile_kind == TILE_TREE or tile_kind == TILE_TRENCH:
 		return false
-	return bool(_passability.passability(site.x, site.y)["passable"])
+	return bool(_passability.passability(site)["passable"])
 
 ## The same "tile:" key work jobs reserve: sites and jobs contend through one ledger.
-func _build_site_key(build_target: Vector2i) -> String:
-	return TileGridType.target_key(build_target.x, build_target.y)
+func _build_site_key(build_target: Vector3i) -> String:
+	return TileGridType.target_key(build_target)
 
 ## A detached copy with builder_ids translated from job ids to the colonist
 ## currently driving each job (one no longer found is omitted).
@@ -281,14 +281,13 @@ func get_construction_sites() -> Array[Dictionary]:
 	return out
 
 ## {} for a tile no site covers; any footprint tile resolves to its site.
-func get_construction_site(x: int, y: int) -> Dictionary:
-	var id := construction_site_id_at(x, y)
+func get_construction_site(tile: Vector3i) -> Dictionary:
+	var id := construction_site_id_at(tile)
 	if id.is_empty():
 		return {}
 	return _public_site_view(site_table.get_site(id))
 
-func construction_site_id_at(x: int, y: int) -> String:
-	var tile := Vector2i(x, y)
+func construction_site_id_at(tile: Vector3i) -> String:
 	for site in site_table.list():
 		if _object_table.object_footprint_tiles(String(site["kind"]), site["origin"], String(site["orientation"])).has(tile):
 			return String(site["id"])
@@ -320,7 +319,7 @@ func _pending_site_fetch_jobs(exclude_job_id: String = "") -> Array[Dictionary]:
 
 ## The cheapest-route stockpiled source of `kind` not committed to another site_fetch job
 ## (ties by lowest id); "" when none. A pure query.
-func next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String, from: Vector2i) -> String:
+func next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String, from: Vector3i) -> String:
 	var table := _scheduler.queue.get_reservation_table()
 	var job_id := String(job["id"])
 	var faction_id := String(colonist.get("factionId", "colony"))
@@ -335,14 +334,14 @@ func next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String,
 		var item: Dictionary = _item_table.items[id]
 		if String(item["kind"]) != kind:
 			continue
-		if not _zone_table.is_in_any_zone(int(item["x"]), int(item["y"])):
+		if not _zone_table.is_in_any_zone(TileGrid.tile_of(item)):
 			continue
 		if committed.has(String(id)):
 			continue
 		var owner := table.owner(JobQueueType.ITEM_KEY_PREFIX + String(id))
 		if not owner.is_empty() and owner != job_id:
 			continue
-		var tile := Vector2i(int(item["x"]), int(item["y"]))
+		var tile := TileGrid.tile_of(item)
 		var cost: int = _route_cost.call(from, tile, faction_id)
 		if cost < 0:
 			continue
@@ -358,7 +357,7 @@ func next_site_fetch_source(colonist: Dictionary, job: Dictionary, kind: String,
 ## Every other site still short of `kind`, reachable from `from` and below its
 ## max_builders busy count (a retarget bypasses the giver's own cap), sorted by
 ## route cost then site id: where a colonist may chain a leftover hands-load.
-func reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vector2i, exclude_site_id: String) -> Array[Dictionary]:
+func reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vector3i, exclude_site_id: String) -> Array[Dictionary]:
 	var faction_id := String(colonist.get("factionId", "colony"))
 	var scored: Array = []
 	for site in site_table.list():
@@ -381,7 +380,7 @@ func reachable_short_sibling_sites(colonist: Dictionary, kind: String, from: Vec
 
 ## Queued/active site_fetch + site_work jobs on `origin`: the same busy count
 ## ConstructionGiver.advance() uses.
-func _site_fetch_work_busy(origin: Vector2i) -> int:
+func _site_fetch_work_busy(origin: Vector3i) -> int:
 	var busy := 0
 	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch", "site_work"]):
 		if String(job.get("status", "")) in ["queued", "active"] and job.get("site") == origin:
@@ -389,7 +388,7 @@ func _site_fetch_work_busy(origin: Vector2i) -> int:
 	return busy
 
 ## The nearest reachable_short_sibling_sites() candidate, or {}.
-func next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector2i, exclude_site_id: String) -> Dictionary:
+func next_site_fetch_site(colonist: Dictionary, kind: String, from: Vector3i, exclude_site_id: String) -> Dictionary:
 	var candidates := reachable_short_sibling_sites(colonist, kind, from, exclude_site_id)
 	return candidates[0] if not candidates.is_empty() else {}
 
@@ -417,7 +416,7 @@ func resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
 		var kind := String(_item_table.item_lookup(current_item_id).get("kind", ""))
 		if kind.is_empty():
 			continue
-		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var current := TileGrid.tile_of(colonist)
 		var best_id := next_site_fetch_source(colonist, job, kind, current)
 		if best_id.is_empty() or best_id == current_item_id:
 			continue
@@ -425,12 +424,12 @@ func resolve_freshly_activated_site_fetch_sources(before: Dictionary) -> void:
 		table.release(JobQueueType.ITEM_KEY_PREFIX + current_item_id, job_id)
 		table.acquire(JobQueueType.ITEM_KEY_PREFIX + best_id, job_id)
 		var best_item := _item_table.item_lookup(best_id)
-		_scheduler.queue.retarget_site_fetch_source(job_id, best_id, Vector2i(int(best_item["x"]), int(best_item["y"])))
+		_scheduler.queue.retarget_site_fetch_source(job_id, best_id, TileGrid.tile_of(best_item))
 		site_fetch_source_retargeted[job_id] = true
 
 ## submit_fetch callable for ConstructionGiver: leg one targets item_tile; the
 ## item and the site origin (leg two) are attached to the job.
-func submit_site_fetch(origin: Vector2i, item_id: String, item_tile: Vector2i, tick: int) -> Dictionary:
+func submit_site_fetch(origin: Vector3i, item_id: String, item_tile: Vector3i, tick: int) -> Dictionary:
 	var result := _scheduler.submit(item_tile, JobQueueType.Priority.NORMAL, tick, "site_fetch", "")
 	if result.get("ok", false):
 		var job_id: String = result["job_id"]
@@ -440,7 +439,7 @@ func submit_site_fetch(origin: Vector2i, item_id: String, item_tile: Vector2i, t
 
 ## submit_work callable for ConstructionGiver: targets the site origin and adds
 ## the job to the site's builders (capped at max_builders by the table).
-func submit_site_work(origin: Vector2i, tick: int) -> Dictionary:
+func submit_site_work(origin: Vector3i, tick: int) -> Dictionary:
 	var result := _scheduler.submit(origin, JobQueueType.Priority.NORMAL, tick, "site_work", "")
 	if result.get("ok", false):
 		var job_id: String = result["job_id"]
@@ -450,16 +449,16 @@ func submit_site_work(origin: Vector2i, tick: int) -> Dictionary:
 
 ## The first passable, non-trench tile next to the footprint (N/W/E/S per tile)
 ## not in `exclude`; tiles[0] when none qualifies.
-func _nearest_free_adjacent_to_footprint(tiles: Array[Vector2i], exclude: Dictionary = {}) -> Vector2i:
+func _nearest_free_adjacent_to_footprint(tiles: Array[Vector3i], exclude: Dictionary = {}) -> Vector3i:
 	var footprint := {}
 	for tile in tiles:
 		footprint[tile] = true
 	for tile in tiles:
-		for neighbor in [Vector2i(tile.x, tile.y - 1), Vector2i(tile.x - 1, tile.y),
-				Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]:
+		for neighbor in [Vector3i(tile.x, tile.y - 1, tile.z), Vector3i(tile.x - 1, tile.y, tile.z),
+				Vector3i(tile.x + 1, tile.y, tile.z), Vector3i(tile.x, tile.y + 1, tile.z)]:
 			if footprint.has(neighbor) or exclude.has(neighbor):
 				continue
-			if bool(_passability.passability(neighbor.x, neighbor.y)["passable"]) and _tile_grid.get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
+			if bool(_passability.passability(neighbor)["passable"]) and _tile_grid.tile_at(neighbor) != TILE_TRENCH:
 				return neighbor
 	return tiles[0]
 
@@ -470,7 +469,7 @@ func cancel_construction_site(site_id: String) -> void:
 	var site := site_table.get_site(site_id)
 	if site.is_empty():
 		return
-	var origin: Vector2i = site["origin"]
+	var origin: Vector3i = site["origin"]
 	for job in _scheduler.queue.view_jobs_of_kinds(["site_fetch", "site_work"]):
 		if job.get("site") != origin or not (String(job.get("status", "")) in ["queued", "active"]):
 			continue
@@ -487,7 +486,7 @@ func cancel_construction_site(site_id: String) -> void:
 			continue
 		var drop_at := _nearest_free_adjacent_to_footprint(footprint, used)
 		used[drop_at] = true
-		_item_table.place_new_ground_item(String(entry["item"]), quantity, drop_at.x, drop_at.y)
+		_item_table.place_new_ground_item(String(entry["item"]), quantity, drop_at)
 	_scheduler.queue.get_reservation_table().release_all(site_table.owner_key(site_id))
 	site_table.remove(site_id)
 
@@ -506,8 +505,8 @@ func _finalize_construction_site(site_id: String, completing_job_id: String) -> 
 		else:
 			_finish_job.call(String(other_job_id), "complete_job")
 	_scheduler.queue.get_reservation_table().release_all(site_table.owner_key(site_id))
-	var origin: Vector2i = site["origin"]
-	_object_table.set_object(origin.x, origin.y, String(site["kind"]), "colony", String(site["orientation"]))
+	var origin: Vector3i = site["origin"]
+	_object_table.set_object(origin, String(site["kind"]), "colony", String(site["orientation"]))
 	site_table.remove(site_id)
 
 ## A site_work job's terminal transition other than completion frees its builder
@@ -522,7 +521,7 @@ func release_site_builder(job_id: String) -> void:
 
 ## True when blocking `tiles` (plus other impassable sites) would strand a tile a colony
 ## actor reaches today; counted per component, as build_line tiles may span several.
-func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") -> bool:
+func _would_enclose_tiles(tiles: Array[Vector3i], exclude_site_id: String = "") -> bool:
 	var blocked := {}
 	for site in site_table.list():
 		if String(site["id"]) == exclude_site_id:
@@ -535,7 +534,7 @@ func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") 
 	for colonist in _get_colonists.call():
 		if String(colonist.get("factionId", "colony")) != "colony":
 			continue
-		var reference := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var reference := TileGrid.tile_of(colonist)
 		if tiles.has(reference) or seen.has(reference) or blocked.has(reference):
 			continue
 		var before := _flood_fill_passable(reference, blocked)
@@ -561,21 +560,21 @@ func _would_enclose_tiles(tiles: Array[Vector2i], exclude_site_id: String = "") 
 	return false
 
 ## 4-connected flood fill of colony-passable tiles from start, treating `blocked` as walls.
-func _flood_fill_passable(start: Vector2i, blocked: Dictionary) -> Dictionary:
+func _flood_fill_passable(start: Vector3i, blocked: Dictionary) -> Dictionary:
 	var visited := {}
-	if blocked.has(start) or not bool(_passability.passability(start.x, start.y)["passable"]):
+	if blocked.has(start) or not bool(_passability.passability(start)["passable"]):
 		return visited
 	visited[start] = true
-	var frontier: Array[Vector2i] = [start]
+	var frontier: Array[Vector3i] = [start]
 	while not frontier.is_empty():
-		var current: Vector2i = frontier.pop_back()
-		for offset in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
-			var next: Vector2i = current + offset
+		var current: Vector3i = frontier.pop_back()
+		for offset in [Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0)]:
+			var next: Vector3i = current + offset
 			if blocked.has(next) or visited.has(next):
 				continue
 			if next.x < 0 or next.x >= _tile_grid.width or next.y < 0 or next.y >= _tile_grid.height:
 				continue
-			if not bool(_passability.passability(next.x, next.y)["passable"]):
+			if not bool(_passability.passability(next)["passable"]):
 				continue
 			visited[next] = true
 			frontier.append(next)

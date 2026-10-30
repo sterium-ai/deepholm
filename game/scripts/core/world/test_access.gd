@@ -53,10 +53,11 @@ static func object_table(w: WorldState) -> ObjectTableType: return w._object_tab
 static func zone_table(w: WorldState) -> ZoneTableType: return w._zone_table
 static func construction(w: WorldState) -> ConstructionSystemType: return w._construction
 static func area_orders(w: WorldState) -> AreaOrders: return w._area_orders
-static func tile_key(w: WorldState, x: int, y: int) -> String: return w._tile_key(x, y)
-static func cell_key(w: WorldState, x: int, y: int) -> String: return w._cell_key(x, y)
+## The (x, y) helpers below address the surface, like WorldState's (x, y) queries.
+static func tile_key(w: WorldState, x: int, y: int) -> String: return w._tile_key(Vector3i(x, y, TileGrid.SURFACE))
+static func cell_key(w: WorldState, x: int, y: int) -> String: return w._cell_key(Vector3i(x, y, TileGrid.SURFACE))
 static func is_cell_occupied(w: WorldState, x: int, y: int, excluding_colonist_id: String) -> bool:
-	return w._is_cell_occupied(x, y, excluding_colonist_id)
+	return w._is_cell_occupied(Vector3i(x, y, TileGrid.SURFACE), excluding_colonist_id)
 
 # --- Actors ------------------------------------------------------------------------------
 
@@ -64,7 +65,7 @@ static func is_cell_occupied(w: WorldState, x: int, y: int, excluding_colonist_i
 static func colonists(w: WorldState) -> Array[Dictionary]: return w._colonists
 static func set_colonists(w: WorldState, value: Array[Dictionary]) -> void: w._colonists = value
 static func find_colonist(w: WorldState, colonist_id: String) -> Dictionary: return w._find_colonist(colonist_id)
-static func colonist_at(w: WorldState, x: int, y: int) -> bool: return w._colonist_at(x, y)
+static func colonist_at(w: WorldState, x: int, y: int) -> bool: return w._colonist_at(Vector3i(x, y, TileGrid.SURFACE))
 static func append_colonist(w: WorldState, actor: Dictionary) -> void: w._append_colonist(actor)
 static func remove_colonist_by_id(w: WorldState, colonist_id: String, is_death: bool = false) -> void:
 	w._remove_colonist_by_id(colonist_id, is_death)
@@ -101,12 +102,12 @@ static func scheduler_find_waiting_entry(w: WorldState, job_id: String) -> Dicti
 	return w._scheduler._find_waiting_entry(job_id)
 static func toils(w: WorldState) -> ToilExecutorType: return w._toils
 static func progress_table(w: WorldState) -> WorkProgressType: return w._progress_table
-static func set_work_progress(w: WorldState, target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
+static func set_work_progress(w: WorldState, target: Vector3i, ticks_remaining: int, job_id: String = "") -> void:
 	w._set_work_progress(target, ticks_remaining, job_id)
 static func resolve_refused_reservations(w: WorldState) -> void: w._resolve_refused_reservations()
 static func resubmit_unreachable_job(w: WorldState, job_id: String, job: Dictionary) -> void:
 	w._resubmit_unreachable_job(job_id, job)
-static func flee_target_reserved(w: WorldState, x: int, y: int) -> bool: return w._flee_target_reserved(x, y)
+static func flee_target_reserved(w: WorldState, x: int, y: int) -> bool: return w._flee_target_reserved(Vector3i(x, y, TileGrid.SURFACE))
 static func tick_pipeline(w: WorldState) -> TickPipelineType: return w._tick_pipeline
 static func colonists_not_searching_need(w: WorldState) -> Array[Dictionary]:
 	return w._tick_pipeline._colonists_not_searching_need()
@@ -116,7 +117,7 @@ static func colonists_not_searching_need(w: WorldState) -> Array[Dictionary]:
 static func need_giver(w: WorldState) -> NeedGiverType: return w._need_giver
 static func need_giver_pending(w: WorldState) -> Dictionary: return w._need_giver._pending
 static func need_giver_searching(w: WorldState) -> Dictionary: return w._need_giver._searching
-static func need_giver_bounds_max(w: WorldState) -> Vector2i: return w._need_giver._bounds_max
+static func need_giver_bounds_max(w: WorldState) -> Vector3i: return w._need_giver._bounds_max
 static func rescue_giver(w: WorldState) -> RescueGiverType: return w._rescue_giver
 static func rescue_giver_searching(w: WorldState) -> Dictionary: return w._rescue_giver._searching
 static func rescue_giver_job_victim(w: WorldState) -> Dictionary: return w._rescue_giver._job_victim
@@ -128,7 +129,7 @@ static func approach_giver(w: WorldState) -> ApproachGiverType: return w._approa
 # --- Incidents, calendar, clock, events --------------------------------------------------
 
 static func incidents(w: WorldState) -> IncidentSchedulerType: return w._incidents
-static func submit_incident_job(w: WorldState, actor_id: String, target: Vector2i) -> String:
+static func submit_incident_job(w: WorldState, actor_id: String, target: Vector3i) -> String:
 	return w._submit_incident_job(actor_id, target)
 static func incident_random(w: WorldState) -> RandomNumberGenerator: return w._incidents._random
 static func incident_last_processed_day(w: WorldState) -> int: return w._incidents._last_processed_day
@@ -164,5 +165,5 @@ static func generator_scatter_rock_outcrops(rng: RandomNumberGenerator, map: Arr
 		mapgen: Dictionary, scale: float) -> void:
 	WorldGeneratorType._scatter_rock_outcrops(rng, map, width, height, mapgen, scale)
 static func generator_count_reachable_food_sources(map: Array[String], width: int, height: int,
-		footprint: Array[Vector2i], bush_lookup: Dictionary, limit: int) -> int:
+		footprint: Array[Vector3i], bush_lookup: Dictionary, limit: int) -> int:
 	return WorldGeneratorType._count_reachable_food_sources(map, width, height, footprint, bush_lookup, limit)

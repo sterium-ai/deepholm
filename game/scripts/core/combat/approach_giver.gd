@@ -28,9 +28,9 @@ const BLOCKED_TARGET_UNREACHABLE := "blocked_target_unreachable"
 
 ## The 8 Chebyshev-adjacent offsets around a target tile, cardinal first
 ## (matching CombatTargeting.NEIGHBOR_OFFSETS' own scan order).
-const NEIGHBOR_OFFSETS: Array[Vector2i] = [
-	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0),
-	Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1),
+const NEIGHBOR_OFFSETS: Array[Vector3i] = [
+	Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0),
+	Vector3i(-1, -1, 0), Vector3i(1, -1, 0), Vector3i(-1, 1, 0), Vector3i(1, 1, 0),
 ]
 
 var _submit_job: Callable
@@ -42,7 +42,7 @@ var _may_reserve_target: Callable
 var _reachable: Callable
 var _is_target_reserved: Callable
 var _routable_to: Callable
-var _bounds_max: Vector2i
+var _bounds_max: Vector3i
 var _content
 var _relations
 var _route_budget: Dictionary
@@ -70,7 +70,7 @@ var _job_actor: Dictionary = {}
 ## per-tick route ledger shared by reference with the scheduler and the other givers.
 func _init(submit_job: Callable, get_job: Callable, list_jobs: Callable, restrict_to_for: Callable,
 		passable_for_actor: Callable, may_reserve_target: Callable, reachable: Callable,
-		is_target_reserved: Callable, routable_to: Callable, bounds_max: Vector2i, content, relations,
+		is_target_reserved: Callable, routable_to: Callable, bounds_max: Vector3i, content, relations,
 		route_budget: Dictionary, combat_owns: Callable, list_objects: Callable, object_at: Callable,
 		object_health_at: Callable, object_faction_at: Callable, cancel_job: Callable) -> void:
 	_submit_job = submit_job
@@ -202,8 +202,8 @@ func _target_lost(job_id: String, actors: Array[Dictionary]) -> bool:
 			if String(other["id"]) == target_id:
 				return bool((other.get("health", {}) as Dictionary).get("dead", false))
 		return true
-	var tile: Vector2i = target["tile"]
-	return _object_health_at.call(tile.x, tile.y).is_empty() or String(_object_at.call(tile.x, tile.y)).is_empty()
+	var tile: Vector3i = target["tile"]
+	return _object_health_at.call(tile).is_empty() or String(_object_at.call(tile)).is_empty()
 
 ## Every living actor and placed object with health that `actor`'s faction is hostile to.
 func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dictionary]:
@@ -216,32 +216,31 @@ func _hostile_targets(actor: Dictionary, actors: Array[Dictionary]) -> Array[Dic
 			continue
 		if _relations.relation(own_faction, TargetingType.actor_faction(other)) != "hostile":
 			continue
-		targets.append({"kind": "actor", "id": String(other["id"]), "tile": Vector2i(int(other["x"]), int(other["y"]))})
+		targets.append({"kind": "actor", "id": String(other["id"]), "tile": TileGrid.tile_of(other)})
 	for placed_object in (_list_objects.call() as Array):
-		var x := int(placed_object["x"])
-		var y := int(placed_object["y"])
-		var health: Dictionary = _object_health_at.call(x, y)
+		var tile := TileGrid.tile_of(placed_object)
+		var health: Dictionary = _object_health_at.call(tile)
 		if health.is_empty():
 			continue
-		if _relations.relation(own_faction, String(_object_faction_at.call(x, y))) != "hostile":
+		if _relations.relation(own_faction, String(_object_faction_at.call(tile))) != "hostile":
 			continue
-		targets.append({"kind": "object", "tile_key": TileGrid.coord_key(x, y), "tile": Vector2i(x, y)})
+		targets.append({"kind": "object", "tile_key": TileGrid.coord_key(tile), "tile": tile})
 	return targets
 
 ## The Chebyshev-adjacent tile of target_tile nearest `start` that is in bounds, passable, reservable,
 ## unreserved and region-reachable; null when none qualifies.
-func _best_adjacent_tile(actor_id: String, start: Vector2i, target_tile: Vector2i):
+func _best_adjacent_tile(actor_id: String, start: Vector3i, target_tile: Vector3i):
 	var best: Variant = null
 	var best_distance := -1
 	for offset in NEIGHBOR_OFFSETS:
 		var candidate := target_tile + offset
 		if candidate.x < 0 or candidate.y < 0 or candidate.x > _bounds_max.x or candidate.y > _bounds_max.y:
 			continue
-		if not bool((_passable_for_actor.call(actor_id, candidate.x, candidate.y) as Dictionary).get("passable", false)):
+		if not bool((_passable_for_actor.call(actor_id, candidate) as Dictionary).get("passable", false)):
 			continue
 		if not bool(_may_reserve_target.call(actor_id, candidate)):
 			continue
-		if bool(_is_target_reserved.call(candidate.x, candidate.y)):
+		if bool(_is_target_reserved.call(candidate)):
 			continue
 		if not bool(_reachable.call(start, candidate)):
 			continue
@@ -264,7 +263,7 @@ static func _target_precedes(a: Dictionary, b: Dictionary) -> bool:
 ## One candidate tile per hostile target, sorted by Chebyshev distance: an admissible lower bound
 ## with diagonal moves (Manhattan is not), so _search_can_stop() never prunes a nearer target.
 func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary], tick: int) -> void:
-	var start := Vector2i(int(actor["x"]), int(actor["y"]))
+	var start := TileGrid.tile_of(actor)
 	var candidates: Array = []
 	for target in _hostile_targets(actor, actors):
 		var tile: Variant = _best_adjacent_tile(actor_id, start, target["tile"])
@@ -302,13 +301,13 @@ func _advance_candidate_search(actor: Dictionary, state: Dictionary, cursor: int
 	var candidates: Array = state["candidates"]
 	var found: Array = state["found"]
 	var entry: Dictionary = candidates[cursor]
-	var tile: Vector2i = entry["tile"]
+	var tile: Vector3i = entry["tile"]
 	var actor_id: String = String(actor["id"])
 	var actor_faction := TargetingType.actor_faction(actor)
 	var search: RerouteType = state.get("search")
 	if search == null:
-		var start := Vector2i(int(actor["x"]), int(actor["y"]))
-		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector2i.ZERO, _bounds_max, _reachable)
+		var start := TileGrid.tile_of(actor)
+		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector3i.ZERO, _bounds_max, _reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(actor_id, false)):
@@ -350,15 +349,15 @@ func _advance_commit(actor_id: String, state: Dictionary, tick: int) -> void:
 		_searching.erase(actor_id) # rule 5: nothing reachable, retried fresh next tick
 		return
 	var entry: Dictionary = ranked[commit_cursor]
-	var tile: Vector2i = entry["tile"]
-	if _is_target_reserved.call(tile.x, tile.y):
+	var tile: Vector3i = entry["tile"]
+	if _is_target_reserved.call(tile):
 		state["commit_cursor"] = commit_cursor + 1
 		return
 	_searching.erase(actor_id)
 	_commit(actor_id, entry["target"], tile, tick)
 
 ## Submits through submit_autonomous() (never refused by may_be_ordered) and records the target.
-func _commit(actor_id: String, target: Dictionary, tile: Vector2i, tick: int) -> void:
+func _commit(actor_id: String, target: Dictionary, tile: Vector3i, tick: int) -> void:
 	var result: Dictionary = _submit_job.call(tile, APPROACH_PRIORITY, tick, APPROACH_KIND, actor_id)
 	if not result.get("ok", false):
 		return

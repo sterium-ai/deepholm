@@ -163,30 +163,29 @@ func _cancel_job_for_death(job_id: String) -> void:
 ## Drops hands contents, the held tool (moved, keeping identity and reservation) and a generic
 ## actor's inventory and tool slot as loose items on its tile.
 func _drop_inventory_contents(actor: Dictionary) -> void:
-	var x := int(actor["x"])
-	var y := int(actor["y"])
+	var tile := TileGrid.tile_of(actor)
 	for entry in InventoryType.hands_snapshot(actor):
-		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), x, y)
+		_item_table.place_new_ground_item(String(entry["kind"]), int(entry["count"]), tile)
 	var held_tool_id := WorkerType.get_held_tool(actor)
 	if not held_tool_id.is_empty():
-		_tool_store.set_ground(held_tool_id, x, y)
+		_tool_store.set_ground(held_tool_id, tile)
 	var inventory: Variant = actor.get("inventory")
 	if inventory is Dictionary:
 		for raw_item in (inventory.get("items", []) as Array):
 			var item: Dictionary = raw_item
-			_drop_inventory_item(String(item.get("kind", "")), int(item.get("count", 1)), x, y)
+			_drop_inventory_item(String(item.get("kind", "")), int(item.get("count", 1)), tile)
 		var carried_tool_kind := String(inventory.get("tool", ""))
 		if not carried_tool_kind.is_empty():
-			_drop_inventory_item(carried_tool_kind, 1, x, y)
+			_drop_inventory_item(carried_tool_kind, 1, tile)
 
 ## A tool kind goes to ToolItemStore (one ground tool per unit: tools carry identity); any other
 ## kind is an ItemTable stack.
-func _drop_inventory_item(kind: String, count: int, x: int, y: int) -> void:
+func _drop_inventory_item(kind: String, count: int, tile: Vector3i) -> void:
 	if _is_tool_kind.call(kind):
 		for _unit in count:
-			_spawn_ground_tool_item.call(kind, x, y)
+			_spawn_ground_tool_item.call(kind, tile)
 		return
-	_item_table.place_new_ground_item(kind, count, x, y)
+	_item_table.place_new_ground_item(kind, count, tile)
 
 ## Every actor with health (not just workers), deep copies, for viewer health bars.
 func get_actors_with_health() -> Array[Dictionary]:

@@ -84,7 +84,7 @@ var _route_search_factory: Callable
 ## GlobalAssignment.set_route_budget() and cleared at the start of every tick, so an
 ## activation and a fetch_tool leg never resume two searches in the same tick.
 var _route_budget: Dictionary
-## (job) -> Vector2i: the tile a job's work toil runs on (ToilBindings.work_target_for());
+## (job) -> Vector3i: the tile a job's work toil runs on (ToilBindings.work_target_for());
 ## job["target"] when unset.
 var _work_target_for: Callable
 ## ConstructionSystem's site lookup and deposit (returns units accepted, clamped to need),
@@ -216,7 +216,7 @@ func start_work(colonist: Dictionary, job_id: String) -> void:
 	colonist["work"] = {"job_id": job_id, "ticks_remaining": ticks_remaining}
 
 ## work_target_for passthrough; job["target"] when unset.
-func _work_target(job: Dictionary) -> Vector2i:
+func _work_target(job: Dictionary) -> Vector3i:
 	if _work_target_for.is_valid():
 		return _work_target_for.call(job)
 	return job["target"]
@@ -228,16 +228,15 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 	var route: Dictionary = _route(colonist)
 	var path: Array = route["path"]
 	var step: int = int(route["step"])
-	var next_tile: Vector2i = path[step + 1]
-	if not bool(_passability.call(next_tile.x, next_tile.y, String(colonist.get("factionId", "colony")))["passable"]):
+	var next_tile: Vector3i = path[step + 1]
+	if not bool(_passability.call(next_tile, String(colonist.get("factionId", "colony")))["passable"]):
 		return true
 	route["move_ticks_remaining"] -= 1
 	if route["move_ticks_remaining"] > 0:
 		return false
 	step += 1
-	var arrived: Vector2i = path[step]
-	colonist["x"] = arrived.x
-	colonist["y"] = arrived.y
+	var arrived: Vector3i = path[step]
+	TileGrid.write_tile(colonist, arrived)
 	on_actor_moved.call(colonist)
 	route["step"] = step
 	if step == path.size() - 1:
@@ -259,13 +258,13 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 ## already cleared; the caller resubmits or fails the job.
 ## record_as/on_arrive let fetch_tool reuse this leg. force_trim_last always drops the last
 ## tile (a site that is still passable but will become impassable).
-func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passable: Callable,
+func advance_go_to(colonist: Dictionary, job_id: String, target: Vector3i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	# Step-off rule: on a force-trim target the one-tile path would start work under the
 	# coming object, so re-aim at the first passable orthogonal neighbour (N/W/E/S) until the
 	# colonist has left the tile.
 	if force_trim_last:
-		var standing := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var standing := TileGrid.tile_of(colonist)
 		if standing == target:
 			var step_off := _step_off_tile(standing, String(colonist.get("factionId", "colony")))
 			if step_off != standing:
@@ -276,7 +275,7 @@ func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passa
 		_record(record_as, "enter")
 		# Never []: entity_validator's _valid_entity_route() needs a tile, and a save can land
 		# before the search resolves. Only persistence reads it until the search replaces it.
-		var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+		var current := TileGrid.tile_of(colonist)
 		colonist["route"] = {
 			"job_id": job_id, "path": [current], "step": 0,
 			"move_ticks_remaining": _move_ticks_per_tile, "rerouting": null,
@@ -288,16 +287,16 @@ func advance_go_to(colonist: Dictionary, job_id: String, target: Vector2i, passa
 		return _begin_go_to_reroute(colonist, job_id, target, passable, record_as, on_arrive, force_trim_last)
 	return ""
 
-func _begin_go_to_reroute(colonist: Dictionary, job_id: String, target: Vector2i, passable: Callable,
+func _begin_go_to_reroute(colonist: Dictionary, job_id: String, target: Vector3i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	var route: Dictionary = _route(colonist)
-	var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var start := TileGrid.tile_of(colonist)
 	var search: Variant = _route_search_factory.call(start, target, passable)
 	_reroutes[colonist["id"]] = search
 	route["rerouting"] = search.summary()
 	return _resume_go_to_reroute(colonist, route, job_id, target, passable, record_as, on_arrive, force_trim_last)
 
-func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: String, target: Vector2i, passable: Callable,
+func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: String, target: Vector3i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	var colonist_id: String = colonist["id"]
 	var search: Variant = _reroutes[colonist_id]
@@ -310,7 +309,7 @@ func _resume_go_to_reroute(colonist: Dictionary, route: Dictionary, job_id: Stri
 	if search.get_status() == RerouteType.STATUS_FOUND:
 		_reroutes.erase(colonist_id)
 		var new_path: Array = search.get_path()
-		if new_path.size() > 1 and (force_trim_last or not bool(_passability.call(target.x, target.y, String(colonist.get("factionId", "colony")))["passable"])):
+		if new_path.size() > 1 and (force_trim_last or not bool(_passability.call(target, String(colonist.get("factionId", "colony")))["passable"])):
 			new_path = new_path.slice(0, new_path.size() - 1)
 		if new_path.size() <= 1:
 			colonist["route"] = null
@@ -354,8 +353,8 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 	var item: Dictionary = _item_lookup.call(item_id)
 	if item.is_empty():
 		return {"ok": false, "reason": REASON_ITEM_NOT_FOUND}
-	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	var item_tile := Vector2i(int(item["x"]), int(item["y"]))
+	var colonist_tile := TileGrid.tile_of(colonist)
+	var item_tile := TileGrid.tile_of(item)
 	if TileGrid.chebyshev(colonist_tile, item_tile) > 1:
 		return {"ok": false, "reason": REASON_ITEM_OUT_OF_REACH}
 	var hands_free := InventoryType.free_capacity(colonist, hands_capacity(colonist))
@@ -374,16 +373,16 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 ## place toil (colonist-ai.md 3.3): re-validates carrying and a free, passable, in-bounds
 ## cell every call, failing typed. Drops one fresh ground item per hands kind, then clears
 ## hands; zone membership is not checked here.
-func place(colonist: Dictionary, cell: Vector2i) -> Dictionary:
+func place(colonist: Dictionary, cell: Vector3i) -> Dictionary:
 	if not InventoryType.is_carrying(colonist):
 		return {"ok": false, "reason": REASON_NOT_CARRYING}
-	if not bool(_passability.call(cell.x, cell.y)["passable"]):
+	if not bool(_passability.call(cell)["passable"]):
 		return {"ok": false, "reason": REASON_DESTINATION_BLOCKED}
-	if bool(_cell_occupied.call(cell.x, cell.y, colonist.get("id"))):
+	if bool(_cell_occupied.call(cell, colonist.get("id"))):
 		return {"ok": false, "reason": REASON_DESTINATION_BLOCKED}
 	var placed_ids: Array[String] = []
 	for entry in InventoryType.hands_snapshot(colonist):
-		placed_ids.append(String(_place_item.call(String(entry["kind"]), int(entry["count"]), cell.x, cell.y)))
+		placed_ids.append(String(_place_item.call(String(entry["kind"]), int(entry["count"]), cell)))
 	InventoryType.clear_hands(colonist)
 	_record(TOIL_PLACE, "complete")
 	return {"ok": true, "item_ids": placed_ids}
@@ -409,8 +408,8 @@ func consume(colonist: Dictionary, job_id: String) -> Dictionary:
 	var job: Dictionary = _job_lookup.call(job_id)
 	if job.is_empty():
 		return {"ok": false, "reason": REASON_SOURCE_GONE}
-	var target: Vector2i = job["target"]
-	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var target: Vector3i = job["target"]
+	var colonist_tile := TileGrid.tile_of(colonist)
 	if TileGrid.chebyshev(colonist_tile, target) > 1:
 		return {"ok": false, "reason": REASON_SOURCE_OUT_OF_REACH}
 	if _source_valid.is_valid() and not bool(_source_valid.call(job_id)):
@@ -480,7 +479,7 @@ func _start_current_toil(colonist: Dictionary, job_id: String, job: Dictionary, 
 	match String(toils[index]):
 		"go_to":
 			var is_first: bool = _is_first_leg(toils, colonist, job, hooks)
-			var current := Vector2i(int(colonist["x"]), int(colonist["y"]))
+			var current := TileGrid.tile_of(colonist)
 			var use_assignment_path: bool = is_first and assignment_path.size() > 0 and assignment_path[0] == current
 			# go_to_skip_assignment_path: the job was retargeted after the scheduler planned its path,
 			# so force a fresh bounded search instead of walking toward a stale target.
@@ -507,7 +506,7 @@ func _start_current_toil(colonist: Dictionary, job_id: String, job: Dictionary, 
 			else:
 				(hooks["on_toil_fail"] as Callable).call(job_id, String(result["reason"]))
 		"place":
-			var cell: Vector2i = (hooks["cell_for"] as Callable).call(job)
+			var cell: Vector3i = (hooks["cell_for"] as Callable).call(job)
 			var result := place(colonist, cell)
 			if result.get("ok", false):
 				(hooks["on_place_success"] as Callable).call(job_id)
@@ -543,7 +542,7 @@ func _next_toil_index(toils: Array, colonist: Dictionary, job: Dictionary, hooks
 				var next_toil := String(toils[i + 1]) if i + 1 < toils.size() else ""
 				if next_toil == "work":
 					return i
-				var target: Vector2i = (hooks["go_to_target"] as Callable).call(job, is_first)
+				var target: Vector3i = (hooks["go_to_target"] as Callable).call(job, is_first)
 				if _within_reach(colonist, target):
 					continue
 				return i
@@ -560,7 +559,7 @@ func _next_toil_index(toils: Array, colonist: Dictionary, job: Dictionary, hooks
 func _continue_go_to(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var toils := get_toils(String(job["kind"]))
 	var is_first: bool = _is_first_leg(toils, colonist, job, hooks)
-	var target: Vector2i = (hooks["go_to_target"] as Callable).call(job, is_first)
+	var target: Vector3i = (hooks["go_to_target"] as Callable).call(job, is_first)
 	var passable: Callable = (hooks["go_to_passable"] as Callable).call(job, is_first, target, String(colonist.get("factionId", "colony")))
 	var force_trim_last := false
 	if hooks.has("go_to_force_trim_last"):
@@ -595,8 +594,8 @@ func _no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
 	_record(TOIL_GO_TO, "complete")
 
 ## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
-func _within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
-	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+func _within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
+	var colonist_tile := TileGrid.tile_of(colonist)
 	return TileGrid.chebyshev(colonist_tile, tile) <= 1
 
 ## Read-only counterpart of _tool_fetch.satisfied() for NeedsSystem.resume_paused_job() and StateCodec:
@@ -606,10 +605,10 @@ func needs_fetch_tool(colonist: Dictionary, job: Dictionary, job_id: String) -> 
 
 ## advance_go_to()'s step-off target: the first passable orthogonal neighbour of `tile`
 ## (N, W, E, S), else `tile` itself.
-func _step_off_tile(tile: Vector2i, faction_id: String) -> Vector2i:
-	for offset in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-		var next: Vector2i = tile + offset
-		if bool(_passability.call(next.x, next.y, faction_id)["passable"]):
+func _step_off_tile(tile: Vector3i, faction_id: String) -> Vector3i:
+	for offset in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+		var next: Vector3i = tile + offset
+		if bool(_passability.call(next, faction_id)["passable"]):
 			return next
 	return tile
 
