@@ -317,6 +317,31 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
+### B6 — Held-tool / cargo / trapped badges float at the colonist's top-left · `todo` · *parallel-safe (viewer only; do not touch core)*
+
+- **Owner (2026-11-02, main `32bfb81`, native build):** when a colonist is assigned a job, a
+  pick (the held-tool badge) floats at the **top-left corner, far from the character**.
+- **Diagnosis (orchestrator):** `game/scripts/viewer/colonist_sprites.gd` anchors the badges to
+  the colonist **sprite's top-left origin** (`_sprites[id].position`, lines ~475–481), which
+  since B2 is the 64×64 pack frame placed at `tile + SPRITE_POSITION_OFFSET` = tile + (−24, −31).
+  `TOOL_MARKER_OFFSET` (−4, −4), `CARRIED_MARKER_OFFSET` (+8, −4) and `TRAPPED_MARKER_OFFSET`
+  were designed for a 16 px sprite, so the badges land ~28 px left / 35 px above the tile.
+  The health bar (line ~263) is tile-anchored and is fine.
+- **Fix:** anchor the three badges to the **tile position** (like the health bar), with offsets
+  that put them beside the character's head: tool badge to the left of the head, cargo badge to
+  the right, trapped badge above (below the health bar, no overlap). Keep `TILE_SIZE`
+  multiples, no magic pixels. Update the three tests that assert the old anchoring
+  (`test_colonist_panel_toil.gd` lines ~87 and ~140, `test_colonist_sprites.gd` if touched) to
+  the new rule, not by loosening them.
+- **Owned paths:** `game/scripts/viewer/colonist_sprites.gd`, the tests named above,
+  `docs/orca/handoffs/B6.md`.
+- **Acceptance:** a before/after screenshot in the handoff (screenshot tool in
+  `game/scripts/tools/`, a colonist holding a pick while carrying wood); the badge positions
+  are asserted in a test as `tile * TILE_SIZE + <OFFSET>`; suite green; owner confirms.
+- **Non-goals:** new art, badge art changes, core, anything in the placeholder path.
+- **Budget:** ≤ 120 turns. Read only the files above plus AGENTS.md; do not read BACKLOG.md
+  beyond this entry.
+
 ### B5 — Three persistence bugs found by the R2/R4 probes (save refused, berries) · `review (antonelmejor50-hub/b5-three-persistence-bugs-found)` · *parallel-safe (persistence + WorkProgress/ItemTable only; coordinate: R9 in flight touches combat, not these)*
 
 - **Bugs (pre-existing on `main`, diagnosed in `handoffs/R2.md` and `handoffs/R4.md`):**
