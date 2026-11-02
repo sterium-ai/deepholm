@@ -49,22 +49,32 @@ const SPRITE_POSITION_OFFSET := Vector2(
 	TILE_SIZE / 2.0 - FRAME_SOURCE_SIZE * DISPLAY_SCALE / 2.0,
 	TILE_SIZE - FRAME_FEET_Y * DISPLAY_SCALE)
 
-## Carried-item marker offset from the colonist sprite's own top-left origin:
-## above and to the right, so it reads as a
-## badge on the sprite rather than overlapping its face.
-const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.5, -TILE_SIZE * 0.25)
+## Top of the character's silhouette in its frame: the smallest y of every
+## idle/walk/carry alpha bbox measured in colonist_pack.json (work strips reach
+## higher only with the swung tool). In tile pixels that is HEAD_TOP_Y above
+## the tile's own raw pixel origin.
+const FRAME_HEAD_TOP_Y := 18.0
+const HEAD_TOP_Y := FRAME_HEAD_TOP_Y * DISPLAY_SCALE + SPRITE_POSITION_OFFSET.y
+
+## Badge offsets are from the colonist's interpolated tile origin (tile *
+## TILE_SIZE, like the health bar), not from the 64x64 frame's top-left: the
+## figure spans the tile's width, so the badges flank its head.
+## Carried-item marker: right of the head, so it reads as a badge on the
+## sprite rather than overlapping its face.
 const CARRIED_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
+const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE, HEAD_TOP_Y)
 ## Separate left badge so a tool remains visible while carrying cargo.
 ## Resolve the held kind's registered art, just like carried cargo.
-const TOOL_MARKER_OFFSET := Vector2(-TILE_SIZE * 0.25, -TILE_SIZE * 0.25)
 const TOOL_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
+const TOOL_MARKER_OFFSET := Vector2(-TOOL_MARKER_SIZE.x, HEAD_TOP_Y)
 
 ## Trapped badge reuses the registered wolf actor crop: its hazard silhouette
 ## is a deliberately legible warning without introducing a second actor-art
 ## path or any simulation state. The tint distinguishes it from cargo/tool
-## badges while keeping the source pixels nearest-neighbour.
-const TRAPPED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.1, -TILE_SIZE * 0.35)
+## badges while keeping the source pixels nearest-neighbour. It sits centred
+## right above the head, clear of the health bar (which crosses the face).
 const TRAPPED_MARKER_SIZE := Vector2(TILE_SIZE * 0.8, TILE_SIZE * 0.5)
+const TRAPPED_MARKER_OFFSET := Vector2((TILE_SIZE - TRAPPED_MARKER_SIZE.x) / 2.0, HEAD_TOP_Y - TRAPPED_MARKER_SIZE.y)
 const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 
 ## Health bar: a thin two-rect bar (grey background, coloured
@@ -403,14 +413,14 @@ func _update_motion(colonist_id: String, tile: Vector2i, carrying: bool, work_ki
 	state["cycles"] = 0.0
 	return state
 
-## The interpolated, feet-anchored pixel position shared by the
-## body and the badges: lerp(previous_tile, current_tile, t) in
-## tile units, converted to pixels, then offset per docs/art/style.md's feet
-## anchor rule.
-func _drawn_position(state: Dictionary) -> Vector2:
+## The interpolated tile's own raw pixel origin, lerp(previous_tile,
+## current_tile, t) * TILE_SIZE, shared by the body (plus the feet anchor,
+## SPRITE_POSITION_OFFSET, per docs/art/style.md) and the badges (plus their
+## own offsets).
+func _drawn_tile_origin(state: Dictionary) -> Vector2:
 	var previous := Vector2(state["previous_tile"])
 	var current := Vector2(state["current_tile"])
-	return previous.lerp(current, float(state["t"])) * TILE_SIZE + SPRITE_POSITION_OFFSET
+	return previous.lerp(current, float(state["t"])) * TILE_SIZE
 
 ## "carry_"|"" + "walk"|"idle" + "_" + facing, matching colonist_frames.tres's
 ## 12 walk/idle/carry animation names, plus the work toil's own animation
@@ -458,8 +468,8 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	var sprite: SpriteRecordType = _sprites.get(colonist_id)
 	if sprite == null:
 		return
-	var position := _drawn_position(state)
-	sprite.position = position
+	var tile_origin := _drawn_tile_origin(state)
+	sprite.position = tile_origin + SPRITE_POSITION_OFFSET
 	sprite.flip_h = bool(state["flip_h"])
 	var animation_name := _animation_name(state)
 	if sprite.animation != animation_name:
@@ -472,10 +482,10 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 
 	var marker: SpriteRecordType = _carried_markers.get(colonist_id)
 	if marker != null:
-		marker.position = position + CARRIED_MARKER_OFFSET
+		marker.position = tile_origin + CARRIED_MARKER_OFFSET
 	var tool_marker: SpriteRecordType = _tool_markers.get(colonist_id)
 	if tool_marker != null:
-		tool_marker.position = position + TOOL_MARKER_OFFSET
+		tool_marker.position = tile_origin + TOOL_MARKER_OFFSET
 	var trapped_marker: SpriteRecordType = _trapped_markers.get(colonist_id)
 	if trapped_marker != null:
-		trapped_marker.position = position + TRAPPED_MARKER_OFFSET
+		trapped_marker.position = tile_origin + TRAPPED_MARKER_OFFSET

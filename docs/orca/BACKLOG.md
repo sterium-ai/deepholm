@@ -347,7 +347,7 @@ Orca helper scripts, this backlog.
 - **Non-goals:** core, new animations, terrain, PixelLab, colonist art (B2), badges (B6).
 - **Budget:** ≤ 300 turns; inventory in the first 40.
 
-### B6 — Held-tool / cargo / trapped badges float at the colonist's top-left · `todo` · *parallel-safe (viewer only; do not touch core)*
+### B6 — Held-tool / cargo / trapped badges float at the colonist's top-left · `review (antonelmejor50-hub/b6-held-tool-cargo-trapped)` · *parallel-safe (viewer only; do not touch core)*
 
 - **Owner (2026-11-02, main `32bfb81`, native build):** when a colonist is assigned a job, a
   pick (the held-tool badge) floats at the **top-left corner, far from the character**.

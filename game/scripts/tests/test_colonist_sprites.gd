@@ -50,6 +50,7 @@ func _init() -> void:
 	_check_paused_freezes_t()
 	_check_snap_on_new_game()
 	_check_trapped_marker_visibility()
+	_check_badges_flank_the_head()
 	_check_constant_glide_across_straight_route()
 	_check_l_shaped_route_has_no_pause_at_corner()
 
@@ -218,9 +219,47 @@ func _check_trapped_marker_visibility() -> void:
 	sprites.set_world(world)
 	var marker: SpriteRecordType = sprites._trapped_markers["colonist_0"]
 	_expect(marker.visible, "a trapped colonist must show the actor-atlas warning marker")
+	_expect(marker.position == Vector2(4, 4) * TILE_SIZE + ColonistSpritesType.TRAPPED_MARKER_OFFSET,
+		"the trapped badge sits at tile * TILE_SIZE + TRAPPED_MARKER_OFFSET")
 	TestAccess.colonists(world)[0]["trapped"] = null
 	sprites.refresh()
 	_expect(not marker.visible, "the trapped marker must hide after WorldState clears trapped")
+	sprites.free()
+
+## B6: the badge offsets (from the tile's raw pixel origin) put the tool badge
+## left of the head, the cargo badge right of it and the trapped badge above
+## it, none of them over the health bar -- instead of the old frame-origin
+## anchoring that left them ~28 px left / 35 px above the character.
+func _check_badges_flank_the_head() -> void:
+	var head_top := ColonistSpritesType.HEAD_TOP_Y
+	_expect(head_top == ColonistSpritesType.FRAME_HEAD_TOP_Y + SPRITE_POSITION_OFFSET.y,
+		"the head top is the frame's measured head line on the feet-anchored sprite")
+	var tool_rect := Rect2(ColonistSpritesType.TOOL_MARKER_OFFSET, ColonistSpritesType.TOOL_MARKER_SIZE)
+	var cargo_rect := Rect2(ColonistSpritesType.CARRIED_MARKER_OFFSET, ColonistSpritesType.CARRIED_MARKER_SIZE)
+	var trapped_rect := Rect2(ColonistSpritesType.TRAPPED_MARKER_OFFSET, ColonistSpritesType.TRAPPED_MARKER_SIZE)
+	var bar_rect := Rect2(ColonistSpritesType.HEALTH_BAR_OFFSET, ColonistSpritesType.HEALTH_BAR_SIZE)
+	_expect(tool_rect.end.x == 0.0 and tool_rect.position.y == head_top, "the tool badge sits just left of the tile, level with the head")
+	_expect(cargo_rect.position.x == TILE_SIZE and cargo_rect.position.y == head_top, "the cargo badge sits just right of the tile, level with the head")
+	_expect(trapped_rect.end.y == head_top and is_equal_approx(trapped_rect.get_center().x, TILE_SIZE / 2.0),
+		"the trapped badge sits centred right above the head")
+	for badge: Array in [[tool_rect, "tool"], [cargo_rect, "cargo"], [trapped_rect, "trapped"]]:
+		_expect(not Rect2(badge[0]).intersects(bar_rect), "the %s badge must not overlap the health bar" % badge[1])
+	_expect(not tool_rect.intersects(cargo_rect) and not trapped_rect.intersects(tool_rect) and not trapped_rect.intersects(cargo_rect),
+		"the badges must not overlap each other")
+	# Badges follow the same interpolated tile origin as the body mid-glide.
+	var world := _build_world(4, 4)
+	TestAccess.colonists(world)[0]["trapped"] = {"tile": Vector2i(4, 4), "ticksRemaining": 40, "fromTile": Vector2i(3, 4)}
+	var sprites := ColonistSpritesType.new()
+	sprites.set_world(world)
+	TestAccess.colonists(world)[0]["x"] = 5
+	sprites.refresh()
+	var state: Dictionary = sprites._motion["colonist_0"]
+	state["t"] = 0.5
+	sprites._apply_motion_visual("colonist_0", state)
+	var origin: Vector2 = sprites._sprites["colonist_0"].position - SPRITE_POSITION_OFFSET
+	_expect(origin == Vector2(4.5, 4) * TILE_SIZE, "mid-glide the body is half-way between the tiles")
+	var trapped: SpriteRecordType = sprites._trapped_markers["colonist_0"]
+	_expect(trapped.position == origin + ColonistSpritesType.TRAPPED_MARKER_OFFSET, "the trapped badge glides with the body")
 	sprites.free()
 
 ## A single colonist on open floor, forage-ordered against a berry_bush placed
