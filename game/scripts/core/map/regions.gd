@@ -318,7 +318,7 @@ func _index(x: int, y: int) -> int:
 	return TileGrid.flat_index(x, y, _width)
 
 func _flat(tile: Vector3i) -> int:
-	return tile.z * _layer_size + tile.y * _width + tile.x
+	return TileGrid.index_in(tile, _width, _height)
 
 func _coord(index: int) -> Vector3i:
 	return TileGrid.coord_in(index, _width, _height)

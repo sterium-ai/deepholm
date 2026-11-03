@@ -38,8 +38,9 @@ func _init(width: int, height: int, layers: int, passable: Callable, link_flags:
 	for z in _layer_count - 1:
 		for y in _height:
 			for x in _width:
-				if _derive(Vector3i(x, y, z)):
-					var index := z * _layer_size + y * _width + x
+				var upper := Vector3i(x, y, z)
+				if _derive(upper):
+					var index := _flat(upper)
 					_down[index] = 1
 					_upper.append(index)
 
@@ -107,7 +108,7 @@ func _derive(upper: Vector3i) -> bool:
 	return upper_passable and lower_passable
 
 func _flat(tile: Vector3i) -> int:
-	return tile.z * _layer_size + tile.y * _width + tile.x
+	return TileGrid.index_in(tile, _width, _height)
 
 func _in_bounds(tile: Vector3i) -> bool:
 	return (tile.x >= 0 and tile.x < _width and tile.y >= 0 and tile.y < _height

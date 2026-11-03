@@ -68,7 +68,7 @@ func _reset_map() -> void:
 	_link[_flat(STAIR_BOTTOM)] = VerticalLinksType.UP
 
 func _flat(tile: Vector3i) -> int:
-	return tile.z * W * H + tile.y * W + tile.x
+	return TileGrid.index_in(tile, W, H)
 
 func _in_map(tile: Vector3i) -> bool:
 	return tile.x >= 0 and tile.x < W and tile.y >= 0 and tile.y < H and tile.z >= 0 and tile.z < LAYERS
