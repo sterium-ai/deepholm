@@ -1247,7 +1247,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   **F5a-b — haul rejected tools out of a stockpile** (`todo`, after F5a; owned: haul_giver,
   tool_item_store, tool_*_toil, tests). The limitation is documented in the F5a handoff.
 
-### F5a-b — Haul rejected tools out of a stockpile · `review` (branch `antonelmejor50-hub/f5a-b-haul-rejected-tools-out`; no schema bump) · after F5a · Design: closed 2026-11-03
+### F5a-b — Haul rejected tools out of a stockpile · `review` (branch `antonelmejor50-hub/f5a-b-haul-rejected-tools-out`; schema v13) · after F5a · Design: closed 2026-11-03
 
 - **Goal:** complete F5a's rule for tools: a tool item (identity-bearing, `ToolItemStore`) that
   sits in a stockpile whose filter no longer accepts tools is hauled to the nearest valid

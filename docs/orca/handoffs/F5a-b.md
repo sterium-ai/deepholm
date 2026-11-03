@@ -32,6 +32,18 @@
        schema enum, `test_architecture_rules.gd` and `test_toils_dig_chop_regression.gd`
        (22 to 23 kinds).
      The v13 edits were folded into `3a02bf1`, and this commit updates only this file.
+  6. Round 4, the commit after round 3. It answers review round 4 (`.orca-review.md`,
+     REQUEST_CHANGES):
+     - (blocking) the round 3 diff edited **three** existing `world_state.gd` lines, not two as
+       this file said: the `ToilExecutor` line and both lines of the `HaulGiver` call. The
+       first `HaulGiver` line is now restored to `origin/main`'s text
+       (`view_jobs_of_kinds.bind(["haul"])`). `HaulGiver` gets its `haul_tool` jobs from a new
+       optional trailing argument `get_tool_jobs` (`view_jobs_of_kinds.bind(["haul_tool"])`),
+       appended to the second line with `tool_store` and `get_zones`. Against `origin/main`,
+       exactly two existing lines change, no line is added, and the file stays at 767 lines;
+     - (non-blocking) `docs/orca/BACKLOG.md`'s F5a-b heading said "no schema bump". It now
+       says "schema v13";
+     - (non-blocking) the full suite was rerun on the round 4 tree (see below).
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
   keeping F5b's v12 step (v14 only if v13 were taken; it was not).
 - Owner decision followed (round 2): `afeeade` on main approves that scope and asks for the
@@ -43,17 +55,17 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 3)
+## Final suite line (author-reported, round 4)
 
 ```
-run_tests: all 136 test(s) PASS  [991s]
+run_tests: all 136 test(s) PASS  [999s]
 ```
 
-The author ran this on the round 3 tree (this branch rebased onto `origin/main` `5399153`, with
-schema v13), on Windows with Godot 4.7.2 headless. It is still author-reported: the reviewer has
+The author ran this on the round 4 tree (this branch on `origin/main` `5399153`, with schema
+v13 and the two-line `world_state.gd` wiring), on Windows with Godot 4.7.2 headless. It is still author-reported: the reviewer has
 not reproduced it yet (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1`).
 N is 136 because main now has 136 test files. This branch adds or removes none: its checks are in
-existing test files. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
+existing test files. The round 3 tree gave 136 PASS [991s]. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
 [889s] (round 1).
 
 ## What changed (carried design, replaces the teleport)
@@ -115,12 +127,16 @@ existing test files. Earlier runs, before the rebase, were 135 PASS [924s] (roun
 - `toil_bindings.gd` adds a `haul_tool` arm to the work-completion match. `toil_executor.gd`
   adds a one-line forwarder `place_hauled_tool()`, the 2-line en-route recheck and an optional
   `get_all_stockpiles` constructor parameter (round 2).
-- **`world_state.gd` hook (declared):** one existing line is edited. `HaulGiver` reads
-  `view_jobs_of_kinds.bind(["haul", "haul_tool"])` instead of `["haul"]`, so it sees its own
-  `haul_tool` jobs. In round 2, `_zone_table.get_stockpile_zones` is appended to the existing
-  `ToilExecutor` constructor line. No line was added: 767 lines before and after. The two optional
-  `HaulGiver` arguments (`tool_store`, `get_zones`) were already wired by `18bc3bd` on the same
-  line.
+- **`world_state.gd` hook (declared):** exactly two existing lines are edited against
+  `origin/main` (`git diff origin/main -- game/scripts/core/world_state.gd`), and none is added:
+  767 lines before and after.
+  - The `ToilExecutor` constructor's last line gains `_zone_table.get_stockpile_zones`
+    (round 2).
+  - The `HaulGiver` constructor's second line gains three optional trailing arguments:
+    `_tool_store`, `_zone_table.get_zones` and
+    `_scheduler.queue.view_jobs_of_kinds.bind(["haul_tool"])` (`get_tool_jobs`, round 4). The
+    first line keeps `view_jobs_of_kinds.bind(["haul"])`. `HaulGiver` reads its own queued and
+    active `haul_tool` jobs through `get_tool_jobs`, so it does not offer a target twice.
 - Kept from `18bc3bd`:
   - `ToolItemStore.lies_at(cell)`.
   - `HaulGiver._cell_takes_item()`, shared with `find_free_haul_cell()` (same behaviour).
@@ -185,8 +201,9 @@ and are still pending:
    `game/scripts/tests/test_toils_dig_chop_regression.gd`: `haul_tool` added to its pinned kind
    list (22 to 23, after F5b's `cook_work`).
 3. `game/scripts/core/world_state.gd`: the edits to two existing lines described above (the
-   `HaulGiver` hook, and in round 2 the argument appended to the `ToilExecutor` line). It stays
-   at 767 lines, within the round 1 decision (`07cd384`).
+   `ToilExecutor` constructor's last line and the `HaulGiver` constructor's second line). It
+   stays at 767 lines, within the round 1 decision (`07cd384`). Round 3 wrongly reported two
+   lines while three were edited; round 4 brings it to two.
 4. `docs/decisions/064-…md` and `docs/orca/BACKLOG.md` (status `review`, unchanged in this
    round).
 
@@ -209,7 +226,9 @@ and are still pending:
   - A failed `haul_tool` job can carry reason `invalid_target`. That reason already exists,
     with its own text.
   - `ToolItemStore.lies_at()` is new.
-  - `HaulGiver._init` has two optional trailing parameters (from `18bc3bd`).
+  - `HaulGiver._init` has three optional trailing parameters: `tool_store` and `get_zones`
+    (from `18bc3bd`), and `get_tool_jobs` (round 4). Its `get_jobs` view lists `haul` jobs only,
+    as on `origin/main`.
 
 ## Validation (Windows, Godot 4.7.2 headless)
 
@@ -224,6 +243,8 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered runs (round 4), both PASS: `test_stockpile_filters` [22s] and
+  `test_architecture_rules` [3s].
 - Filtered runs (round 3): `test_save_migration` [7s] PASS after the v13 renumbering.
 - Filtered runs (round 2), all PASS: `test_stockpile_filters` [23s], `test_save_migration`
   [6s], `test_architecture_rules` [3s], `test_crafting` [9s] and
@@ -231,7 +252,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23105 lines in 112 files` (round 3, on top of F5b).
+- `tools/measure_core.ps1`: `core total: 23108 lines in 112 files` (round 4, on top of F5b;
+  23105 in round 3).
 
   | File | Lines | Longest function |
   |---|---|---|
@@ -240,7 +262,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   | `toil_bindings.gd` | 501 | `_init`, 49 |
   | `tool_drop_toil.gd` | 351 (255 code, 70 comment) | `_init`, 30 |
   | `tool_fetch_toil.gd` | 254 | — |
-  | `haul_giver.gd` | 161 | — |
+  | `haul_giver.gd` | 164 | — |
   | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
 
 ## Known limitations

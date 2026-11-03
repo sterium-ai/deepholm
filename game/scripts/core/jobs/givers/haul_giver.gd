@@ -17,15 +17,17 @@ var _passability: Callable
 var _is_cell_occupied: Callable
 var _tool_store
 var _get_zones: Callable
+var _get_tool_jobs: Callable
 
-## priority comes from jobs.json; get_jobs is the read-only JobQueue.view_jobs_of_kinds(["haul", "haul_tool"])
+## priority comes from jobs.json; get_jobs is the read-only JobQueue.view_jobs_of_kinds(["haul"])
 ## (A5, never mutated); accepts_item_at and stockpiles_for_item are ZoneTable's (F5a filters and
 ## priorities); item_lookup is ItemTable's; the rest are WorldState/scheduler entry points.
-## tool_store (ToolItemStore) and get_zones (ZoneTable.get_zones) haul rejected stocked tools out (F5a-b).
+## tool_store (ToolItemStore), get_zones (ZoneTable.get_zones) and get_tool_jobs (the read-only
+## view_jobs_of_kinds(["haul_tool"])) haul rejected stocked tools out (F5a-b).
 func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_at: Callable,
 		submit_job: Callable, attach_item: Callable, stockpiles_for_item: Callable, item_lookup: Callable,
 		is_cell_free: Callable, passability: Callable, is_cell_occupied: Callable,
-		tool_store = null, get_zones: Callable = Callable()) -> void:
+		tool_store = null, get_zones: Callable = Callable(), get_tool_jobs: Callable = Callable()) -> void:
 	_priority = priority
 	_get_jobs = get_jobs
 	_get_items = get_items
@@ -39,6 +41,7 @@ func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_
 	_is_cell_occupied = is_cell_occupied
 	_tool_store = tool_store
 	_get_zones = get_zones
+	_get_tool_jobs = get_tool_jobs
 
 ## Runs once per tick (TickPipeline, before the scheduler). "Unreserved" is derived from the
 ## job list, so a terminated job frees its item next tick. An item already in a stockpile that
@@ -89,10 +92,10 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## tool (being fetched or already hauled) is skipped, and so is one outside every stockpile (its
 ## zone was removed: not stock, F2). A queued or active haul_tool job's target is not offered twice.
 func _haul_rejected_tools(tick: int) -> void:
-	if _tool_store == null:
+	if _tool_store == null or not _get_tool_jobs.is_valid():
 		return
 	var busy: Dictionary = {}
-	for job in (_get_jobs.call() as Array):
+	for job in (_get_tool_jobs.call() as Array):
 		if String(job["kind"]) == "haul_tool" and job["status"] in ["queued", "active"]:
 			busy[job["target"]] = true
 	for tool: Dictionary in (_tool_store.get_items() as Array):
