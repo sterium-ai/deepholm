@@ -631,6 +631,9 @@ func place_hauled_tool(c: Dictionary, job_id: String, target: Vector3i) -> void:
 ## ToilBindings' unreachable and interrupt causes.
 func fail_hauled_tool(c: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, reason: String) -> void: _tool_drop.fail_haul_tool(c, job_id, job, hooks, reason)
 
+## F5a-b (review round 14): the set-down cleanup for a haul_tool job ended by a command or a trap.
+func set_down_hauled_tool(c: Dictionary, job_id: String, job: Dictionary) -> void: _tool_drop.set_down_for_ended_job(c, job_id, job)
+
 ## Persistence passthrough: true while the in-flight route is a drop_tool leg, so a restored
 ## search uses the drop toil's plain passability.
 func is_dropping_leg(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> bool:

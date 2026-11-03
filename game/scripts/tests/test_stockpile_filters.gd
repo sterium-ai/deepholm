@@ -79,6 +79,7 @@ func _init() -> void:
 	_check_interrupt_outside_a_is_replanned_from_the_ground_into_b()
 	_check_set_down_tool_is_replanned_after_the_filters_change()
 	_check_haul_tool_failure_matrix()
+	_check_job_commands_set_an_active_haul_tool_down()
 	if _failed:
 		quit(1)
 		return
@@ -1113,6 +1114,58 @@ func _run_haul_tool_failure_case(seed_value: int, label: String, carried: bool, 
 		"%s: the same pick id must be the only tool: %s" % [label, world.get_tool_items()])
 
 ## Rock on one cell (rock = true), or floor again (false): a raw tile write, as in _wall_around.
+## F5a-b review round 14: cancel_job, fail_job and invalidate_job on an active haul_tool job whose
+## carrier holds the pick outside A and B must not leave it in the colonist's hand. Each command,
+## through the real command path, ends the job and the carrier sets the pick down where it stands
+## (marked set_down, no reservation left); ticked on, HaulGiver re-plans it from the ground and the
+## same pick id ends stocked in B, with no haul_tool job open and never held by an idle colonist.
+func _check_job_commands_set_an_active_haul_tool_down() -> void:
+	var seeds := {"cancel_job": 64062, "fail_job": 64063, "invalidate_job": 64064}
+	for command_type in seeds:
+		var world := _stocked_pick_world(int(seeds[command_type]), true)
+		var pick_id := String(world.get_tool_items()[0]["id"])
+		_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+		var job_id := ""
+		var carrier_id := ""
+		for _i in _day_ticks:
+			world.tick()
+			var location := _pick_location(world)
+			if String(location["type"]) != "held":
+				continue
+			for colonist in TestAccess.colonists(world):
+				var cell := Vector2i(int(colonist["x"]), int(colonist["y"]))
+				if String(colonist["id"]) == String(location["colonist_id"]) and cell.distance_to(Vector2i(A.position)) >= 6.0 \
+						and not A.has_point(cell) and not B.has_point(cell):
+					carrier_id = String(colonist["id"])
+					job_id = String(world.get_assignments().get(carrier_id, {}).get("job_id", ""))
+			if not job_id.is_empty():
+				break
+		_expect(not job_id.is_empty() and String(world.get_job(job_id).get("kind", "")) == "haul_tool",
+			"%s: a colonist must carry the pick out of A for a haul_tool job" % command_type)
+		if job_id.is_empty():
+			continue
+		_command_ok(world, command_type, {"job_id": job_id})
+		_expect(not (String(world.get_job(job_id).get("status", "")) in ["queued", "active"]),
+			"%s must end the haul_tool job: %s" % [command_type, world.get_job(job_id)])
+		var dropped := _pick_location(world)
+		var dropped_cell := Vector2i(int(dropped.get("x", -1)), int(dropped.get("y", -1)))
+		_expect(String(dropped["type"]) == "ground" and not A.has_point(dropped_cell) and not B.has_point(dropped_cell)
+				and bool(world.get_tool_item(pick_id).get("set_down", false)),
+			"%s: the carrier must set the pick down, marked, outside A and B: %s" % [command_type, world.get_tool_item(pick_id)])
+		_expect(world.get_tool_item_reservation(pick_id).is_empty(),
+			"%s must leave no reservation on the pick: %s" % [command_type, world.get_tool_item_reservation(pick_id)])
+		_expect(String(world.get_assignments().get(carrier_id, {}).get("job_id", "")) != job_id,
+			"%s: the carrier must no longer be assigned the ended job" % command_type)
+		var in_b := func() -> bool:
+			_expect_holder_busy(world, command_type)
+			return _haul_tool_closed(world) and _tool_rests_validly(world, true)
+		_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks,
+			"%s: the set-down pick must be re-planned from the ground and stocked in B: %s, jobs %s"
+				% [command_type, _pick_location(world), world.get_jobs(["haul_tool"])])
+		_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id
+				and not world.get_tool_item(pick_id).has("set_down"),
+			"%s: the same pick id must be the only tool, stocked and unmarked: %s" % [command_type, world.get_tool_items()])
+
 func _set_rock(world: WorldStateType, cell: Vector3i, rock: bool) -> void:
 	TestAccess.set_tile(world, cell.x, cell.y, WorldStateType.TILE_ROCK if rock else WorldStateType.TILE_FLOOR)
 	TestAccess.tile_grid(world).reset_cells()

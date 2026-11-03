@@ -325,6 +325,44 @@
        `origin/main`; `check_core_budgets` OK; `measure_core` 23822 lines in 114 files;
        `haul_giver.gd` 195 lines, `tool_drop_toil.gd` 358, `tool_item_store.gd` 129,
        `state_codec.gd` 608, `tool_validator.gd` 124.
+  17. Round 14, the commit that changes this file to the present text. It answers review
+     round 14 (`.orca-review.md`):
+     - (blocking) `order_handler.gd:73`: `cancel_job`, `fail_job` and `invalidate_job` on an
+       active `haul_tool` ended the job and released its reservation but left the pick in the
+       carrier's hand, and HaulGiver skips held tools. These commands now go through the shared
+       set-down cleanup. `ToolDropToil.set_down_for_ended_job()` is the set-down half of
+       `fail_haul_tool()`, which now calls it: the job's tool is set down where the carrier
+       stands (marked `set_down`), the job's reservations are released and the execution state
+       is cleared. `ToilExecutor.set_down_hauled_tool()` forwards to it.
+       `ToilBindings.drop_carried_haul_item()` calls it for a `haul_tool` job before the usual
+       cargo drop. `order_handler.gd` and `trench_system.gd` (a trapped carrier) each add
+       `"haul_tool"` to the list of kinds whose cargo is dropped at that boundary. All of this
+       runs before `_finish_job()`, while the reservation still exists. There is no new id,
+       reason or field;
+     - new check `_check_job_commands_set_an_active_haul_tool_down`. It uses seeds 64062,
+       64063 and 64064, one per command, and runs through commands and ticks. A carries the
+       pick at least 6 tiles out of A for a `haul_tool` job, and then the command runs through
+       the real command path. The check asserts that the job is ended, the carrier is no longer
+       assigned it, and the pick lies on the ground outside A and B, marked, with no
+       reservation. It then ticks on. Every tick, the pick is never held by an idle colonist,
+       and the same pick id ends stocked in B, unmarked, with no `haul_tool` job open. With the
+       three routing edits reverted, `test_stockpile_filters` fails; with them restored, it
+       passes;
+     - not covered: `complete_job` on an active `haul_tool` (a debug command for a job that has
+       not delivered). It keeps the earlier behaviour: the reservation is released, but the pick
+       stays held. The reviewer did not raise it. Routing it the same way would change what
+       `complete_job` means for every carried kind, so that is left to the owner;
+     - (non-blocking) the suite line is still author-reported (see below), with the log path;
+     - gates on the round 14 tree: `world_state.gd` is 767 lines and numstat `2 2` against
+       `origin/main`; `check_core_budgets` OK; `measure_core` 23836 lines in 114 files;
+       `tool_drop_toil.gd` 365 lines, `toil_bindings.gd` 512, `toil_executor.gd` 657.
+- Pending owner approval (round 14, does not block): two one-line edits outside the owned
+  paths, needed for the reviewer's round 14 fix. In `game/scripts/core/commands/handlers/order_handler.gd:73`
+  and `game/scripts/core/actors/trench_system.gd:227`, `"haul_tool"` is added to the list of
+  carried kinds whose cargo is dropped when the job ends. The round 14 additions to
+  `toil_bindings.gd` (the `haul_tool` branch in `drop_carried_haul_item()`) and
+  `toil_executor.gd` (the `set_down_hauled_tool()` forwarder) also go beyond the round 2
+  approval.
 - Pending owner approval (round 13, does not block): the persisted optional `setDown` field on
   `toolItems` entries (the schema, `state_codec.gd`, `tool_validator.gd`, `save-system.md`). It
   is what the reviewer's round 13 fix needs ("preserve recovery eligibility independently of
@@ -351,7 +389,22 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 13)
+## Final suite line (author-reported, round 14)
+
+```
+run_tests: all 139 test(s) PASS  [1.074s]
+```
+
+Quoted verbatim. As in earlier rounds, the runner prints seconds with `.` as the thousands
+separator in this locale. The tree is round 14 (the code changes in item 17). On Windows, with
+Godot 4.7.2 headless, the author ran
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 -SkipImport > full14.log 2>&1`.
+`-SkipImport` is safe here because round 14 adds no `class_name`. The log is at
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\full14.log`.
+It is local to the author's machine and not committed. Its FAIL and push_error lines come from
+the suite's expected-failure checks. The reviewer has not reproduced the full suite.
+
+### Round 13 (history)
 
 ```
 run_tests: all 139 test(s) PASS  [1.037s]
@@ -640,6 +693,12 @@ and are still pending:
    tool down, per `c769a48`) instead of suspending the job. Other kinds are unchanged.
    **Approved since round 12**: the owner approved it in `docs/orca/BACKLOG.md` on main,
    commit `a7cbb0e`. It is listed here only so the scope stays traceable.
+6. `game/scripts/core/commands/handlers/order_handler.gd:73` and
+   `game/scripts/core/actors/trench_system.gd:227` (round 14): `"haul_tool"` is added to the
+   kinds whose carried cargo is dropped when a command or a trap ends the job. Through
+   `ToilBindings.drop_carried_haul_item()`, a `haul_tool` carrier sets its tool down
+   (`ToolDropToil.set_down_for_ended_job()`) instead of keeping it in hand. This is one edited
+   line in each file.
 
 ## Contract impact
 
@@ -686,6 +745,9 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered run (round 14): `test_stockpile_filters` PASS [37s], with the new command check.
+  With the round 14 edits to `toil_bindings.gd`, `order_handler.gd` and `trench_system.gd`
+  reverted, it fails; restored, it passes.
 - Filtered runs (round 13), all PASS: `test_stockpile_filters` [32s], `test_save_migration`
   [7s], `test_tool_items_save` [5s], `test_tool_items_handover` [7s], `test_haul_need_interrupt`
   [2s], `test_farming_content` [3s] and `test_movement_scheduling_load` [4s].
@@ -720,7 +782,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23822 lines in 114 files` (round 13; 23803 in round 12;
+- `tools/measure_core.ps1`: `core total: 23836 lines in 114 files` (round 14; 23822 in round 13;
+  23803 in round 12;
   23783 in round 11, after the F5c
   and L4 rebases; the table below is round 10's, except that `needs_system.gd` is now 532,
   `toil_bindings.gd` 508 and `state_codec.gd` 603). Earlier: 23456 lines in 113 files (round 10; 23459 in round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
@@ -763,12 +826,19 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   a new job is queued from where the tool lies.
 - A stack hauled onto the target while the tool is carried may share the cell with the stocked
   tool, as it could before F5a-b.
+- `complete_job` on an active `haul_tool` that has not delivered releases the reservation but
+  leaves the tool in the carrier's hand, as before round 14 (item 17). The other job commands
+  set it down.
 
 ## Next action
 
 - The owner approves or rejects the files still listed under "Pending owner approval": the
   schema v14 files beyond the enum, the test pins, the `world_state.gd` line edits, the
   `needs_system.gd` wiring, the round 8 and round 10 additions to `toil_executor.gd` and
-  `toil_bindings.gd`, and the round 13 `setDown` field (schema, codec, validator, save-system).
+  `toil_bindings.gd`, the round 13 `setDown` field (schema, codec, validator, save-system), and
+  the round 14 one-line edits to `order_handler.gd` and `trench_system.gd` plus the round 14
+  additions to `toil_bindings.gd` and `toil_executor.gd`.
+- The owner decides whether `complete_job` on an active `haul_tool` should also set the tool
+  down (item 17).
 - The reviewer reproduces the full suite line.
 - Then review with `tools/orca/review.ps1`, which now resolves `F5a-b` to this file.

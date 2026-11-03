@@ -70,7 +70,7 @@ func apply_job_command(command: Dictionary) -> Dictionary:
 		# Cancelling/failing/invalidating a haul, site_fetch or craft_fetch job mid-carry drops the carried item (colonist-ai.md 3.3).
 		if command["type"] in ["cancel_job", "fail_job", "invalidate_job"]:
 			var target_job := _scheduler.queue.get_job(String(payload["job_id"]))
-			if String(target_job.get("kind", "")) in ["haul", "site_fetch", "craft_fetch"]:
+			if String(target_job.get("kind", "")) in ["haul", "site_fetch", "craft_fetch", "haul_tool"]:
 				_drop_carried_haul_item.call(String(payload["job_id"]))
 		var terminal_job := _scheduler.queue.get_job(String(payload["job_id"]))
 		var terminal_was_active: bool = String(terminal_job.get("status", "")) == "active"

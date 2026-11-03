@@ -145,9 +145,13 @@ func _force_drop_carried_item(colonist: Dictionary) -> void:
 
 ## Drops a haul/build job's cargo at the shared terminal boundary: through the live
 ## assignment, else through the NeedsSystem.paused_jobs entry (cleared: nothing to resume).
+## A haul_tool carrier also sets its tool down (F5a-b, ToolDropToil.set_down_for_ended_job()).
 func drop_carried_haul_item(job_id: String) -> void:
 	var colonist: Dictionary = _find_job_colonist.call(job_id)
 	if not colonist.is_empty():
+		var job := _scheduler.queue.get_job(job_id)
+		if String(job.get("kind", "")) == "haul_tool":
+			_toils.set_down_hauled_tool(colonist, job_id, job)
 		drop_carried_item_from(colonist)
 		return
 	for colonist_id in _needs_system.paused_jobs.keys():

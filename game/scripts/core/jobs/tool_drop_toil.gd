@@ -341,17 +341,24 @@ func haul_cannot_continue(job: Dictionary) -> bool:
 	var target: Vector3i = job["target"]
 	return not _free_for_tool(target) or (_in_any_stockpile(target) and not _in_any_zone(target))
 
+## The set-down half of fail_haul_tool(), shared with every other path that ends an active
+## haul_tool job (cancel_job/fail_job/invalidate_job commands, a trapped carrier; review round 14):
+## the job's tool leaves the carrier's hands (_set_down_held()), the job's reservations are
+## released and execution state is cleared. The caller ends the job.
+func set_down_for_ended_job(colonist: Dictionary, job_id: String, job: Dictionary) -> void:
+	var held_id := String(colonist.get("held_tool", ""))
+	if not held_id.is_empty() and (held_id == String(job.get("item_id", "")) or String(_tool_reservation_of.call(held_id)) == job_id):
+		_set_down_held(held_id, TileGrid.tile_of(colonist))
+	_release_all_tool_reservations.call(job_id)
+	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")
+
 ## The single haul_tool failure branch (c769a48), whatever the cause (interrupt, target invalid or
 ## unreachable, reservation missing): the carrier sets the job's tool (item_id, or any tool the job
 ## reserves) down on its current tile (_set_down_held()), every reservation of the job is released,
 ## execution state is cleared and on_toil_fail fails the job through the shared engine (remedy
 ## resubmit_order). HaulGiver re-plans the tool from where it now lies.
 func fail_haul_tool(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, reason: String) -> void:
-	var held_id := String(colonist.get("held_tool", ""))
-	if not held_id.is_empty() and (held_id == String(job.get("item_id", "")) or String(_tool_reservation_of.call(held_id)) == job_id):
-		_set_down_held(held_id, TileGrid.tile_of(colonist))
-	_release_all_tool_reservations.call(job_id)
-	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")
+	set_down_for_ended_job(colonist, job_id, job)
 	if _work_progress_clear.is_valid() and _work_ticks.has(String(job["kind"])):
 		_work_progress_clear.call(job["target"])
 	(hooks["on_toil_fail"] as Callable).call(job_id, reason)
