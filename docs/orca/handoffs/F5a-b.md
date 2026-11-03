@@ -4,12 +4,12 @@
 
 - Branch: `antonelmejor50-hub/f5a-b-haul-rejected-tools-out`. Not pushed.
 - Commits on this branch, oldest first:
-  (Hashes after the round 3 rebase onto `origin/main` `5399153`, F5b.)
-  1. `0dd4266`: first delivery (an instant move with no job). It was rejected in review round 1.
-  2. `6b8063a`: a handoff note about `review.ps1`. That note is now dropped, because the
+  (Hashes after the round 5 rebase onto `origin/main` `f55e9b0`, which includes L3 `bb3ff32`.)
+  1. `a80f538`: first delivery (an instant move with no job). It was rejected in review round 1.
+  2. `6c9d4fb`: a handoff note about `review.ps1`. That note is now dropped, because the
      script was fixed on main (`5be734f`, `76d139b`).
-  3. `ab5f013`: the round 1 fix (a carried `haul_tool` job, no teleport).
-  4. `3a02bf1`: the round 2 fix. It answers review round 2 (`.orca-review.md`,
+  3. `f34f3af`: the round 1 fix (a carried `haul_tool` job, no teleport).
+  4. `1079d00`: the round 2 fix. It answers review round 2 (`.orca-review.md`,
      REQUEST_CHANGES):
      - (b) the destination is rechecked on every tick while the tool is fetched or carried.
        An invalid one fails the job through the shared job engine (`invalid_target`), and the
@@ -19,11 +19,11 @@
      - (a) scope: the owner approved `jobs.json`, `toil_executor.gd`, `toil_bindings.gd`, the
        schema enum and `en.json` in `docs/orca/BACKLOG.md` on main, commit `afeeade`. The rest
        is listed under "Pending owner approval".
-  5. Round 3, the commit that changes this file to the present text
-     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). Owner note: F5b (`5399153`) is on main and
+  5. `b35d9dc`: round 3. Owner note: F5b (`5399153`) is on main and
      took schema v12. The branch was rebased onto `origin/main` and the bump renumbered to
      **v13**:
-     - v13 was free: `origin/main` is at v12, and L3 is not merged. So v13 was used, not v14;
+     - v13 was free: `origin/main` was at v12, and L3 (merged later, see item 8) has no bump. So
+       v13 was used, not v14;
      - the bump is `_v12_to_v13`, and F5b's `_v11_to_v12` (heal labour) is kept unchanged;
      - F5b's `save_schema_v12_fixture.json` is untouched. The new
        `save_schema_v13_fixture.json` (hash 237246710, issued 6, tick 150) is the same session,
@@ -31,8 +31,8 @@
      - rebase conflicts: F5b's `cook_work` and this branch's `haul_tool` are both kept in the
        schema enum, `test_architecture_rules.gd` and `test_toils_dig_chop_regression.gd`
        (22 to 23 kinds).
-     The v13 edits were folded into `3a02bf1`, and this commit updates only this file.
-  6. Round 4, the commit after round 3. It answers review round 4 (`.orca-review.md`,
+     The v13 edits were folded into `1079d00`, and this commit updates only this file.
+  6. `cca1601`: round 4. It answers review round 4 (`.orca-review.md`,
      REQUEST_CHANGES):
      - (blocking) the round 3 diff edited **three** existing `world_state.gd` lines, not two as
        this file said: the `ToilExecutor` line and both lines of the `HaulGiver` call. The
@@ -44,7 +44,7 @@
      - (non-blocking) `docs/orca/BACKLOG.md`'s F5a-b heading said "no schema bump". It now
        says "schema v13";
      - (non-blocking) the full suite was rerun on the round 4 tree.
-  7. Round 5, the commit after round 4. It answers review round 5 (`.orca-review.md`,
+  7. `dd1b2d6`: round 5. It answers review round 5 (`.orca-review.md`,
      REQUEST_CHANGES):
      - (blocking) a need or rescue interrupt released the reservation of the tool in the
        carrier's hand. On resuming, `_carry_done()` saw no reserved tool and reported the carry
@@ -67,6 +67,17 @@
          not held: {type: held, colonist_id: colonist_0}";
      - (non-blocking) the full suite is still author-reported; it was rerun on the round 5 tree
        (see below).
+  8. Round 5 rebase, the commit that changes this file to the present text
+     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). Owner note: L3 (`bb3ff32`, ADR 068, no schema
+     bump) is on main. The branch was rebased onto `origin/main` `f55e9b0` with no conflict:
+     - v13 is still free (`origin/main` is at v12), so the bump stays `_v12_to_v13`;
+     - L3 changes map and routing code (`regions.gd`, `vertical_links.gd`, `route_search.gd`,
+       `passability.gd`, `tile_grid.gd`) and adds `test_vertical_links.gd`, so the full suite
+       was rerun on the rebased HEAD and N is now 137;
+     - `world_state.gd` is still 767 lines, and still exactly two existing lines differ from
+       `origin/main`; this commit updates only this file.
+- Owner decision followed (round 5): rebase onto `origin/main` after L3, keep v13, and rerun the
+  full suite since the rebase brings code changes.
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
   keeping F5b's v12 step (v14 only if v13 were taken; it was not).
 - Owner decision followed (round 2): `afeeade` on main approves that scope and asks for the
@@ -78,19 +89,24 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 5)
+## Final suite line (author-reported, round 5, after the L3 rebase)
 
 ```
-run_tests: all 136 test(s) PASS  [880s]
+run_tests: all 137 test(s) PASS  [985s]
 ```
 
-The author ran this on the round 5 tree (this branch on `origin/main` `5399153`, with schema
+The author ran this on HEAD after the round 5 rebase (this branch on `origin/main` `f55e9b0`, with schema
 v13, the two-line `world_state.gd` wiring and the round 5 re-reservation), on Windows with Godot
 4.7.2 headless. It is still author-reported: the reviewer has
 not reproduced it yet (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1`).
-N is 136 because main now has 136 test files. This branch adds or removes none: its checks are in
-existing test files. The round 4 tree gave 136 PASS [999s], round 3 136 PASS [991s]. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
-[889s] (round 1).
+N is 137 because main now has 137 test files (L3 added `test_vertical_links.gd`). This branch adds
+or removes none: its checks are in existing test files. The round 5 tree before the L3 rebase
+gave 136 PASS [880s]. The first full run after the rebase gave `2 of 137 test(s) failed: test_reroute,
+test_tool_items_save`, each with `SaveIO must read back ...: could not open save`. Other
+worktrees' Godot processes were running and share `user://`. Both tests passed alone (`-Filter`),
+and the rerun above, on the same HEAD, passed with no such error. The round 4 tree gave 136 PASS
+[999s], round 3 136 PASS [991s]. Earlier runs, before the round 3 rebase, were 135 PASS [924s]
+(round 2) and 135 PASS [889s] (round 1).
 
 ## What changed (carried design, replaces the teleport)
 
@@ -289,8 +305,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23144 lines in 112 files` (round 5, on top of F5b;
-  23108 in round 4, 23105 in round 3).
+- `tools/measure_core.ps1`: `core total: 23423 lines in 113 files` (round 5 after the L3 rebase;
+  23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
 
   | File | Lines | Longest function |
   |---|---|---|
