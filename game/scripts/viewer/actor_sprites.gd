@@ -122,6 +122,8 @@ func refresh(snapshot: Dictionary = {}) -> void:
 		_track(actor_id, key, Vector2i(xs[row], ys[row]))
 	_placeholders.clear()
 	for animal: Dictionary in snapshot.get("animals", []):
+		if int(animal["z"]) != active_layer:
+			continue
 		var animal_id := String(animal["id"])
 		var tile := Vector2i(int(animal["x"]), int(animal["y"]))
 		var species := String(animal["species"])

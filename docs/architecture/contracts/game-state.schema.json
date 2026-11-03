@@ -633,11 +633,19 @@
           {
             "if": { "properties": { "kind": { "const": "trader" } } },
             "then": { "required": ["inventory", "visitor"] }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "animal" } } },
+            "then": { "required": ["species", "bornTick", "lastMealTick", "nextBirthTick"], "properties": { "id": { "pattern": "^animal_[0-9]+$" } } }
           }
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["colonist", "wolf", "trader"] },
+          "kind": { "type": "string", "enum": ["colonist", "wolf", "trader", "animal"] },
+          "species": { "type": "string", "pattern": "^[a-z0-9_-]+$", "description": "F6b-1 (ADR 070): kind animal only, a species.json id." },
+          "bornTick": { "type": "integer" },
+          "lastMealTick": { "type": "integer" },
+          "nextBirthTick": { "type": "integer" },
           "x": { "type": "integer", "minimum": 0 },
           "y": { "type": "integer", "minimum": 0 },
           "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
@@ -900,32 +908,11 @@
       }
     },
     "fauna": {
-      "description": "F6b-1 (ADR 070, schema v14): wild animals (actor-table records of kind animal, species from species.json) on the surface, the next animal id and the fauna RNG stream (world seed + salt). Absent when the world never had an animal.",
+      "description": "F6b-1 (ADR 070, schema v14): the next animal id and the fauna RNG stream (world seed + salt). The animals themselves are entities of kind animal. Absent when the world never had an animal.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["animals", "nextAnimalId", "rng"],
+      "required": ["nextAnimalId", "rng"],
       "properties": {
-        "animals": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["id", "kind", "species", "x", "y", "z", "factionId", "bornTick", "lastMealTick", "nextBirthTick", "health"],
-            "properties": {
-              "id": { "type": "string", "pattern": "^animal_[0-9]+$" },
-              "kind": { "const": "animal" },
-              "species": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-              "x": { "type": "integer", "minimum": 0 },
-              "y": { "type": "integer", "minimum": 0 },
-              "z": { "type": "integer", "minimum": 0 },
-              "factionId": { "type": "string" },
-              "bornTick": { "type": "integer" },
-              "lastMealTick": { "type": "integer" },
-              "nextBirthTick": { "type": "integer" },
-              "health": { "type": "integer", "minimum": 0 }
-            }
-          }
-        },
         "nextAnimalId": { "type": "integer", "minimum": 0 },
         "rng": {
           "type": "object",

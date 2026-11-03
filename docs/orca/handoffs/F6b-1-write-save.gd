@@ -5,9 +5,10 @@ extends SceneTree
 ## SaveIO.write_atomic(). Run from the repo root:
 ##   godot --headless --path game --script ../docs/orca/handoffs/F6b-1-write-save.gd -- <absolute-output-path>
 ## On the F6b-1 branch it produced game/scripts/tests/fixtures/save_schema_v14_fixture.json (schema
-## v14: the optional top-level "fauna", ADR 070). Worldgen places no animals by default
-## (mapgen.json has no animal_counts), so the session spawns a few grasshoppers and two birds on the
-## first surface soil tiles it finds and ticks until the fauna stream has been drawn from.
+## v14: animals are entities of kind "animal" in the shared actor table, plus the optional top-level
+## "fauna" {nextAnimalId, rng}, ADR 070). On top of whatever mapgen.animal_counts seeds, the session
+## spawns a few grasshoppers and two birds on the first surface soil tiles it finds and ticks until
+## the fauna stream has been drawn from.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")

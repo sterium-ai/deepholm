@@ -113,6 +113,8 @@ func _run_job_to_completion(world: WorldStateType, job_type: String, target: Vec
 		# order can sit queued for thousands of ticks (see test_save_dimensions.gd's
 		# far-edge check for the same fixture behavior spelled out in full).
 		for colonist in TestAccess.colonists(world):
+			if not colonist.has("needs"):
+				continue # F6b-1: wild animals share the actor table and carry no needs
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100

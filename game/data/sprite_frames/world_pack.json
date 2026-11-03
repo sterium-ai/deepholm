@@ -1319,6 +1319,9 @@
  },
  "side_faces": "right",
  "placeholder": {
+  "actors": {
+   "animal": "F6b-1 (ADR 070): wild animals draw per species; the wolf species reuses the wolf pack art, the other species are coloured placeholder dots until pack art is chosen"
+  },
   "objects": {
    "bed": "every pack bed is about 30 px wide, two tiles (Props/Static/Furniture.png, Interior_Props_01.png); owner rule: footprint <= 1 tile, art may overhang only up",
    "test_multi_source_crate": "test-only content kind, never placed by the game; no art at all",

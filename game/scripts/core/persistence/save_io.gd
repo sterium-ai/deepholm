@@ -136,7 +136,7 @@ static func _read_and_verify(path: String, check: Dictionary) -> Dictionary:
 	var seed_restore := SaveJsonInts._restore_exact_seed(state, located_state)
 	var incident_rng_restore := SaveJsonInts._restore_exact_incident_rng(state, located_state)
 	var dig_find_rng_restore := SaveJsonInts._restore_exact_dig_find_rng(state, located_state)
-	var fauna_rng_restore := SaveJsonInts._restore_exact_fauna_rng(state, located_state)
+	var fauna_rng_restore := SaveJsonInts._restore_exact_fauna_rng(state as Dictionary, located_state)
 	var version_value: Variant = state.get("schemaVersion")
 	if _is_int(version_value) and int(version_value) > SCHEMA_VERSION:
 		return {"ok": false, "code": "save_from_newer_version", "message": "save schema is newer than this build", "file": path}
@@ -275,12 +275,12 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return _optional(state, "rescueVictimAssignments", func(v: Variant) -> Dictionary: return GiverValidator._valid_rescue_victim_assignments(v)),
 		func() -> Dictionary: return _optional(state, "combatBlockedTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_combat_blocked_targets(v, w, h, layers)),
 		func() -> Dictionary: return _optional(state, "approachJobTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_approach_job_targets(v, w, h, layers)),
-		func() -> Dictionary: return _optional(state, "fauna", func(v: Variant) -> Dictionary: return FaunaValidator._valid_fauna(v, w, h, layers, species_ids)),
+		func() -> Dictionary: return _optional(state, "fauna", func(v: Variant) -> Dictionary: return FaunaValidator._valid_fauna(v)),
 		func() -> Dictionary: return CalendarValidator._valid_calendar_alerts(state.get("calendarAlerts")),
 		func() -> Dictionary: return ToolValidator._valid_tool_fetch_excluded(state.get("toolFetchExcluded"), state.get("toolItems")),
 		func() -> Dictionary: return ToolValidator._valid_tool_items(state.get("toolItems"), w, h, layers),
 		func() -> Dictionary: return ToolValidator._valid_tool_reservations(state.get("toolReservations"), state.get("toolItems")),
-		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"], w, h, layers, need_kinds, skill_rules),
+		func() -> Dictionary: return EntityValidator._valid_entities(state["entities"] as Array, w, h, layers, need_kinds, skill_rules, species_ids),
 		func() -> Dictionary: return ItemValidator._valid_inventory(state["inventory"]),
 		func() -> Dictionary: return SchedulingValidator._valid_jobs(state["jobs"], w, h, layers, job_kinds),
 		func() -> Dictionary: return SchedulingValidator._valid_scheduling(state["scheduling"], w, h, layers),

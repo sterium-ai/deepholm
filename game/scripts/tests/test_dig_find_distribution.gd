@@ -59,6 +59,7 @@ func _build_world(seed_value: int) -> WorldType:
 	TestAccess.set_tile(world, 1, 0, WorldType.TILE_SOIL)
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 0, "build": 3, "craft": 3, "cook": 3}})
@@ -233,6 +234,7 @@ func _check_simultaneous_resolution_order() -> void:
 	TestAccess.set_tile(world, 9, 8, WorldType.TILE_FLOOR)
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
+	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.item_table(world).items.clear()
 	TestAccess.item_table(world).item_factions.clear()
 

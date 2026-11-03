@@ -161,8 +161,7 @@ var _construction: ConstructionSystemType
 var _construction_giver: ConstructionGiverType
 var _crafting: CraftingSystem # F2 (ADR 061): workbench targets, orders and bills
 var _craft_giver: CraftGiver
-## Trader offers; never persisted or hashed.
-var _trade: TradeSystemType
+var _trade: TradeSystemType # trader offers; never persisted or hashed
 var _farm: FarmSystemType # crop growth + FarmGiver (F1, ADR 059)
 var _fauna: FaunaSystem # wild animals, their worldgen and "fauna" tick phase (F6b-1, ADR 070)
 
@@ -257,7 +256,8 @@ func _build_systems() -> void:
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	_farm = FarmSystemType.new(_content, _calendar, _clock, _tile_grid, _zone_table.get_farm_zones, _item_table.get_items,
-		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability, _zone_table.get_forest_zones, _colonist_at); _fauna = FaunaSystem.new(_content, _calendar.day_length_ticks(), func() -> int: return _clock.tick, _tile_grid, _passability.passable_for_faction, _seed, _mapgen, _spawn_clearing)
+		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability, _zone_table.get_forest_zones, _colonist_at); _fauna = FaunaSystem.new(_content, _calendar.day_length_ticks(), func() -> int: return _clock.tick, _tile_grid, _passability.passable_for_faction, _seed, _mapgen, _spawn_clearing,
+		func() -> Array[Dictionary]: return _colonists, _append_colonist, _remove_colonist_by_id, _actor_index.moved)
 	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), _construction.get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:

@@ -305,7 +305,9 @@ func _check_disabled_reproduces_pre_incident_hash() -> void:
 		"the default (incidents off) and an explicitly-disabled world must match exactly")
 	_expect(_incident_started_events(default_world, "wildlife_wander").is_empty(),
 		"incidents must never fire when disabled, even well past min_day")
-	_expect(TestAccess.colonists(default_world).size() == 3,
+	# F6b-1: wild animals (kind "animal") share the actor table and breed on their own; incidents
+	# spawn only non-animal actors, so the roster that must not grow is the non-animal one.
+	_expect(TestAccess.colonists(default_world).filter(func(a: Dictionary) -> bool: return a.get("kind") != "animal").size() == 3,
 		"a disabled world must never grow the actor roster beyond its 3 starting colonists")
 	for entry in TestAccess.scheduler(default_world).get_waiting():
 		_expect(not entry.has("autonomous"), "an ordinary queue entry must never carry the autonomous flag")

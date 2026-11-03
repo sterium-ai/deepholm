@@ -1,10 +1,12 @@
 class_name FaunaSystem
 extends RefCounted
 
-## Wild animals (F6b-1, ADR 070): their roster, worldgen placement and the "fauna" tick phase.
-## Animals are actor-table actors of kind "animal" (ActorTable.spawn_animal()) kept in their own
-## roster: no labours, needs, jobs or combat, so no colonist system ever iterates them. They live on
-## the surface only (z = TileGrid.SURFACE). Every random draw comes from this system's own stream,
+## Wild animals (F6b-1, ADR 070): their worldgen placement and the "fauna" tick phase. Animals are
+## rows of WorldState's shared actor table of kind "animal" (ActorTable.spawn_animal()): health only,
+## no mover, worker, needs or combat component, so worker systems skip them while combat and the
+## view see one table (F6b-3). This system reaches the table only through WorldState's callables
+## (append, remove, index `moved`), so the actor index stays in step. They live on the surface only
+## (z = TileGrid.SURFACE). Every random draw comes from this system's own stream,
 ## seeded from the world seed + SEED_SALT, so fauna never perturbs WorldState's simulation RNG.
 ##
 ## Per tick, in roster order (spawn order, so ids ascend): an animal starves once starve_ticks pass
@@ -29,13 +31,17 @@ var _tick: Callable # () -> int
 var _tile_grid: TileGridType
 var _passable: Callable # (Vector3i, faction_id) -> float
 var _random := RandomNumberGenerator.new()
-var _animals: Array[Dictionary] = []
+var _seed := 0
+var _actors: Callable # () -> Array[Dictionary], the shared actor table
+var _append: Callable # (actor) -> void
+var _remove: Callable # (actor_id, is_death) -> void
+var _moved: Callable # (actor) -> void, the actor index after a move
 var _next_id := 0
 var _startup_error := ""
 
 ## Seeds mapgen["animal_counts"] onto open ground outside `clearing` (the colony's spawn rect).
 func _init(content: ContentRegistry, day_ticks: int, tick: Callable, tile_grid: TileGridType, passable: Callable, world_seed: int,
-		mapgen: Dictionary, clearing: Dictionary) -> void:
+		mapgen: Dictionary, clearing: Dictionary, actors: Callable, append: Callable, remove: Callable, moved: Callable) -> void:
 	var counts: Dictionary = mapgen.get("animal_counts", {})
 	_table = FaunaSpecies.build(content.document("species") as Dictionary, counts, day_ticks, content)
 	if not _table["ok"]:
@@ -44,17 +50,27 @@ func _init(content: ContentRegistry, day_ticks: int, tick: Callable, tile_grid: 
 	_tick = tick
 	_tile_grid = tile_grid
 	_passable = passable
-	_random.seed = world_seed + SEED_SALT
+	_actors = actors
+	_append = append
+	_remove = remove
+	_moved = moved
+	_seed = world_seed + SEED_SALT
+	_random.seed = _seed
 	for species_id: String in _table["order"]:
 		_seed_species(species_id, (counts.get(species_id, 0) as int), clearing)
+	# Seeding queried passability; drop the cells it cached so construction leaves no cache behind
+	# (a caller that edits tiles or objects directly before the first tick must not see stale cells).
+	tile_grid.reset_cells()
 
 ## Empty, or the typed fatal error WorldState's startup aborts on (bad species.json or mapgen counts).
 func startup_error() -> String: return _startup_error
-func get_animals() -> Array[Dictionary]: return _animals
+## The live animals, in table order (spawn order, so ids ascend).
+func get_animals() -> Array[Dictionary]:
+	return (_actors.call() as Array[Dictionary]).filter(func(actor: Dictionary) -> bool: return actor.get("kind") == "animal")
 func get_species(species_id: String) -> Dictionary: return (_table["species"] as Dictionary).get(species_id, {})
 func count_of(species_id: String) -> int:
 	var count := 0
-	for animal: Dictionary in _animals:
+	for animal: Dictionary in get_animals():
 		count += 1 if animal["species"] == species_id else 0
 	return count
 
@@ -66,20 +82,20 @@ func spawn(species_id: String, tile: Vector3i) -> Dictionary:
 	animal["lastMealTick"] = tick
 	animal["nextBirthTick"] = tick
 	_next_id += 1
-	_animals.append(animal)
+	_append.call(animal)
 	return animal
 
 ## The "fauna" TickPipeline phase.
 func advance() -> void:
-	if _animals.is_empty():
+	var roster := get_animals()
+	if roster.is_empty():
 		return
 	var tick: int = _tick.call()
 	var counts := {}
-	for animal: Dictionary in _animals:
-		counts[animal["species"]] = (counts.get(animal["species"], 0) as int) + 1
-	var roster := _animals.duplicate()
 	for animal: Dictionary in roster:
-		if animal.get("dead", false):
+		counts[animal["species"]] = (counts.get(animal["species"], 0) as int) + 1
+	for animal: Dictionary in roster:
+		if _dead(animal):
 			continue
 		var record: Dictionary = _table["species"][animal["species"]]
 		if tick - (animal["lastMealTick"] as int) >= (record["starve_ticks"] as int):
@@ -90,20 +106,22 @@ func advance() -> void:
 		if tick - (animal["lastMealTick"] as int) < (record["hungry_ticks"] as int):
 			_wander(animal)
 		elif record["predator"]:
-			_hunt(animal, record, tick, counts)
+			_hunt(animal, record, tick, counts, roster)
 		elif _on_food(animal, record):
 			animal["lastMealTick"] = tick
 		else:
 			_wander(animal)
-		_try_breed(animal, record, tick, counts)
-	_animals = _animals.filter(func(animal: Dictionary) -> bool: return not animal.get("dead", false))
+		_try_breed(animal, record, tick, counts, roster)
+	for animal: Dictionary in roster:
+		if _dead(animal):
+			_remove.call(animal["id"] as String, true)
 
-func _hunt(animal: Dictionary, record: Dictionary, tick: int, counts: Dictionary) -> void:
+func _hunt(animal: Dictionary, record: Dictionary, tick: int, counts: Dictionary, roster: Array[Dictionary]) -> void:
 	var here := TileGridType.tile_of(animal)
 	var best: Dictionary = {}
 	var best_distance := (record["sight"] as int) + 1
-	for other: Dictionary in _animals:
-		if other.get("dead", false) or not (record["prey"] as Array).has(other["species"]):
+	for other: Dictionary in roster:
+		if _dead(other) or not (record["prey"] as Array).has(other["species"]):
 			continue
 		var distance := TileGridType.chebyshev(here, TileGridType.tile_of(other))
 		if distance < best_distance:
@@ -119,7 +137,8 @@ func _hunt(animal: Dictionary, record: Dictionary, tick: int, counts: Dictionary
 		if not _move(animal, Vector2i(signi(toward.x), signi(toward.y))):
 			_wander(animal)
 
-func _try_breed(animal: Dictionary, record: Dictionary, tick: int, counts: Dictionary) -> void:
+## A newborn joins the table but not `roster`: it takes its first turn next tick.
+func _try_breed(animal: Dictionary, record: Dictionary, tick: int, counts: Dictionary, roster: Array[Dictionary]) -> void:
 	var species_id: String = animal["species"]
 	var count := (counts.get(species_id, 0) as int)
 	if tick < (animal["nextBirthTick"] as int) or count >= (record["cap"] as int) or not _is_adult(animal, record, tick) \
@@ -127,8 +146,8 @@ func _try_breed(animal: Dictionary, record: Dictionary, tick: int, counts: Dicti
 		return
 	var here := TileGridType.tile_of(animal)
 	var partner := false
-	for other: Dictionary in _animals:
-		if other != animal and other["species"] == species_id and not other.get("dead", false) \
+	for other: Dictionary in roster:
+		if other != animal and other["species"] == species_id and not _dead(other) \
 				and _is_adult(other, record, tick) and TileGridType.chebyshev(here, TileGridType.tile_of(other)) <= (record["radius"] as int):
 			partner = true
 			break
@@ -139,7 +158,7 @@ func _try_breed(animal: Dictionary, record: Dictionary, tick: int, counts: Dicti
 		return
 	var child := ActorTableType.spawn_animal(species_id, record, here, "animal_%d" % _next_id, tick)
 	_next_id += 1
-	_animals.append(child)
+	_append.call(child)
 	counts[species_id] = count + 1
 
 func _wander(animal: Dictionary) -> void:
@@ -151,6 +170,7 @@ func _move(animal: Dictionary, step: Vector2i) -> bool:
 	if not _tile_grid.contains(target) or (_passable.call(target, FACTION) as float) <= 0.0:
 		return false
 	TileGridType.write_tile(animal, target)
+	_moved.call(animal)
 	return true
 
 func _on_food(animal: Dictionary, record: Dictionary) -> bool:
@@ -158,9 +178,14 @@ func _on_food(animal: Dictionary, record: Dictionary) -> bool:
 	return ((record["eats"] as Array).has("grass") and (_table["grass"] as Dictionary).has(tile_id)) \
 		or ((record["eats"] as Array).has("crops") and (_table["crops"] as Dictionary).has(tile_id))
 
+## Marks the death (health.dead, hp 0); advance() removes the dead from the table after the pass.
 func _kill(animal: Dictionary, counts: Dictionary) -> void:
-	animal["dead"] = true
+	animal["health"]["hp"] = 0
+	animal["health"]["dead"] = true
 	counts[animal["species"]] = (counts[animal["species"]] as int) - 1
+
+static func _dead(animal: Dictionary) -> bool:
+	return (animal["health"] as Dictionary).get("dead", false) == true
 
 func _is_adult(animal: Dictionary, record: Dictionary, tick: int) -> bool:
 	return tick - (animal["bornTick"] as int) >= (record["adult_ticks"] as int)
@@ -189,29 +214,26 @@ static func _in_clearing(tile: Vector3i, clearing: Dictionary) -> bool:
 	return tile.x >= (clearing["x"] as int) and tile.x < (clearing["x"] as int) + (clearing["width"] as int) \
 		and tile.y >= (clearing["y"] as int) and tile.y < (clearing["y"] as int) + (clearing["height"] as int)
 
-## Save fields; {} for a world that never had an animal (its stream is untouched and rebuilt from the seed).
+## Save fields: the id counter and the fauna stream (the animals are table rows, saved with the
+## entities). {} for a world that never had an animal (its stream is rebuilt from the seed).
 func encode() -> Dictionary:
 	if _next_id == 0:
 		return {}
-	return {"fauna": {"animals": _animals.duplicate(true), "nextAnimalId": _next_id,
-		"rng": {"seed": _random.seed, "state": _random.state}}}
+	return {"fauna": {"nextAnimalId": _next_id, "rng": {"seed": _random.seed, "state": _random.state}}}
 
-## Replaces the worldgen roster with the saved one; an absent "fauna" field leaves an empty roster.
+## Restores the counter and the stream; the constructor's worldgen animals were already replaced
+## with the saved entities. An absent "fauna" field is a world that never had an animal.
 func decode(state: Dictionary) -> void:
-	_animals = []
-	_next_id = 0
 	var fauna: Dictionary = state.get("fauna", {})
 	if fauna.is_empty():
+		_next_id = 0
+		_random.seed = _seed
 		return
-	for animal: Dictionary in fauna["animals"]:
-		var copy := animal.duplicate(true)
-		for field: String in ["x", "y", "z", "bornTick", "lastMealTick", "nextBirthTick", "health"]:
-			copy[field] = (copy[field] as int)
-		_animals.append(copy)
 	_next_id = (fauna["nextAnimalId"] as int)
 	_random.seed = (fauna["rng"]["seed"] as int)
 	_random.state = (fauna["rng"]["state"] as int)
 
+## The animals themselves are hashed with the actor table (EntityCodec._hash_colonists()).
 func hash_into(snapshot: Dictionary) -> void:
 	if _next_id > 0:
-		snapshot["fauna"] = {"animals": _animals, "next_id": _next_id, "rng": {"seed": _random.seed, "state": _random.state}}
+		snapshot["fauna"] = {"next_id": _next_id, "rng": {"seed": _random.seed, "state": _random.state}}

@@ -65,8 +65,12 @@ func _check_bad_content_is_rejected() -> void:
 
 func _seeded(seed_value: int, counts: Dictionary) -> FaunaSystem:
 	var world := WorldStateType.new(seed_value)
+	var rows: Array[Dictionary] = [] # a standalone actor table, apart from the world's
 	return FaunaSystem.new(TestAccess.content(world), DAY_TICKS, world.get_tick, TestAccess.tile_grid(world),
-		TestAccess.passability(world).passable_for_faction, seed_value, {"animal_counts": counts}, world.get_spawn_clearing())
+		TestAccess.passability(world).passable_for_faction, seed_value, {"animal_counts": counts}, world.get_spawn_clearing(),
+		func() -> Array[Dictionary]: return rows, func(row: Dictionary) -> void: rows.append(row),
+		func(id: String, _drop: bool) -> void: rows.assign(rows.filter(func(r: Dictionary) -> bool: return r["id"] != id)),
+		func(_row: Dictionary) -> void: pass)
 
 func _placement(fauna: FaunaSystem) -> Array:
 	var tiles := []
@@ -88,7 +92,7 @@ func _check_worldgen_seeds_counts() -> void:
 		_expect(animal["kind"] == "animal" and animal["factionId"] == "wildlife", "an animal is a wildlife actor")
 	_expect(_placement(_seeded(424242, counts)) == _placement(fauna), "the same seed must place the same animals")
 	_expect(_placement(_seeded(424243, counts)) != _placement(fauna), "another seed must place them differently")
-	_expect(WorldStateType.new(424242)._fauna.get_animals().is_empty(), "shipped mapgen places no animals by default")
+	_expect(not WorldStateType.new(424242)._fauna.get_animals().is_empty(), "shipped mapgen places its animal counts")
 
 ## Spawning and ticking animals leaves the world's simulation stream exactly where it was.
 func _check_fauna_stream_is_separate() -> void:

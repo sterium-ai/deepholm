@@ -814,8 +814,8 @@ func _check_v14_to_v15_changes_only_the_version() -> void:
 	rest["schemaVersion"] = 14
 	_expect(JSON.stringify(rest) == before, "v14 -> v15 must change nothing but schemaVersion")
 
-## The committed v15 fixture carries a "fauna" roster, loads through SaveIO.read(), re-encodes to
-## exactly the state it was read from, and keeps its state_hash through a second write/read.
+## The committed v15 fixture carries animal entities and the "fauna" field, loads through
+## SaveIO.read(), re-encodes to exactly the state it was read from, and keeps its state_hash through a second write/read.
 func _check_v15_fixture_loads_and_reencodes_unchanged() -> void:
 	var result := SaveIOType.read(V15_FIXTURE)
 	_expect(result["ok"], "the v15 fixture must load through SaveIO.read(): %s" % result)
@@ -825,8 +825,8 @@ func _check_v15_fixture_loads_and_reencodes_unchanged() -> void:
 	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V15_FIXTURE))["state"]
 	_expect(int(raw["schemaVersion"]) == 15 and int(state["schemaVersion"]) == StateCodecType.SCHEMA_VERSION,
 		"the v15 fixture must be schemaVersion 15 on disk and load at the current schemaVersion")
-	_expect(not (state.get("fauna", {}).get("animals", []) as Array).is_empty(),
-		"the v15 fixture must hold animals for this to prove anything")
+	_expect((state["entities"] as Array).any(func(e: Dictionary) -> bool: return e.get("kind") == "animal"),
+		"the v15 fixture must hold animal entities for this to prove anything")
 	var world := StateCodecType.decode(state)
 	var reencoded := StateCodecType.encode(world)
 	_expect(JSON.stringify(reencoded) == JSON.stringify(state),

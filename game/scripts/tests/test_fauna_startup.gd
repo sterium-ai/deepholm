@@ -62,16 +62,14 @@ func _check_unknown_prey_is_fatal() -> void:
 	_expect_fatal(_run_probe(), "unknown prey 'dragon'")
 
 func _check_unknown_count_species_is_fatal() -> void:
-	_write_content_copy("mapgen", "{", "{\"animal_counts\": {\"dragon\": 2},")
+	_write_content_copy("mapgen", "\"animal_counts\": {", "\"animal_counts\": {\"dragon\": 2, ")
 	_expect_fatal(_run_probe(), "unknown species 'dragon'")
 
-## Review fix (item 3): mapgen.animal_counts seeds animals through WorldState.new() itself, from the
-## world seed. Shipped mapgen keeps no counts (ADR 070 §6, pending owner decision 3), so the counts
-## go in a content copy; valid content does not abort, so this runs in-process.
+## Owner round 1: shipped mapgen.animal_counts seeds animals through WorldState.new() itself, from
+## the world seed, into the shared actor table (ADR 070 §6). Shipped content, in-process.
 func _check_world_seeds_mapgen_counts() -> void:
-	_write_content_copy("mapgen", "{", "{\"animal_counts\": %s," % JSON.stringify(COUNTS))
-	var content := ContentRegistryType.new(CONTENT_DIR)
-	_expect(content.is_valid(), "the counted content copy must load: %s" % [content.get_error()])
+	var content := ContentRegistryType.new()
+	_expect(content.is_valid(), "shipped content must load: %s" % [content.get_error()])
 	var world := WorldStateType.new(424242, 10, 48, 48, false, content)
 	var clearing := world.get_spawn_clearing()
 	for id: String in COUNTS.keys():
@@ -84,8 +82,19 @@ func _check_world_seeds_mapgen_counts() -> void:
 	_expect(again.state_hash() == world.state_hash(), "the same seed must give the same state_hash()")
 	var other := WorldStateType.new(424243, 10, 48, 48, false, content)
 	_expect(other._fauna.get_animals() != world._fauna.get_animals(), "another seed must seed them elsewhere")
-	_expect(world.state_hash() != WorldStateType.new(424242, 10, 48, 48).state_hash(), "seeded animals must be in state_hash()")
+	_expect(world._fauna.get_animals().size() == _sum(COUNTS), "WorldState must seed exactly the mapgen counts")
+	for animal: Dictionary in world._fauna.get_animals():
+		_expect(world._colonists.has(animal), "seeded animals are rows of the shared actor table")
+	var extra := WorldStateType.new(424242, 10, 48, 48, false, content)
+	extra._fauna.spawn("rabbit", TileGrid.tile_of(world._fauna.get_animals()[0]))
+	_expect(extra.state_hash() != world.state_hash(), "animals must be in state_hash()")
 	_expect((world.get_view_snapshot()["animals"] as Array).size() == world._fauna.get_animals().size(), "the view must see them")
+
+static func _sum(counts: Dictionary) -> int:
+	var total := 0
+	for id: String in counts.keys():
+		total += int(counts[id])
+	return total
 
 func _expect_fatal(output: String, detail: String) -> void:
 	_expect(not output.contains(SURVIVED), "bad fauna content must abort WorldState startup: %s" % output)

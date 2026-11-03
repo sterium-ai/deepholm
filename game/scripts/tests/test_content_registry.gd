@@ -150,7 +150,7 @@ func _check_real_bundle_loads_and_resolves() -> void:
 	_expect(registry.list("needs").size() == 3, "needs collection must contain exactly food/water/rest")
 	_expect(registry.list("objects").size() > 0, "objects collection must not be empty")
 
-	_expect(registry.list("actors").size() == 3, "actors collection must contain exactly colonist/wolf/trader")
+	_expect(registry.list("actors").size() == 4, "actors collection must contain exactly colonist/wolf/trader/animal")
 	var colonist := registry.get_entry("actors", "colonist")
 	_expect(not colonist.is_empty() and (colonist.get("components", []) as Array).has("worker"),
 		"actors collection must declare 'colonist' with a worker component")

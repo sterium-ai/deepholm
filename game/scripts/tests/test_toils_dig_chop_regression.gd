@@ -71,8 +71,12 @@ const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## `heal` entry, and 195318204 / 4154555954 became the values below. The same snapshot with
 ## `heal` dropped still hashes to both old literals
 ## (docs/orca/handoffs/F5b-hash_projection.gd), so stepping did not change.
-const EXPECTED_HASH := 3133873738
-const COLONY_EXPECTED_HASH := 2587936448
+## F6b-1 (ADR 070 §6) ships mapgen.animal_counts: the 26 seeded animals are rows of the actor
+## table, so both projections hash them and 3133873738 / 2587936448 became the values below.
+## With animal_counts emptied the same run still hashes to both old literals, so the colonists'
+## stepping did not change.
+const EXPECTED_HASH := 1099216867
+const COLONY_EXPECTED_HASH := 2179195481
 const TOTAL_TICKS := 260
 
 var _failed := false

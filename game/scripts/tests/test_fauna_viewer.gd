@@ -13,7 +13,7 @@ class FakeWorld:
 	extends RefCounted
 	var animals: Array = []
 	func get_view_snapshot(_detail_ids: Array = []) -> Dictionary:
-		return {"ids": [], "worker": [], "hp": [], "kinds": [], "factions": [], "x": [], "y": [],
+		return {"ids": [], "worker": [], "hp": [], "kinds": [], "factions": [], "x": [], "y": [], "z": [],
 			"animals": animals.duplicate(true)}
 
 func _init() -> void:

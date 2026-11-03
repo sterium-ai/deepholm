@@ -51,7 +51,7 @@ func _check_hash_is_deterministic() -> void:
 	var plain := WorldStateType.new(880001)
 	_expect(a.state_hash() == b.state_hash(), "the same seed and spawns must hash the same")
 	_expect(a.state_hash() != plain.state_hash(), "animals must change state_hash()")
-	_expect(WorldStateType.new(880001).state_hash() == plain.state_hash(), "an animal-free world hashes the same")
+	_expect(WorldStateType.new(880001).state_hash() == plain.state_hash(), "the same seed alone hashes the same")
 	for _i in DAY_TICKS:
 		a.tick()
 		b.tick()
@@ -113,10 +113,13 @@ func _check_unknown_species_rejected() -> void:
 	var saved: Dictionary = world.to_save_state()
 	_expect(SaveIOType._validate_state(saved)["ok"], "the untouched save with animals must validate")
 	var tampered: Dictionary = saved.duplicate(true)
-	(tampered["fauna"]["animals"] as Array)[0]["species"] = "dragon"
+	for entity: Dictionary in tampered["entities"]:
+		if entity.get("kind") == "animal":
+			entity["species"] = "dragon"
+			break
 	var check := SaveIOType._validate_state(tampered)
 	_expect(not check["ok"], "a save with an unknown species must be rejected")
-	_expect(str(check.get("message", "")).contains("fauna"), "the rejection must name the fauna field: %s" % check)
+	_expect(str(check.get("message", "")).contains("animal"), "the rejection must name the animal species: %s" % check)
 	var written := SaveIOType.write_atomic(SAVE_PATH, tampered)
 	_expect(not written.get("ok", false), "the writer must refuse a save with an unknown species: %s" % written)
 	if FileAccess.file_exists(SAVE_PATH):
