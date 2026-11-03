@@ -78,15 +78,17 @@ Non-blocking, both taken: the budgets line now names the frozen exceptions (the 
 
 Blocking:
 1. **`crafting_system.gd` is outside the owned paths.** The round-1 fix needs it (without it a
-   loose tool is stocked in a stockpile that rejects tools). No owner approval exists yet, so
-   none is quoted: the request is now written in the F5a entry of `BACKLOG.md` ("Pending owner
-   approval ... (1)") and below. If the owner refuses, the alternative is to revert the 9 lines
-   and accept the round-1 defect as a known limitation.
+   loose tool is stocked in a stockpile that rejects tools). **Approved** by the owner,
+   `BACKLOG.md` F5a entry, commit 203129a: "(1) scope extension to
+   `game/scripts/core/crafting/crafting_system.gd` (`stock_tools()` respects the destination's
+   filters, ~9 lines) — approved".
 2. **Already-stocked tools are not hauled out.** Doing so needs a haul path for
    `ToolItemStore` tools, or turning an identity-bearing tool back into a pile (new ids, ADR 061
    territory), both outside F5a and both design choices. I kept the conservative behaviour (the
-   tool stays until a colonist takes it) and wrote it as a requested design amendment
-   ("Pending owner approval ... (2)" in `BACKLOG.md`). Not quoted as approved.
+   tool stays until a colonist takes it). **Approved** as an F5a limitation by the owner,
+   `BACKLOG.md` F5a entry, commit 203129a: "(2) an already-stocked tool stays in a stockpile that
+   later rejects tools until a colonist takes it: accepted as an F5a limitation"; the haul-out
+   is follow-up task **F5a-b** (`todo`).
 3. **Trigger tests for the `ToolDropToil` filter and the other-layer ranking.** Added, both
    through commands and ticks:
    - `_check_drop_tool_skips_a_stockpile_that_rejects_tools()`: a holder whose pick a foreign
@@ -103,28 +105,31 @@ Blocking:
 Non-blocking: the commit identification below now lists every commit; "owner confirmation
 pending" (panel playtest) stays a post-merge check.
 
-**Pending owner approval (2026-11-03):** (1) the scope extension to
-`core/crafting/crafting_system.gd`; (2) the design amendment that an already-stocked tool stays
-in a stockpile that later rejects tools. Both are in `BACKLOG.md` (F5a entry).
+**Approved (owner, 2026-11-03, commit 203129a, `BACKLOG.md` F5a entry "Approved amendments"):**
+(1) the scope extension to `core/crafting/crafting_system.gd`; (2) an already-stocked tool stays
+in a stockpile that later rejects tools, as an F5a limitation (follow-up F5a-b). The branch was
+rebased onto 203129a so its `BACKLOG.md` carries that text; this branch's own "pending" bullet
+was dropped in favour of the owner's.
 
 ## Branch and commit
 
-- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 3e7ba13,
-  three commits: deccb3b (the feature, squashed and rebased onto L2), 3492984 (review round 1
-  fixes) and the review-round-2 commit that carries this report (`git log origin/main..HEAD`).
+- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 203129a
+  (3e7ba13 + B7 2126574, viewer/tests only, + the owner's backlog note), four commits: 5f5edb1
+  (the feature, squashed and rebased onto L2), 9c38844 (review round 1 fixes), c5c8730 (review
+  round 2 tests) and the round-3 commit that carries this report (`git log origin/main..HEAD`).
   Not pushed.
 - Earlier history: written on 73d0fa6 as v7 -> v8 (`all 132 test(s) PASS [745s]`), rebased onto
   F3 (32bfb81) as v8 -> v9 (`all 133 test(s) PASS [823s]`), now on L2 as v9 -> v10.
 - **Owner coordination note:** ADRs up to 063 are taken (this is **064**); `world_state.gd` must
   not grow (767 -> 767, four statements edited in place); new code uses `TileGrid` helpers.
 
-## Final suite line (branch head, after the review-round-2 changes)
+## Final suite line (branch head, rebased onto 203129a)
 
 ```
-run_tests: all 134 test(s) PASS  [859s]
+run_tests: all 134 test(s) PASS  [885s]
 ```
 
-`origin/main` (3e7ba13) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
+`origin/main` (203129a) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
 
 ## Design, line by line
 
@@ -150,7 +155,7 @@ run_tests: all 134 test(s) PASS  [859s]
    stocked (`CraftingSystem.stock_tools()`) only in a stockpile accepting `tool`; one delivered
    into a stockpile that stopped accepting tools is hauled out. A tool already stocked in a
    stockpile that later stops accepting tools stays (tools have no haul path, ADR 061):
-   **pending owner approval** as a design amendment (review round 2).
+   **approved** as an F5a limitation (owner, commit 203129a; follow-up F5a-b).
 6. A haul already carrying an item to a stockpile that stops accepting it delivers it, and
    HaulGiver then hauls it out (ADR 064, "Command").
 
@@ -174,7 +179,7 @@ ADR; this report.
 | `game/scripts/viewer/stockpile_panel.gd` (new), `game/scripts/viewer/info_panel.gd` | the panel and its place in the info column |
 | `game/data/text/en.json` | 4 rejection texts (ADR 052: every detail code has text) and the panel strings |
 | `game/scripts/core/world_state.gd` | composition only, 4 lines edited in place, 0 added: `ZoneTable.new(_item_definitions)`, HaulGiver's new Callables, `ToolDropToil` gets `get_stockpile_zones_for_group.bind("tool")`, `CraftingSystem` gets `_zone_table.accepts_item_at` |
-| `game/scripts/core/crafting/crafting_system.gd` | review fix: `stock_tools()` stocks a loose tool only where the stockpile accepts `tool` (outside the listed owned paths; the reviewer's blocking item 1 requires it) |
+| `game/scripts/core/crafting/crafting_system.gd` | review fix: `stock_tools()` stocks a loose tool only where the stockpile accepts `tool` (outside the listed owned paths; scope extension approved by the owner, commit 203129a) |
 | `docs/architecture/orders-and-movement.md` | the zone-command section and the haul-destination paragraph, which described the old rule |
 | `docs/decisions/064-stockpile-filters-and-priorities.md` (new), `docs/decisions/README.md` | ADR |
 | `game/scripts/tests/test_stockpile_filters.gd` (new), `test_save_migration.gd`, `test_text_pseudo_locale.gd` | tests (the last one adds the `stockpile` text prefix to its key census: more coverage) |
@@ -200,7 +205,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [859s]
+tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [885s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2801 warning(s), none above baseline (2803)
@@ -252,11 +257,11 @@ unchanged; unknown, unsorted or repeated groups, non-list groups, priority 0 or 
 zone with a priority are `schema_error`; the v10 fixture re-encodes unchanged (L2's v9 check,
 moved to v10 as F2, F3 and L2 did); the v1-v8 fixtures now load at v10.
 
-Assert sites (`_expect(`/`_fail(`, `origin/main` 3e7ba13 -> branch): `test_save_migration` 149 -> 164,
+Assert sites (`_expect(`/`_fail(`, `origin/main` 203129a -> branch): `test_save_migration` 149 -> 164,
 `test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 62. No test removed, skipped
 or loosened.
 
-## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets)
+## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets, unchanged at 203129a: B7 touched no core file)
 
 Core total: **22,417 lines** [21,818 lines]. The script counted 109 files in this worktree and
 108 in a `git archive` copy of `origin/main`; the branch adds no core file (both track 108).
@@ -289,7 +294,7 @@ have.
 
 - A tool already stocked in a stockpile that later stops accepting tools stays there (tools
   have no haul path, ADR 061); new tool drops and newly stocked crafted tools respect the filter.
-  Pending owner approval as a design amendment (review round 2).
+  Approved as an F5a limitation (owner, commit 203129a); the haul-out is follow-up F5a-b.
 - The panel is minimal (list of stockpiles, no map selection), like F2's workbench panel.
 - Owner confirmation pending: the native panel playtest is a post-merge check (`REVIEW.md`
   item 7, through the desktop shortcut); the headless panel tests are the pre-merge evidence.

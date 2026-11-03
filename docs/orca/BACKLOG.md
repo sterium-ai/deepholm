@@ -1196,7 +1196,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   (one discovered layer must not slow the tick measurably when empty).
 - **Non-goals:** cave-ins/supports (F4b), smelting, deep-only metal, fog of war.
 
-### F5a — Stockpile filters and priorities · `review (antonelmejor50-hub/f5a-stockpile-filters-and-priorities; rebased on L2 3e7ba13, save schema v10)` · after F2 (item groups) · Design: closed 2026-10-30
+### F5a — Stockpile filters and priorities · `review (antonelmejor50-hub/f5a-stockpile-filters-and-priorities; rebased on 203129a, save schema v10)` · after F2 (item groups) · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** a stockpile zone accepts a set of **item groups** (F2's
   `tool`, `material`, `food`, `seed`, plus `ore` when F4 lands) and has a **priority 1–3**.
