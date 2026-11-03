@@ -49,6 +49,9 @@ var _passable_at: Callable
 var _door_at: Callable
 var _passable_mask: Callable
 var _room_cell_flags: Callable
+## Passability's link hooks (bind_links()): (tile: Vector3i) -> bool and -> int link ends.
+var _passable_tile: Callable
+var _link_flags: Callable
 ## (tile: Vector3i) -> String: the object kind at a tile ("" when none).
 var _get_object: Callable
 ## (tile: Vector3i) -> bool: rooms.gd's has_stockpile.
@@ -74,6 +77,11 @@ func bind_passability(refresh_cell: Callable, reset: Callable, passable_at: Call
 	_door_at = door_at
 	_passable_mask = passable_mask
 	_room_cell_flags = room_cell_flags
+
+## Wired by Passability._init() next to bind_passability(): the per-layer region build's hooks.
+func bind_links(passable_tile: Callable, link_flags: Callable) -> void:
+	_passable_tile = passable_tile
+	_link_flags = link_flags
 
 ## map is the save's "map" object; width/height/layer_count were already set from it.
 func decode(map: Dictionary) -> void:
@@ -236,7 +244,7 @@ func get_dirty_cells_since(cursor: int) -> Dictionary:
 
 func get_regions() -> RegionMapType:
 	if regions == null:
-		regions = RegionMapType.new(width, height, _passable_at, _passable_mask.call())
+		regions = RegionMapType.new(width, height, _passable_at, _passable_mask.call(), layer_count, _passable_tile, _link_flags)
 	return regions
 
 ## Every water tile of every layer, in ascending flat index.
@@ -265,10 +273,11 @@ func get_rooms() -> RoomMapType:
 			_is_in_any_zone, _room_cell_flags.call())
 	return rooms
 
-## Regions' and rooms' hook after tile's passability may have changed (they cover the surface).
+## Regions' and rooms' hook after tile's passability or link ends may have changed: regions and
+## links cover every layer (ADR 068), rooms the surface.
 func on_passability_changed(tile: Vector3i) -> void:
+	get_regions().on_tile_changed(tile)
 	if tile.z == SURFACE:
-		get_regions().on_passability_changed(tile.x, tile.y)
 		get_rooms().on_passability_changed(tile.x, tile.y)
 
 ## {} for a tile with no recognised room; otherwise RoomMapType.get_room_at().

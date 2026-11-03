@@ -130,7 +130,9 @@ A caller that passes `reachable(from, target) -> bool` has the request
 refused in the constructor, before the frontier is seeded, when it returns
 false: `STATUS_UNREACHABLE` with no expansion and an empty snapshot. Every
 simulation caller passes `Passability.region_reachable` (`Regions.reachable()`:
-same region, or an impassable work target with a neighbor in that region):
+same region-graph component, i.e. the same region or one joined to it by
+vertical links (ADR 068), or an impassable work target with a neighbor on its
+own layer in that component):
 `WorldState._route_search_factory()` (ToilExecutor's go_to re-routes and
 `_route_cost()`), `NeedGiver`, `RescueGiver` and `ApproachGiver`.
 `GlobalAssignment.tick()` makes the same check itself before it creates its
@@ -139,6 +141,21 @@ search, and `GlobalAssignment.restore_scheduling()` passes it (from
 passability exceeds (only doors differ, and the colony may pass them), so the
 check never refuses a target the search could reach; it only ends a doomed
 search at once instead of after it exhausts the map.
+
+## Vertical links (ADR 068)
+
+`set_vertical_links(links)`, called right after construction (and before
+`restore()`), lets the search cross the map's `VerticalLinks`
+(`RegionMap.vertical_links()`): a tile with a link down or up gains the link's
+other end as a neighbour, costing that tile's `cost_fn` like a planar step.
+z grows underground (ADR 045): the link up to z - 1 comes before the four
+planar offsets and the link down to z + 1 after them, so discovery stays in
+ascending flat index; the heuristic becomes the
+3D Manhattan distance × `min_cost`, still consistent because every step,
+planar or link, changes it by at most one tile. Without links (the default)
+or with an empty link set the search, its snapshot and its path are exactly
+the planar ones. Simulation callers do not pass links yet (L3b); pair it with
+`Regions.reachable()`, which follows the same links through the region graph.
 
 ## Searching vs. unreachable
 

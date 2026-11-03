@@ -14,6 +14,8 @@
           "passable": {"type": "boolean"},
           "move_cost": {"type": "integer", "minimum": 0},
           "is_door": {"type": "boolean"},
+          "link_up": {"type": "boolean"},
+          "link_down": {"type": "boolean"},
           "health": {"type": "integer", "minimum": 0},
           "max_health": {"type": "integer", "minimum": 1},
           "footprint": {
