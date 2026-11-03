@@ -5,7 +5,7 @@
       "components": ["mover", "worker", "needs", "health", "inventory", "combat"],
       "tunables": {
         "mover": {"speed": 1},
-        "worker": {"labours": ["mine", "chop", "farm", "haul", "build", "craft", "cook"], "labour_default": 3, "labour_min": 0, "labour_max": 4},
+        "worker": {"labours": ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"], "labour_default": 3, "labour_min": 0, "labour_max": 4},
         "needs": {"rates": {"food": 1, "water": 2, "rest": 1}},
         "health": {"hp": 100, "maxHp": 100},
         "inventory": {"capacity": 1},

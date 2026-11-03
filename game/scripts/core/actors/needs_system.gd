@@ -28,6 +28,7 @@ const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const WorkProgressType = preload("res://scripts/core/jobs/work_progress.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 const TrenchSystemType = preload("res://scripts/core/actors/trench_system.gd")
+const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 
 const TILE_WATER := ContentRegistryType.TILE_WATER
 const REASON_NEED_UNMET_PREFIX := "need_unmet:"
@@ -287,18 +288,24 @@ func emit_need_unmet_event(colonist_id: String, kind: String) -> void:
 ## Kind-aware sources (berries, water, bed) minus those no colonist can reach, so NeedGiver never
 ## floods a whole component for nothing. Every colonist gets the same list (test_combat relies on
 ## it). Reachability is by region id once per source; an impassable source (water) belongs to each
-## region among its orthogonal neighbours, matching RegionMap.reachable().
+## region among its orthogonal neighbours, matching RegionMap.reachable(). Food offers only the
+## highest-satiety tier left after that filter (F5b, ADR 065): a reachable meal beats raw food.
 func need_source_candidates(kind: String) -> Array[Vector3i]:
 	var candidates := _raw_need_sources(kind)
-	if _get_colonists.call().is_empty():
+	if not _get_colonists.call().is_empty():
+		var regions := _tile_grid.get_regions()
+		var colonist_regions: Dictionary = {}
+		for colonist: Dictionary in _get_colonists.call():
+			colonist_regions[regions.region_of(TileGrid.tile_of(colonist))] = true
+		colonist_regions.erase(0) # reachable() is false from a tile with no region
+		candidates = candidates.filter(func(candidate: Vector3i) -> bool:
+			return _regions_reaching(regions, candidate).any(func(region: int) -> bool: return colonist_regions.has(region)))
+	if kind != "food" or candidates.is_empty():
 		return candidates
-	var regions := _tile_grid.get_regions()
-	var colonist_regions: Dictionary = {}
-	for colonist: Dictionary in _get_colonists.call():
-		colonist_regions[regions.region_of(TileGrid.tile_of(colonist))] = true
-	colonist_regions.erase(0) # reachable() is false from a tile with no region
-	return candidates.filter(func(candidate: Vector3i) -> bool:
-		return _regions_reaching(regions, candidate).any(func(region: int) -> bool: return colonist_regions.has(region)))
+	var best := 0
+	for tile in candidates:
+		best = maxi(best, food_satiety_at(tile))
+	return candidates.filter(func(tile: Vector3i) -> bool: return food_satiety_at(tile) == best)
 
 func _raw_need_sources(kind: String) -> Array[Vector3i]:
 	var candidates: Array[Vector3i] = []
@@ -308,6 +315,10 @@ func _raw_need_sources(kind: String) -> Array[Vector3i]:
 				if int(_item_table.ground_berries[key]) <= 0:
 					continue
 				candidates.append(TileGrid.coord_of_key(String(key)))
+			for item: Dictionary in _item_table.get_items():
+				var tile := TileGrid.tile_of(item)
+				if not candidates.has(tile) and not _edible_item_at(tile).is_empty():
+					candidates.append(tile)
 		"water":
 			candidates = _tile_grid.get_water_tiles()
 		"rest":
@@ -347,7 +358,7 @@ func need_kind_for_job(job_kind: String) -> String:
 		_: return ""
 
 ## source_valid callable for ToilExecutor's consume(): water never runs out; food needs a
-## ground berry still at the target; rest needs the bed still there.
+## ground berry or an unreserved edible item still at the target; rest needs the bed still there.
 func consume_source_valid(job_id: String) -> bool:
 	var job := _scheduler.queue.get_job(job_id)
 	if job.is_empty():
@@ -355,7 +366,7 @@ func consume_source_valid(job_id: String) -> bool:
 	var target: Vector3i = job["target"]
 	match String(job["kind"]):
 		"eat_food":
-			return _item_table.get_ground_berries(target) > 0
+			return food_satiety_at(target) > 0
 		"drink_water":
 			return _tile_grid.tile_at(target) == TILE_WATER
 		"sleep":
@@ -364,7 +375,8 @@ func consume_source_valid(job_id: String) -> bool:
 			return false
 
 ## A completed need job's effect: restores the need (sleep scaled by
-## bedroom_rest_multiplier in a recognised bedroom); eat_food also consumes the berry.
+## bedroom_rest_multiplier in a recognised bedroom); eat_food consumes the best edible item at the
+## target (restoring its satiety), else one berry.
 func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 	var need_kind := need_kind_for_job(String(job["kind"]))
 	if need_kind.is_empty():
@@ -376,7 +388,46 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 		if bool(_tile_grid.get_room_at(target).get("has_bed", false)):
 			restore *= float(need_def.get("bedroom_rest_multiplier", 1.0))
 	var needs: Dictionary = _needs(colonist)
-	needs[need_kind] = mini(_need_full, int(restore))
 	if String(job["kind"]) == "eat_food":
 		var target: Vector3i = job["target"]
-		_item_table.consume_ground_berry(target)
+		var item := _edible_item_at(target)
+		if item.is_empty():
+			_item_table.consume_ground_berry(target)
+		else:
+			var item_id: String = item["id"]
+			restore = float(_satiety_of(item))
+			_item_table.remove_ground_item_units(item_id, 1)
+	needs[need_kind] = mini(_need_full, int(restore))
+
+## F5b (ADR 065): the best restore an eat_food job at tile would give; 0 when nothing edible.
+## A ground berry restores the food need's "restore"; an item its content "satiety".
+func food_satiety_at(tile: Vector3i) -> int:
+	var best := 0
+	if _item_table.get_ground_berries(tile) > 0:
+		var food: Dictionary = _need_definitions.get("food", {})
+		var restore: int = food.get("restore", _need_full)
+		best = restore
+	var item := _edible_item_at(tile)
+	if not item.is_empty():
+		best = maxi(best, _satiety_of(item))
+	return best
+
+## The unreserved ground item at tile with the highest content satiety (ties by id), or {}.
+## An item reserved for a haul or a craft fetch is never eaten from under that job.
+func _edible_item_at(tile: Vector3i) -> Dictionary:
+	var reservations: ReservationTable = _scheduler.queue.get_reservation_table()
+	var best: Dictionary = {}
+	for item: Dictionary in _item_table.get_items():
+		if TileGrid.tile_of(item) != tile or _satiety_of(item) <= 0:
+			continue
+		var item_id: String = item["id"]
+		if reservations.is_reserved(JobQueueType.ITEM_KEY_PREFIX + item_id):
+			continue
+		if best.is_empty() or _satiety_of(item) > _satiety_of(best):
+			best = item
+	return best
+
+func _satiety_of(item: Dictionary) -> int:
+	var kind: String = item["kind"]
+	var satiety: int = _content.get_entry("items", kind).get("satiety", 0)
+	return satiety

@@ -413,7 +413,7 @@ func _check_cancel_order_and_removed_bench_drop_held_inputs() -> void:
 func _check_content_registry_rejects_bad_recipes_and_groups() -> void:
 	var base := ContentRegistryType.new()
 	_expect(base.is_valid(), "the shipped content must load: %s" % base.get_error())
-	_expect(base.list("recipes").size() == 4, "the base bundle ships four recipes")
+	_expect(base.list("recipes").size() == 5, "the base bundle ships five recipes (F5b adds meal)")
 	var dangling := ContentRegistryType.ERROR_DANGLING_REFERENCE
 	var violation := ContentRegistryType.ERROR_SCHEMA_VIOLATION
 	var axe_inputs := "[{\"item\": \"wood\", \"quantity\": 3}, {\"item\": \"stone\", \"quantity\": 1}]"

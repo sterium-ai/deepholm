@@ -69,6 +69,14 @@ func _zone(world: WorldStateType, id: String, rect: Rect2i, extra: Dictionary = 
 	payload.merge(extra)
 	return Scenarios.command(world, id, "zone_add", payload)
 
+## A berry patch at (0, 0), away from the farm and the stockpile, with enough berries for the
+## whole run: harvested food is edible since F5b (ADR 065), and a berry (restore 100) goes before
+## it, so the checks below count the food the farm makes. Bootstrap state, so a replay has it.
+func _feed(world: WorldStateType) -> void:
+	var key := TileGrid.coord_key(Vector3i(0, 0, 0))
+	TestAccess.item_table(world).ground_berries[key] = 1000
+	TestAccess.item_table(world).ground_berries_factions[key] = "colony"
+
 ## Units of `kind` on the ground inside `rect`.
 func _units_in(world: WorldStateType, kind: String, rect: Rect2i) -> int:
 	var total := 0
@@ -125,6 +133,7 @@ func _check_scenario_save_load_and_replay() -> void:
 		for x in range(FARM.position.x, FARM.end.x):
 			TestAccess.set_tile(world, x, y, WorldStateType.TILE_SOIL)
 	Scenarios.add_stock(world, "seed", START_SEEDS, STOCKPILE.position.x, STOCKPILE.position.y)
+	_feed(world)
 	# The bootstrap writes above are the replay's start state; the zones are recorded commands.
 	var log := ReplayLogType.begin(world, 100, false)
 	world.command_observer = func(command: Variant, result: Dictionary) -> void:
@@ -251,6 +260,7 @@ func _check_no_growth_outside_window_and_wither() -> void:
 ## (no farm zone) gets a harvest job too.
 func _check_ripe_crop_waits_and_outside_zone_harvest_job() -> void:
 	var world := _world(SEED + 3, 1)
+	_feed(world)
 	TestAccess.set_tile(world, 3, 3, WorldStateType.TILE_PLOWED_SOIL)
 	Scenarios.add_stock(world, "seed", 1, 10, 10)
 	_expect(Scenarios.command(world, "sow", "sow", {"x": 3, "y": 3, "z": 0, "priority": 1}).get("ok", false), "the sow order must be accepted")

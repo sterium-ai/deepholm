@@ -47,7 +47,7 @@ static func _valid_entity_route(value, map_width: int, map_height: int, layer_co
 static func _valid_labour_table(value) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid entity labourTable type")
-	var labour_kinds := ["mine", "chop", "farm", "haul", "build", "craft", "cook"]
+	var labour_kinds := ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"]
 	var check := _require_fields(value, labour_kinds, "entity labourTable")
 	if not check["ok"]:
 		return check
@@ -63,7 +63,7 @@ static func _valid_skills(value: Variant, skill_rules: Dictionary) -> Dictionary
 	if not (value is Dictionary):
 		return _fail("invalid entity skills type")
 	var skills: Dictionary = value
-	var labour_kinds := ["mine", "chop", "farm", "haul", "build", "craft", "cook"]
+	var labour_kinds := ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"]
 	if not _keys_allowed(skills, labour_kinds):
 		return _fail("unexpected entity skills field")
 	var check := _require_fields(skills, labour_kinds, "entity skills")

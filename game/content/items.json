@@ -10,7 +10,8 @@
     {"id": "flint", "kind": "material"},
     {"id": "coal", "kind": "material"},
     {"id": "wood", "kind": "material"},
-    {"id": "food", "kind": "food"},
+    {"id": "food", "kind": "food", "satiety": 40},
+    {"id": "meal", "kind": "food", "satiety": 100},
     {"id": "planks", "kind": "material"},
     {"id": "stone_blocks", "kind": "material"}
   ]

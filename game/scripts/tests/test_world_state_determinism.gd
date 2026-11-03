@@ -450,7 +450,11 @@ func _check_incident_replay_determinism() -> void:
 ## - The tile layer (L2, ADR 045 §5): "z" beside every hashed x/y, Vector3i job targets and the
 ##   tile grid's layer_count; 3266324817 became the value below, and the pre-L2 shape of the
 ##   same snapshot still hashes to 3266324817 (docs/orca/handoffs/L2-hash_projection.gd).
-const PRE_INCIDENT_BASELINE_HASH := 2778412269
+## - The `heal` labour (F5b, ADR 065): one more seeded skill per colonist from the same RNG, and a
+##   heal entry in every labour table and skill map; 2778412269 became the value below. Re-drawing
+##   the skills over the pre-F5b labours and dropping heal gives 2778412269 back
+##   (docs/orca/handoffs/F5b-baseline_projection.gd).
+const PRE_INCIDENT_BASELINE_HASH := 2396113793
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if _failed:

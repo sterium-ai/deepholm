@@ -87,7 +87,7 @@ const REASON_NO_RESCUER_AVAILABLE := RescueGiverType.REASON_NO_RESCUER_AVAILABLE
 const RESCUE_JOB_PRIORITY := 1
 
 ## Per-colonist labour table: priority 0 (off) .. 4 per labour kind.
-const LABOUR_KINDS := ["mine", "chop", "farm", "haul", "build", "craft", "cook"]
+const LABOUR_KINDS := ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"]
 const LABOUR_DEFAULT := 3
 const LABOUR_MIN := 0
 const LABOUR_MAX := 4

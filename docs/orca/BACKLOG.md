@@ -1257,7 +1257,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   declared in the handoff. The delivery recheck (destination stops accepting tools during
   travel) is fixed as Codex asks, through the shared job engine.
 
-### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
+### F5b — Labours: cook and heal; cooking · `review (antonelmejor50-hub/f5b-labours-cook-and-heal)` · after F2 · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** two new labours in the table, **`cook`** and **`heal`**
   (`heal` is only the labour entry and skill slot now; its jobs come with F8). Cooking: a **2×1
