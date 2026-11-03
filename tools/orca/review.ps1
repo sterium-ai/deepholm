@@ -24,7 +24,7 @@ $branch = git rev-parse --abbrev-ref HEAD
 $taskId = ((($branch -split "/")[-1]) -split "-")[0].ToUpperInvariant()   # Orca may prefix the branch with the GitHub user
 # Sub-tasks carry a one-letter suffix (F5a-b): prefer the longest handoff name the branch starts with.
 $parts = (($branch -split "/")[-1]) -split "-"
-if ($parts.Count -ge 2 -and $parts[1] -match '^[a-z]$' -and (Test-Path (Join-Path $root "docs\orca\handoffs\$($parts[0].ToUpperInvariant())-$($parts[1]).md"))) {
+if ($parts.Count -ge 2 -and $parts[1] -match '^[a-z0-9]$' -and (Test-Path (Join-Path $root "docs\orca\handoffs\$($parts[0].ToUpperInvariant())-$($parts[1]).md"))) {
     $taskId = "$($parts[0].ToUpperInvariant())-$($parts[1])"
 }
 
