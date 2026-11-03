@@ -1238,6 +1238,12 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   deterministic; replay identical; suite green.
 - **Non-goals:** per-item filters, hauling priorities, anything in the viewer.
 - **Budget:** ≤ 200 turns.
+- **Review round 1 (owner's interface, 2026-11-03):** the first delivery moved tools without a
+  job (teleport) — **rejected**: the move must be a haul job through the shared queue and the
+  existing tool fetch/drop toils (ADR 011), done by a colonist with the haul labour, with
+  headless coverage through commands and ticks. Scope: a change in `world_state.gd` is
+  approved only as a wiring hook of ≤ 2 lines with no growth (767 stays 767), declared in the
+  handoff; anything larger goes into the owned files.
 
 ### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
 
