@@ -1296,6 +1296,11 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   two days; one who starves and sleeps on the ground drops < 40; thoughts expire on schedule;
   deterministic; save/load/replay identical; suite green.
 - **Non-goals:** depression/breakdowns (F5d), relations, room-quality thoughts (F9).
+- **Review round 1 (owner's interface, 2026-11-03): scope.** `core/world/view_snapshot.gd`
+  (happiness and active thoughts for the panel) and `game/data/text/en.json` (thought labels)
+  are approved as F5c's scope, as declared in the handoff. The technical findings (per-actor
+  bed reachability, death thoughts through the existing actor iteration, trigger-driven tests
+  for stack limits/replacement/refresh/raw food) are fixed as Codex asks — no amendment.
 
 ### F6 — Forest zone, wild fauna ecosystem, pasture · split 2026-10-30 into F6a / F6b / F6c
 
