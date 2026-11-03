@@ -179,9 +179,14 @@ func decay_needs() -> void:
 	for kind in _need_definitions.keys():
 		rates[kind] = int(_need_definitions[kind].get("rate_per_day", 0))
 	var needs_tunables := {"rates": rates, "day_length_ticks": _calendar.day_length_ticks()}
+	var thought_rules := ActorThoughts.rules(_content)
+	var day_length := _calendar.day_length_ticks()
+	var bed_reachable := _bed_reachable_once()
 	for colonist in _get_colonists.call():
 		NeedsType.apply_tick(colonist, needs_tunables)
 		HealthType.apply_tick(colonist)
+		ActorThoughts.apply_state_tick(colonist, thought_rules, _clock.tick, day_length, bed_reachable,
+			_content)
 
 ## Pauses a colonist's current job (colonist-ai.md 3.6): suspends colonist.work, or reads the job
 ## off the assignment at a toil boundary. No-op without an assignment.
@@ -401,6 +406,7 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 		if bool(_tile_grid.get_room_at(target).get("has_bed", false)):
 			restore *= float(need_def.get("bedroom_rest_multiplier", 1.0))
 	var needs: Dictionary = _needs(colonist)
+	var eaten_kind := ""
 	if String(job["kind"]) == "eat_food":
 		var target: Vector3i = job["target"]
 		var item := _edible_item_at(target)
@@ -409,9 +415,41 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 			_item_table.consume_ground_berry(target)
 		else:
 			var item_id: String = item["id"]
+			eaten_kind = String(item["kind"])
 			restore = float(_satiety_of(item))
 			_item_table.remove_ground_item_units(item_id, 1)
 	needs[need_kind] = mini(_need_full, int(restore))
+	add_thought(colonist, _need_thought(String(job["kind"]), eaten_kind))
+
+## F5c (ADR 066): adds thought id to colonist now (no-op for an empty id or undefined thought).
+func add_thought(colonist: Dictionary, id: String) -> void:
+	if not id.is_empty():
+		ActorThoughts.add(colonist, id, ActorThoughts.rules(_content), _clock.tick, _calendar.day_length_ticks(),
+			_content)
+
+## F5c (ADR 066): adds the thoughts thoughts.json's job_kinds give a completed job of job_kind.
+func add_job_thoughts(colonist: Dictionary, job_kind: String) -> void:
+	for id in ActorThoughts.ids_for_job_kind(ActorThoughts.rules(_content), job_kind):
+		add_thought(colonist, id)
+
+## The thought a completed need job gives: sleep "slept_bed" (sleep always targets a bed),
+## eat_food "ate_meal" for an item of thoughts.json's meal_items, else "ate_raw"; water none.
+func _need_thought(job_kind: String, eaten_kind: String) -> String:
+	match job_kind:
+		"sleep": return "slept_bed"
+		"eat_food":
+			var meals: Array = ActorThoughts.rules(_content).get("meal_items", [])
+			return "ate_meal" if meals.has(eaten_kind) else "ate_raw"
+		_: return ""
+
+## A Callable() -> bool, true when some bed is reachable from a colonist's region; the lookup
+## runs at most once per call site (once per decay tick) and only when a colonist's rest is low.
+func _bed_reachable_once() -> Callable:
+	var cache := {}
+	return func() -> bool:
+		if not cache.has("v"):
+			cache["v"] = not need_source_candidates("rest").is_empty()
+		return cache["v"]
 
 ## F5b (ADR 065): the best restore an eat_food job at tile would give; 0 when nothing edible.
 ## A ground berry restores the food need's "restore"; an item its content "satiety".

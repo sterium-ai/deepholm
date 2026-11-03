@@ -1284,7 +1284,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   food sources), the content schemas (`items`, `recipes`, `skills`, `scenarios`), migration,
   validator, game-state schema, fixture and docs — each the minimum needed to wire the design.
 
-### F5c — Happiness from a thought table · `todo` · after F5b · Design: closed 2026-10-30
+### F5c — Happiness from a thought table · `review (antonelmejor50-hub/f5c-happiness-from-a-thought)` · after F5b · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** a content **thought table** (`thoughts.json`): each thought
   has an id, weight (±), duration in days and a repeat rule; triggers are events the core

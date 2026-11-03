@@ -126,6 +126,11 @@ func apply_actor_death(actor: Dictionary) -> void:
 	var colonist_id: String = String(actor["id"])
 	_drop_inventory_contents(actor)
 	_remove_colonist_by_id.call(colonist_id, true)
+	if ActorThoughts.applies(actor, _content) and String(actor.get("factionId", "colony")) == "colony":
+		# F5c (ADR 066): every surviving colony colonist thinks "colonist_died".
+		for other: Dictionary in _get_colonists.call():
+			if String(other.get("factionId", "colony")) == "colony":
+				_needs_system.add_thought(other, "colonist_died")
 
 ## Cancels every nonterminal job restricted to colonist_id through the shared finish boundary and
 ## tells NeedGiver/CombatGiver/ApproachGiver (death and incident despawn). Paused job detached first

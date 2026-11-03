@@ -58,6 +58,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v10_to_v11(state)
 		11:
 			return _v11_to_v12(state)
+		12:
+			return _v12_to_v13(state)
 		_:
 			return {
 				"ok": false,
@@ -238,6 +240,15 @@ static func _v11_to_v12(state: Dictionary) -> Dictionary:
 			(skills as Dictionary)["heal"] = {"level": 0, "xp": 0}
 			entity["skills"] = _sorted(skills as Dictionary)
 	migrated["schemaVersion"] = 12
+	return {"ok": true, "state": migrated}
+
+## v12 -> v13 (F5c, ADR 066): a colonist's optional "thoughts". A v12 colonist had none, and an
+## absent key means no active thought (happiness at the content base), so only the version moves.
+static func _v12_to_v13(state: Dictionary) -> Dictionary:
+	if not (state.get("entities") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v12 save has no entities array"}
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 13
 	return {"ok": true, "state": migrated}
 
 ## The same dictionary with its keys in sorted order (_v11_to_v12()).

@@ -74,6 +74,7 @@ all with one size rule.
 | [063](063-map-layers-l2-implementation.md) | Map layers, step L2: key formats, surface shorthands, layer cap |
 | [064](064-stockpile-filters-and-priorities.md) | Stockpile filters (item groups) and priorities |
 | [065](065-cook-and-heal-labours-and-cooking.md) | The cook and heal labours, the kitchen and meals |
+| [066](066-happiness-from-thoughts.md) | Happiness from a thought table |
 | [067](067-forest-zones-and-saplings.md) | Forest zones, saplings and replanting |
 | [068](068-vertical-links-and-region-graph.md) | Map layers, step L3: vertical links, region graph, link edges |
 

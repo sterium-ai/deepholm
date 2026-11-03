@@ -71,6 +71,10 @@ const V11_NOSKILLS_FIXTURE := "res://scripts/tests/fixtures/save_schema_v11_nosk
 ## heal among their labours, which shifts the seeded levels of the others, so (like F3's v8 file)
 ## older fixtures migrate to heal at zero, not to this file.
 const V12_FIXTURE := "res://scripts/tests/fixtures/save_schema_v12_fixture.json"
+## Written by docs/orca/handoffs/F5c-write-save.gd (F5c): the first v13 file; v13 adds a colonist's
+## optional "thoughts" (ADR 066), and the session ran until a colonist held one.
+const V13_FIXTURE := "res://scripts/tests/fixtures/save_schema_v13_fixture.json"
+const V13_RESAVE_PATH := "user://test-save-migration-v13-resave.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
@@ -113,6 +117,8 @@ func _init() -> void:
 	_check_v11_to_v12_adds_only_the_heal_labour()
 	_check_malformed_scenario_start_rejected_through_save_io()
 	_check_v12_fixture_loads_and_reencodes_unchanged()
+	_check_v12_to_v13_changes_only_the_version()
+	_check_v13_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -678,6 +684,55 @@ func _check_v12_fixture_loads_and_reencodes_unchanged() -> void:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
 			"a second write/read of the v12 fixture must keep the decoded state_hash")
 	_remove(V12_RESAVE_PATH)
+
+## F5c: v12 -> v13 changes only schemaVersion (an absent "thoughts" means none), does not mutate
+## its argument, and the v12 fixture has no thoughts to lose.
+func _check_v12_to_v13_changes_only_the_version() -> void:
+	var raw := _unpacked_fixture_state(V12_FIXTURE)
+	var before := JSON.stringify(raw)
+	var migrated := SaveMigrationsType.migrate(raw, 12, 13)
+	_expect(migrated["ok"], "v12 -> v13 must migrate the v12 fixture: %s" % migrated)
+	_expect(JSON.stringify(raw) == before, "the migration must not mutate its argument")
+	if not migrated["ok"]:
+		return
+	var rest: Dictionary = (migrated["state"] as Dictionary).duplicate(true)
+	_expect(int(rest["schemaVersion"]) == 13, "v12 -> v13 must stamp schemaVersion 13")
+	for entity: Dictionary in rest["entities"]:
+		_expect(not entity.has("thoughts"), "a migrated v12 entity must hold no thoughts")
+	rest["schemaVersion"] = 12
+	_expect(JSON.stringify(rest) == before, "v12 -> v13 must change nothing but schemaVersion")
+
+## The committed v13 fixture carries at least one colonist "thoughts" list, loads through
+## SaveIO.read(), re-encodes to exactly the state it was read from, and keeps its state_hash
+## through a second write/read.
+func _check_v13_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V13_FIXTURE)
+	_expect(result["ok"], "the v13 fixture must load through SaveIO.read(): %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V13_FIXTURE))["state"]
+	_expect(int(raw["schemaVersion"]) == 13 and int(state["schemaVersion"]) == StateCodecType.SCHEMA_VERSION,
+		"the v13 fixture must be schemaVersion 13 on disk and load at the current schemaVersion")
+	var thinking := 0
+	# The unpacked state (on disk the entities are packed, SaveWire).
+	for entity: Dictionary in state["entities"]:
+		if entity.has("thoughts"):
+			thinking += 1
+	_expect(thinking > 0, "the v13 fixture must hold a colonist with thoughts for this to prove anything")
+	var world := StateCodecType.decode(state)
+	var reencoded := StateCodecType.encode(world)
+	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
+		"decode() -> encode() of the v13 fixture must reproduce its state exactly")
+	_remove(V13_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V13_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v13 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V13_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v13 fixture must load: %s" % reread)
+	if reread["ok"]:
+		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
+			"a second write/read of the v13 fixture must keep the decoded state_hash")
+	_remove(V13_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.

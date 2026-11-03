@@ -41,6 +41,8 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 			entity["wild"] = true
 		if colonist.has("visitor"):
 			entity["visitor"] = true
+		if colonist.has("thoughts"):
+			entity["thoughts"] = _encode_thoughts(colonist["thoughts"])
 		entities.append(entity)
 	return entities
 
@@ -82,6 +84,8 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 			colonist["wild"] = true
 		if entity.has("visitor"):
 			colonist["visitor"] = true
+		if entity.has("thoughts"):
+			colonist["thoughts"] = _encode_thoughts(entity["thoughts"])
 		colonists.append(colonist)
 	return colonists
 
@@ -159,6 +163,14 @@ static func _encode_skills(skills: Dictionary) -> Dictionary:
 		var level: int = record["level"]
 		var xp: int = record["xp"]
 		encoded[key] = {"level": level, "xp": xp}
+	return encoded
+
+## [{"id", "until"}] (F5c, ADR 066), ints, kept in the stored order (ActorThoughts sorts it);
+## the same shape both ways.
+static func _encode_thoughts(thoughts: Array) -> Array:
+	var encoded: Array = []
+	for record: Dictionary in thoughts:
+		encoded.append({"id": String(record["id"]), "until": int(record["until"])})
 	return encoded
 
 static func _decode_labour_table(labour_table: Dictionary) -> Dictionary:

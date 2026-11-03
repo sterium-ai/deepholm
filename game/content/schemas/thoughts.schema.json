@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Thoughts and happiness (F5c, ADR 066). A colonist's happiness is base plus the weights of its active thoughts, clamped to min..max; a thought lasts duration_days from the tick it was added.",
+  "type": "object",
+  "required": [
+    "base",
+    "min",
+    "max",
+    "hungry",
+    "slept_ground",
+    "meal_items",
+    "thoughts"
+  ],
+  "properties": {
+    "base": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Happiness with no active thought."
+    },
+    "min": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Lowest happiness after clamping."
+    },
+    "max": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Highest happiness after clamping."
+    },
+    "hungry": {
+      "type": "object",
+      "required": [
+        "need",
+        "at_or_below"
+      ],
+      "properties": {
+        "need": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A need kind of needs.json."
+        },
+        "at_or_below": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The need value at or below which the thought is refreshed."
+        }
+      },
+      "additionalProperties": false,
+      "description": "The need level at or below which the 'hungry' thought is refreshed every tick."
+    },
+    "slept_ground": {
+      "type": "object",
+      "required": [
+        "need",
+        "at_or_below"
+      ],
+      "properties": {
+        "need": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A need kind of needs.json."
+        },
+        "at_or_below": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The need value at or below which the thought is refreshed."
+        }
+      },
+      "additionalProperties": false,
+      "description": "The need level at or below which a colonist with no reachable bed refreshes 'slept_ground' every tick."
+    },
+    "meal_items": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Item kinds (items.json ids) whose eating adds 'ate_meal'; any other eaten food adds 'ate_raw'."
+    },
+    "thoughts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "weight",
+          "duration_days",
+          "repeat",
+          "stack_limit"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable thought id; saved in a colonist's 'thoughts' list."
+          },
+          "weight": {
+            "type": "integer",
+            "description": "Happiness added while the thought is active (negative for a bad thought)."
+          },
+          "duration_days": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Days the thought stays active after it is added (rounded to whole ticks, at least 1)."
+          },
+          "repeat": {
+            "type": "string",
+            "enum": [
+              "refresh",
+              "stack"
+            ],
+            "description": "refresh: adding it again restarts its one instance; stack: each addition is a new instance, up to stack_limit (then the instance that expires first is restarted)."
+          },
+          "stack_limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Most instances of the thought active at once (1 for refresh)."
+          },
+          "job_kinds": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Job kinds whose toil-driven completion adds this thought to the colonist that held the job."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
