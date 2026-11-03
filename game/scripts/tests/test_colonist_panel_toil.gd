@@ -79,12 +79,12 @@ func _check_hauling_colonist_shows_job_and_toil(item_kind: String) -> void:
 	var atlas: Dictionary = load("res://scripts/viewer/tile_atlas_map.gd").ITEM_ATLAS_MAP[item_kind]
 	_expect(marker.visible, "real haul must show the carried " + item_kind)
 	_expect(marker.texture.resource_path == atlas["texture_path"] and marker.region_rect == atlas["rect"], "cargo badge must resolve the actual carried kind: " + item_kind)
-	# Marker position now follows the sprite's own interpolated,
-	# feet-anchored position (SPRITE_POSITION_OFFSET) instead of the raw tile
-	# origin -- this sprite is freshly spawned as of set_world() above (no
-	# prior motion state), so it is snapped with t=0 at its current tile,
-	# matching the position refresh()/advance() draw right now.
-	_expect(marker.position == Vector2(colonist["x"], colonist["y"]) * 16.0 + sprites.SPRITE_POSITION_OFFSET + sprites.CARRIED_MARKER_OFFSET, "cargo keeps the established marker position")
+	# Badges are anchored to the colonist's interpolated tile origin (tile *
+	# TILE_SIZE, like the health bar), not the 64x64 frame's top-left (B6) --
+	# this sprite is freshly spawned as of set_world() above (no prior motion
+	# state), so it is snapped with t=0 at its current tile, matching the
+	# position refresh()/advance() draw right now.
+	_expect(marker.position == Vector2(colonist["x"], colonist["y"]) * sprites.TILE_SIZE + sprites.CARRIED_MARKER_OFFSET, "cargo badge sits at tile * TILE_SIZE + CARRIED_MARKER_OFFSET")
 	_expect(marker.scale * marker.region_rect.size == sprites.CARRIED_MARKER_SIZE, "cargo keeps the established marker dimensions")
 	var panel := ColonistPanelType.new()
 	panel.world = world
@@ -137,7 +137,8 @@ func _check_tool_display() -> void:
 		_expect(marker.texture.resource_path == atlas["texture_path"], "tool marker resolves registered texture: " + kind)
 		_expect(marker.modulate == Color.WHITE, "tool marker keeps untinted source pixels: " + kind)
 		_expect(marker.scale * marker.region_rect.size == sprites.TOOL_MARKER_SIZE, "tool marker keeps established dimensions")
-		_expect(marker.position == sprites._sprites[id].position + sprites.TOOL_MARKER_OFFSET, "tool marker keeps established offset")
+		var tile := Vector2(colonist["x"], colonist["y"])
+		_expect(marker.position == tile * sprites.TILE_SIZE + sprites.TOOL_MARKER_OFFSET, "tool badge sits at tile * TILE_SIZE + TOOL_MARKER_OFFSET")
 		_expect(world.set_tool_item_ground(tool_id, 0, 0), "drop tool setup")
 		sprites.refresh()
 		_expect(not sprites._tool_markers[id].visible, "drop clears marker on refresh")

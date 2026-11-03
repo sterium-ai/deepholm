@@ -49,22 +49,36 @@ const SPRITE_POSITION_OFFSET := Vector2(
 	TILE_SIZE / 2.0 - FRAME_SOURCE_SIZE * DISPLAY_SCALE / 2.0,
 	TILE_SIZE - FRAME_FEET_Y * DISPLAY_SCALE)
 
-## Carried-item marker offset from the colonist sprite's own top-left origin:
-## above and to the right, so it reads as a
-## badge on the sprite rather than overlapping its face.
-const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.5, -TILE_SIZE * 0.25)
+## The character's head in its frame: its top is the smallest y of every
+## idle/walk/carry alpha bbox measured in colonist_pack.json (work strips reach
+## higher only with the swung tool); the box spans the head's widest rows down
+## to the neck, idle bob included (pack Idle_Down frames: x 26..37, y 18..32).
+## HEAD_BOX is the same box in pixels from the tile's own raw pixel origin.
+const FRAME_HEAD_BOX := Rect2(26.0, 18.0, 12.0, 15.0)
+const HEAD_BOX := Rect2(FRAME_HEAD_BOX.position * DISPLAY_SCALE + SPRITE_POSITION_OFFSET,
+	FRAME_HEAD_BOX.size * DISPLAY_SCALE)
+const HEAD_TOP_Y := HEAD_BOX.position.y
+
+## Badge offsets are from the colonist's interpolated tile origin (tile *
+## TILE_SIZE, like the health bar), not from the 64x64 frame's top-left: the
+## figure spans the tile's width, so the badges flank its head.
+## Carried-item marker: right of the head, so it reads as a badge on the
+## sprite rather than overlapping its face.
 const CARRIED_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
+const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE, HEAD_TOP_Y)
 ## Separate left badge so a tool remains visible while carrying cargo.
 ## Resolve the held kind's registered art, just like carried cargo.
-const TOOL_MARKER_OFFSET := Vector2(-TILE_SIZE * 0.25, -TILE_SIZE * 0.25)
 const TOOL_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
+const TOOL_MARKER_OFFSET := Vector2(-TOOL_MARKER_SIZE.x, HEAD_TOP_Y)
 
 ## Trapped badge reuses the registered wolf actor crop: its hazard silhouette
 ## is a deliberately legible warning without introducing a second actor-art
 ## path or any simulation state. The tint distinguishes it from cargo/tool
-## badges while keeping the source pixels nearest-neighbour.
-const TRAPPED_MARKER_OFFSET := Vector2(TILE_SIZE * 0.1, -TILE_SIZE * 0.35)
+## badges while keeping the source pixels nearest-neighbour. It sits centred
+## directly above the health bar, touching but not overlapping it (B6 amendment).
 const TRAPPED_MARKER_SIZE := Vector2(TILE_SIZE * 0.8, TILE_SIZE * 0.5)
+const TRAPPED_MARKER_OFFSET := Vector2((TILE_SIZE - TRAPPED_MARKER_SIZE.x) / 2.0,
+	HEALTH_BAR_OFFSET.y - TRAPPED_MARKER_SIZE.y)
 const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 
 ## Health bar: a thin two-rect bar (grey background, coloured
@@ -72,7 +86,9 @@ const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 ## are pure static functions -- callable on this script's own preload without
 ## instantiating a Node2D -- so a headless test can assert bar values without
 ## a live SceneTree.
-const HEALTH_BAR_OFFSET := Vector2(0, -TILE_SIZE * 0.3)
+## Tile-anchored one tile above the tile's origin, so with the 64 px frame it
+## sits just above the head (HEAD_TOP_Y) instead of across the face (B6).
+const HEALTH_BAR_OFFSET := Vector2(0, -TILE_SIZE)
 const HEALTH_BAR_SIZE := Vector2(TILE_SIZE, 3.0)
 const HEALTH_BAR_BACKGROUND := Color(0.15, 0.15, 0.15, 0.9)
 
@@ -260,7 +276,7 @@ func _refresh(snapshot: Dictionary) -> void:
 		# file draws no body for one.
 		if hp[row] >= 0:
 			if moved or (not health_same and (hp[row] != last_hp[row] or max_hp[row] != last_max[row])):
-				_health_bars[ids[row]] = {"position": Vector2(xs[row] * TILE_SIZE, ys[row] * TILE_SIZE) + HEALTH_BAR_OFFSET,
+				_health_bars[ids[row]] = {"position": _bar_tile_origin(ids[row], Vector2(xs[row], ys[row])) + HEALTH_BAR_OFFSET,
 					"fill": health_bar_fill({"hp": hp[row], "maxHp": max_hp[row]})}
 		elif not health_same and same_rows and last_hp[row] >= 0:
 			_health_bars.erase(ids[row])
@@ -403,14 +419,21 @@ func _update_motion(colonist_id: String, tile: Vector2i, carrying: bool, work_ki
 	state["cycles"] = 0.0
 	return state
 
-## The interpolated, feet-anchored pixel position shared by the
-## body and the badges: lerp(previous_tile, current_tile, t) in
-## tile units, converted to pixels, then offset per docs/art/style.md's feet
-## anchor rule.
-func _drawn_position(state: Dictionary) -> Vector2:
+## The interpolated tile's own raw pixel origin, lerp(previous_tile,
+## current_tile, t) * TILE_SIZE, shared by the body (plus the feet anchor,
+## SPRITE_POSITION_OFFSET, per docs/art/style.md) and the badges (plus their
+## own offsets).
+func _drawn_tile_origin(state: Dictionary) -> Vector2:
 	var previous := Vector2(state["previous_tile"])
 	var current := Vector2(state["current_tile"])
-	return previous.lerp(current, float(state["t"])) * TILE_SIZE + SPRITE_POSITION_OFFSET
+	return previous.lerp(current, float(state["t"])) * TILE_SIZE
+
+## The health bar's tile origin: a colonist's interpolated one while it has a
+## motion state (so an hp change mid-glide does not snap the bar to the
+## destination tile), else `tile` * TILE_SIZE (actors this file draws no body for).
+func _bar_tile_origin(actor_id: String, tile: Vector2) -> Vector2:
+	var state: Dictionary = _motion.get(actor_id, {})
+	return tile * TILE_SIZE if state.is_empty() else _drawn_tile_origin(state)
 
 ## "carry_"|"" + "walk"|"idle" + "_" + facing, matching colonist_frames.tres's
 ## 12 walk/idle/carry animation names, plus the work toil's own animation
@@ -446,8 +469,8 @@ func _animation_name(state: Dictionary) -> String:
 func _work_animation(work_kind: String) -> String:
 	return String(WORK_ANIMATION_BY_JOB_KIND.get(work_kind, ""))
 
-## Applies one colonist's current motion state to its sprite, both item
-## markers, and the animation frame -- called from refresh() (t as last
+## Applies one colonist's current motion state to its sprite, its badges,
+## its health bar, and the animation frame -- called from refresh() (t as last
 ## computed) and from advance() (t just recomputed from real elapsed time).
 ## The frame is set explicitly from floor(t * frame_count) -- or, for a pack
 ## work animation, from the unclamped glide clock so the swing loops once per
@@ -458,8 +481,8 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	var sprite: SpriteRecordType = _sprites.get(colonist_id)
 	if sprite == null:
 		return
-	var position := _drawn_position(state)
-	sprite.position = position
+	var tile_origin := _drawn_tile_origin(state)
+	sprite.position = tile_origin + SPRITE_POSITION_OFFSET
 	sprite.flip_h = bool(state["flip_h"])
 	var animation_name := _animation_name(state)
 	if sprite.animation != animation_name:
@@ -472,10 +495,14 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 
 	var marker: SpriteRecordType = _carried_markers.get(colonist_id)
 	if marker != null:
-		marker.position = position + CARRIED_MARKER_OFFSET
+		marker.position = tile_origin + CARRIED_MARKER_OFFSET
 	var tool_marker: SpriteRecordType = _tool_markers.get(colonist_id)
 	if tool_marker != null:
-		tool_marker.position = position + TOOL_MARKER_OFFSET
+		tool_marker.position = tile_origin + TOOL_MARKER_OFFSET
 	var trapped_marker: SpriteRecordType = _trapped_markers.get(colonist_id)
 	if trapped_marker != null:
-		trapped_marker.position = position + TRAPPED_MARKER_OFFSET
+		trapped_marker.position = tile_origin + TRAPPED_MARKER_OFFSET
+	# The bar glides with the head too, or it crosses the face mid-step (B6).
+	var bar: Dictionary = _health_bars.get(colonist_id, {})
+	if not bar.is_empty():
+		bar["position"] = tile_origin + HEALTH_BAR_OFFSET
