@@ -59,6 +59,13 @@ func _check_bad_content_is_rejected() -> void:
 	document = _species_document()
 	document["species"][1]["diet"]["prey"] = ["dragon"]
 	_expect_error(document, {}, "unknown prey 'dragon'")
+	# Review round 2: a mixed diet (a predator that also grazes, a grazer that also hunts) is refused.
+	document = _species_document()
+	document["species"][1]["diet"]["eats"] = ["grass_tiles"]
+	_expect_error(document, {}, "a predator lists prey and no eats")
+	document = _species_document()
+	document["species"][0]["diet"]["prey"] = ["bird"]
+	_expect_error(document, {}, "a grazer lists eats and no prey")
 	_expect_error(_species_document(), {"dragon": 3}, "unknown species 'dragon'")
 	_expect_error(_species_document(), {"wolf": 1.5}, "expected an integer")
 	_expect_error(_species_document(), {"wolf": -1}, "must be at least 0")

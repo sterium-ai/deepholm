@@ -19,6 +19,7 @@ func _init() -> void:
 	_check_save_load_continues_identically()
 	_check_real_file_round_trip()
 	_check_unknown_species_rejected()
+	_check_malformed_animal_saves_rejected()
 	_check_recorded_session_replays()
 	if _failed:
 		quit(1)
@@ -124,3 +125,55 @@ func _check_unknown_species_rejected() -> void:
 	_expect(not written.get("ok", false), "the writer must refuse a save with an unknown species: %s" % written)
 	if FileAccess.file_exists(SAVE_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+
+## Review round 2: animal entities without "fauna", a nextAnimalId that is not past every saved
+## animal_N (the next birth would reuse a live id), an id off ^animal_[0-9]+$ and an animal off the
+## surface are all refused, by validation and by the writer.
+func _check_malformed_animal_saves_rejected() -> void:
+	var world := _wild_world(880006)
+	world.tick()
+	var saved: Dictionary = world.to_save_state()
+	_expect(SaveIOType._validate_state(saved)["ok"], "the untouched save with animals must validate")
+	var highest := 0
+	for entity: Dictionary in saved["entities"]:
+		if entity.get("kind") == "animal":
+			highest = maxi(highest, (entity["id"] as String).substr(7).to_int())
+	_expect(int(saved["fauna"]["nextAnimalId"]) == highest + 1, "the shipped counter is one past the highest animal id")
+	var missing := saved.duplicate(true)
+	missing.erase("fauna")
+	_expect_rejected(missing, "missing fauna", "animal entities without a fauna field")
+	var written := SaveIOType.write_atomic(SAVE_PATH, missing)
+	_expect(not written.get("ok", false), "the writer must refuse animals without a fauna field: %s" % written)
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	for counter: int in [0, highest]:
+		var stale := saved.duplicate(true)
+		stale["fauna"]["nextAnimalId"] = counter
+		_expect_rejected(stale, "nextAnimalId", "fauna.nextAnimalId %d with animal_%d saved" % [counter, highest])
+	for bad_id: String in ["animal_foo", "animal_", "animal_1x"]:
+		_expect_rejected(_with_first_animal(saved, "id", bad_id), "animal id", "animal id '%s'" % bad_id)
+	# A second layer of tiles (test_map_layers' pattern) puts z 1 on the map, so the surface rule
+	# itself must refuse it, not the generic bounds check.
+	var two_layers: Dictionary = saved.duplicate(true)
+	two_layers["map"]["layerCount"] = 2
+	(two_layers["map"]["tiles"] as Array).append_array(saved["map"]["tiles"])
+	_expect(SaveIOType._validate_state(two_layers)["ok"], "the two-layer save with surface animals must validate")
+	_expect_rejected(_with_first_animal(two_layers, "z", 1), "surface", "an underground animal (z 1)")
+	_expect(not SaveIOType._validate_state(_with_first_animal(saved, "z", -1))["ok"], "an animal at z -1 must be rejected")
+	var no_animals := saved.duplicate(true)
+	no_animals["entities"] = (no_animals["entities"] as Array).filter(func(e: Dictionary) -> bool: return e.get("kind") != "animal")
+	no_animals.erase("fauna")
+	_expect(SaveIOType._validate_state(no_animals)["ok"], "a save with neither animals nor fauna must still validate")
+
+func _with_first_animal(saved: Dictionary, field: String, value: Variant) -> Dictionary:
+	var tampered: Dictionary = saved.duplicate(true)
+	for entity: Dictionary in tampered["entities"]:
+		if entity.get("kind") == "animal":
+			entity[field] = value
+			break
+	return tampered
+
+func _expect_rejected(state: Dictionary, needle: String, what: String) -> void:
+	var check := SaveIOType._validate_state(state)
+	_expect(not check["ok"], "%s must be rejected" % what)
+	_expect(str(check.get("message", "")).contains(needle), "the rejection of %s must say '%s': %s" % [what, needle, check])

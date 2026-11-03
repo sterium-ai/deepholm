@@ -210,12 +210,15 @@ static func _valid_entities(value, map_width: int, map_height: int, layer_count:
 	return {"ok": true}
 
 ## F6b-1 (ADR 070): an animal's species must be one of the session's species.json ids (FaunaSystem
-## drops nothing on load, so a bad record fails here), its id "animal_N" and its ticks ints.
+## drops nothing on load, so a bad record fails here), its id "animal_N" (schema ^animal_[0-9]+$),
+## its z the surface (animals never go underground, ADR 070 §4) and its ticks ints.
 static func _valid_animal(animal: Dictionary, species_ids: Array[String]) -> Dictionary:
 	if not (animal["species"] is String) or not species_ids.has(animal["species"] as String):
 		return _fail("invalid entity animal species")
-	if not (animal["id"] as String).begins_with("animal_"):
+	if FaunaValidator._animal_id_number(animal["id"]) < 0:
 		return _fail("invalid entity animal id")
+	if animal["z"] != TileGrid.SURFACE:
+		return _fail("invalid entity animal z (animals live on the surface)")
 	for field: String in ["bornTick", "lastMealTick", "nextBirthTick"]:
 		if not (animal[field] is int):
 			return _fail("invalid entity animal %s" % field)

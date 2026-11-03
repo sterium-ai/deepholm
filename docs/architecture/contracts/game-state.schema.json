@@ -636,7 +636,7 @@
           },
           {
             "if": { "properties": { "kind": { "const": "animal" } } },
-            "then": { "required": ["species", "bornTick", "lastMealTick", "nextBirthTick"], "properties": { "id": { "pattern": "^animal_[0-9]+$" } } }
+            "then": { "required": ["species", "bornTick", "lastMealTick", "nextBirthTick"], "properties": { "id": { "pattern": "^animal_[0-9]+$" }, "z": { "const": 0 } } }
           }
         ],
         "properties": {

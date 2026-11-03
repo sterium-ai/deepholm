@@ -100,10 +100,14 @@ The owner note adds four constraints:
 7. **Persistence.**
    - Animals are saved in `entities` with kind `"animal"` and the extra fields `species`,
      `bornTick`, `lastMealTick` and `nextBirthTick`. `EntityValidator` checks that `species` is a
-     species.json id of the session (`SaveIO.content_rules()["species"]`), the id is `animal_<n>`
-     and the ticks are ints; a save holding an unknown species is refused on read and on write.
+     species.json id of the session (`SaveIO.content_rules()["species"]`), the whole id matches
+     `^animal_[0-9]+$`, `z` is `TileGrid.SURFACE` and the ticks are ints. A save holding an
+     unknown species, a malformed id or an underground animal is refused on read and on write.
    - Schema v14 also adds an optional top-level `fauna` field, `{nextAnimalId, rng: {seed,
-     state}}`, checked by `FaunaValidator`. It carries no roster.
+     state}}`, checked by `FaunaValidator`. It carries no roster. The field is optional only
+     while there are no animal entities. A save with animals must carry it, and `nextAnimalId`
+     must exceed every saved `animal_<n>`; otherwise the next birth would reuse a live id
+     (review round 2, `FaunaValidator._valid_fauna_for_animals()`).
    - `fauna.rng.state` is a full 64-bit integer, so `SaveJsonInts` restores it exactly, like
      the world's own stream. A float round trip above 2^53 would lose bits and diverge on the
      next draw.
@@ -155,11 +159,13 @@ The owner note adds four constraints:
   - the grasshoppers reach the cap of 60 and hold it;
   - with 2 birds they peak below 60 and the birds survive;
   - the wolf is alive 10 ticks before `starve_ticks` and dead 10 ticks after.
-- `test_fauna_species.gd`: content compiles and rejects bad input; worldgen seeding works; the
+- `test_fauna_species.gd`: content compiles and rejects bad input (including a mixed diet:
+  a predator with `eats` or a grazer with `prey`); worldgen seeding works; the
   RNG stream is separate; shipped mapgen places animals.
 - `test_fauna_persistence.gd`: the hash is deterministic, save/load continues identically, and
   a replay is ok. A real save file keeps a `fauna.rng.state` above 2^53 bit-exact, and a save
-  with an unknown species is refused.
+  with an unknown species is refused. So are animals without `fauna`, a `nextAnimalId` that is
+  not past every animal id, an id off `^animal_[0-9]+$`, and an animal off the surface.
 - `test_fauna_startup.gd`: bad prey or bad counts abort the real startup with the typed error;
   the shipped mapgen counts seed exactly those animals through `WorldState.new()`, as rows of the
   shared actor table, deterministically, outside the clearing, in `state_hash()` and in the view.
