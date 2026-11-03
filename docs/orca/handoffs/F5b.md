@@ -3,9 +3,10 @@
 ## Branch and commit
 
 - Branch: `antonelmejor50-hub/f5b-labours-cook-and-heal`, rebased (on the owner's note) onto
-  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it). Four commits,
-  not pushed: `a84211f` (F5b), `33589e0` (review round 1), `a1ae5c3` (review round 2, the head
-  Codex approved in round 3) and a report-only commit for round 3 on top of it.
+  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it), and after the
+  Codex approval rebased again onto `origin/main` `f8b6aec` (see "Rebase after approval"). Five
+  commits, not pushed: F5b, review round 1, review round 2 (the code Codex approved in round 3, as
+  `a1ae5c3` before the rebase), the round-3 report commit, and the rebase note.
 - **Schema number.** Save schema **v12**, the owner's allocation: F5b's step is
   `_v11_to_v12()`, after F5a's v9 -> v10 and F6a's v10 -> v11, which are kept unchanged.
 - ADR: **065** (owner's allocation), `docs/decisions/065-cook-and-heal-labours-and-cooking.md`.
@@ -227,6 +228,18 @@ warnings and both hash projections, which passed. No code change follows from it
 reran the full suite on `a1ae5c3`, `run_tests: all 136 test(s) PASS  [934s]`, and the gates are
 unchanged (budgets OK, warnings 2798, `core total: 22910 lines in 112 files`).
 
+## Rebase after approval (owner's note, 2026-11-03)
+
+Rebased onto `origin/main` `f8b6aec`. Main had moved only in docs and orchestration since
+`5724053`: `docs/orca/BACKLOG.md`, `docs/orca/README.md`, `tools/orca/review.ps1` (no game
+code, content, schema or test). One conflict, in `docs/orca/BACKLOG.md`: main's new F5a-b entry
+and amendment lines next to this branch's F5b status row. Resolved keeping both: all of main's
+lines as they are, plus the F5b header with status `review (...)`; the diff against main in that
+file is now that one header line. No code changed in the rebase: outside those three files the
+tree is identical to the approved head (`git diff 715dc2b HEAD` shows nothing there). **The
+full suite was not rerun**, as the owner allows when only docs conflict; the last full run,
+`run_tests: all 136 test(s) PASS  [934s]`, is on the same code. `check_core_budgets` rerun: OK.
+
 ## Known limitations
 
 - `kitchen` and `meal` draw the placeholder art (entries in `world_pack.json`); choosing pack
@@ -242,4 +255,4 @@ unchanged (budgets OK, warnings 2798, `core total: 22910 lines in 112 files`).
 
 ## Next action
 
-Approved by Codex (round 3). Owner: merge the branch (not pushed).
+Approved by Codex (round 3), rebased onto `origin/main` `f8b6aec`. Owner: open the PR (not pushed).
