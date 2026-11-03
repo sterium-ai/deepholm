@@ -374,27 +374,27 @@
        (the pick is `held`); restored, it passes. The `_set_rock` doc comment, which round 14
        had left above the new check, is back above `_set_rock`;
      - (blocking, scope) `order_handler.gd` and `trench_system.gd` lie outside the owned paths.
-       The author cannot grant the scope amendment, so it is recorded below as pending owner
-       approval (round 15), and the reviewer's condition is that it is recorded before merge;
+       The author cannot grant the scope amendment, so it was recorded below as pending owner
+       approval (round 15). The owner has since approved it (`78dc216`, see below);
      - (non-blocking) stale sizes in "Validation": now `state_codec.gd` 608 and
        `toil_bindings.gd` 512;
      - (non-blocking) the suite line is still author-reported (see below), with the log path;
      - gates on the round 15 tree: `world_state.gd` is 767 lines and numstat `2 2` against
        `origin/main`; `check_core_budgets` OK; `measure_core` 23837 lines in 114 files;
        `git diff --check` clean.
-- Pending owner approval (round 15, blocks merge per the reviewer, does not block this handoff):
-  the scope amendment for `game/scripts/core/commands/handlers/order_handler.gd` (the job
-  command condition at lines 70-75, which since round 15 also routes `complete_job` on a
-  `haul_tool` job) and `game/scripts/core/actors/trench_system.gd:227`. Both are outside the
-  owned paths. The reviewer asks for the owner's amendment to be obtained and recorded before
-  merge.
-- Pending owner approval (round 14, does not block): two one-line edits outside the owned
-  paths, needed for the reviewer's round 14 fix. In `game/scripts/core/commands/handlers/order_handler.gd:73`
-  and `game/scripts/core/actors/trench_system.gd:227`, `"haul_tool"` is added to the list of
-  carried kinds whose cargo is dropped when the job ends. The round 14 additions to
+- Owner approval (round 15 scope amendment): approved. The owner approved
+  `game/scripts/core/commands/handlers/order_handler.gd` and
+  `game/scripts/core/actors/trench_system.gd` as F5a-b's scope in `docs/orca/BACKLOG.md` on
+  main, commit `78dc216` ("Review round 13 (owner's interface, 2026-11-03): scope", the owner's
+  round numbering): "job-ending paths routed through the shared set-down cleanup, as the
+  uniform rule requires". This covers the job command condition at lines 70-75, including the
+  round 15 `complete_job` routing on a `haul_tool` job, and `trench_system.gd:227`. The
+  reviewer's condition (amendment recorded before merge) is met.
+- Pending owner approval (round 14, does not block): the round 14 additions to
   `toil_bindings.gd` (the `haul_tool` branch in `drop_carried_haul_item()`) and
-  `toil_executor.gd` (the `set_down_hauled_tool()` forwarder) also go beyond the round 2
-  approval.
+  `toil_executor.gd` (the `set_down_hauled_tool()` forwarder) go beyond the round 2 approval.
+  The one-line edits to `order_handler.gd:73` and `trench_system.gd:227` from the same round
+  are approved (`78dc216`, above).
 - Pending owner approval (round 13, does not block): the persisted optional `setDown` field on
   `toolItems` entries (the schema, `state_codec.gd`, `tool_validator.gd`, `save-system.md`). It
   is what the reviewer's round 13 fix needs ("preserve recovery eligibility independently of
@@ -748,7 +748,9 @@ and are still pending:
    (`ToolDropToil.set_down_for_ended_job()`) instead of keeping it in hand. This is one edited
    line in each file. Round 15: in `order_handler.gd`, the same condition (lines 70-75) also
    routes `complete_job` on a `haul_tool` job through that set-down, so the file has one more
-   line (109). The reviewer requires the owner's scope amendment for both files before merge.
+   line (109). **Approved**: the owner approved both files as F5a-b's scope in
+   `docs/orca/BACKLOG.md` on main, commit `78dc216`. They are listed here only so the scope
+   stays traceable.
 
 ## Contract impact
 
@@ -887,9 +889,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   schema v14 files beyond the enum, the test pins, the `world_state.gd` line edits, the
   `needs_system.gd` wiring, the round 8 and round 10 additions to `toil_executor.gd` and
   `toil_bindings.gd`, the round 13 `setDown` field (schema, codec, validator, save-system), and
-  the round 14 one-line edits to `order_handler.gd` and `trench_system.gd` plus the round 14
-  additions to `toil_bindings.gd` and `toil_executor.gd`.
-- Before merge, the owner records the scope amendment for `order_handler.gd` (including the
-  round 15 `complete_job` routing) and `trench_system.gd`, as the reviewer requires (item 18).
+  the round 14 additions to `toil_bindings.gd` and `toil_executor.gd`. The scope amendment for
+  `order_handler.gd` (including the round 15 `complete_job` routing) and `trench_system.gd` is
+  approved (`78dc216`).
 - The reviewer reproduces the full suite line.
 - Then review with `tools/orca/review.ps1`, which now resolves `F5a-b` to this file.
