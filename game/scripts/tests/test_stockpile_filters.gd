@@ -17,7 +17,10 @@ extends SceneTree
 ##   stocked there (CraftingSystem.stock_tools()) but hauled out to one that accepts it;
 ## - the save snapshot never aliases a stockpile's live groups;
 ## - drop_tool (ToolDropToil) skips a nearer stockpile that rejects tools;
-## - on a two-layer map, a stockpile on another layer ranks after one on the item's layer.
+## - on a two-layer map, a stockpile on another layer ranks after one on the item's layer;
+## - F5a-b: a stocked pick in A, switched to materials only, keeps its id and moves to B (every
+##   group) within a day; with no B it is dropped on a free tile beside A, outside every zone;
+##   both runs are deterministic and replay.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -52,6 +55,9 @@ func _init() -> void:
 	_check_panel_rebuilds_for_another_world_with_the_same_zone_ids()
 	_check_drop_tool_skips_a_stockpile_that_rejects_tools()
 	_check_a_stockpile_on_another_layer_ranks_after_the_items_layer()
+	_check_rejected_stocked_tool_moves_to_b_with_its_id()
+	_check_rejected_stocked_tool_without_b_is_dropped_beside_a()
+	_check_rejected_stocked_tool_is_deterministic_and_replays()
 	if _failed:
 		quit(1)
 		return
@@ -487,3 +493,71 @@ func _check_a_stockpile_on_another_layer_ranks_after_the_items_layer() -> void:
 	for item in world.get_items():
 		_expect(not (int(item["z"]) == 1 and deep.has_point(Vector2i(int(item["x"]), int(item["y"])))),
 			"nothing may be hauled into the layer-1 stockpile: %s" % [item])
+
+## F5a-b: a world with A (every group) holding a stocked pick at A's first cell, and B when with_b.
+func _stocked_pick_world(seed_value: int, with_b: bool) -> WorldStateType:
+	var world := _world(seed_value, false)
+	_add_zone(world, A)
+	if with_b:
+		_add_zone(world, B)
+	var pick_id := world.spawn_ground_tool_item("pick", A.position.x, A.position.y)
+	_expect(world.set_tool_item_stockpile(pick_id, A.position.x, A.position.y), "the pick must be stocked in A")
+	return world
+
+func _pick_location(world: WorldStateType) -> Dictionary:
+	var location: Dictionary = (world.get_tool_items()[0] as Dictionary)["location"]
+	return location
+
+func _check_rejected_stocked_tool_moves_to_b_with_its_id() -> void:
+	var world := _stocked_pick_world(64016, true)
+	var pick_id := String(world.get_tool_items()[0]["id"])
+	for _i in 10:
+		world.tick()
+	_expect(String(_pick_location(world)["type"]) == "stockpile" and int(_pick_location(world)["x"]) == A.position.x,
+		"while A accepts tools the pick must stay in A: %s" % [_pick_location(world)])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var in_b := func() -> bool:
+		var location := _pick_location(world)
+		return String(location["type"]) == "stockpile" and B.has_point(Vector2i(int(location["x"]), int(location["y"])))
+	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks, "within a day the pick must be stocked in B: %s" % [_pick_location(world)])
+	_expect(world.get_tool_items().size() == 1 and world.get_tool_item(pick_id).get("kind") == "pick",
+		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
+	_expect(_axes_in(world, A) == {"loose": 0, "stocked": 0} and _units_in(world, "pick", A) == 0, "A's cell must be free")
+
+func _check_rejected_stocked_tool_without_b_is_dropped_beside_a() -> void:
+	var world := _stocked_pick_world(64017, false)
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var on_ground := func() -> bool: return String(_pick_location(world)["type"]) == "ground"
+	_expect(_tick_until(world, _day_ticks, on_ground) <= _day_ticks, "within a day the pick must be dropped: %s" % [_pick_location(world)])
+	var dropped := _pick_location(world)
+	var cell := Vector2i(int(dropped["x"]), int(dropped["y"]))
+	var beside := not A.has_point(cell) and A.grow(1).has_point(cell) 		and ((cell.x >= A.position.x and cell.x < A.end.x) != (cell.y >= A.position.y and cell.y < A.end.y))
+	_expect(beside and int(dropped["z"]) == TileGrid.SURFACE, "the pick must lie on a tile sharing an edge with A: %s" % [dropped])
+	# The nearest such tile to A's first cell (30, 2): (29, 2), then (30, 1) by y.
+	_expect(cell == Vector2i(30, 1), "nearest tile beside A, ties by y then x: %s" % [cell])
+	for _i in 50:
+		world.tick()
+	var later := _pick_location(world)
+	_expect(String(later["type"]) != "stockpile", "a pick on the ground beside A must not be moved back into A: %s" % [later])
+
+## Two runs of each scenario give the same state_hash() tick for tick, and a recorded session replays.
+func _check_rejected_stocked_tool_is_deterministic_and_replays() -> void:
+	for with_b in [true, false]:
+		var first := _stocked_pick_world(64018, with_b)
+		var second := _stocked_pick_world(64018, with_b)
+		var recorder := CommandRecorderType.new()
+		recorder.start(first, 100, false)
+		for step in _day_ticks / 2:
+			if step == 20:
+				_command_ok(first, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+				_command_ok(second, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+			first.tick()
+			recorder.observe_tick(first)
+			second.tick()
+			if first.state_hash() != second.state_hash():
+				_fail("with_b %s: the same seed must give the same state_hash() at tick %d" % [with_b, first.get_tick()])
+				break
+		_expect(String(_pick_location(first)["type"]) == ("stockpile" if with_b else "ground"),
+			"with_b %s: the pick must have moved: %s" % [with_b, _pick_location(first)])
+		var result := recorder.stop().replay()
+		_expect(bool(result.get("ok", false)), "with_b %s: the session must replay every checkpoint: %s" % [with_b, result])

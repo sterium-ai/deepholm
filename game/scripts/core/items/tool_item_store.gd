@@ -57,6 +57,14 @@ func set_stockpile(item_id: String, tile: Vector3i) -> bool:
 	items[item_id]["location"] = {"type": "stockpile", "x": tile.x, "y": tile.y, "z": tile.z}
 	return true
 
+## Whether a ground or stockpile tool lies on cell (a held tool lies nowhere).
+func lies_at(cell: Vector3i) -> bool:
+	for item: Dictionary in items.values():
+		var location: Dictionary = item["location"]
+		if String(location["type"]) in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell:
+			return true
+	return false
+
 ## Into colonist_id's hand; false when either is unknown or the hand holds another tool.
 func set_held(item_id: String, colonist_id: String) -> bool:
 	if not items.has(item_id):
