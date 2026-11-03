@@ -15,6 +15,8 @@ const STEP_BUDGET := 64
 ## Default heuristic weight: content move costs are integers and <= 0 is impassable.
 const MIN_TILE_COST := 1.0
 
+const VerticalLinksType = preload("res://scripts/core/map/vertical_links.gd")
+
 const STATUS_SEARCHING := "searching"
 const STATUS_FOUND := "found"
 const STATUS_UNREACHABLE := "unreachable"
@@ -35,7 +37,7 @@ var _bounds_min: Vector3i
 var _bounds_max: Vector3i
 var _min_cost: float
 ## VerticalLinks (core/map/vertical_links.gd) or null: null keeps the search on its start's layer.
-var _links = null
+var _links: VerticalLinksType = null
 
 var _status: String = STATUS_SEARCHING
 ## Best parent of every discovered tile except _start, in discovery order (snapshot()'s
@@ -90,7 +92,7 @@ func _init(start: Vector3i, target: Vector3i, cost_fn: Callable,
 ## Lets the search cross vertical links (ADR 068): call right after construction (and before
 ## restore()) with the map's current links, as with cost_fn. A crossing costs the destination
 ## tile's cost, like a planar step. Without it the search never leaves its start's layer.
-func set_vertical_links(links) -> void:
+func set_vertical_links(links: VerticalLinksType) -> void:
 	_links = links
 
 ## "searching", "found" or "unreachable"; the last two are terminal.

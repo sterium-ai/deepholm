@@ -307,9 +307,8 @@ func _passable_neighbours(tile: Vector3i) -> Array[Vector3i]:
 
 ## The surface keeps its (x, y) rule; deeper layers use passable_tile.
 func _passable_at(tile: Vector3i) -> bool:
-	if tile.z == TileGrid.SURFACE:
-		return bool(_passable.call(tile.x, tile.y))
-	return bool(_passable_tile.call(tile))
+	var passable: bool = _passable.call(tile.x, tile.y) if tile.z == TileGrid.SURFACE else _passable_tile.call(tile)
+	return passable
 
 func _orthogonal(tile: Vector3i) -> Array[Vector3i]:
 	return [Vector3i(tile.x, tile.y - 1, tile.z), Vector3i(tile.x - 1, tile.y, tile.z),
@@ -322,7 +321,7 @@ func _flat(tile: Vector3i) -> int:
 	return tile.z * _layer_size + tile.y * _width + tile.x
 
 func _coord(index: int) -> Vector3i:
-	return Vector3i(index % _width, index / _width % _height, index / _layer_size)
+	return TileGrid.coord_in(index, _width, _height)
 
 func _in_bounds(x: int, y: int) -> bool:
 	return x >= 0 and x < _width and y >= 0 and y < _height

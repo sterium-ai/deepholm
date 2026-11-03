@@ -161,9 +161,11 @@ func _write_cell(index: int) -> void:
 				cost = int(object_definition.get("move_cost", 0))
 			if bool(object_definition.get("is_door", false)):
 				flags |= DOOR
-			if bool(object_definition.get("link_up", false)):
+			var link_up: bool = object_definition.get("link_up", false)
+			var link_down: bool = object_definition.get("link_down", false)
+			if link_up:
 				flags |= LINK_UP
-			if bool(object_definition.get("link_down", false)):
+			if link_down:
 				flags |= LINK_DOWN
 	elif index < _tile_grid.tiles.size():
 		if not _tile_rule_by_kind.has(tile_kind):

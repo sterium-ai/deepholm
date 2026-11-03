@@ -21,10 +21,10 @@ var _count := 0
 
 ## passable(tile: Vector3i) -> bool and link_flags(tile: Vector3i) -> int (UP | DOWN bits) are
 ## Passability.passable_tile() and link_flags(). A single layer has no links and no work.
-func _init(width: int, height: int, layer_count: int, passable: Callable, link_flags: Callable) -> void:
+func _init(width: int, height: int, layers: int, passable: Callable, link_flags: Callable) -> void:
 	_width = width
 	_height = height
-	_layer_count = maxi(layer_count, 1)
+	_layer_count = maxi(layers, 1)
 	_layer_size = width * height
 	_passable = passable
 	_link_flags = link_flags
@@ -65,7 +65,7 @@ func links() -> Array[Vector3i]:
 		return result
 	var index := _up.find(1)
 	while index != -1:
-		result.append(Vector3i(index % _width, index / _width % _height, index / _layer_size))
+		result.append(TileGrid.coord_in(index, _width, _height))
 		index = _up.find(1, index + 1)
 	return result
 
@@ -83,7 +83,7 @@ func on_tile_changed(tile: Vector3i) -> bool:
 	if _layer_count < 2 or not _in_bounds(tile):
 		return false
 	var changed := false
-	for lower_z in [tile.z - 1, tile.z]:
+	for lower_z: int in [tile.z - 1, tile.z]:
 		if lower_z < 0 or lower_z >= _layer_count - 1:
 			continue
 		var lower := Vector3i(tile.x, tile.y, lower_z)
@@ -97,9 +97,13 @@ func on_tile_changed(tile: Vector3i) -> bool:
 
 func _derive(lower: Vector3i) -> bool:
 	var upper := lower + Vector3i(0, 0, 1)
-	if int(_link_flags.call(lower)) & UP == 0 or int(_link_flags.call(upper)) & DOWN == 0:
+	var lower_flags: int = _link_flags.call(lower)
+	var upper_flags: int = _link_flags.call(upper)
+	if lower_flags & UP == 0 or upper_flags & DOWN == 0:
 		return false
-	return bool(_passable.call(lower)) and bool(_passable.call(upper))
+	var lower_passable: bool = _passable.call(lower)
+	var upper_passable: bool = _passable.call(upper)
+	return lower_passable and upper_passable
 
 func _flat(tile: Vector3i) -> int:
 	return tile.z * _layer_size + tile.y * _width + tile.x
