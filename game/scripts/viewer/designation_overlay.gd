@@ -31,9 +31,20 @@ var world: WorldStateType
 var _cursor := 0
 var _image: Image
 var _texture: ImageTexture
+## The one layer map_view.gd draws (ADR 045 §7); set_active_layer() repaints.
+var active_layer := 0
 
 func set_world(world_ref: WorldStateType) -> void:
 	world = world_ref
+	_rebuild()
+
+## Replays the designation log from 0 (its latest count per tile) onto a clear
+## image, keeping only `z`'s tiles.
+func set_active_layer(z: int) -> void:
+	active_layer = z
+	_rebuild()
+
+func _rebuild() -> void:
 	_cursor = 0
 	_image = null
 	if world != null:
@@ -47,7 +58,7 @@ func refresh() -> void:
 		_cursor = int(changes["next"])
 		var tiles: Dictionary = changes["tiles"]
 		for tile: Vector3i in tiles:
-			if tile.z == TileGrid.SURFACE: # the surface until L4's active layer (ADR 045 §7)
+			if tile.z == active_layer:
 				_image.set_pixel(tile.x, tile.y, fill_color(int(tiles[tile])))
 		if not tiles.is_empty():
 			_texture.update(_image)
@@ -68,6 +79,8 @@ func _draw() -> void:
 		if String(job["status"]) not in PENDING_STATUSES:
 			continue
 		var target: Vector3i = job["target"]
+		if target.z != active_layer:
+			continue
 		draw_rect(Rect2(
 			target.x * TILE_SIZE,
 			target.y * TILE_SIZE,

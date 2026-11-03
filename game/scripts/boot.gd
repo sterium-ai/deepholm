@@ -143,7 +143,8 @@ func _build_ui() -> void:
 		"center": func(): _map_viewport.center_colonists(), "select_tool": _select_tool,
 		"toggle_art": func(): _map_view.toggle_art_enabled(), "new_game": _on_new_game_pressed,
 		"debug_scenario": _on_debug_scenario_pressed, "select_wall_kind": func(kind: String): _orders.select_wall_kind(_map_view, kind),
-		"rotate_build": func(): _orders.rotate_build(world, _map_view)})
+		"rotate_build": func(): _orders.rotate_build(world, _map_view),
+		"step_layer": func(delta: int): _map_view.step_layer(delta)})
 	var hint := Label.new()
 	hint.text = _text_table.get_string("controls.map_hint")
 	layout.add_child(hint)
@@ -160,6 +161,7 @@ func _build_ui() -> void:
 	_map_view.zone_add_committed.connect(func(result: Dictionary): _show_map_result(StatusTextType.zone_result_text(_text_table, result)))
 	_map_view.build_committed.connect(func(result: Dictionary): _show_map_result(StatusTextType.build_result_text(_text_table, result)))
 	_map_view.tool_left.connect(func(): _select_tool(-1))
+	_map_view.layer_changed.connect(_on_layer_changed)
 	_map_view.preview_validity = _preview_validity
 	_map_viewport.attach(_map_view)
 	_ui_scroll = InfoPanelType.new()
@@ -184,8 +186,16 @@ func _preview_validity(tiles: Array[Vector2i]) -> Array[bool]:
 func _command_for_tile(tool: int, tile: Vector2i) -> Dictionary:
 	return OrderInputType.command_for_tile(world, _map_view, tool, tile)
 
+## The map view's drawn layer (ADR 069), or the surface before the UI is built.
+func _active_layer() -> int:
+	return _map_view.active_layer if _map_view != null else 0
+
+func _on_layer_changed(z: int) -> void:
+	_controls.show_layer(z)
+	_refresh_room_label()
+
 func _wall_command(tiles: Array[Vector2i]) -> Dictionary:
-	return _orders.wall_command(world, tiles)
+	return _orders.wall_command(world, tiles, _active_layer())
 
 ## Applies the selected tool over the rectangle (OrderInput.commit_rectangle())
 ## and returns every rejected tile so the caller (and tests) can inspect the
@@ -228,7 +238,7 @@ func _update_need_alerts_label(snapshot: Dictionary = {}) -> void:
 
 func _refresh_room_label() -> void:
 	if _room_label != null:
-		_room_label.text = StatusTextType.room_text(world, _text_table, _orders.has_inspected_tile, _orders.inspected_tile)
+		_room_label.text = StatusTextType.room_text(world, _text_table, _orders.has_inspected_tile, _orders.inspected_tile, _active_layer())
 
 ## One debug Spawn button per content incident (ControlBar.make_incident_buttons()).
 func _make_incident_buttons() -> Array[Button]:
@@ -338,6 +348,7 @@ func _replace_world(new_world: WorldStateType) -> void:
 	autosave_trigger.attach(new_world, save_manager, _current_epoch)
 	if _map_view != null:
 		_map_view.set_world(new_world)
+		_controls.show_layer(_map_view.active_layer)
 		# Reapplies camera bounds, or a smaller new world leaves the view blank.
 		_map_viewport.center_colonists()
 	if _ui_scroll != null:

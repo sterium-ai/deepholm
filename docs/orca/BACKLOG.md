@@ -1168,7 +1168,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   reversed against ADR 045: z grows downward) and the mid-search restore test are to be fixed
   as Codex asks — no amendment.
 
-### L4 — Viewer: one active layer · `todo` · after L3 · viewer only
+### L4 — Viewer: one active layer · `review` · after L3 · viewer only
 
 - **Goal:** ADR 045 §7: the viewer draws one active layer, switches with keys/buttons, shows
   stairs/links and the layer number; commands sent from the viewer carry the active `z`.

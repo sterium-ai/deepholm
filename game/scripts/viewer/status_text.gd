@@ -100,9 +100,10 @@ static func _incident_started_alert_line(text_table: TextTableType, event: Dicti
 ## last showed -- unlike rejected_tiles_text(), which only ever
 ## replaces on a fresh command outcome, room membership can change out from
 ## under an inspected tile with no new command aimed at it at all (an
-## overlapping zone_add, a wall breached or resealed elsewhere).
-static func room_text(world: WorldStateType, text_table: TextTableType, has_inspected_tile: bool, inspected_tile: Vector2i) -> String:
-	if not has_inspected_tile:
+## overlapping zone_add, a wall breached or resealed elsewhere). Rooms are
+## surface-only (get_room_at), so a deeper active `layer` shows none (ADR 069).
+static func room_text(world: WorldStateType, text_table: TextTableType, has_inspected_tile: bool, inspected_tile: Vector2i, layer: int = 0) -> String:
+	if not has_inspected_tile or layer != 0:
 		return ""
 	var room := world.get_room_at(inspected_tile.x, inspected_tile.y)
 	if room.is_empty():

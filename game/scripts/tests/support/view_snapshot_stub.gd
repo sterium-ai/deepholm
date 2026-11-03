@@ -14,6 +14,7 @@ static func columns(actors: Array, worker_ids: Dictionary, job_kinds: Dictionary
 	var factions := PackedStringArray()
 	var xs := PackedInt32Array()
 	var ys := PackedInt32Array()
+	var zs := PackedInt32Array()
 	var worker := PackedByteArray()
 	var carrying := PackedStringArray()
 	var tools := PackedStringArray()
@@ -27,6 +28,7 @@ static func columns(actors: Array, worker_ids: Dictionary, job_kinds: Dictionary
 		factions.append(String(actor.get("factionId", "colony")))
 		xs.append(int(actor["x"]))
 		ys.append(int(actor["y"]))
+		zs.append(int(actor.get("z", 0)))
 		worker.append(1 if worker_ids.has(String(actor["id"])) else 0)
 		var cargo: Variant = actor.get("carrying")
 		carrying.append(String((cargo as Dictionary)["kind"]) if cargo is Dictionary else "")
@@ -38,6 +40,6 @@ static func columns(actors: Array, worker_ids: Dictionary, job_kinds: Dictionary
 		hp.append(int((health as Dictionary).get("hp", 0)) if health is Dictionary else -1)
 		max_hp.append(int((health as Dictionary).get("maxHp", 1)) if health is Dictionary else -1)
 	return {"tick": 0, "ids": Array(ids), "kinds": Array(kinds), "factions": Array(factions), "x": Array(xs),
-		"y": Array(ys), "z": 0, "worker": Array(worker), "carrying": Array(carrying), "tool_kinds": Array(tools),
+		"y": Array(ys), "z": Array(zs), "worker": Array(worker), "carrying": Array(carrying), "tool_kinds": Array(tools),
 		"trapped": Array(trapped), "work_kinds": Array(work_kinds), "hp": Array(hp), "max_hp": Array(max_hp),
 		"need_reasons": {}, "details": {}, "jobs": {}}

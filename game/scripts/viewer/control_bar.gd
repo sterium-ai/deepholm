@@ -16,11 +16,13 @@ const TOOL_KEYS := ["dig", "chop", "forage", "cancel", "wall", "remove_object", 
 
 var seed_input: LineEdit
 var active_seed_label: Label
+## The drawn layer (ADR 069): "z 0" is the surface. Notation, not a word, so no text-table key.
+var layer_label: Label
 
 ## `on` maps each control to its handler: pause, step, speed (takes a
 ## TickDriver.Speed), save, load, center, select_tool (takes a tool, -1 to
 ## navigate), toggle_art, new_game, debug_scenario, select_wall_kind (takes a
-## kind), rotate_build.
+## kind), rotate_build, step_layer (takes -1 for up, +1 for down).
 func build(text_table: TextTableType, orders: OrderInputType, incident_buttons: Array[Button], on: Dictionary) -> void:
 	for entry in [
 		["controls.pause", on["pause"]], ["controls.step", on["step"]],
@@ -30,6 +32,12 @@ func build(text_table: TextTableType, orders: OrderInputType, incident_buttons: 
 		["controls.load", on["load"]], ["controls.center", on["center"]],
 		["controls.navigate", on["select_tool"].bind(-1)], ["controls.toggle_art", on["toggle_art"]]]:
 		add_child(make_button(text_table.get_string(entry[0]), entry[1]))
+	# Layer switch (ADR 069), also PageUp / PageDown on the map.
+	add_child(make_button("▲", on["step_layer"].bind(-1)))
+	layer_label = Label.new()
+	add_child(layer_label)
+	show_layer(0)
+	add_child(make_button("▼", on["step_layer"].bind(1)))
 	# New game controls: a visible, editable numeric seed --
 	# left blank, boot.gd's _on_new_game_pressed() picks one and writes it back
 	# here so it stays documented/visible, never silently chosen (see
@@ -72,6 +80,9 @@ func build(text_table: TextTableType, orders: OrderInputType, incident_buttons: 
 	add_child(orders.rotate_build_button)
 	for incident_button in incident_buttons:
 		add_child(incident_button)
+
+func show_layer(z: int) -> void:
+	layer_label.text = "z %d" % z
 
 func _add_tool_button(orders: OrderInputType, tool: int, text: String, select_tool: Callable) -> void:
 	var button := make_button(text, select_tool.bind(tool))
