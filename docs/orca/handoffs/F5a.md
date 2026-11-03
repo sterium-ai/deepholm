@@ -74,19 +74,54 @@ fail, the axe ends stocked in A; codec without the copy: 2 fail; panel keyed by 
 Non-blocking, both taken: the budgets line now names the frozen exceptions (the 861-line
 `world_generator.gd`); the playtest line says it is a post-merge check.
 
+## Review round 2 (Codex: REQUEST_CHANGES) and the answers
+
+Blocking:
+1. **`crafting_system.gd` is outside the owned paths.** The round-1 fix needs it (without it a
+   loose tool is stocked in a stockpile that rejects tools). No owner approval exists yet, so
+   none is quoted: the request is now written in the F5a entry of `BACKLOG.md` ("Pending owner
+   approval ... (1)") and below. If the owner refuses, the alternative is to revert the 9 lines
+   and accept the round-1 defect as a known limitation.
+2. **Already-stocked tools are not hauled out.** Doing so needs a haul path for
+   `ToolItemStore` tools, or turning an identity-bearing tool back into a pile (new ids, ADR 061
+   territory), both outside F5a and both design choices. I kept the conservative behaviour (the
+   tool stays until a colonist takes it) and wrote it as a requested design amendment
+   ("Pending owner approval ... (2)" in `BACKLOG.md`). Not quoted as approved.
+3. **Trigger tests for the `ToolDropToil` filter and the other-layer ranking.** Added, both
+   through commands and ticks:
+   - `_check_drop_tool_skips_a_stockpile_that_rejects_tools()`: a holder whose pick a foreign
+     job reserved drops it during a `forage` order; the nearer stockpile (2, 0) rejects tools,
+     so the pick lands in the farther (0, 4). With the unfiltered zone list wired back in, the
+     pick lands at (2, 0) and the check fails.
+   - `_check_a_stockpile_on_another_layer_ranks_after_the_items_layer()`: a two-layer world
+     (a save with `map.layerCount` 2, layer 1 bare floor, loaded with `from_save_state()`);
+     `zone_1` on layer 1 right above a wood stack, `zone_2` (A) on the surface far away, both at
+     priority 2. Planar distance and zone id would both choose `zone_1`; the wood must reach A
+     and nothing may enter the layer-1 stockpile. With `_distance_to()` ignoring the layer, the
+     wood and the harvest go to layer 1 and the checks fail.
+
+Non-blocking: the commit identification below now lists every commit; "owner confirmation
+pending" (panel playtest) stays a post-merge check.
+
+**Pending owner approval (2026-11-03):** (1) the scope extension to
+`core/crafting/crafting_system.gd`; (2) the design amendment that an already-stocked tool stays
+in a stockpile that later rejects tools. Both are in `BACKLOG.md` (F5a entry).
+
 ## Branch and commit
 
-- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities`, one commit on
-  `origin/main` 3e7ba13 (see above). Not pushed.
+- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 3e7ba13,
+  three commits: deccb3b (the feature, squashed and rebased onto L2), 3492984 (review round 1
+  fixes) and the review-round-2 commit that carries this report (`git log origin/main..HEAD`).
+  Not pushed.
 - Earlier history: written on 73d0fa6 as v7 -> v8 (`all 132 test(s) PASS [745s]`), rebased onto
   F3 (32bfb81) as v8 -> v9 (`all 133 test(s) PASS [823s]`), now on L2 as v9 -> v10.
 - **Owner coordination note:** ADRs up to 063 are taken (this is **064**); `world_state.gd` must
-  not grow (767 -> 767, three statements edited in place); new code uses `TileGrid` helpers.
+  not grow (767 -> 767, four statements edited in place); new code uses `TileGrid` helpers.
 
-## Final suite line (branch head, after the rebase onto L2 and the review-round-1 fixes)
+## Final suite line (branch head, after the review-round-2 changes)
 
 ```
-run_tests: all 134 test(s) PASS  [922s]
+run_tests: all 134 test(s) PASS  [859s]
 ```
 
 `origin/main` (3e7ba13) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
@@ -114,7 +149,8 @@ run_tests: all 134 test(s) PASS  [922s]
 5. Tool drops (`ToolDropToil`) only use stockpiles accepting `tool`, and a loose crafted tool is
    stocked (`CraftingSystem.stock_tools()`) only in a stockpile accepting `tool`; one delivered
    into a stockpile that stopped accepting tools is hauled out. A tool already stocked in a
-   stockpile that later stops accepting tools stays (tools have no haul path, ADR 061).
+   stockpile that later stops accepting tools stays (tools have no haul path, ADR 061):
+   **pending owner approval** as a design amendment (review round 2).
 6. A haul already carrying an item to a stockpile that stops accepting it delivers it, and
    HaulGiver then hauls it out (ADR 064, "Command").
 
@@ -164,7 +200,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [922s]
+tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [859s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2801 warning(s), none above baseline (2803)
@@ -200,7 +236,9 @@ crop's real harvest and ticks (no direct internal calls):
   and restore every group, all through commands; moved to another world whose `zone_1` lies
   elsewhere it rebuilds its rows (heading, buttons acting on the new world);
 - **review regressions:** a loose tool delivered into a stockpile that stopped accepting tools is
-  hauled out and stocked elsewhere; the save snapshot does not alias a live filter.
+  hauled out and stocked elsewhere; the save snapshot does not alias a live filter; `drop_tool`
+  skips a nearer stockpile that rejects tools; on a two-layer map a stockpile on another layer
+  ranks after one on the item's layer.
 
 Checked that the acceptance discriminates: with the priority comparison disabled the food goes
 to B ("within a day the food must lie in A ..." fails); with `accepts_item_at()` ignoring the
@@ -215,7 +253,7 @@ zone with a priority are `schema_error`; the v10 fixture re-encodes unchanged (L
 moved to v10 as F2, F3 and L2 did); the v1-v8 fixtures now load at v10.
 
 Assert sites (`_expect(`/`_fail(`, `origin/main` 3e7ba13 -> branch): `test_save_migration` 149 -> 164,
-`test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 55. No test removed, skipped
+`test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 62. No test removed, skipped
 or loosened.
 
 ## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets)
@@ -251,6 +289,7 @@ have.
 
 - A tool already stocked in a stockpile that later stops accepting tools stays there (tools
   have no haul path, ADR 061); new tool drops and newly stocked crafted tools respect the filter.
+  Pending owner approval as a design amendment (review round 2).
 - The panel is minimal (list of stockpiles, no map selection), like F2's workbench panel.
 - Owner confirmation pending: the native panel playtest is a post-merge check (`REVIEW.md`
   item 7, through the desktop shortcut); the headless panel tests are the pre-merge evidence.

@@ -15,7 +15,9 @@ extends SceneTree
 ##   rebuilds its rows for another world whose zones reuse the same ids;
 ## - a loose tool delivered into a stockpile that stopped accepting tools mid-haul is not
 ##   stocked there (CraftingSystem.stock_tools()) but hauled out to one that accepts it;
-## - the save snapshot never aliases a stockpile's live groups.
+## - the save snapshot never aliases a stockpile's live groups;
+## - drop_tool (ToolDropToil) skips a nearer stockpile that rejects tools;
+## - on a two-layer map, a stockpile on another layer ranks after one on the item's layer.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -48,6 +50,8 @@ func _init() -> void:
 	_check_tool_delivered_after_its_stockpile_rejects_tools_is_hauled_out()
 	_check_save_snapshot_does_not_alias_the_live_filter()
 	_check_panel_rebuilds_for_another_world_with_the_same_zone_ids()
+	_check_drop_tool_skips_a_stockpile_that_rejects_tools()
+	_check_a_stockpile_on_another_layer_ranks_after_the_items_layer()
 	if _failed:
 		quit(1)
 		return
@@ -433,3 +437,53 @@ func _check_panel_rebuilds_for_another_world_with_the_same_zone_ids() -> void:
 	_expect(heading != null and heading.text == "Stockpile (%d, %d)" % [A.position.x, A.position.y],
 		"refresh() on a reassigned world must rebuild the heading: %s" % [heading.text if heading else null])
 	panel.free()
+
+## Review F5a round 2: a holder whose pick a foreign job reserved drops it at the nearest
+## stockpile cell within ToolDropToil.TOOL_DROP_RADIUS that accepts tools (a forage order and
+## ticks, as test_tool_items_handover.gd). The nearer stockpile, at (2, 0), rejects tools; the
+## pick must land in the farther one at (0, 4), not in place and not at (2, 0).
+func _check_drop_tool_skips_a_stockpile_that_rejects_tools() -> void:
+	var world := WorldStateType.new(64014)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.colonists(world).clear()
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
+	var near := String(_command_ok(world, "zone_add", {"x": 2, "y": 0, "width": 1, "height": 1}).get("zone_id", ""))
+	_command_ok(world, "zone_add", {"x": 0, "y": 4, "width": 1, "height": 1})
+	_command_ok(world, "zone_set_stockpile", {"id": near, "groups": "food,material,seed,valuable", "priority": 2})
+	_command_ok(world, "place_object", {"x": 5, "y": 0, "kind": "berry_bush"})
+	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	_expect(world.set_tool_item_held(pick_id, "colonist_0") and world.reserve_tool_item(pick_id, "foreign_job"),
+		"the pick must be held by colonist_0 and reserved by a foreign job")
+	var job_id := String(_command_ok(world, "forage", {"x": 5, "y": 0, "priority": 1}).get("job_id", ""))
+	var completed := func() -> bool: return String(Scenarios.find_job(world, job_id).get("status", "")) == "completed"
+	_expect(_tick_until(world, 120, completed) <= 120, "colonist_0's forage must complete")
+	var location: Dictionary = world.get_tool_item(pick_id).get("location", {})
+	_expect(String(location.get("type", "")) == "stockpile" and int(location.get("x", -1)) == 0 and int(location.get("y", -1)) == 4,
+		"the pick must be dropped in the stockpile that accepts tools at (0, 4), got %s" % [location])
+
+## Review F5a round 2: a two-layer world (a save with map.layerCount 2, loaded as SaveIO would)
+## with zone_1 on layer 1 right above a loose wood stack and zone_2 on the surface, far away, both
+## at priority 2. Planar distance and id would both pick zone_1; the layer rule sends the wood
+## to zone_2 (ZoneTable.OTHER_LAYER_DISTANCE), through zone_add commands and ticks.
+func _check_a_stockpile_on_another_layer_ranks_after_the_items_layer() -> void:
+	var surface := _world(64015)
+	var state := surface.to_save_state()
+	state["map"]["layerCount"] = 2
+	# Layer 1 is bare floor: no crop or tree there, so no job targets another layer than its worker.
+	var deep_tiles: Array = []
+	deep_tiles.resize((state["map"]["tiles"] as Array).size())
+	deep_tiles.fill(WorldStateType.TILE_FLOOR)
+	(state["map"]["tiles"] as Array).append_array(deep_tiles)
+	var world := WorldStateType.from_save_state(state)
+	_expect(_command(world, "zone_add", {"x": WOOD.x, "y": WOOD.y, "z": 1, "width": 2, "height": 2}).get("ok", false),
+		"a stockpile on layer 1 must be accepted on a two-layer map")
+	_add_zone(world, A)
+	_expect(world.get_zone("zone_1").get("z") == 1 and world.get_zone("zone_2").get("z") == 0,
+		"zone_1 must lie on layer 1 and zone_2 on the surface: %s / %s" % [world.get_zone("zone_1"), world.get_zone("zone_2")])
+	var deep := Rect2i(WOOD.x, WOOD.y, 2, 2)
+	var stored := func() -> bool: return _units_in(world, "wood", A) == 3
+	_expect(_tick_until(world, _day_ticks, stored) <= _day_ticks,
+		"within a day the wood must reach the surface stockpile A: A %d, total %d" % [_units_in(world, "wood", A), _units(world, "wood")])
+	for item in world.get_items():
+		_expect(not (int(item["z"]) == 1 and deep.has_point(Vector2i(int(item["x"]), int(item["y"])))),
+			"nothing may be hauled into the layer-1 stockpile: %s" % [item])

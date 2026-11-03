@@ -124,7 +124,8 @@ button applies `zone_set_stockpile`; nothing else mutates. Texts under `stockpil
   crafting stock, rooms) still treat any stockpile tile as "in a stockpile", filter or not.
 - A stocked tool (ADR 061: a `ToolItemStore` item, not a ground item) has no haul path, so a
   tool already stocked in a stockpile that later stops accepting tools stays there until a
-  colonist takes it; new drops and newly stocked crafted tools respect the filter.
+  colonist takes it; new drops and newly stocked crafted tools respect the filter. This exception to
+  "moved out" is a design amendment pending owner approval (`BACKLOG.md` F5a).
 - `L2` (`Vector3i`, ADR 063): every ZoneTable/HaulGiver tile is a `Vector3i` and zones carry
   `z`; the distance uses `TileGrid.manhattan()` on one layer, and the rectangle clamp is the one
   planar step, inside the zone's own layer.
