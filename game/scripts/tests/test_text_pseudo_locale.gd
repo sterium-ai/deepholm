@@ -36,7 +36,7 @@ const DROPPED_KEY := "controls.pause"
 ## The first segment of every data/text key; a viewer literal of the form
 ## "<prefix>.<rest>" is a text key and must resolve.
 const KEY_PREFIXES := ["controls", "incident", "work_table", "status", "save", "new_game", "colonists",
-	"rejection", "recording", "tile", "calendar", "workbench"]
+	"rejection", "recording", "tile", "calendar", "workbench", "stockpile"]
 ## Bookkeeping toils that are never a colonist's current toil (colonist_panel.gd).
 const UNSHOWN_TOILS := ["reserve", "release_all"]
 ## save_wiring.gd's write-failure codes (SaveManager/SaveIO write path).

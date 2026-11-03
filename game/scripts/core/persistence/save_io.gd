@@ -250,13 +250,14 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 	var h := int(state["map"]["height"])
 	var layers := int(state["map"]["layerCount"])
 	var crop_ids: Array[String] = rules["crops"]
+	var item_groups: Array[String] = rules["itemGroups"]
 	var checks: Array[Callable] = [
 		func() -> Dictionary: return ItemValidator._valid_items(state.get("items"), w, h, layers),
 		func() -> Dictionary: return ObjectValidator._valid_objects(state["objects"], w, h, layers),
 		func() -> Dictionary: return _optional(state, "constructionSites", func(v: Variant) -> Dictionary: return ObjectValidator._valid_construction_sites(v, w, h, layers)),
 		func() -> Dictionary: return _optional(state, "crafting", func(v: Variant) -> Dictionary: return CraftingValidator._valid_crafting(v, w, h, layers)),
 		func() -> Dictionary: return _optional(state, "areaOrders", func(v: Variant) -> Dictionary: return ObjectValidator._valid_area_orders(v, w, h, layers)),
-		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h, layers, crop_ids),
+		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h, layers, crop_ids, item_groups),
 		func() -> Dictionary: return {"ok": true} if _is_int_min(state.get("nextZoneId"), 1) else _fail("invalid nextZoneId"),
 		func() -> Dictionary: return FarmValidator._valid_crops(state.get("crops"), w, h, layers, crop_ids),
 		func() -> Dictionary: return ItemValidator._valid_ground_berries(state.get("groundBerries"), w, h, layers),
@@ -297,6 +298,8 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		"crops": _ids(registry, "crops"),
 		# F3 (ADR 062): skill levels and the carry bonus in a saved colonist's hands.
 		"skills": registry.document("skills").duplicate(true),
+		# F5a: the groups a stockpile filter may name are the items' kinds (ZoneTable.item_groups).
+		"itemGroups": ZoneTable.groups_of(registry.list("items")),
 		# A saved map keeps its exact size on load, so only WorldGenerator's upper bound applies.
 		"maxWorldSize": int(registry.document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE)),
 	}

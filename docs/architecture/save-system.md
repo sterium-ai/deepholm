@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 8` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 10` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -134,6 +134,8 @@ colonist's skills (see "Colonist needs, the labour table and skills" below and
 [ADR 062](../decisions/062-skills-and-xp-per-labour.md));
 v9 gives every tile a layer (see "Layers" below and
 [ADR 045](../decisions/045-map-layers.md) §5).
+v10 lets a stockpile carry its item-group filter and priority (see "Stockpile zones" below and
+[ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -252,6 +254,11 @@ returns a new dictionary and never mutates its input. Steps today:
   already layer 0's. Nothing else changes, and a v8 state that already has `layerCount` is
   refused. The v1 to v8 fixtures all migrate exactly to `save_schema_v9_fixture.json` (the same
   session, written packed by `docs/orca/handoffs/L2-write-save.gd`).
+- **v9 → v10** (F5a, ADR 064): the unpacked shape is unchanged; a v9 stockpile accepted every
+  item at one priority, which is a v10 stockpile with neither optional key. A v9 zone that
+  already carries `groups` or `priority` is refused. `save_schema_v9_fixture.json` migrates
+  exactly to `save_schema_v10_fixture.json` (the same session, written packed by
+  `docs/orca/handoffs/F5a-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -517,6 +524,13 @@ for the same reason as `items.nextId`. `WorldState` exposes zones through
 `get_zones() -> Array[Dictionary]` (id-sorted, detached copies) and
 `get_zone(id) -> Dictionary` (`{}` for an unknown id). `state_hash()` covers
 the zones and the next-id counter.
+
+Since v10 ([ADR 064](../decisions/064-stockpile-filters-and-priorities.md)) a stockpile may also
+carry `groups`, the ascending list of item groups it accepts (an item's group is its
+`items.json` `kind`; SaveIO accepts only the session's kinds), and `priority`, 1 to 3. Each key
+is written only when set away from its default (every group, priority 2), so a stockpile nobody
+configured is the v9 record byte for byte. A farm zone never carries either. The
+`zone_set_stockpile` command sets both.
 
 ## Area orders
 
