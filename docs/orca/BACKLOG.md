@@ -1301,6 +1301,13 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   are approved as F5c's scope, as declared in the handoff. The technical findings (per-actor
   bed reachability, death thoughts through the existing actor iteration, trigger-driven tests
   for stack limits/replacement/refresh/raw food) are fixed as Codex asks — no amendment.
+- **Review round 2 (owner's interface, 2026-11-03): design deviations accepted** as listed in
+  the F5c handoff: (1) `slept_ground` comes from the needs tick (tired with no reachable bed),
+  not from a sleep job; (2) `meal_items` content key decides meal (+) vs raw (0); (3)
+  `colonist_died` goes to every colony colonist and lands one tick after the death through the
+  pending count (now hashed); (4) the panel shows name and weight, not time left. One change
+  required: **`crafted` must also count `cook_work`** (content, one word). ADR 066 merges as
+  `proposed` (README rule).
 
 ### F6 — Forest zone, wild fauna ecosystem, pasture · split 2026-10-30 into F6a / F6b / F6c
 
