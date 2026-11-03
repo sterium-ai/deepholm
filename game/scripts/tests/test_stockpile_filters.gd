@@ -25,7 +25,8 @@ extends SceneTree
 ##   a need that interrupts the carrier mid-carry does not end the job with the pick in hand: on
 ##   resuming, the job reserves the pick again and stocks it in B; a pick walled off while its
 ##   haul_tool job goes to fetch it fails that job once (blocked_target_unreachable), stays stocked
-##   in A, is not offered again while walled off, and is carried to B once the wall is gone.
+##   in A, is not offered again while walled off, and is carried to B once the wall is gone; with
+##   the preferred accepting stockpile C walled off, the pick is carried to the reachable B instead.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -66,6 +67,7 @@ func _init() -> void:
 	_check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools()
 	_check_need_interrupt_mid_carry_still_stocks_the_tool_in_b()
 	_check_walled_off_rejected_tool_fails_once_without_a_retry_loop()
+	_check_walled_off_preferred_stockpile_yields_to_a_reachable_one()
 	if _failed:
 		quit(1)
 		return
@@ -706,13 +708,13 @@ func _check_need_interrupt_mid_carry_still_stocks_the_tool_in_b() -> void:
 	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
 		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
 
-## Rock on every tile sharing an edge or a corner with A (rock = true), or floor again (false).
+## Rock on every tile sharing an edge or a corner with rect (rock = true), or floor again (false).
 ## Raw tile writes, so the passability cache and the region and room maps are rebuilt on query.
-func _wall_a(world: WorldStateType, rock: bool) -> void:
-	var ring := A.grow(1)
+func _wall_around(world: WorldStateType, rect: Rect2i, rock: bool) -> void:
+	var ring := rect.grow(1)
 	for x in range(ring.position.x, ring.end.x):
 		for y in range(ring.position.y, ring.end.y):
-			if not A.has_point(Vector2i(x, y)):
+			if not rect.has_point(Vector2i(x, y)):
 				TestAccess.set_tile(world, x, y, WorldStateType.TILE_ROCK if rock else WorldStateType.TILE_FLOOR)
 	TestAccess.tile_grid(world).reset_cells()
 	TestAccess.tile_grid(world).regions = null
@@ -738,7 +740,7 @@ func _check_walled_off_rejected_tool_fails_once_without_a_retry_loop() -> void:
 		"a haul_tool job must go active while the pick is still in A: %s" % [world.get_jobs(["haul_tool"])])
 	if job_id.is_empty():
 		return
-	_wall_a(world, true)
+	_wall_around(world, A, true)
 	var failed := false
 	for _i in 200:
 		world.tick()
@@ -762,7 +764,7 @@ func _check_walled_off_rejected_tool_fails_once_without_a_retry_loop() -> void:
 		"no haul_tool job may stay open on the walled-off pick: %s" % [world.get_jobs(["haul_tool"])])
 	_expect(world.get_tool_item_reservation(String(world.get_tool_items()[0]["id"])).is_empty(),
 		"the walled-off pick must not stay reserved")
-	_wall_a(world, false)
+	_wall_around(world, A, false)
 	var seen: Dictionary = {}
 	var in_b := func() -> bool:
 		_observe_haul(world, seen)
@@ -770,3 +772,26 @@ func _check_walled_off_rejected_tool_fails_once_without_a_retry_loop() -> void:
 		return String(location["type"]) == "stockpile" and B.has_point(Vector2i(int(location["x"]), int(location["y"])))
 	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks, "with the wall gone the pick must reach B: %s" % [_pick_location(world)])
 	_expect_carried(seen, "after the wall")
+
+## F5a-b review round 7: C (every group, priority 3, beside A) outranks B, but it is walled off.
+## The destination search skips C's unreachable cells and goes on, so a colonist carries the pick
+## to the reachable B; C is never targeted and stays empty.
+func _check_walled_off_preferred_stockpile_yields_to_a_reachable_one() -> void:
+	var c := Rect2i(35, 2, 2, 2)
+	var world := _stocked_pick_world(64022, true)
+	var zone_c := _add_zone(world, c)
+	_command_ok(world, "zone_set_stockpile", {"id": zone_c, "groups": "food,material,seed,tool,valuable", "priority": 3})
+	_wall_around(world, c, true)
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var seen: Dictionary = {}
+	var in_b := func() -> bool:
+		_observe_haul(world, seen)
+		var location := _pick_location(world)
+		return String(location["type"]) == "stockpile" and B.has_point(Vector2i(int(location["x"]), int(location["y"])))
+	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks,
+		"with C walled off the pick must reach the reachable B: %s" % [_pick_location(world)])
+	_expect_carried(seen, "past walled-off C")
+	for job in world.get_jobs(["haul_tool"]):
+		var target: Vector3i = job["target"]
+		_expect(not c.has_point(Vector2i(target.x, target.y)), "no haul_tool job may target walled-off C: %s" % [job])
+	_expect(_axes_in(world, c) == {"loose": 0, "stocked": 0}, "walled-off C must stay empty")

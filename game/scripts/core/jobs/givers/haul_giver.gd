@@ -97,9 +97,9 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## keeping its id; an interrupt that releases the reservation leaves item_id, which ToolFetchToil
 ## re-reserves on resume. A reserved tool (being fetched or already hauled), one a queued or active
 ## haul_tool job names, and one outside every stockpile (its zone was removed: not stock, F2) are
-## skipped. A queued or active haul_tool job's target is not offered twice. A tool whose target is
-## in another passability region (walled off) waits: the queue's own reachability block then
-## stands for the colonist side, so an unreachable tool is never offered and failed every tick.
+## skipped. A queued or active haul_tool job's target is not offered twice. A candidate cell in
+## another passability region than the tool (walled off) is skipped and the search goes on, so a
+## reachable alternative wins; with none reachable the tool waits, never offered and failed per tick.
 func _haul_rejected_tools(tick: int) -> void:
 	if _tool_store == null or not _get_tool_jobs.is_valid():
 		return
@@ -120,7 +120,7 @@ func _haul_rejected_tools(tick: int) -> void:
 		var cell: Variant = _free_tool_stockpile_cell(String(tool["kind"]), tile, busy)
 		if cell == null:
 			cell = _free_ground_cell_beside(tile, busy)
-		if cell == null or (_region_reachable.is_valid() and not bool(_region_reachable.call(tile, cell))):
+		if cell == null:
 			continue
 		var result: Dictionary = _submit_job.call(cell, _priority, tick, "haul_tool")
 		if result.get("ok", false):
@@ -133,9 +133,14 @@ func _free_tool_stockpile_cell(kind: String, from: Vector3i, busy: Dictionary) -
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
 			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
 				var cell := Vector3i(x, y, int(zone["z"]))
-				if _cell_takes_item(cell) and not _tool_store.lies_at(cell) and not busy.has(cell):
+				if _cell_takes_item(cell) and not _tool_store.lies_at(cell) and not busy.has(cell) and _reaches(from, cell):
 					return cell
 	return null
+
+## Whether a colonist can walk from the tool's tile to cell (same passability region); true
+## when no region check is wired.
+func _reaches(from: Vector3i, cell: Vector3i) -> bool:
+	return not _region_reachable.is_valid() or bool(_region_reachable.call(from, cell))
 
 ## The free tile outside every zone sharing an edge with the stockpile holding tile, nearest to
 ## tile (Manhattan), ties by y then x; null when there is none.
@@ -157,7 +162,7 @@ func _free_ground_cell_beside(tile: Vector3i, busy: Dictionary) -> Variant:
 				continue
 			if zones.any(func(zone: Dictionary) -> bool: return _zone_has(zone, cell)):
 				continue
-			if not _cell_takes_item(cell) or _tool_store.lies_at(cell) or busy.has(cell):
+			if not _cell_takes_item(cell) or _tool_store.lies_at(cell) or busy.has(cell) or not _reaches(tile, cell):
 				continue
 			var distance := TileGrid.manhattan(tile, cell)
 			if best == null or distance < best_distance:

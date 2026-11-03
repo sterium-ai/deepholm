@@ -76,8 +76,7 @@
        was rerun on the rebased HEAD and N is now 137;
      - `world_state.gd` is still 767 lines, and still exactly two existing lines differ from
        `origin/main`; this commit updates only this file.
-  9. Round 6, the commit that changes this file to the present text
-     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 6
+  9. Round 6, `9796270`. It answers review round 6
      (`.orca-review.md`, REQUEST_CHANGES):
      - (blocking) a `haul_tool` cargo that cannot be reached was re-reserved forever
        (`tool_fetch_toil.gd`, the round 5 re-reservation). Each failed route released it,
@@ -105,6 +104,26 @@
        of the round 6 run are quoted below;
      - cleanup: broken continuation lines in `haul_giver.gd` (`_cell_takes_item`, `_zone_has`),
        `tool_fetch_toil.gd` and `test_stockpile_filters.gd` are joined or indented again.
+  10. Round 7, the commit that changes this file to the present text
+     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 7
+     (`.orca-review.md`, REQUEST_CHANGES):
+     - (blocking) `haul_giver.gd` checked reachability only after choosing the first
+       destination, so an unreachable preferred stockpile blocked the haul forever even when
+       another accepting stockpile was reachable. The region check now runs inside the
+       destination search (new helper `_reaches(from, cell)`, used by
+       `_free_tool_stockpile_cell()` and `_free_ground_cell_beside()`): an unreachable cell is
+       skipped and the search goes on to the next cell, the next stockpile, then the ground
+       fallback. The post-selection check is gone;
+     - new tick-driven test `_check_walled_off_preferred_stockpile_yields_to_a_reachable_one`
+       (seed 64022, see "Tests" below). With the round 6 `haul_giver.gd` swapped in it fails
+       at `test_stockpile_filters.gd:791` (the pick stays in A); with the fix it passes. The
+       test helper `_wall_a` became `_wall_around(world, rect, rock)`;
+     - (non-blocking) the "All cases" determinism and replay claim under "Tests" is narrowed to
+       the cases that check it (seeds 64018 and 64019);
+     - (non-blocking) the full suite is still author-reported. The final line and the log path
+       of the round 7 run are quoted below;
+     - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
+       game/scripts/core/world_state.gd` giving `2 2`; `tool_fetch_toil.gd` is unchanged.
 - Owner decision followed (round 5): rebase onto `origin/main` after L3, keep v13, and rerun the
   full suite since the rebase brings code changes.
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
@@ -118,22 +137,23 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 6)
+## Final suite line (author-reported, round 7)
 
 ```
-run_tests: all 137 test(s) PASS  [1.022s]
+run_tests: all 137 test(s) PASS  [916s]
 ```
 
-The line is quoted verbatim; `1.022` is 1022 seconds (the Windows locale prints a thousands
-separator). The author ran this on the round 6 tree (this branch on `origin/main` `f55e9b0`,
-with schema v13, the two-line `world_state.gd` wiring and the round 6 unreachable-cargo fail
-path), on Windows with Godot 4.7.2 headless, with
-`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 > suite_r6.log 2>&1`.
+The line is quoted verbatim. The author ran this on the round 7 tree (this branch on
+`origin/main` `f55e9b0`, with schema v13, the two-line `world_state.gd` wiring and the round 7 per-candidate
+reachability check), on Windows with Godot 4.7.2 headless, with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 > suite_r7.log 2>&1`.
 The full log is at
-`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\suite_r6.log`
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\suite_r7.log`
 (local to the author's machine, not committed). Its push_error stack lines come from the
 suite's expected-failure checks. It is still author-reported: the reviewer has not reproduced
-it yet. The round 5 tree after the L3 rebase gave `run_tests: all 137 test(s) PASS  [985s]`.
+it yet. The round 6 tree gave `run_tests: all 137 test(s) PASS  [1.022s]` (1022 seconds; the
+Windows locale prints a thousands separator), logged in `suite_r6.log`.
+The round 5 tree after the L3 rebase gave `run_tests: all 137 test(s) PASS  [985s]`.
 N is 137 because main now has 137 test files (L3 added `test_vertical_links.gd`). This branch adds
 or removes none: its checks are in existing test files. The round 5 tree before the L3 rebase
 gave 136 PASS [880s]. The first full run after the rebase gave `2 of 137 test(s) failed: test_reroute,
@@ -163,8 +183,10 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
      zone (ties by y, then x);
   3. else no target, and the tool is tried again next tick.
 
-  When the tool's tile shares no region with the chosen target (`region_reachable`, round 6),
-  no job is submitted and the tool is tried again next tick, so a walled-off tool gets no job.
+  A candidate cell (in steps 1 and 2) whose region the tool's tile does not share
+  (`region_reachable`, round 6) is skipped and the search goes on (round 7), so a reachable
+  later stockpile or ground tile wins over an unreachable preferred one. With no reachable
+  candidate the tool gets no job and is tried again next tick.
 
   It then submits a `haul_tool` job at the target through the shared queue (`submit_job`),
   names the tool on it (`item_id`, round 5) and reserves the tool for that job
@@ -249,8 +271,14 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
       `blocked_target_unreachable` within 200 ticks. For a day after that the pick stays
       stocked in A, unreserved, no new `haul_tool` job is created and none is queued or
       active. Once the wall is removed, a colonist carries the pick to B within a day.
-    - All cases: two worlds built from the same seed have equal `state_hash()` on every tick,
-      and the replay returns ok.
+    - Round 7, seed 64022: a third stockpile C (every group, priority 3, beside A) outranks B
+      but is walled off. After A switches to materials only, a colonist carries the pick to B
+      within a day, a `haul_tool` job completes, no `haul_tool` job ever targets C, and C stays
+      empty.
+    - Determinism and replay are checked by the seed 64018 case (with and without B) and the
+      seed 64019 case: two worlds built from the same seed have equal `state_hash()` on every
+      tick, and the recorded session replays ok. The seed 64016, 64017, 64020, 64021 and 64022
+      cases run one world and do not check this.
   - `test_architecture_rules.gd`: `haul_tool` is added to the expected job kinds, and a
     `_run_and_verify("haul_tool", 207301, …)` scenario runs it end to end, like the other
     kinds.
@@ -337,6 +365,8 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered run (round 7): `test_stockpile_filters` PASS [24s]. With the round 6
+  `haul_giver.gd` swapped in, it fails at `test_stockpile_filters.gd:791`.
 - Filtered run (round 6): `test_stockpile_filters` PASS [21s]. With the round 5
   `tool_fetch_toil.gd` swapped in, it fails at `test_stockpile_filters.gd:761`.
 - Filtered runs (round 5), all PASS: `test_stockpile_filters` [18s], `test_haul_need_interrupt`
@@ -353,7 +383,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23443 lines in 113 files` (round 6; 23423 in round 5 after the L3 rebase;
+- `tools/measure_core.ps1`: `core total: 23448 lines in 113 files` (round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
   23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
 
   | File | Lines | Longest function |
@@ -363,15 +393,16 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   | `toil_bindings.gd` | 501 | `_init`, 49 |
   | `tool_drop_toil.gd` | 358 | `_init`, 30 |
   | `tool_fetch_toil.gd` | 290 | `advance`, 41 |
-  | `haul_giver.gd` | 177 | — |
+  | `haul_giver.gd` | 182 | — |
   | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
 
 ## Known limitations
 
 - If the tool cannot be reached, the job fails once with `blocked_target_unreachable` (round
   6) and the reservation is released. The giver does not offer that tool again until its tile
-  shares a region with the chosen target cell; reachability is judged by region, so a tool reachable
-  by region but not by route would fail once per offer.
+  shares a region with some free candidate cell (round 7: each candidate is checked, not just
+  the first); reachability is judged by region, so a tool reachable by region but not by route
+  would fail once per offer.
 - A reserved tool (one a colonist is fetching for other work) is skipped until it is free.
 - With no free destination and no free adjacent tile, the tool stays put, and the giver searches
   again every tick. That costs a few cell checks per rejected tool per tick.
