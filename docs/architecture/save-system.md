@@ -387,6 +387,14 @@ on load. Mapgen count/placement budgets scale with the map area relative to
 `reference_width*reference_height` (48x48). See
 [ADR 019](../decisions/019-world-dimensions-and-generation.md).
 
+`map.undergroundVersion` (schema v14, F4, [ADR 071](../decisions/071-underground-layers.md))
+records `UndergroundGenerator.GENERATOR_VERSION`: the algorithm that generates the next
+underground layer from the seed when a tunnel is finished. A discovered layer is ordinary
+tiles and objects (it grows `layerCount` and `tiles`). Like `generatorVersion` the value is
+kept through load and re-save and is not checked on load today; it is there so a future
+algorithm change can tell which algorithm an older world's undiscovered layers expect.
+v13 saves migrate to version 1.
+
 `_validate_state()` rejects a `tiles` array whose length is not
 `width*height*layerCount` and a `map.width`/`map.height` above `max_world_size`, and
 bounds-checks every persisted tile coordinate (`z` against `layerCount`) in the save against

@@ -1,13 +1,14 @@
 extends SceneTree
 
-## The save format after the R14 reset (ADR 049), now at schema v15 (A5, ADR 053:
+## The save format after the R14 reset (ADR 049), now at schema v16 (A5, ADR 053:
 ## terminal jobs leave the save; A13b, ADR 010 amendment 2: the save records its
 ## content packs; A16b, ADR 057: the scenario calendar and incident list are saved;
 ## A7, ADR 058: compact file encoding and saved route costs; F1, ADR 059: farm zones
 ## and crop growth; F2, ADR 061: workbench targets, orders and bills; F3, ADR 062: colonist
 ## skills; L2, ADR 045 §5: map layers and "z" on every tile; F5a, ADR 064: stockpile filters
 ## and priorities; F6a, ADR 067: forest zones and sapling growth; F5b, ADR 065: the heal labour; F5c, ADR 066: a
-## colonist's thoughts; F5a-b, ADR 064: the haul_tool job kind; F6b-1, ADR 070: wild animals).
+## colonist's thoughts; F5a-b, ADR 064: the haul_tool job kind; F6b-1, ADR 070: wild animals;
+## F4, ADR 071: map.undergroundVersion).
 ## Proves a save written before the reset is rejected with a clear message, the
 ## committed v1 to v6 fixtures migrate to exactly the migrated v7 fixture, a v1 save
 ## holding terminal jobs loads without them and with the original state_hash, the
@@ -22,7 +23,8 @@ extends SceneTree
 ## labour and skill and nothing else, a malformed scenarioStart is
 ## rejected, the committed v12 and v13 fixtures load and re-encode unchanged, the v13 fixture
 ## migrates to exactly the v14 one (v13 -> v14 changes only the version), v14 -> v15 changes
-## only the version and the committed v15 fixture (with animals) loads and re-encodes unchanged, a
+## only the version and the committed v15 fixture (with animals) loads and re-encodes unchanged,
+## v15 -> v16 adds only map.undergroundVersion, the v16 fixture loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
 ## live beside the old migration chain.
@@ -86,6 +88,10 @@ const V14_RESAVE_PATH := "user://test-save-migration-v14-resave.json"
 ## optional top-level "fauna" (ADR 070), and the session spawned grasshoppers and birds.
 const V15_FIXTURE := "res://scripts/tests/fixtures/save_schema_v15_fixture.json"
 const V15_RESAVE_PATH := "user://test-save-migration-v15-resave.json"
+## Written by docs/orca/handoffs/F4-write-save.gd (F4): the first v16 file; v16 adds
+## map.undergroundVersion (ADR 071), and the session built a tunnel that discovered L1.
+const V16_FIXTURE := "res://scripts/tests/fixtures/save_schema_v16_fixture.json"
+const V16_RESAVE_PATH := "user://test-save-migration-v16-resave.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
@@ -134,6 +140,8 @@ func _init() -> void:
 	_check_v14_fixture_loads_and_reencodes_unchanged()
 	_check_v14_to_v15_changes_only_the_version()
 	_check_v15_fixture_loads_and_reencodes_unchanged()
+	_check_v15_to_v16_adds_only_the_underground_version()
+	_check_v16_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -843,6 +851,52 @@ func _check_v15_fixture_loads_and_reencodes_unchanged() -> void:
 			"a second write/read of the v15 fixture must keep the decoded state_hash")
 	_remove(V15_RESAVE_PATH)
 
+## F4: v15 -> v16 adds only map.undergroundVersion 1 (the generator every older world used for
+## its undiscovered layers) and stamps schemaVersion 16, without mutating its argument.
+func _check_v15_to_v16_adds_only_the_underground_version() -> void:
+	var raw := _unpacked_fixture_state(V15_FIXTURE)
+	var before := JSON.stringify(raw)
+	var migrated := SaveMigrationsType.migrate(raw, 15, 16)
+	_expect(migrated["ok"], "v15 -> v16 must migrate a v15 state: %s" % migrated)
+	_expect(JSON.stringify(raw) == before, "the migration must not mutate its argument")
+	if not migrated["ok"]:
+		return
+	var rest: Dictionary = (migrated["state"] as Dictionary).duplicate(true)
+	_expect(int(rest["schemaVersion"]) == 16, "v15 -> v16 must stamp schemaVersion 16")
+	var map: Dictionary = rest["map"]
+	_expect(int(map.get("undergroundVersion", 0)) == 1, "v15 -> v16 must add map.undergroundVersion 1")
+	map.erase("undergroundVersion")
+	rest["schemaVersion"] = 15
+	_expect(JSON.stringify(rest) == before, "v15 -> v16 must change nothing but schemaVersion and undergroundVersion")
+
+## The committed v16 fixture holds a discovered L1 (two layers), loads through SaveIO.read(),
+## re-encodes to exactly the state it was read from, and keeps its state_hash through a second
+## write/read.
+func _check_v16_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V16_FIXTURE)
+	_expect(result["ok"], "the v16 fixture must load through SaveIO.read(): %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V16_FIXTURE))["state"]
+	_expect(int(raw["schemaVersion"]) == 16 and int(state["schemaVersion"]) == StateCodecType.SCHEMA_VERSION,
+		"the v16 fixture must be schemaVersion 16 on disk and load at the current schemaVersion")
+	var world := StateCodecType.decode(state)
+	_expect(TestAccess.tile_grid(world).layer_count >= 2,
+		"the v16 fixture must hold a discovered underground layer for this to prove anything")
+	var reencoded := StateCodecType.encode(world)
+	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
+		"decode() -> encode() of the v16 fixture must reproduce its state exactly")
+	_remove(V16_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V16_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v16 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V16_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v16 fixture must load: %s" % reread)
+	if reread["ok"]:
+		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
+			"a second write/read of the v16 fixture must keep the decoded state_hash")
+	_remove(V16_RESAVE_PATH)
+
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.
 func _check_fresh_save_load_keeps_state_hash() -> void:
@@ -1457,7 +1511,7 @@ func _minimal_current_schema_state(content_version: String, item_kind: String) -
 	return {
 		"schemaVersion": SaveIOType.SCHEMA_VERSION, "contentVersion": content_version, "contentPacks": [], "seed": 1, "tick": 0,
 		"epoch": 0,
-		"map": {"width": 1, "height": 1, "layerCount": 1, "tiles": ["soil"], "generatorVersion": 1},
+		"map": {"width": 1, "height": 1, "layerCount": 1, "tiles": ["soil"], "generatorVersion": 1, "undergroundVersion": 1},
 		"entities": [],
 		"inventory": {}, "jobs": [],
 		"scheduling": {

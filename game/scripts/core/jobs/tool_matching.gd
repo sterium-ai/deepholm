@@ -8,6 +8,7 @@ extends RefCounted
 ## Manhattan-nearest tool of `kind` that is unreserved or already reserved by job_id
 ## (a retry reuses its own reservation); ties broken by item id for determinism.
 ## excluded_ids skips candidates already proven unreachable in this fetch attempt.
+## No planar distance across layers: a tool on another layer ranks after every same-layer one.
 static func find_nearest_free_tool(kind: String, from: Vector3i, job_id: String,
 		tool_items: Array[Dictionary], reservation_of: Callable, colonist_positions: Dictionary,
 		excluded_ids: Array = []) -> Dictionary:
@@ -26,7 +27,8 @@ static func find_nearest_free_tool(kind: String, from: Vector3i, job_id: String,
 		var target: Variant = item_target(item, colonist_positions)
 		if target == null:
 			continue
-		var distance: int = TileGrid.manhattan(target, from)
+		var target_tile: Vector3i = target
+		var distance: int = TileGrid.manhattan(target_tile, from) if target_tile.z == from.z else ZoneTable.OTHER_LAYER_DISTANCE
 		if best_id.is_empty() or distance < best_distance or (distance == best_distance and item_id < best_id):
 			best_id = item_id
 			best_target = target

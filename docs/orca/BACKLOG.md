@@ -1189,7 +1189,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   recorded in the handoff with the reproducible bench; the one-frame target moves to the
   cached-reuse optimisation task (L4b, 	odo).
 
-### F4 — Underground layers: generation, discovery, tunnel, drill and ores · `todo` · after L1–L4 · Design: closed 2026-10-30
+### F4 — Underground layers: generation, discovery, tunnel, drill and ores · `review (antonelmejor50-hub/f4-underground-layers-generation-discovery)` · after L1–L4 · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** the surface plus **3 underground layers**. A layer is
   discovered by finishing a **tunnel building** on the current layer (one per layer; needs a

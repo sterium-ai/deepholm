@@ -1,5 +1,5 @@
 {
-  "groups": ["tool", "material", "food", "seed", "valuable"],
+  "groups": ["tool", "material", "food", "seed", "valuable", "ore"],
   "items": [
     {"id": "axe", "kind": "tool"},
     {"id": "pick", "kind": "tool"},
@@ -13,6 +13,14 @@
     {"id": "food", "kind": "food", "satiety": 40},
     {"id": "meal", "kind": "food", "satiety": 100},
     {"id": "planks", "kind": "material"},
-    {"id": "stone_blocks", "kind": "material"}
+    {"id": "stone_blocks", "kind": "material"},
+    {"id": "drill", "kind": "material"},
+    {"id": "copper_ore", "kind": "ore"},
+    {"id": "tin_ore", "kind": "ore"},
+    {"id": "coal_ore", "kind": "ore"},
+    {"id": "iron_ore", "kind": "ore"},
+    {"id": "silver_ore", "kind": "ore"},
+    {"id": "gold_ore", "kind": "ore"},
+    {"id": "rough_gem", "kind": "ore"}
   ]
 }

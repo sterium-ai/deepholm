@@ -363,6 +363,7 @@
   "workbench.idle": "idle",
   "workbench.status": "Now: %s. Queue: %s.",
   "workbench.recipe.axe": "Axe",
+  "workbench.recipe.drill": "Drill",
   "workbench.recipe.pick": "Pick",
   "workbench.recipe.planks": "Planks",
   "workbench.recipe.stone_blocks": "Stone blocks",
@@ -375,6 +376,7 @@
   "stockpile.rejects": "[ ] %s",
   "stockpile.group.food": "Food",
   "stockpile.group.material": "Materials",
+  "stockpile.group.ore": "Ore",
   "stockpile.group.seed": "Seeds",
   "stockpile.group.tool": "Tools",
   "stockpile.group.valuable": "Valuables"

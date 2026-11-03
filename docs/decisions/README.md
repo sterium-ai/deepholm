@@ -79,6 +79,7 @@ all with one size rule.
 | [068](068-vertical-links-and-region-graph.md) | Map layers, step L3: vertical links, region graph, link edges |
 | [069](069-viewer-active-layer.md) | Map layers, step L4: the viewer draws one active layer |
 | [070](070-wild-species-and-populations.md) | Wild species, animal actors and population dynamics |
+| [071](071-underground-layers.md) | Underground layers (F4): seed-only generation, tunnel discovery, drill, ores |
 
 ## Renumbered records (redirects)
 

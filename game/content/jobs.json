@@ -9,7 +9,7 @@
         {"item": null, "weight": 55}
       ]}}},
     {"kind": "mine", "labour": "mine", "needs_tool": "pick", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 30, "retry_base_ticks": 20, "retry_cap_ticks": 80,
-      "effects": {"requires_tile": "rock", "set_tile": "floor", "yields": {"placement": "target", "always": ["stone"]}}},
+      "effects": {"requires_tile": "rock", "set_tile": "floor", "vein_ore": true, "yields": {"placement": "target", "always": ["stone"]}}},
     {"kind": "chop", "labour": "chop", "needs_tool": "axe", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 40, "retry_base_ticks": 20, "retry_cap_ticks": 80,
       "effects": {"set_tile": "soil", "yields": {"placement": "target", "always": ["wood"]}}},
     {"kind": "forage", "labour": "forage", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 25,

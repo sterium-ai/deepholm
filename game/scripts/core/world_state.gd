@@ -108,13 +108,10 @@ var _actor_index := ActorIndexType.new()
 var _item_table: ItemTableType
 ## Read-through accessors kept for viewer/debug_scenario.gd's farm stock.
 var _items: Dictionary:
-	get:
-		return _item_table.items
+	get: return _item_table.items
 var _next_item_id: int:
-	get:
-		return _item_table.next_item_id
-	set(value):
-		_item_table.next_item_id = value
+	get: return _item_table.next_item_id
+	set(value): _item_table.next_item_id = value
 var _tool_store: ToolItemStoreType
 var _item_definitions: Dictionary = {}
 var _object_table: ObjectTableType
@@ -158,6 +155,7 @@ var _combat_giver: CombatGiverType
 var _combat_system: CombatSystemType
 var _approach_giver: ApproachGiverType
 var _construction: ConstructionSystemType
+var _layer_discovery: LayerDiscovery # F4 (ADR 071): tunnels discover underground layers
 var _construction_giver: ConstructionGiverType
 var _crafting: CraftingSystem # F2 (ADR 061): workbench targets, orders and bills
 var _craft_giver: CraftGiver
@@ -243,6 +241,7 @@ func _build_systems() -> void:
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
+	_layer_discovery = LayerDiscovery.new(self); _construction.on_site_completed = _layer_discovery.on_site_completed
 	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, func(kind: String, tile: Vector3i) -> String: return _tool_store.spawn_ground(kind, tile) if is_tool_kind(kind) else "",
 		_tool_store.set_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit, _zone_table.accepts_item_at)
 	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
