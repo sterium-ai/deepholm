@@ -276,7 +276,7 @@ func _refresh(snapshot: Dictionary) -> void:
 		# file draws no body for one.
 		if hp[row] >= 0:
 			if moved or (not health_same and (hp[row] != last_hp[row] or max_hp[row] != last_max[row])):
-				_health_bars[ids[row]] = {"position": Vector2(xs[row] * TILE_SIZE, ys[row] * TILE_SIZE) + HEALTH_BAR_OFFSET,
+				_health_bars[ids[row]] = {"position": _bar_tile_origin(ids[row], Vector2(xs[row], ys[row])) + HEALTH_BAR_OFFSET,
 					"fill": health_bar_fill({"hp": hp[row], "maxHp": max_hp[row]})}
 		elif not health_same and same_rows and last_hp[row] >= 0:
 			_health_bars.erase(ids[row])
@@ -428,6 +428,13 @@ func _drawn_tile_origin(state: Dictionary) -> Vector2:
 	var current := Vector2(state["current_tile"])
 	return previous.lerp(current, float(state["t"])) * TILE_SIZE
 
+## The health bar's tile origin: a colonist's interpolated one while it has a
+## motion state (so an hp change mid-glide does not snap the bar to the
+## destination tile), else `tile` * TILE_SIZE (actors this file draws no body for).
+func _bar_tile_origin(actor_id: String, tile: Vector2) -> Vector2:
+	var state: Dictionary = _motion.get(actor_id, {})
+	return tile * TILE_SIZE if state.is_empty() else _drawn_tile_origin(state)
+
 ## "carry_"|"" + "walk"|"idle" + "_" + facing, matching colonist_frames.tres's
 ## 12 walk/idle/carry animation names, plus the work toil's own animation
 ## (WORK_ANIMATION_BY_JOB_KIND prefix + "_" + facing; there is no carry_ work
@@ -462,8 +469,8 @@ func _animation_name(state: Dictionary) -> String:
 func _work_animation(work_kind: String) -> String:
 	return String(WORK_ANIMATION_BY_JOB_KIND.get(work_kind, ""))
 
-## Applies one colonist's current motion state to its sprite, both item
-## markers, and the animation frame -- called from refresh() (t as last
+## Applies one colonist's current motion state to its sprite, its badges,
+## its health bar, and the animation frame -- called from refresh() (t as last
 ## computed) and from advance() (t just recomputed from real elapsed time).
 ## The frame is set explicitly from floor(t * frame_count) -- or, for a pack
 ## work animation, from the unclamped glide clock so the swing loops once per
@@ -495,3 +502,7 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	var trapped_marker: SpriteRecordType = _trapped_markers.get(colonist_id)
 	if trapped_marker != null:
 		trapped_marker.position = tile_origin + TRAPPED_MARKER_OFFSET
+	# The bar glides with the head too, or it crosses the face mid-step (B6).
+	var bar: Dictionary = _health_bars.get(colonist_id, {})
+	if not bar.is_empty():
+		bar["position"] = tile_origin + HEALTH_BAR_OFFSET
