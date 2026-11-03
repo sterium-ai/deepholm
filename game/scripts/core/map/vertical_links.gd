@@ -1,9 +1,10 @@
 extends RefCounted
 
 ## Vertical links (ADR 045 §3, ADR 068): stairs, ramps and tunnels join (x, y, z) and
-## (x, y, z + 1), straight up and down only. A link exists while the upper tile declares
-## link_down, the lower one link_up, and both are colony-passable. Links are derived from the
-## map (objects' link_up / link_down flags), never saved: a load rebuilds them.
+## (x, y, z + 1), straight up and down only. z grows underground, so z is the upper end and
+## z + 1 the lower one: a link exists while the upper tile declares link_down, the lower one
+## link_up, and both are colony-passable. Links are derived from the map (objects' link_up /
+## link_down flags), never saved: a load rebuilds them.
 ## Owned by RegionMap, which feeds on_tile_changed() from TileGrid.on_passability_changed().
 
 const UP := 1
@@ -15,9 +16,11 @@ var _layer_count: int
 var _layer_size: int
 var _passable: Callable
 var _link_flags: Callable
-## _up[i] == 1: a link between flat index i and i + _layer_size (i on layers 0 .. count - 2).
-var _up := PackedByteArray()
-var _count := 0
+## _down[i] == 1: a link between flat index i (upper end) and i + _layer_size (lower end).
+var _down := PackedByteArray()
+## The upper ends of every link as flat indices, ascending: what links() and the region graph
+## iterate, so neither scans the map.
+var _upper := PackedInt32Array()
 
 ## passable(tile: Vector3i) -> bool and link_flags(tile: Vector3i) -> int (UP | DOWN bits) are
 ## Passability.passable_tile() and link_flags(). A single layer has no links and no work.
@@ -28,82 +31,80 @@ func _init(width: int, height: int, layers: int, passable: Callable, link_flags:
 	_layer_size = width * height
 	_passable = passable
 	_link_flags = link_flags
-	_up.resize(_layer_size * (_layer_count - 1))
-	_up.fill(0)
+	_down.resize(_layer_size * (_layer_count - 1))
+	_down.fill(0)
 	if _layer_count < 2 or not _link_flags.is_valid():
 		return
 	for z in _layer_count - 1:
 		for y in _height:
 			for x in _width:
 				if _derive(Vector3i(x, y, z)):
-					_up[z * _layer_size + y * _width + x] = 1
-					_count += 1
+					var index := z * _layer_size + y * _width + x
+					_down[index] = 1
+					_upper.append(index)
 
 func layer_count() -> int:
 	return _layer_count
 
 ## Number of links on the map.
 func size() -> int:
-	return _count
+	return _upper.size()
 
-## True when lower links to the tile right above it.
-func has_link_up(lower: Vector3i) -> bool:
-	if not _in_bounds(lower) or lower.z >= _layer_count - 1:
+## True when tile links to the tile right below it, (x, y, z + 1).
+func has_link_down(tile: Vector3i) -> bool:
+	if not _in_bounds(tile) or tile.z >= _layer_count - 1:
 		return false
-	return _up[_flat(lower)] == 1
+	return _down[_flat(tile)] == 1
 
-## True when upper links to the tile right below it.
-func has_link_down(upper: Vector3i) -> bool:
-	if not _in_bounds(upper) or upper.z < 1:
+## True when tile links to the tile right above it, (x, y, z - 1).
+func has_link_up(tile: Vector3i) -> bool:
+	if not _in_bounds(tile) or tile.z < 1:
 		return false
-	return _up[_flat(upper) - _layer_size] == 1
+	return _down[_flat(tile) - _layer_size] == 1
 
-## Every link's lower tile, in ascending flat index.
+## Every link's upper tile, in ascending flat index.
 func links() -> Array[Vector3i]:
 	var result: Array[Vector3i] = []
-	if _count == 0:
-		return result
-	var index := _up.find(1)
-	while index != -1:
+	for index in _upper:
 		result.append(TileGrid.coord_in(index, _width, _height))
-		index = _up.find(1, index + 1)
 	return result
 
-## Every link's lower tile as a flat index, ascending (RegionMap's graph build).
-func lower_indices() -> PackedInt32Array:
-	var result := PackedInt32Array()
-	var index := _up.find(1) if _count > 0 else -1
-	while index != -1:
-		result.append(index)
-		index = _up.find(1, index + 1)
-	return result
+## Every link's upper tile as a flat index, ascending (RegionMap's graph build); the lower end
+## is index + layer size. O(links).
+func upper_indices() -> PackedInt32Array:
+	return _upper
 
-## Re-derives the two links tile can take part in (below and above it); true when one changed.
+## Re-derives the two links tile can take part in (above and below it); true when one changed.
 func on_tile_changed(tile: Vector3i) -> bool:
 	if _layer_count < 2 or not _in_bounds(tile):
 		return false
 	var changed := false
-	for lower_z: int in [tile.z - 1, tile.z]:
-		if lower_z < 0 or lower_z >= _layer_count - 1:
+	for upper_z: int in [tile.z - 1, tile.z]:
+		if upper_z < 0 or upper_z >= _layer_count - 1:
 			continue
-		var lower := Vector3i(tile.x, tile.y, lower_z)
-		var index := _flat(lower)
-		var now := 1 if _derive(lower) else 0
-		if _up[index] != now:
-			_up[index] = now
-			_count += 1 if now == 1 else -1
-			changed = true
+		var upper := Vector3i(tile.x, tile.y, upper_z)
+		var index := _flat(upper)
+		var now := 1 if _derive(upper) else 0
+		if _down[index] == now:
+			continue
+		_down[index] = now
+		var at := _upper.bsearch(index)
+		if now == 1:
+			_upper.insert(at, index)
+		else:
+			_upper.remove_at(at)
+		changed = true
 	return changed
 
-func _derive(lower: Vector3i) -> bool:
-	var upper := lower + Vector3i(0, 0, 1)
-	var lower_flags: int = _link_flags.call(lower)
+func _derive(upper: Vector3i) -> bool:
+	var lower := upper + Vector3i(0, 0, 1)
 	var upper_flags: int = _link_flags.call(upper)
-	if lower_flags & UP == 0 or upper_flags & DOWN == 0:
+	var lower_flags: int = _link_flags.call(lower)
+	if upper_flags & DOWN == 0 or lower_flags & UP == 0:
 		return false
-	var lower_passable: bool = _passable.call(lower)
 	var upper_passable: bool = _passable.call(upper)
-	return lower_passable and upper_passable
+	var lower_passable: bool = _passable.call(lower)
+	return upper_passable and lower_passable
 
 func _flat(tile: Vector3i) -> int:
 	return tile.z * _layer_size + tile.y * _width + tile.x

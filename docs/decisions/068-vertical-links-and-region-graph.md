@@ -26,10 +26,13 @@ kept regions and rooms on the surface until this step.
    booleans in `objects.schema.json`). `Passability` packs them beside its existing flags
    (`LINK_UP = 4`, `LINK_DOWN = 8`) and answers `passable_tile(tile)` and `link_flags(tile)`.
    No shipped object declares them yet; layer generation (L5) and tunnel building place them.
-2. **What a link is.** `core/map/vertical_links.gd` holds one bit per lower tile: `(x, y, z)`
-   and `(x, y, z + 1)` are linked while the lower tile has `link_up`, the upper `link_down`, and
-   both are colony-passable. A one-sided stair or a blocked end is no link. `on_tile_changed()`
-   re-derives the two links a tile can belong to.
+2. **What a link is.** z grows underground (ADR 045), so `(x, y, z)` is the upper end and
+   `(x, y, z + 1)` the lower one. `core/map/vertical_links.gd` holds one bit per upper tile:
+   the two are linked while the upper tile has `link_down`, the lower `link_up`, and both are
+   colony-passable. A one-sided stair, flags declared the wrong way round or a blocked end is
+   no link. Beside the bits it keeps the links' upper ends as an ascending index, so the
+   region graph and `links()` cost O(links), not O(tiles); `on_tile_changed()` re-derives the
+   two links a tile can belong to and inserts or removes them in the index.
 3. **Never saved.** Links are rebuilt from tiles and objects on load, like regions, so neither
    the save format nor `state_hash()` changes. No schema bump.
 4. **Per-layer regions, global ids.** `RegionMap` floods every layer on its own and numbers
@@ -41,8 +44,9 @@ kept regions and rooms on the surface until this step.
    the same component, and an impassable target (a dig or work target) counts through its
    orthogonal neighbours on its own layer only, never through the tile above or below.
 6. **Link edges in RouteSearch.** `set_vertical_links(links)`, called after construction and
-   before `restore()`, adds a tile's link ends as neighbours: the one below before the four
-   planar offsets, the one above after them, so discovery stays in ascending flat index.
+   before `restore()`, adds a tile's link ends as neighbours: the one above (z - 1) before the
+   four planar offsets, the one below (z + 1) after them, so discovery stays in ascending flat
+   index.
    Crossing costs the destination tile's `cost_fn`. The heuristic becomes the 3D Manhattan
    distance × `min_cost`, consistent because every step changes it by at most one tile. The
    f/h/latest-pushed tie-break is unchanged; without links, or with z = 0 everywhere, the

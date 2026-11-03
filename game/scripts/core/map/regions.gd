@@ -204,9 +204,9 @@ func _rebuild_graph() -> void:
 	_labels.resize(_next_id)
 	for id in _next_id:
 		_labels[id] = id
-	for lower in _links.lower_indices():
-		var a := _region_of[lower]
-		var b := _region_of[lower + _layer_size]
+	for upper in _links.upper_indices():
+		var a := _region_of[upper]
+		var b := _region_of[upper + _layer_size]
 		if a != 0 and b != 0:
 			_union(_labels, a, b)
 	for id in _next_id:

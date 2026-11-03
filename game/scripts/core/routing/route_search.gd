@@ -24,8 +24,8 @@ const STATUS_UNREACHABLE := "unreachable"
 ## Neighbours are discovered in row-major order (y, then x), i.e. ascending flat index on one
 ## layer (ADR 045 §2); with the frontier order below this fixes which of several equally cheap
 ## paths is returned. The offsets already are in that order; they stay on the current layer.
-## With set_vertical_links() a link end is a neighbour too (ADR 068): the one below comes before
-## the offsets and the one above after them, which keeps the whole order ascending flat index.
+## With set_vertical_links() a link end is a neighbour too (ADR 068): the one above (z - 1) comes
+## before the offsets and the one below (z + 1) after them, which keeps the order ascending flat index.
 const NEIGHBOR_OFFSETS: Array[Vector3i] = [
 	Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0),
 ]
@@ -126,7 +126,7 @@ func resume() -> String:
 		var current := _frontier_pop()
 		var current_cost: float = _g[current]
 		steps += 1
-		if _links != null and _links.has_link_down(current):
+		if _links != null and _links.has_link_up(current):
 			if _relax_link(current, current_cost, current - Vector3i(0, 0, 1)):
 				_last_resume_steps = steps
 				return _status
@@ -162,7 +162,7 @@ func resume() -> String:
 				_last_resume_steps = steps
 				return _status
 			_frontier_push(neighbor, cost)
-		if _links != null and _links.has_link_up(current):
+		if _links != null and _links.has_link_down(current):
 			if _relax_link(current, current_cost, current + Vector3i(0, 0, 1)):
 				_last_resume_steps = steps
 				return _status

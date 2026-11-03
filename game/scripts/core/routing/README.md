@@ -148,8 +148,9 @@ search at once instead of after it exhausts the map.
 `restore()`), lets the search cross the map's `VerticalLinks`
 (`RegionMap.vertical_links()`): a tile with a link down or up gains the link's
 other end as a neighbour, costing that tile's `cost_fn` like a planar step.
-The link below comes before the four planar offsets and the link above after
-them, so discovery stays in ascending flat index; the heuristic becomes the
+z grows underground (ADR 045): the link up to z - 1 comes before the four
+planar offsets and the link down to z + 1 after them, so discovery stays in
+ascending flat index; the heuristic becomes the
 3D Manhattan distance × `min_cost`, still consistent because every step,
 planar or link, changes it by at most one tile. Without links (the default)
 or with an empty link set the search, its snapshot and its path are exactly
