@@ -22,6 +22,8 @@ const STATUS_UNREACHABLE := "unreachable"
 ## Neighbours are discovered in row-major order (y, then x), i.e. ascending flat index on one
 ## layer (ADR 045 §2); with the frontier order below this fixes which of several equally cheap
 ## paths is returned. The offsets already are in that order; they stay on the current layer.
+## With set_vertical_links() a link end is a neighbour too (ADR 068): the one below comes before
+## the offsets and the one above after them, which keeps the whole order ascending flat index.
 const NEIGHBOR_OFFSETS: Array[Vector3i] = [
 	Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0),
 ]
@@ -32,6 +34,8 @@ var _cost_fn: Callable
 var _bounds_min: Vector3i
 var _bounds_max: Vector3i
 var _min_cost: float
+## VerticalLinks (core/map/vertical_links.gd) or null: null keeps the search on its start's layer.
+var _links = null
 
 var _status: String = STATUS_SEARCHING
 ## Best parent of every discovered tile except _start, in discovery order (snapshot()'s
@@ -83,6 +87,12 @@ func _init(start: Vector3i, target: Vector3i, cost_fn: Callable,
 	_g[start] = 0.0
 	_frontier_push(start, 0.0)
 
+## Lets the search cross vertical links (ADR 068): call right after construction (and before
+## restore()) with the map's current links, as with cost_fn. A crossing costs the destination
+## tile's cost, like a planar step. Without it the search never leaves its start's layer.
+func set_vertical_links(links) -> void:
+	_links = links
+
 ## "searching", "found" or "unreachable"; the last two are terminal.
 func get_status() -> String:
 	return _status
@@ -96,7 +106,8 @@ func get_path() -> Array[Vector3i]:
 
 ## Advances by at most STEP_BUDGET expansions. Terminal statuses are sticky; unreachable is only
 ## reported once the bounded space is exhausted, never because the budget ran out. h is
-## consistent (a step changes the Manhattan distance by 1 and costs >= min_cost), so a closed
+## consistent (a step, planar or link, changes the 3D Manhattan distance by 1 and costs
+## >= min_cost), so a closed
 ## tile's g is final. FOUND at the target's discovery is a cheapest path: any other one leaves
 ## through an open tile o with f(o) >= f(current) and costs >= g(current) + cost(target) (ADR 054).
 func resume() -> String:
@@ -113,6 +124,10 @@ func resume() -> String:
 		var current := _frontier_pop()
 		var current_cost: float = _g[current]
 		steps += 1
+		if _links != null and _links.has_link_down(current):
+			if _relax_link(current, current_cost, current - Vector3i(0, 0, 1)):
+				_last_resume_steps = steps
+				return _status
 		for offset in NEIGHBOR_OFFSETS:
 			var neighbor := current + offset
 			if neighbor == _start:
@@ -145,6 +160,10 @@ func resume() -> String:
 				_last_resume_steps = steps
 				return _status
 			_frontier_push(neighbor, cost)
+		if _links != null and _links.has_link_up(current):
+			if _relax_link(current, current_cost, current + Vector3i(0, 0, 1)):
+				_last_resume_steps = steps
+				return _status
 	if _open.is_empty():
 		_status = STATUS_UNREACHABLE
 		_heap.clear()
@@ -203,6 +222,34 @@ func restore(state: Dictionary) -> void:
 		var g: float = _g[tile]
 		_frontier_push(tile, g)
 
+## resume()'s neighbour rule for a link end (full bounds test, since z changes); true when it
+## reached the target and the search is FOUND.
+func _relax_link(current: Vector3i, current_cost: float, neighbor: Vector3i) -> bool:
+	if neighbor == _start:
+		return false
+	var known := _came_from.has(neighbor)
+	if known and not _open.has(neighbor):
+		return false
+	if not _in_bounds(neighbor):
+		return false
+	var edge_cost := _cost_of(neighbor)
+	if edge_cost <= 0.0:
+		return false
+	assert(edge_cost >= _min_cost, "RouteSearch: a tile cost below min_cost makes the heuristic inadmissible")
+	var cost := current_cost + edge_cost
+	if known:
+		var best: float = _g[neighbor]
+		if cost >= best:
+			return false
+	_came_from[neighbor] = current
+	_g[neighbor] = cost
+	if neighbor == _target:
+		_status = STATUS_FOUND
+		_path = _reconstruct_path(neighbor)
+		return true
+	_frontier_push(neighbor, cost)
+	return false
+
 func _reconstruct_path(end: Vector3i) -> Array[Vector3i]:
 	var path: Array[Vector3i] = [end]
 	var cursor := end
@@ -244,7 +291,8 @@ func _in_bounds(tile: Vector3i) -> bool:
 
 ## Opens tile (or re-opens it at a lower g) with the next insertion number.
 func _frontier_push(tile: Vector3i, g: float) -> void:
-	var h := float(TileGrid.manhattan(tile, _target)) * _min_cost
+	# 3D Manhattan inline (TileGrid.manhattan() is planar): a link step changes |dz| by 1.
+	var h := float(absi(tile.x - _target.x) + absi(tile.y - _target.y) + absi(tile.z - _target.z)) * _min_cost
 	var seq := _entry_tile.size()
 	_entry_f.append(g + h)
 	_entry_h.append(h)

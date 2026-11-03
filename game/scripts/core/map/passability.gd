@@ -17,6 +17,9 @@ const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
 
 const PASSABLE := 1
 const DOOR := 2
+## Vertical link ends (ADR 045 §3, ADR 068): the object declares link_up / link_down.
+const LINK_UP := 4
+const LINK_DOWN := 8
 
 var _content: ContentRegistryType
 var _tile_grid: TileGridType
@@ -53,6 +56,7 @@ func _init(content: ContentRegistryType, tile_grid: TileGridType, object_table: 
 	_actor_faction = actor_faction
 	_find_colonist = find_colonist
 	tile_grid.bind_passability(refresh_cell, reset_cells, passable_at, door_at, passable_mask, room_cell_flags)
+	tile_grid.bind_links(passable_tile, link_flags)
 
 ## The public rule as a Dictionary, for callers outside the hot paths.
 func passability(tile: Vector3i, faction_id: String = "colony") -> Dictionary:
@@ -77,10 +81,22 @@ func door_at(x: int, y: int) -> bool:
 		return false
 	return _flags[_fresh_index(Vector3i(x, y, TileGridType.SURFACE))] & DOOR != 0
 
-## Layer 0's passable_at() as 1/0, row-major (RegionMap's full build).
+## passability(tile)["passable"] (colony) on any layer; false out of bounds.
+func passable_tile(tile: Vector3i) -> bool:
+	if not _tile_grid.contains(tile):
+		return false
+	return _colony_passable[_fresh_index(tile)] == 1
+
+## tile's declared link ends: bit 1 = link_up, bit 2 = link_down (VerticalLinks); 0 out of bounds.
+func link_flags(tile: Vector3i) -> int:
+	if not _tile_grid.contains(tile):
+		return 0
+	return _flags[_fresh_index(tile)] >> 2 & 3
+
+## passable_tile() of every tile as 1/0 in flat-index order (RegionMap's full build).
 func passable_mask() -> PackedByteArray:
 	_refresh_all()
-	return _colony_passable.slice(0, _tile_grid.layer_size())
+	return _colony_passable.duplicate()
 
 ## Layer 0's passable_at() (bit 1) and door_at() (bit 2), row-major (RoomMap's full build).
 func room_cell_flags() -> PackedByteArray:
@@ -145,6 +161,10 @@ func _write_cell(index: int) -> void:
 				cost = int(object_definition.get("move_cost", 0))
 			if bool(object_definition.get("is_door", false)):
 				flags |= DOOR
+			if bool(object_definition.get("link_up", false)):
+				flags |= LINK_UP
+			if bool(object_definition.get("link_down", false)):
+				flags |= LINK_DOWN
 	elif index < _tile_grid.tiles.size():
 		if not _tile_rule_by_kind.has(tile_kind):
 			var tile_definition: Dictionary = _tile_definitions.get(tile_kind, {})
