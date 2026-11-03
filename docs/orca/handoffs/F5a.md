@@ -111,25 +111,33 @@ in a stockpile that later rejects tools, as an F5a limitation (follow-up F5a-b).
 rebased onto 203129a so its `BACKLOG.md` carries that text; this branch's own "pending" bullet
 was dropped in favour of the owner's.
 
+## Preflight before round 3: rebased onto B6 (7a9ff1e)
+
+The review preflight refused the branch: "1 commit(s) behind origin/main with code changes (3
+file(s))". That commit is B6 7a9ff1e (`viewer/colonist_sprites.gd`, `test_colonist_sprites.gd`,
+`test_colonist_panel_toil.gd`, its handoff and its `BACKLOG.md` row; no core file). Fetched
+and rebased: no conflict (`BACKLOG.md` merged cleanly, different rows). On the rebased head: warnings gate OK (2801, baseline 2803), budgets OK,
+full suite below.
+
 ## Branch and commit
 
-- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 203129a
-  (3e7ba13 + B7 2126574, viewer/tests only, + the owner's backlog note), four commits: 5f5edb1
-  (the feature, squashed and rebased onto L2), 9c38844 (review round 1 fixes), c5c8730 (review
-  round 2 tests) and the round-3 commit that carries this report (`git log origin/main..HEAD`).
-  Not pushed.
+- Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 7a9ff1e
+  (3e7ba13 + B7 2126574 + the owner's backlog note 203129a + B6 7a9ff1e; none touches the core),
+  five commits: 49f30b9 (the feature, squashed and rebased onto L2), b228427 (review round 1
+  fixes), c721d3a (review round 2 tests), 0bf839a (owner approvals recorded) and the commit that
+  carries this report (`git log origin/main..HEAD`). Not pushed.
 - Earlier history: written on 73d0fa6 as v7 -> v8 (`all 132 test(s) PASS [745s]`), rebased onto
   F3 (32bfb81) as v8 -> v9 (`all 133 test(s) PASS [823s]`), now on L2 as v9 -> v10.
 - **Owner coordination note:** ADRs up to 063 are taken (this is **064**); `world_state.gd` must
   not grow (767 -> 767, four statements edited in place); new code uses `TileGrid` helpers.
 
-## Final suite line (branch head, rebased onto 203129a)
+## Final suite line (branch head, rebased onto 7a9ff1e)
 
 ```
-run_tests: all 134 test(s) PASS  [885s]
+run_tests: all 134 test(s) PASS  [784s]
 ```
 
-`origin/main` (203129a) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
+`origin/main` (7a9ff1e) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
 
 ## Design, line by line
 
@@ -205,7 +213,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [885s]
+tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [784s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2801 warning(s), none above baseline (2803)
@@ -257,11 +265,11 @@ unchanged; unknown, unsorted or repeated groups, non-list groups, priority 0 or 
 zone with a priority are `schema_error`; the v10 fixture re-encodes unchanged (L2's v9 check,
 moved to v10 as F2, F3 and L2 did); the v1-v8 fixtures now load at v10.
 
-Assert sites (`_expect(`/`_fail(`, `origin/main` 203129a -> branch): `test_save_migration` 149 -> 164,
+Assert sites (`_expect(`/`_fail(`, `origin/main` 7a9ff1e -> branch): `test_save_migration` 149 -> 164,
 `test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 62. No test removed, skipped
 or loosened.
 
-## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets, unchanged at 203129a: B7 touched no core file)
+## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets, unchanged at 7a9ff1e: B7 and B6 touched no core file)
 
 Core total: **22,417 lines** [21,818 lines]. The script counted 109 files in this worktree and
 108 in a `git archive` copy of `origin/main`; the branch adds no core file (both track 108).
