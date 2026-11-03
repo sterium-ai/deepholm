@@ -77,6 +77,7 @@ all with one size rule.
 | [066](066-happiness-from-thoughts.md) | Happiness from a thought table |
 | [067](067-forest-zones-and-saplings.md) | Forest zones, saplings and replanting |
 | [068](068-vertical-links-and-region-graph.md) | Map layers, step L3: vertical links, region graph, link edges |
+| [069](069-viewer-active-layer.md) | Map layers, step L4: the viewer draws one active layer |
 
 ## Renumbered records (redirects)
 

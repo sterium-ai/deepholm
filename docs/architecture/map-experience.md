@@ -283,29 +283,44 @@ godot --headless --path game --script res://scripts/tests/test_map_experience_fp
 godot --path game --script res://scripts/tests/test_map_experience_fps_measurement.gd -- --capture
 ```
 
-## Layers (planned, ADR 045)
+## Layers (ADR 045, ADR 069)
 
-Not implemented yet: this is the presentation half of
-[ADR 045](../decisions/045-map-layers.md), which the L4 step and F4 build. Until then
-the map has one layer and nothing below applies.
+The presentation half of [ADR 045](../decisions/045-map-layers.md), built by step L4
+([ADR 069](../decisions/069-viewer-active-layer.md)); F4 adds the rest (see the end of this
+section).
 
 - **One active layer.** The map shows exactly one layer at a time, starting on the surface
-  (`z = 0`). The active layer is viewer state like the camera: never serialized, reset to
-  the surface by a load or a restart, and changing it issues no command.
-- **Switching.** Layer up/down buttons next to the toolbar and the `PageUp`/`PageDown`
-  keys move one layer; only layers the world reports (`layer_count`) are reachable. A
-  label shows the active layer ("Surface", "Layer 1", …). Switching keeps the camera's
-  pan and zoom (all layers share the map size) and discards an unfinished rectangle, like
-  zooming or loading does.
-- **What is drawn.** Tiles, objects, construction sites, designations and actors are drawn
-  for the active layer only. Each layer has its own `TileMapLayer` content; the first
-  switch to a layer pays one full rebuild of it, later switches reuse it.
+  (`z = 0`). The active layer (`MapView.active_layer`) is viewer state like the camera: never
+  serialized, reset to the surface by `set_world()` (a load or a restart), and changing it
+  issues no command, so `state_hash()` does not move.
+- **Switching.** The ▲/▼ buttons in the control bar and the `PageUp`/`PageDown` keys move one
+  layer (`PageUp` up, towards the surface); only layers the world reports are reachable. A
+  label beside the buttons shows the active layer as "z N" (glyphs and notation, so no
+  text-table keys). Switching keeps the camera's pan and zoom (all layers share the map size)
+  and discards an unfinished rectangle, like zooming or loading does.
+- **What is drawn.** Tiles, objects, construction sites, designations, ground items,
+  stockpile zones, colonists and other actors are drawn for the active layer only. The tile
+  and object `TileMapLayer`s hold one layer: a switch rebuilds them in full from that layer
+  (one O(width × height) pass per switch). A switch is a player action, so v1 rebuilds rather
+  than caching each layer; reusing a cached layer is a later optimisation, not part of v1.
+  Measured on A9's 128×128 world with 1,000 actors (`bench_viewer_layer_switch.gd`, headless):
+  about 20–22 ms to a rock layer and 23–27 ms back to the surface, within the ≤ 50 ms budget
+  per switch (owner amendment `c769a48`); the per-cell GDScript of the full tile pass is most
+  of it (see the L4 handoff). Fitting one frame (16.7 ms) is the target of the cached-reuse
+  task L4b.
 - **Dirty cells.** `get_dirty_cells_since()` carries `Vector3i`. The viewer consumes the whole
-  tail on every `refresh()` as today, applies cells of the active layer, and keeps the
-  others as pending for their layer, so a layer redrawn on switch never shows stale tiles.
+  tail on every `refresh()`, applies cells of the active layer and drops the others; a layer
+  is rebuilt in full when it becomes active, so it never shows stale tiles. A deep layer is
+  read from a copy of its tiles (every layer, the surface too), re-read when one of its cells
+  is dirty.
 - **Coordinates.** `screen_to_tile()` and `tiles_in_rectangle()` stay planar and the viewer
-  attaches the active layer: every preview and command names `Vector3i(x, y,
-  active_layer)`. A rectangle never spans layers.
-- **Links.** Stair, ramp and tunnel tiles are drawn on both layers they join, so the player
-  sees where a path goes up or down. The colonist panel and the "center colonists" action
-  name an actor's layer; centering on an actor on another layer switches to it.
+  attaches the active layer: every command it builds carries `payload.z = active_layer`
+  (commands aimed at an existing site, workbench or stockpile keep that thing's own `z`). A
+  rectangle never spans layers.
+- **Links.** Each end of a vertical link (an object whose content declares `link_up` or
+  `link_down`, ADR 068) is drawn on its own layer with a small white triangle: up at the
+  tile's top-right corner, down at its bottom-right. The two ends of a stair are two objects,
+  one per layer, so the player sees on each layer where a path goes up or down.
+- **Rooms** stay surface-only (ADR 068 §8), so the room label is empty off the surface.
+- **Not yet (F4).** The colonist panel and the "center colonists" action do not name an
+  actor's layer, and centering on an actor on another layer does not switch to it.

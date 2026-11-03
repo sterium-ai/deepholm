@@ -58,6 +58,13 @@ func set_tick_driver(driver) -> void:
 func set_visible_for_art(enabled: bool) -> void:
 	visible = enabled
 
+## The one layer map_view.gd draws (ADR 045 §7); actors on any other layer
+## are dropped like dead ones. map_view.gd sets it, then calls refresh().
+var active_layer := 0
+
+func set_active_layer(z: int) -> void:
+	active_layer = z
+
 func set_world(world_ref) -> void:
 	world = world_ref
 	_actors.clear()
@@ -90,10 +97,11 @@ func refresh(snapshot: Dictionary = {}) -> void:
 	var factions: Array = snapshot["factions"]
 	var xs: Array = snapshot["x"]
 	var ys: Array = snapshot["y"]
+	var zs: Array = snapshot["z"]
 	var seen := {}
 	# The actors with a health component that are not colonists (colonist_sprites.gd draws those).
 	for row in (ids.size() if worker.has(0) else 0):
-		if worker[row] == 1 or hp[row] < 0:
+		if worker[row] == 1 or hp[row] < 0 or zs[row] != active_layer:
 			continue
 		var actor_id: String = ids[row]
 		var key := art_key_of(kinds[row], factions[row])

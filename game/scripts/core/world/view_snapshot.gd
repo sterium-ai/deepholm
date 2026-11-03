@@ -15,7 +15,7 @@ extends RefCounted
 ##   ids              String column, every actor in actor-table order; row i of
 ##                    every column below is ids[i]
 ##   kinds, factions  String columns: "kind", "factionId" ("colony" when absent)
-##   x, y             int columns
+##   x, y, z          int columns (z: the actor's layer, ADR 045 §7)
 ##   worker           int column, 1 for an actor with a worker component
 ##                    (the get_colonists() roster)
 ##   carrying         String column, the carried kind (ADR 037 "carrying" view) or ""
@@ -78,6 +78,7 @@ static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRe
 	var factions := PackedStringArray()
 	var xs := PackedInt32Array()
 	var ys := PackedInt32Array()
+	var zs := PackedInt32Array()
 	var worker := PackedByteArray()
 	var carrying := PackedStringArray()
 	var tools := PackedStringArray()
@@ -96,11 +97,13 @@ static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRe
 		var faction: String = actor.get("factionId", "colony")
 		var x: int = actor["x"]
 		var y: int = actor["y"]
+		var z: int = actor.get("z", 0)
 		ids.append(id)
 		kinds.append(kind)
 		factions.append(faction)
 		xs.append(x)
 		ys.append(y)
+		zs.append(z)
 		if kind != last_kind or ids.size() == 1: # runs of one kind skip the lookup
 			if not worker_kinds.has(kind):
 				worker_kinds[kind] = ActorTableType.has_component(actor, "worker", content)
@@ -130,7 +133,8 @@ static func _add_columns(snapshot: Dictionary, actors: Array, content: ContentRe
 	# stored as a read-only Array (a native copy), which a reader typing it as the
 	# Packed*Array converts back into its own copy.
 	snapshot.merge({"ids": _frozen(Array(ids)), "kinds": _frozen(Array(kinds)), "factions": _frozen(Array(factions)),
-		"x": _frozen(Array(xs)), "y": _frozen(Array(ys)), "worker": _frozen(Array(worker)),
+		"x": _frozen(Array(xs)), "y": _frozen(Array(ys)), "z": _frozen(Array(zs)),
+		"worker": _frozen(Array(worker)),
 		"carrying": _frozen(Array(carrying)), "tool_kinds": _frozen(Array(tools)), "trapped": _frozen(Array(trapped)),
 		"work_kinds": _frozen(Array(work_kinds)), "hp": _frozen(Array(hp)), "max_hp": _frozen(Array(max_hp)),
 		"workers_by_id": _frozen(Array(_workers_by_id(ids, worker)))})

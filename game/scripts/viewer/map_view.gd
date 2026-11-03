@@ -16,6 +16,7 @@ const DesignationOverlayType = preload("res://scripts/viewer/designation_overlay
 const DragPreviewType = preload("res://scripts/viewer/drag_preview.gd")
 const ActorSpritesType = preload("res://scripts/viewer/actor_sprites.gd")
 const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
+const LayerSliceType = preload("res://scripts/viewer/layer_slice.gd")
 
 const TILE_SIZE := 16.0
 const GROUND_ITEM_ICON_SIZE := TILE_SIZE * 0.6
@@ -75,8 +76,17 @@ const GROUND_ITEM_COLORS := {
 }
 const STOCKPILE_COUNT_TEXT_COLOR := Color.WHITE
 const STOCKPILE_COUNT_FONT_SIZE := 10
+## Stair/ramp markers on the active layer (ADR 069): a small triangle per link direction.
+const LINK_MARKER_COLOR := Color(1.0, 1.0, 1.0, 0.9)
 
 var world: WorldStateType
+## The one layer drawn (ADR 045 §7, ADR 069): viewer state only, never saved, never a command.
+## 0 is the surface. Commands built here carry it as their z.
+var active_layer := 0
+var _layer := LayerSliceType.new()
+
+## Emitted after set_active_layer() switched the drawn layer.
+signal layer_changed(z: int)
 
 ## Emitted once per completed drag (mouse-up), carrying every tile in the
 ## resulting axis-aligned rectangle in row-major order. A plain click with no
@@ -270,6 +280,9 @@ func set_tick_driver(driver) -> void:
 func set_world(world_ref: WorldStateType) -> void:
 	cancel_selection()
 	world = world_ref
+	active_layer = 0
+	_layer.read(world, 0)
+	_share_active_layer()
 	_take_snapshot({})
 	_resize_for_world()
 	_colonist_sprites.set_world(world_ref)
@@ -299,6 +312,37 @@ func _resize_for_world() -> void:
 ## flat-colour path already does by re-reading world.get_tiles() every draw.
 ## `snapshot` is this tick's WorldState.get_view_snapshot() (boot.gd takes one per
 ## tick and hands it to every panel); {} takes a fresh one.
+## Number of layers the attached world's map has (1 without a world).
+func layer_count() -> int:
+	return LayerSliceType.layer_count(world)
+
+## Draws layer `z` (clamped to the map's layers) instead of the current one. Viewer-only: no
+## command is issued and the world is not touched, so state_hash() is unchanged. The camera
+## stays where it is; an in-progress selection is cancelled, since its tiles were on the old layer.
+func set_active_layer(z: int) -> void:
+	var layer := clampi(z, 0, layer_count() - 1)
+	if layer == active_layer:
+		return
+	cancel_selection()
+	active_layer = layer
+	_layer.read(world, layer)
+	_colonist_sprites.set_active_layer(layer)
+	_actor_sprites.set_active_layer(layer)
+	_designation_overlay.set_active_layer(layer)
+	_refresh_tile_map(true)
+	# A switch changes nothing in the world: redraw the sprites from the snapshot already taken.
+	refresh(_snapshot if _snapshot_world == world else {})
+	layer_changed.emit(layer)
+
+## One layer deeper (delta > 0) or shallower (delta < 0).
+func step_layer(delta: int) -> void:
+	set_active_layer(active_layer + delta)
+
+func _share_active_layer() -> void:
+	_colonist_sprites.active_layer = active_layer
+	_actor_sprites.active_layer = active_layer
+	_designation_overlay.active_layer = active_layer
+
 func refresh(snapshot: Dictionary = {}) -> void:
 	_take_snapshot(snapshot)
 	_update_preview()
@@ -503,13 +547,12 @@ func _drag_preview_changes() -> Array[Vector2i]:
 		# Cells retention dropped unread are unknown: re-validate the whole drag.
 		if bool(dirty["truncated"]):
 			changed.append_array(tiles_in_rectangle(_drag_start, _drag_current))
-		# The viewer draws the surface until L4's active layer (ADR 045 §7): deeper cells are
-		# consumed, not drawn.
+		# Only the active layer is drawn (ADR 045 §7): other layers' cells are consumed, not drawn.
 		for cell: Vector3i in dirty["cells"]:
-			if cell.z == TileGrid.SURFACE:
+			if cell.z == active_layer:
 				changed.append(Vector2i(cell.x, cell.y))
 		for tile: Vector3i in designations["tiles"]:
-			if tile.z == TileGrid.SURFACE:
+			if tile.z == active_layer:
 				changed.append(Vector2i(tile.x, tile.y))
 	_drag_preview_changes_tick = world.get_tick()
 	_drag_preview_cells_read = int(dirty["next"])
@@ -556,8 +599,14 @@ func _build_footprint_tiles(origin: Vector2i) -> Array[Vector2i]:
 	return [origin]
 
 func _unhandled_key_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_R:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if event.keycode == KEY_R:
 		toggle_build_orientation()
+	elif event.keycode == KEY_PAGEUP:
+		step_layer(-1)
+	elif event.keycode == KEY_PAGEDOWN:
+		step_layer(1)
 
 func _gui_input(event: InputEvent) -> void:
 	if not tool_enabled:
@@ -611,7 +660,7 @@ func _commit_zone(start: Vector2i, end: Vector2i) -> void:
 		"command_id": "viewer_zone_add_%d_%d" % [world.get_tick(), _next_zone_command_id],
 		"tick": world.get_tick(),
 		"type": "zone_add",
-		"payload": {"x": min_x, "y": min_y, "z": TileGrid.SURFACE, "width": max_x - min_x + 1, "height": max_y - min_y + 1},
+		"payload": {"x": min_x, "y": min_y, "z": active_layer, "width": max_x - min_x + 1, "height": max_y - min_y + 1},
 	}
 	command["payload"].merge(_zone_payload)
 	var result: Dictionary = world.apply(command)
@@ -637,7 +686,7 @@ func _commit_build(tile: Vector2i) -> void:
 		"command_id": "viewer_build_%d_%d" % [world.get_tick(), _next_build_command_id],
 		"tick": world.get_tick(),
 		"type": "build",
-		"payload": {"kind": _build_kind, "x": tile.x, "y": tile.y, "z": TileGrid.SURFACE, "orientation": _build_orientation if _build_rotatable else ""},
+		"payload": {"kind": _build_kind, "x": tile.x, "y": tile.y, "z": active_layer, "orientation": _build_orientation if _build_rotatable else ""},
 	}
 	var result: Dictionary = world.apply(command)
 	build_committed.emit(result)
@@ -653,6 +702,20 @@ func _commit_build(tile: Vector2i) -> void:
 ## cleared and rebuilt every tick.
 var last_tile_map_cells_touched: int = 0
 
+## The active layer's water/rock cells as a 1/0 byte mask padded by one cell on every side
+## ((width + 2) x (height + 2)), so a soil cell's 8 neighbour checks are byte reads and an
+## out-of-map neighbour reads 0. A layer switch redraws every cell (ADR 069 §3), and per-call
+## neighbour checks made that rebuild cost several frames. Rebuilt by every full rebuild,
+## patched per dirty cell.
+var _shore_mask := PackedByteArray()
+var _shore_stride := 0
+## Grass variant index per surface cell for _grass_variant_coords(), -1 until computed; the
+## key is the seed and size it was computed for.
+var _variant_cache := PackedInt32Array()
+var _variant_cache_key := Vector3i(-1, -1, -1)
+## True while a full rebuild draws onto just-cleared layers: erase_cell() is then a no-op, skipped.
+var _cleared := false
+
 ## Populates the TileMapLayer from world state via TILE_ATLAS_MAP. A no-op
 ## while art is disabled, so toggling to colour mode leaves the layer's last
 ## contents untouched (it is hidden, not drawn) instead of doing wasted work
@@ -664,24 +727,26 @@ var last_tile_map_cells_touched: int = 0
 func _refresh_tile_map(force_full: bool) -> void:
 	if not _art_enabled or world == null:
 		return
+	_prepare_variant_cache()
 	if force_full:
 		_tile_map_layer.clear()
 		_grass_overlay_layer.clear()
 		_object_tile_map_layer.clear()
-		var tiles: Array[String] = world.get_tiles()
+		_layer.read(world, active_layer)
+		var tiles: Array[String] = _layer.tiles()
 		var width: int = world.get_map_width()
 		var height: int = world.get_map_height()
-		var touched := 0
-		for y in height:
-			for x in width:
-				var kind: String = tiles[y * width + x]
-				_set_tile_map_cell(x, y, kind)
-				_set_decor_or_object_cell(x, y, kind, "")
-				touched += 1
-		for object_entry in world.get_objects():
+		var layer_offset := active_layer * width * height
+		var soil_cells := PackedInt32Array()
+		var foreign := _rebuild_shore_mask(tiles, layer_offset, width, height, soil_cells)
+		var touched := width * height
+		_cleared = true
+		_draw_cleared_layer(tiles, layer_offset, width, height, foreign, soil_cells)
+		_cleared = false
+		for object_entry in _layer.objects():
 			var ox: int = int(object_entry["x"])
 			var oy: int = int(object_entry["y"])
-			_set_decor_or_object_cell(ox, oy, tiles[oy * width + ox], String(object_entry["kind"]))
+			_set_decor_or_object_cell(ox, oy, tiles[layer_offset + oy * width + ox], String(object_entry["kind"]))
 			touched += 1
 		last_tile_map_cells_touched = touched
 		_dirty_cells_consumed = int(world.get_dirty_cells_since(0)["next"])
@@ -691,13 +756,21 @@ func _refresh_tile_map(force_full: bool) -> void:
 		_refresh_tile_map(true)
 		return
 	var touched := 0
+	# The slice's tiles are a copy: re-read it once when one of its cells changed.
+	var reread := false
 	for dirty_cell: Vector3i in dirty["cells"]:
-		if dirty_cell.z != TileGrid.SURFACE: # consumed, not drawn (ADR 045 §7)
+		if dirty_cell.z == active_layer:
+			if not reread:
+				_layer.read(world, active_layer)
+				reread = true
+			_shore_mask[(dirty_cell.y + 1) * _shore_stride + dirty_cell.x + 1] = 1 if _is_foreign(_layer.tile(dirty_cell.x, dirty_cell.y)) else 0
+	for dirty_cell: Vector3i in dirty["cells"]:
+		if dirty_cell.z != active_layer: # consumed, not drawn (ADR 045 §7)
 			continue
 		var cell := Vector2i(dirty_cell.x, dirty_cell.y)
-		var kind := world.get_tile(cell.x, cell.y)
+		var kind := _layer.tile(cell.x, cell.y)
 		_set_tile_map_cell(cell.x, cell.y, kind)
-		_set_decor_or_object_cell(cell.x, cell.y, kind, world.get_object(cell.x, cell.y))
+		_set_decor_or_object_cell(cell.x, cell.y, kind, _layer.object(cell.x, cell.y))
 		# A dirty cell can flip a neighbouring TILE_SOIL cell's shore
 		# selection -- both its overlay blob shape and its base-layer backing
 		# material -- without that neighbour itself being marked dirty (e.g. a
@@ -712,11 +785,85 @@ func _refresh_tile_map(force_full: bool) -> void:
 			var neighbor: Vector2i = cell + offset
 			if not _inside(neighbor):
 				continue
-			if world.get_tile(neighbor.x, neighbor.y) == WorldStateType.TILE_SOIL:
+			if _layer.tile(neighbor.x, neighbor.y) == WorldStateType.TILE_SOIL:
 				_set_soil_cell(neighbor.x, neighbor.y)
 		touched += 1
 	_dirty_cells_consumed = int(dirty["next"])
 	last_tile_map_cells_touched = touched
+
+## Every cell of the active layer onto the just-cleared tile layers: the same cells
+## _set_tile_map_cell() and _set_decor_or_object_cell(x, y, kind, "") draw, in one pass with
+## each tile kind's atlas entries looked up once instead of per cell, and interior soil (most
+## of a surface layer) drawn inline. A layer switch runs this for every cell (ADR 069 §3), and
+## the per-cell calls cost more than the frame at the A9 scale (bench_viewer_layer_switch.gd).
+func _draw_cleared_layer(tiles: Array[String], offset: int, width: int, height: int,
+		foreign: PackedInt32Array, soil_cells: PackedInt32Array) -> void:
+	var base_by_kind := {}
+	var decor_by_kind := {}
+	for kind in TileAtlasMapType.TILE_ATLAS_MAP:
+		var atlas: Dictionary = TileAtlasMapType.TILE_ATLAS_MAP[kind]
+		base_by_kind[kind] = [int(atlas["source_id"]), atlas["coords"]]
+	for kind in TileAtlasMapType.TILE_DECOR_MAP:
+		var decor: Dictionary = TileAtlasMapType.TILE_DECOR_MAP[kind]
+		decor_by_kind[kind] = [int(decor["source_id"]), decor["coords"]]
+	var tree_ids: Array[Vector2i] = []
+	var tree_source := _object_tile_map_layer.tile_set.get_source(TileAtlasMapType.SOURCE_TREE) as TileSetAtlasSource
+	if tree_source != null and tree_source.get_tiles_count() > 1:
+		for i in tree_source.get_tiles_count():
+			tree_ids.append(tree_source.get_tile_id(i))
+	var seed_value: int = world.get_seed() if world != null else 0
+	var soil_source := int(TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_SOIL]["source_id"])
+	var variants := TileAtlasMapType.TILE_SOIL_VARIANTS
+	var row := _shore_stride
+	# A soil cell beside a foreign (water/rock) one: 8 writes per foreign cell or 8 reads per
+	# soil cell, whichever side is smaller (a rock layer is mostly foreign, a surface mostly soil).
+	var near := PackedByteArray()
+	near.resize(_shore_mask.size())
+	if foreign.size() <= soil_cells.size():
+		for at in foreign:
+			near[at - row - 1] = 1
+			near[at - row] = 1
+			near[at - row + 1] = 1
+			near[at - 1] = 1
+			near[at + 1] = 1
+			near[at + row - 1] = 1
+			near[at + row] = 1
+			near[at + row + 1] = 1
+	else:
+		var mask := _shore_mask
+		for at in soil_cells:
+			if mask[at - row - 1] + mask[at - row] + mask[at - row + 1] + mask[at - 1] + mask[at + 1] \
+					+ mask[at + row - 1] + mask[at + row] + mask[at + row + 1] != 0:
+				near[at] = 1
+	var cache := _variant_cache
+	var soil := WorldStateType.TILE_SOIL
+	var index := offset
+	var cell := 0
+	for y in height:
+		var at := (y + 1) * row + 1
+		for x in width:
+			var kind: String = tiles[index]
+			index += 1
+			var pos := Vector2i(x, y)
+			if kind == soil:
+				if near[at] != 0:
+					_set_soil_cell(x, y)
+				elif cache[cell] >= 0:
+					_tile_map_layer.set_cell(pos, soil_source, variants[cache[cell]])
+				else:
+					_tile_map_layer.set_cell(pos, soil_source, _grass_variant_coords(x, y))
+			else:
+				var base = base_by_kind.get(kind)
+				if base != null:
+					_tile_map_layer.set_cell(pos, base[0], base[1])
+				var decor = decor_by_kind.get(kind)
+				if decor != null:
+					var coords: Vector2i = decor[1]
+					if decor[0] == TileAtlasMapType.SOURCE_TREE and not tree_ids.is_empty():
+						coords = tree_ids[hash(Vector3i(seed_value, x, y)) % tree_ids.size()]
+					_object_tile_map_layer.set_cell(pos, decor[0], coords)
+			at += 1
+			cell += 1
 
 ## Base terrain cell: TILE_ATLAS_MAP's plain/opaque entry for `kind`, except
 ## for a boundary TILE_SOIL cell (one with a water/rock neighbour), which
@@ -730,11 +877,12 @@ func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 		return
 	var coords_pos := Vector2i(x, y)
 	var atlas = TileAtlasMapType.TILE_ATLAS_MAP.get(kind)
-	if atlas == null:
-		_tile_map_layer.erase_cell(coords_pos)
-	else:
+	if atlas != null:
 		_tile_map_layer.set_cell(coords_pos, int(atlas["source_id"]), atlas["coords"])
-	_grass_overlay_layer.erase_cell(coords_pos)
+	elif not _cleared:
+		_tile_map_layer.erase_cell(coords_pos)
+	if not _cleared:
+		_grass_overlay_layer.erase_cell(coords_pos)
 
 ## A TILE_SOIL cell's neighbour-driven layered composition.
 ## tile_atlas_map.gd's grass_shore_selection() resolves this
@@ -753,15 +901,21 @@ func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 ## selection, so it keeps a plain hash-selected grass fill with no overlay.
 func _set_soil_cell(x: int, y: int) -> void:
 	var coords_pos := Vector2i(x, y)
-	var selection := TileAtlasMapType.grass_shore_selection(
-		_is_shore_neighbor(x, y - 1), _is_shore_neighbor(x, y + 1),
-		_is_shore_neighbor(x + 1, y), _is_shore_neighbor(x - 1, y),
-		_is_shore_neighbor(x + 1, y - 1), _is_shore_neighbor(x - 1, y - 1),
-		_is_shore_neighbor(x + 1, y + 1), _is_shore_neighbor(x - 1, y + 1))
+	var mask := _shore_mask
+	var row := _shore_stride
+	var at := (y + 1) * row + x + 1
+	var selection := {}
+	# Most soil is interior (no foreign neighbour, so no selection): skip the lookup for it.
+	if mask[at - row - 1] | mask[at - row] | mask[at - row + 1] | mask[at - 1] | mask[at + 1] \
+			| mask[at + row - 1] | mask[at + row] | mask[at + row + 1] != 0:
+		selection = TileAtlasMapType.grass_shore_selection(
+			mask[at - row] == 1, mask[at + row] == 1, mask[at + 1] == 1, mask[at - 1] == 1,
+			mask[at - row + 1] == 1, mask[at - row - 1] == 1, mask[at + row + 1] == 1, mask[at + row - 1] == 1)
 	if selection.is_empty():
 		var atlas = TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_SOIL]
 		_tile_map_layer.set_cell(coords_pos, int(atlas["source_id"]), _grass_variant_coords(x, y))
-		_grass_overlay_layer.erase_cell(coords_pos)
+		if not _cleared:
+			_grass_overlay_layer.erase_cell(coords_pos)
 		return
 	var backing_kind := _grass_backing_kind(x, y, selection)
 	var backing_atlas = TileAtlasMapType.TILE_ATLAS_MAP[backing_kind]
@@ -782,31 +936,67 @@ func _grass_backing_kind(x: int, y: int, selection: Dictionary) -> String:
 		var neighbor: Vector2i = Vector2i(x, y) + (offset as Vector2i)
 		if not _inside(neighbor):
 			continue
-		var kind := world.get_tile(neighbor.x, neighbor.y)
+		var kind := _layer.tile(neighbor.x, neighbor.y)
 		if kind == WorldStateType.TILE_WATER or kind == WorldStateType.TILE_ROCK:
 			return kind
 	return WorldStateType.TILE_WATER
 
-## True when (x,y) is inside the map and TILE_WATER or TILE_ROCK -- the
-## "foreign neighbour" predicate for the grass overlay above. Out-of-bounds
-## is never foreign: a prairie tile at the map edge with no water/rock
+## TILE_WATER or TILE_ROCK -- the "foreign neighbour" predicate for the grass
+## overlay above, stored in _shore_mask. Out-of-bounds is never foreign (the
+## mask's padding is 0): a prairie tile at the map edge with no water/rock
 ## neighbour is plain interior, not an invented edge against nothing.
-func _is_shore_neighbor(x: int, y: int) -> bool:
-	if not _inside(Vector2i(x, y)):
-		return false
-	var kind := world.get_tile(x, y)
+static func _is_foreign(kind: String) -> bool:
 	return kind == WorldStateType.TILE_WATER or kind == WorldStateType.TILE_ROCK
+
+## Returns the mask indices it set and fills `soil_cells` with the soil ones, for
+## _draw_cleared_layer()'s boundary test.
+func _rebuild_shore_mask(tiles: Array[String], offset: int, width: int, height: int,
+		soil_cells: PackedInt32Array) -> PackedInt32Array:
+	_shore_stride = width + 2
+	_shore_mask.resize(_shore_stride * (height + 2))
+	_shore_mask.fill(0)
+	var index := offset
+	var foreign := PackedInt32Array()
+	var water := WorldStateType.TILE_WATER
+	var rock := WorldStateType.TILE_ROCK
+	var soil := WorldStateType.TILE_SOIL
+	for y in height:
+		var at := (y + 1) * _shore_stride + 1
+		for x in width:
+			var kind: String = tiles[index]
+			if kind == water or kind == rock: # _is_foreign(), inlined for the full rebuild
+				_shore_mask[at + x] = 1
+				foreign.append(at + x)
+			elif kind == soil:
+				soil_cells.append(at + x)
+			index += 1
+	return foreign
 
 ## Discrete prairie variant, chosen by hash(seed, x, y), never by frame --
 ## a pure function of the
 ## world's seed and the cell's own coordinates, so it is stable across pan,
 ## zoom, save and load, and never changes on its own between redraws.
+## Cached per cell (the string hash is the slow part of a full rebuild); the cache is keyed by
+## (seed, width, height), checked once per _refresh_tile_map() in _prepare_variant_cache().
 func _grass_variant_coords(x: int, y: int) -> Vector2i:
 	var variants := TileAtlasMapType.TILE_SOIL_VARIANTS
-	var seed_value: int = world.get_seed() if world != null else 0
-	var key := "%d:%d:%d" % [seed_value, x, y]
-	var index: int = key.hash() % variants.size()
+	var cell := y * _variant_cache_key.y + x
+	var index: int = _variant_cache[cell]
+	if index < 0:
+		var key := "%d:%d:%d" % [_variant_cache_key.x, x, y]
+		index = key.hash() % variants.size()
+		_variant_cache[cell] = index
 	return variants[index]
+
+func _prepare_variant_cache() -> void:
+	var seed_value: int = world.get_seed() if world != null else 0
+	var width: int = world.get_map_width() if world != null else WorldStateType.MAP_WIDTH
+	var height: int = world.get_map_height() if world != null else WorldStateType.MAP_HEIGHT
+	var cache_key := Vector3i(seed_value, width, height)
+	if cache_key != _variant_cache_key:
+		_variant_cache_key = cache_key
+		_variant_cache.resize(width * height)
+		_variant_cache.fill(-1)
 
 ## Object/decor layer cell: an actual placed object (`object_kind`, from
 ## world.get_objects()/get_object()) takes priority when present; otherwise
@@ -826,7 +1016,8 @@ func _set_decor_or_object_cell(x: int, y: int, tile_kind: String, object_kind: S
 	if decor != null:
 		_object_tile_map_layer.set_cell(coords, int(decor["source_id"]), _decor_variant_coords(x, y, decor))
 		return
-	_object_tile_map_layer.erase_cell(coords)
+	if not _cleared:
+		_object_tile_map_layer.erase_cell(coords)
 
 ## The tree decor shows one of its source's tiles per map tile (the pack's
 ## three sizes), chosen by hash(seed, x, y) like the grass variants, never by
@@ -858,16 +1049,17 @@ func _draw() -> void:
 	if not _art_enabled:
 		var tiles: Array[String] = world.get_tiles()
 		var width: int = world.get_map_width()
+		var layer_offset := active_layer * width * world.get_map_height()
 		for y in world.get_map_height():
 			for x in width:
-				var kind: String = tiles[y * width + x]
+				var kind: String = tiles[layer_offset + y * width + x]
 				var color: Color = TILE_COLORS.get(kind, UNKNOWN_TILE_COLOR)
 				draw_rect(Rect2(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE), color, true)
 		# Drawn once for the whole map, never inside the row loop above:
-		# world.get_objects() is O(objects), and iterating it once per row
+		# get_objects() is O(objects), and iterating it once per row
 		# would make this O(height * objects).
 		var object_inset := TILE_SIZE * 0.1
-		for object_entry in world.get_objects():
+		for object_entry in _layer.objects():
 			var object_color: Color = OBJECT_COLORS.get(String(object_entry["kind"]), UNKNOWN_OBJECT_COLOR)
 			draw_rect(Rect2(
 				int(object_entry["x"]) * TILE_SIZE + object_inset,
@@ -882,8 +1074,9 @@ func _draw() -> void:
 		var xs: Array = _snapshot["x"]
 		var ys: Array = _snapshot["y"]
 		var carrying: Array = _snapshot["carrying"]
+		var zs: Array = _snapshot["z"]
 		for row in ids.size():
-			if worker[row] == 0:
+			if worker[row] == 0 or zs[row] != active_layer:
 				continue
 			draw_rect(Rect2(
 				xs[row] * TILE_SIZE + inset,
@@ -904,6 +1097,7 @@ func _draw() -> void:
 				), GROUND_ITEM_COLORS.get(carrying[row], Color.MAGENTA), true)
 	_draw_stockpile_counts()
 	_draw_construction_sites()
+	_draw_link_markers()
 	_drag_preview.draw(self, TILE_SIZE, _visible_tile_rect())
 	for i in _list_tiles.size():
 		var tile := _list_tiles[i]
@@ -915,8 +1109,27 @@ func _draw() -> void:
 		if not valid:
 			draw_line(rect.position + Vector2(3, 3), rect.end - Vector2(3, 3), color, 1.0)
 
+## A stair/ramp object on the active layer gets a triangle per direction it links: up at the
+## tile's top-right corner, down at its bottom-right (ADR 069). Drawn in both art and colour mode.
+func _draw_link_markers() -> void:
+	var size := TILE_SIZE * 0.3
+	for marker: Dictionary in _layer.link_markers():
+		var origin := Vector2(int(marker["x"]) * TILE_SIZE, int(marker["y"]) * TILE_SIZE)
+		var right := origin.x + TILE_SIZE - 1.0
+		if int(marker["flags"]) & LayerSliceType.LINK_UP:
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(right - size, origin.y + size), Vector2(right, origin.y + size),
+				Vector2(right - size * 0.5, origin.y + 1.0)]), LINK_MARKER_COLOR)
+		if int(marker["flags"]) & LayerSliceType.LINK_DOWN:
+			var bottom := origin.y + TILE_SIZE - 1.0
+			draw_colored_polygon(PackedVector2Array([
+				Vector2(right - size, bottom - size), Vector2(right, bottom - size),
+				Vector2(right - size * 0.5, bottom)]), LINK_MARKER_COLOR)
+
 func _draw_construction_sites() -> void:
 	for site: Dictionary in _snapshot["construction_sites"]:
+		if (site["origin"] as Vector3i).z != active_layer:
+			continue
 		var orientation := String(site.get("orientation", "horizontal"))
 		var kind := String(site["kind"])
 		var footprint_rect := construction_site_footprint_rect(site)
@@ -966,7 +1179,7 @@ func _ground_item_counts() -> Dictionary:
 	var counts := {}
 	for item: Dictionary in _snapshot["items"]:
 		var kind := String(item["kind"])
-		if not _has_ground_icon(kind):
+		if not _has_ground_icon(kind) or int(item.get("z", 0)) != active_layer:
 			continue
 		var cell := Vector2i(int(item["x"]), int(item["y"]))
 		if not counts.has(cell):
@@ -974,7 +1187,7 @@ func _ground_item_counts() -> Dictionary:
 		counts[cell][kind] = int(counts[cell].get(kind, 0)) + int(item["count"])
 	for item: Dictionary in _snapshot["tool_items"]:
 		var location: Dictionary = item["location"]
-		if location["type"] != "ground":
+		if location["type"] != "ground" or int(location.get("z", 0)) != active_layer:
 			continue
 		var kind := String(item["kind"])
 		if not _has_ground_icon(kind):
@@ -1035,7 +1248,7 @@ func _zoned_cells_in_draw_order(counts: Dictionary) -> Array[Vector2i]:
 	for cell in counts:
 		for zone_index in zones.size():
 			var zone: Dictionary = zones[zone_index]
-			if zone.has("kind"):
+			if zone.has("kind") or int(zone.get("z", 0)) != active_layer:
 				continue
 			if Rect2i(int(zone["x"]), int(zone["y"]), int(zone["width"]), int(zone["height"])).has_point(cell):
 				keyed.append([zone_index, cell.y, cell.x, cell])

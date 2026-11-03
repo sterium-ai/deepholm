@@ -137,6 +137,9 @@ var _health_bars: Dictionary = {}
 var _trapped_texture: Texture2D
 ## The (read-only) columns of the last refresh()'s snapshot, to skip colonists that did not change.
 var _last: Dictionary = {}
+## The one layer map_view.gd draws (ADR 045 §7): a row on any other layer is
+## masked to "no worker, no health" so its body and bar drop like a dead one's.
+var active_layer := 0
 
 ## Item textures are keyed by actual kind for cargo and held-tool badges,
 ## refreshed even when the colonist sprite is reused.
@@ -196,6 +199,20 @@ func set_world(world_ref) -> void:
 	_last = {}
 	_refresh({})
 
+## Forgets the last snapshot's columns, so the next refresh() (map_view.gd calls it) re-places
+## every colonist and drops those now on another layer.
+func set_active_layer(z: int) -> void:
+	if z != active_layer:
+		# Everything drawn is on the old layer: drop it in one go, not per id in _drop_missing().
+		_sprites.clear()
+		_carried_markers.clear()
+		_tool_markers.clear()
+		_trapped_markers.clear()
+		_motion.clear()
+		_health_bars.clear()
+	active_layer = z
+	_last = {}
+
 ## `snapshot` is this tick's WorldState.get_view_snapshot(); {} takes a fresh one.
 func refresh(snapshot: Dictionary = {}) -> void:
 	_refresh(snapshot)
@@ -254,14 +271,22 @@ func _refresh(snapshot: Dictionary) -> void:
 	var tools: Array = snapshot["tool_kinds"]
 	var trapped: Array = snapshot["trapped"]
 	var work_kinds: Array = snapshot["work_kinds"]
-	var same_rows: bool = ids == _last.get("ids", [])
+	var zs: Array = snapshot["z"]
+	var hp: Array = snapshot["hp"]
+	if zs.count(active_layer) != zs.size():
+		worker = worker.duplicate()
+		hp = hp.duplicate()
+		for row in zs.size():
+			if zs[row] != active_layer:
+				worker[row] = 0
+				hp[row] = -1
+	var same_rows: bool = ids == _last.get("ids", []) and zs == _last.get("z", [])
 	var last_x: Array = _last.get("x", [])
 	var last_y: Array = _last.get("y", [])
 	var last_carrying: Array = _last.get("carrying", [])
 	var last_tools: Array = _last.get("tool_kinds", [])
 	var last_trapped: Array = _last.get("trapped", [])
 	var last_work: Array = _last.get("work_kinds", [])
-	var hp: Array = snapshot["hp"]
 	var max_hp: Array = snapshot["max_hp"]
 	var last_hp: Array = _last.get("hp", [])
 	var last_max: Array = _last.get("max_hp", [])
@@ -289,8 +314,8 @@ func _refresh(snapshot: Dictionary) -> void:
 			work_kinds[row])
 	if not same_rows:
 		_drop_missing(ids, worker, hp)
-	_last = {"ids": ids, "x": xs, "y": ys, "carrying": carrying, "tool_kinds": tools, "trapped": trapped,
-		"work_kinds": work_kinds, "hp": snapshot["hp"], "max_hp": snapshot["max_hp"]}
+	_last = {"ids": ids, "x": xs, "y": ys, "z": zs, "carrying": carrying, "tool_kinds": tools, "trapped": trapped,
+		"work_kinds": work_kinds, "hp": hp, "max_hp": snapshot["max_hp"]}
 	queue_redraw()
 
 func _refresh_colonist(colonist_id: String, tile: Vector2i, carried_kind: String, tool_kind: String, is_trapped: bool,
