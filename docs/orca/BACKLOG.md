@@ -329,7 +329,12 @@ Orca helper scripts, this backlog.
   The health bar (line ~263) is tile-anchored and is fine.
 - **Fix:** anchor the three badges to the **tile position** (like the health bar), with offsets
   that put them beside the character's head: tool badge to the left of the head, cargo badge to
-  the right, trapped badge above (below the health bar, no overlap). Keep `TILE_SIZE`
+  the right, trapped badge above the head (no overlap with the bar). **Amendment (owner's
+  interface, 2026-11-03, after the first delivery's screenshots):** the health bar at
+  `HEALTH_BAR_OFFSET` (0, −4.8) crosses the character's face with the 64 px pack frame — it is
+  the same bug as the badges, so it is in scope: move the bar **above the head** (tile-anchored,
+  `TILE_SIZE` multiple), the trapped badge directly above the bar, and assert in the tests that
+  bar, badges and the character's head box do not intersect. Keep `TILE_SIZE`
   multiples, no magic pixels. Update the three tests that assert the old anchoring
   (`test_colonist_panel_toil.gd` lines ~87 and ~140, `test_colonist_sprites.gd` if touched) to
   the new rule, not by loosening them.
