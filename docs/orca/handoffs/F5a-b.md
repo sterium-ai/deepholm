@@ -4,20 +4,36 @@
 
 - Branch: `antonelmejor50-hub/f5a-b-haul-rejected-tools-out`. Not pushed.
 - Commits on this branch, oldest first:
-  1. `18bc3bd`: first delivery (an instant move with no job). It was rejected in review round 1.
-  2. `f36dde9`: a handoff note about `review.ps1`. That note is now dropped, because the
+  (Hashes after the round 3 rebase onto `origin/main` `5399153`, F5b.)
+  1. `0dd4266`: first delivery (an instant move with no job). It was rejected in review round 1.
+  2. `6b8063a`: a handoff note about `review.ps1`. That note is now dropped, because the
      script was fixed on main (`5be734f`, `76d139b`).
-  3. `479a473`: the round 1 fix (a carried `haul_tool` job, no teleport).
-  4. The round 2 fix, which is the commit that changes this file to the present text
-     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 2
-     (`.orca-review.md`, REQUEST_CHANGES):
+  3. `ab5f013`: the round 1 fix (a carried `haul_tool` job, no teleport).
+  4. `3a02bf1`: the round 2 fix. It answers review round 2 (`.orca-review.md`,
+     REQUEST_CHANGES):
      - (b) the destination is rechecked on every tick while the tool is fetched or carried.
        An invalid one fails the job through the shared job engine (`invalid_target`), and the
        delivery revalidates too. A 4th check runs through commands and ticks (seed 64019);
-     - (c) `haul_tool` is now schema v12, with a migration and a fixture;
+     - (c) `haul_tool` is now a schema bump, with a migration and a fixture. It was v12 in
+       round 2 and is v13 since round 3 (see item 5);
      - (a) scope: the owner approved `jobs.json`, `toil_executor.gd`, `toil_bindings.gd`, the
        schema enum and `en.json` in `docs/orca/BACKLOG.md` on main, commit `afeeade`. The rest
        is listed under "Pending owner approval".
+  5. Round 3, the commit that changes this file to the present text
+     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). Owner note: F5b (`5399153`) is on main and
+     took schema v12. The branch was rebased onto `origin/main` and the bump renumbered to
+     **v13**:
+     - v13 was free: `origin/main` is at v12, and L3 is not merged. So v13 was used, not v14;
+     - the bump is `_v12_to_v13`, and F5b's `_v11_to_v12` (heal labour) is kept unchanged;
+     - F5b's `save_schema_v12_fixture.json` is untouched. The new
+       `save_schema_v13_fixture.json` (hash 237246710, issued 6, tick 150) is the same session,
+       and the v12 fixture migrates to it exactly;
+     - rebase conflicts: F5b's `cook_work` and this branch's `haul_tool` are both kept in the
+       schema enum, `test_architecture_rules.gd` and `test_toils_dig_chop_regression.gd`
+       (22 to 23 kinds).
+     The v13 edits were folded into `3a02bf1`, and this commit updates only this file.
+- Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
+  keeping F5b's v12 step (v14 only if v13 were taken; it was not).
 - Owner decision followed (round 2): `afeeade` on main approves that scope and asks for the
   en-route destination recheck through the shared job engine, with a test through commands and
   ticks.
@@ -27,17 +43,18 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 2 fix)
+## Final suite line (author-reported, round 3)
 
 ```
-run_tests: all 135 test(s) PASS  [924s]
+run_tests: all 136 test(s) PASS  [991s]
 ```
 
-The author ran this on the round 2 working tree, which is the content of the round 2 commit, on
-Windows with Godot 4.7.2 headless. It is still author-reported: the reviewer has not reproduced
-it yet (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1`). N stays
-135: the new checks are in existing test files, and no test file was added or removed. Round 1's
-run was `run_tests: all 135 test(s) PASS  [889s]`.
+The author ran this on the round 3 tree (this branch rebased onto `origin/main` `5399153`, with
+schema v13), on Windows with Godot 4.7.2 headless. It is still author-reported: the reviewer has
+not reproduced it yet (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1`).
+N is 136 because main now has 136 test files. This branch adds or removes none: its checks are in
+existing test files. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
+[889s] (round 1).
 
 ## What changed (carried design, replaces the teleport)
 
@@ -129,17 +146,17 @@ run was `run_tests: all 135 test(s) PASS  [889s]`.
   - `test_architecture_rules.gd`: `haul_tool` is added to the expected job kinds, and a
     `_run_and_verify("haul_tool", 207301, …)` scenario runs it end to end, like the other
     kinds.
-  - `test_toils_dig_chop_regression.gd`: its pinned job kind list gains `haul_tool` (21 to 22
+  - `test_toils_dig_chop_regression.gd`: its pinned job kind list gains `haul_tool` (22 to 23
     kinds).
 - ADR 064's Consequences bullet now describes the carried haul.
 - `en.json`: `status.job.haul_tool` is "Hauling a tool" (every job kind has a status text).
-- Schema v12 (round 2): `StateCodec.SCHEMA_VERSION` is 12, and
-  `SaveMigrations._v11_to_v12` changes only `schemaVersion` (a v11 world queued no `haul_tool`
-  job; a v11 state that lists one is refused). `game-state.schema.json` gets const 12 and the
-  `"haul_tool"` job kind. `save-system.md` documents v12. The new
-  `save_schema_v12_fixture.json` was written by `docs/orca/handoffs/F5a-b-write-save.gd`, and
-  `test_save_migration.gd` checks that the v11 fixture migrates exactly to it, that v12 loads,
-  and that a v11 state with a `haul_tool` job is refused.
+- Schema v13 (round 2, renumbered in round 3): `StateCodec.SCHEMA_VERSION` is 13, and
+  `SaveMigrations._v12_to_v13` changes only `schemaVersion` (a v12 world queued no `haul_tool`
+  job; a v12 state that lists one is refused). `game-state.schema.json` gets const 13 and the
+  `"haul_tool"` job kind. `save-system.md` documents v13. The new
+  `save_schema_v13_fixture.json` was written by `docs/orca/handoffs/F5a-b-write-save.gd`, and
+  `test_save_migration.gd` checks that F5b's v12 fixture migrates exactly to it, that v13 loads
+  and re-encodes unchanged, and that a v12 state with a `haul_tool` job is refused.
 
 ## Pending owner approval (outside the owned paths)
 
@@ -155,18 +172,18 @@ The owned paths are `haul_giver.gd`, `tool_item_store.gd`, `tool_*_toil.gd`,
 `test_stockpile_filters.gd` and this file. These changes are outside them and that approval,
 and are still pending:
 
-1. Schema v12 (round 2, needed by review finding (c)):
-   - `docs/architecture/contracts/game-state.schema.json`: const 12 (the enum value is
+1. Schema v13 (round 2, needed by review finding (c); v13 since round 3):
+   - `docs/architecture/contracts/game-state.schema.json`: const 13 (the enum value is
      approved);
-   - `game/scripts/core/persistence/state_codec.gd`: `SCHEMA_VERSION` 12 (596/800);
-   - `game/scripts/core/persistence/save_migrations.gd`: the `11:` arm and `_v11_to_v12`;
-   - `docs/architecture/save-system.md`: the v12 notes;
-   - `game/scripts/tests/test_save_migration.gd`: the v12 checks;
-   - new `game/scripts/tests/fixtures/save_schema_v12_fixture.json` and its writer
+   - `game/scripts/core/persistence/state_codec.gd`: `SCHEMA_VERSION` 13 (597/800);
+   - `game/scripts/core/persistence/save_migrations.gd`: the `12:` arm and `_v12_to_v13`;
+   - `docs/architecture/save-system.md`: the v13 notes;
+   - `game/scripts/tests/test_save_migration.gd`: the v13 checks;
+   - new `game/scripts/tests/fixtures/save_schema_v13_fixture.json` and its writer
      `docs/orca/handoffs/F5a-b-write-save.gd`.
 2. `game/scripts/tests/test_architecture_rules.gd`: the expected kinds and one scenario; and
    `game/scripts/tests/test_toils_dig_chop_regression.gd`: `haul_tool` added to its pinned kind
-   list (21 to 22).
+   list (22 to 23, after F5b's `cook_work`).
 3. `game/scripts/core/world_state.gd`: the edits to two existing lines described above (the
    `HaulGiver` hook, and in round 2 the argument appended to the `ToilExecutor` line). It stays
    at 767 lines, within the round 1 decision (`07cd384`).
@@ -175,7 +192,7 @@ and are still pending:
 
 ## Contract impact
 
-- Save format: schema v12. The job `kind` enum gains `haul_tool`. `_v11_to_v12` changes only
+- Save format: schema v13. The job `kind` enum gains `haul_tool`. `_v12_to_v13` changes only
   `schemaVersion`. A saved `haul_tool` job is an ordinary job record, and a tool's reservation
   is already saved in `ToolItemStore.reservations`.
 - Ids: none are created. The tool keeps its id (ADR 061). The job takes a normal job id from
@@ -207,13 +224,14 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered runs (round 3): `test_save_migration` [7s] PASS after the v13 renumbering.
 - Filtered runs (round 2), all PASS: `test_stockpile_filters` [23s], `test_save_migration`
   [6s], `test_architecture_rules` [3s], `test_crafting` [9s] and
   `test_toils_dig_chop_regression` [1s]. `test_crafting` prints push_error stack lines from its
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 22961 lines in 112 files`.
+- `tools/measure_core.ps1`: `core total: 23105 lines in 112 files` (round 3, on top of F5b).
 
   | File | Lines | Longest function |
   |---|---|---|
@@ -223,7 +241,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   | `tool_drop_toil.gd` | 351 (255 code, 70 comment) | `_init`, 30 |
   | `tool_fetch_toil.gd` | 254 | — |
   | `haul_giver.gd` | 161 | — |
-  | `state_codec.gd` | 596 | `decode`, 70 |
+  | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
 
 ## Known limitations
 
@@ -245,6 +263,6 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ## Next action
 
 - The owner approves or rejects the files still listed under "Pending owner approval": the
-  schema v12 files beyond the enum, the test pins and the `world_state.gd` line edits.
+  schema v13 files beyond the enum, the test pins and the `world_state.gd` line edits.
 - The reviewer reproduces the full suite line.
 - Then review with `tools/orca/review.ps1`, which now resolves `F5a-b` to this file.
