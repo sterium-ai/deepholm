@@ -62,8 +62,9 @@ had no layer for actors.
 - The active layer redraws from a copy when its cells change: O(width × height) per dirtying
   tick on that layer.
 - A switch costs a full tile and object pass. At A9's scale (128×128, 1,000 actors, headless)
-  it measured about 25–31 ms to a rock layer and 44 ms to the surface
-  (`bench_viewer_layer_switch.gd`), over the 16.7 ms frame; meeting the frame needs the
-  per-layer cache or a cheaper tile pass (owner decision, L4 handoff).
+  it measures about 20–22 ms to a rock layer and 23–27 ms to the surface
+  (`bench_viewer_layer_switch.gd`, review round 3). The owner's budget (amendment `c769a48`)
+  is ≤ 50 ms per switch at that scale, so v1 accepts a 2–3 frame hitch on a switch; the
+  one-frame target belongs to the cached-reuse task L4b.
 - The owner checks the look after merge; final art for the layer markers is a later step.
 - Words for the controls (if wanted instead of glyphs) need text-table keys in `en.json`.

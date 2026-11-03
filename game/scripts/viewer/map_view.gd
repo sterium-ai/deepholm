@@ -738,15 +738,11 @@ func _refresh_tile_map(force_full: bool) -> void:
 		var width: int = world.get_map_width()
 		var height: int = world.get_map_height()
 		var layer_offset := active_layer * width * height
-		_rebuild_shore_mask(tiles, layer_offset, width, height)
-		var touched := 0
+		var soil_cells := PackedInt32Array()
+		var foreign := _rebuild_shore_mask(tiles, layer_offset, width, height, soil_cells)
+		var touched := width * height
 		_cleared = true
-		for y in height:
-			for x in width:
-				var kind: String = tiles[layer_offset + y * width + x]
-				_set_tile_map_cell(x, y, kind)
-				_set_decor_or_object_cell(x, y, kind, "")
-				touched += 1
+		_draw_cleared_layer(tiles, layer_offset, width, height, foreign, soil_cells)
 		_cleared = false
 		for object_entry in _layer.objects():
 			var ox: int = int(object_entry["x"])
@@ -796,6 +792,80 @@ func _refresh_tile_map(force_full: bool) -> void:
 	_dirty_cells_consumed = int(dirty["next"])
 	last_tile_map_cells_touched = touched
 
+## Every cell of the active layer onto the just-cleared tile layers: the same cells
+## _set_tile_map_cell() and _set_decor_or_object_cell(x, y, kind, "") draw, in one pass with
+## each tile kind's atlas entries looked up once instead of per cell, and interior soil (most
+## of a surface layer) drawn inline. A layer switch runs this for every cell (ADR 069 §3), and
+## the per-cell calls cost more than the frame at the A9 scale (bench_viewer_layer_switch.gd).
+func _draw_cleared_layer(tiles: Array[String], offset: int, width: int, height: int,
+		foreign: PackedInt32Array, soil_cells: PackedInt32Array) -> void:
+	var base_by_kind := {}
+	var decor_by_kind := {}
+	for kind in TileAtlasMapType.TILE_ATLAS_MAP:
+		var atlas: Dictionary = TileAtlasMapType.TILE_ATLAS_MAP[kind]
+		base_by_kind[kind] = [int(atlas["source_id"]), atlas["coords"]]
+	for kind in TileAtlasMapType.TILE_DECOR_MAP:
+		var decor: Dictionary = TileAtlasMapType.TILE_DECOR_MAP[kind]
+		decor_by_kind[kind] = [int(decor["source_id"]), decor["coords"]]
+	var tree_ids: Array[Vector2i] = []
+	var tree_source := _object_tile_map_layer.tile_set.get_source(TileAtlasMapType.SOURCE_TREE) as TileSetAtlasSource
+	if tree_source != null and tree_source.get_tiles_count() > 1:
+		for i in tree_source.get_tiles_count():
+			tree_ids.append(tree_source.get_tile_id(i))
+	var seed_value: int = world.get_seed() if world != null else 0
+	var soil_source := int(TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_SOIL]["source_id"])
+	var variants := TileAtlasMapType.TILE_SOIL_VARIANTS
+	var row := _shore_stride
+	# A soil cell beside a foreign (water/rock) one: 8 writes per foreign cell or 8 reads per
+	# soil cell, whichever side is smaller (a rock layer is mostly foreign, a surface mostly soil).
+	var near := PackedByteArray()
+	near.resize(_shore_mask.size())
+	if foreign.size() <= soil_cells.size():
+		for at in foreign:
+			near[at - row - 1] = 1
+			near[at - row] = 1
+			near[at - row + 1] = 1
+			near[at - 1] = 1
+			near[at + 1] = 1
+			near[at + row - 1] = 1
+			near[at + row] = 1
+			near[at + row + 1] = 1
+	else:
+		var mask := _shore_mask
+		for at in soil_cells:
+			if mask[at - row - 1] + mask[at - row] + mask[at - row + 1] + mask[at - 1] + mask[at + 1] \
+					+ mask[at + row - 1] + mask[at + row] + mask[at + row + 1] != 0:
+				near[at] = 1
+	var cache := _variant_cache
+	var soil := WorldStateType.TILE_SOIL
+	var index := offset
+	var cell := 0
+	for y in height:
+		var at := (y + 1) * row + 1
+		for x in width:
+			var kind: String = tiles[index]
+			index += 1
+			var pos := Vector2i(x, y)
+			if kind == soil:
+				if near[at] != 0:
+					_set_soil_cell(x, y)
+				elif cache[cell] >= 0:
+					_tile_map_layer.set_cell(pos, soil_source, variants[cache[cell]])
+				else:
+					_tile_map_layer.set_cell(pos, soil_source, _grass_variant_coords(x, y))
+			else:
+				var base = base_by_kind.get(kind)
+				if base != null:
+					_tile_map_layer.set_cell(pos, base[0], base[1])
+				var decor = decor_by_kind.get(kind)
+				if decor != null:
+					var coords: Vector2i = decor[1]
+					if decor[0] == TileAtlasMapType.SOURCE_TREE and not tree_ids.is_empty():
+						coords = tree_ids[hash(Vector3i(seed_value, x, y)) % tree_ids.size()]
+					_object_tile_map_layer.set_cell(pos, decor[0], coords)
+			at += 1
+			cell += 1
+
 ## Base terrain cell: TILE_ATLAS_MAP's plain/opaque entry for `kind`, except
 ## for a boundary TILE_SOIL cell (one with a water/rock neighbour), which
 ## instead gets that neighbour's own plain water/rock cell as its *backing*
@@ -837,7 +907,8 @@ func _set_soil_cell(x: int, y: int) -> void:
 	var at := (y + 1) * row + x + 1
 	var selection := {}
 	# Most soil is interior (no foreign neighbour, so no selection): skip the lookup for it.
-	if mask[at - row - 1] | mask[at - row] | mask[at - row + 1] | mask[at - 1] | mask[at + 1] 			| mask[at + row - 1] | mask[at + row] | mask[at + row + 1] != 0:
+	if mask[at - row - 1] | mask[at - row] | mask[at - row + 1] | mask[at - 1] | mask[at + 1] \
+			| mask[at + row - 1] | mask[at + row] | mask[at + row + 1] != 0:
 		selection = TileAtlasMapType.grass_shore_selection(
 			mask[at - row] == 1, mask[at + row] == 1, mask[at + 1] == 1, mask[at - 1] == 1,
 			mask[at - row + 1] == 1, mask[at - row - 1] == 1, mask[at + row + 1] == 1, mask[at + row - 1] == 1)
@@ -878,17 +949,29 @@ func _grass_backing_kind(x: int, y: int, selection: Dictionary) -> String:
 static func _is_foreign(kind: String) -> bool:
 	return kind == WorldStateType.TILE_WATER or kind == WorldStateType.TILE_ROCK
 
-func _rebuild_shore_mask(tiles: Array[String], offset: int, width: int, height: int) -> void:
+## Returns the mask indices it set and fills `soil_cells` with the soil ones, for
+## _draw_cleared_layer()'s boundary test.
+func _rebuild_shore_mask(tiles: Array[String], offset: int, width: int, height: int,
+		soil_cells: PackedInt32Array) -> PackedInt32Array:
 	_shore_stride = width + 2
 	_shore_mask.resize(_shore_stride * (height + 2))
 	_shore_mask.fill(0)
 	var index := offset
+	var foreign := PackedInt32Array()
+	var water := WorldStateType.TILE_WATER
+	var rock := WorldStateType.TILE_ROCK
+	var soil := WorldStateType.TILE_SOIL
 	for y in height:
 		var at := (y + 1) * _shore_stride + 1
 		for x in width:
-			if _is_foreign(tiles[index]):
+			var kind: String = tiles[index]
+			if kind == water or kind == rock: # _is_foreign(), inlined for the full rebuild
 				_shore_mask[at + x] = 1
+				foreign.append(at + x)
+			elif kind == soil:
+				soil_cells.append(at + x)
 			index += 1
+	return foreign
 
 ## Discrete prairie variant, chosen by hash(seed, x, y), never by frame --
 ## a pure function of the

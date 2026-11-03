@@ -1,7 +1,7 @@
 extends SceneTree
 
-## L4 benchmark (ADR 069 §3, owner amendment 15211a7): a layer switch rebuilds the drawn layer
-## (no per-layer cache in v1), and that rebuild must fit in one frame at the A9 viewer scale.
+## L4 benchmark (ADR 069 §3, owner amendments 15211a7 and c769a48): a layer switch rebuilds the
+## drawn layer (no per-layer cache in v1), and that rebuild must fit in 50 ms at the A9 viewer scale.
 ## The world is A9's (BenchCommon.world_with_colonists() on a generated 128x128 map, 1,000
 ## actors, the boot scene built as in bench_viewer_refresh.gd) with a second layer added through
 ## the save: rock with a floor cell under every other colonist, and those colonists moved down
@@ -10,7 +10,8 @@ extends SceneTree
 ## TileMapLayer rebuild, the sprite filters and the map view's own refresh), then the
 ## boot._refresh() that the next frame runs, alternating surface -> deep -> surface.
 ##
-## Evidence, not a gate (bench_common.gd). The budget is one frame at 60 fps, 16.7 ms. Run:
+## Evidence, not a gate (bench_common.gd). The budget is 50 ms per switch (c769a48; one frame,
+## 16.7 ms, is the target of the cached-reuse task L4b). Run:
 ##   & $env:GODOT --headless --path game --script res://scripts/tests/bench_viewer_layer_switch.gd
 ## Optional: -- --actors=1000 --switches=40
 
@@ -22,7 +23,7 @@ const SEED := 42
 const SIZE := 128
 const DEFAULT_ACTORS := [1000]
 const DEFAULT_SWITCHES := 40
-const FRAME_MS := 1000.0 / 60.0
+const BUDGET_MS := 50.0
 
 func _initialize() -> void:
 	_run_all.call_deferred()
@@ -30,7 +31,7 @@ func _initialize() -> void:
 func _run_all() -> void:
 	var args := _parse_args()
 	print(BenchCommon.header("bench_viewer_layer_switch"))
-	print("bench_viewer_layer_switch: map=%dx%dx2 seed=%d switches=%d per run budget=%.1fms" % [SIZE, SIZE, SEED, args["switches"], FRAME_MS])
+	print("bench_viewer_layer_switch: map=%dx%dx2 seed=%d switches=%d per run budget=%.1fms" % [SIZE, SIZE, SEED, args["switches"], BUDGET_MS])
 	for actor_count in args["actors"]:
 		await _run(int(actor_count), int(args["switches"]))
 	print("bench_viewer_layer_switch: done")

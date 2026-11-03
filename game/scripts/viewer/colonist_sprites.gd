@@ -202,6 +202,14 @@ func set_world(world_ref) -> void:
 ## Forgets the last snapshot's columns, so the next refresh() (map_view.gd calls it) re-places
 ## every colonist and drops those now on another layer.
 func set_active_layer(z: int) -> void:
+	if z != active_layer:
+		# Everything drawn is on the old layer: drop it in one go, not per id in _drop_missing().
+		_sprites.clear()
+		_carried_markers.clear()
+		_tool_markers.clear()
+		_trapped_markers.clear()
+		_motion.clear()
+		_health_bars.clear()
 	active_layer = z
 	_last = {}
 
