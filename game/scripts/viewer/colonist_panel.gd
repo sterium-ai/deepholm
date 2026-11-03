@@ -462,6 +462,8 @@ func _compose_line(colonist: Dictionary) -> String:
 		]
 	for need_line in _need_bar_lines(colonist):
 		line += "\n  %s" % need_line
+	for thought_line in _happiness_lines(colonist):
+		line += "\n  %s" % thought_line
 	var need_reason := String((_snapshot["need_reasons"] as Dictionary).get(String(colonist["id"]), ""))
 	if not need_reason.is_empty():
 		var need_reason_text: String = _text_table.get_string("status.reason.%s" % need_reason)
@@ -492,6 +494,20 @@ func _need_bar_lines(colonist: Dictionary) -> Array[String]:
 		var kind_text: String = _text_table.get_string("status.need.%s" % kind)
 		var value := int(needs.get(kind, WorldStateType.NEED_FULL))
 		lines.append(_text_table.format("status.need_value_label", [kind_text, value, WorldStateType.NEED_FULL]))
+	return lines
+
+## Happiness and the active thoughts from the snapshot's "happiness" map (F5c, ADR 066):
+## "Happiness: <value>/100", then one "<thought> <+/-weight>" line per active thought.
+## A colonist the snapshot has no entry for (not detailed, or not a colonist) shows nothing.
+func _happiness_lines(colonist: Dictionary) -> Array[String]:
+	var lines: Array[String] = []
+	var entry: Dictionary = (_snapshot.get("happiness", {}) as Dictionary).get(String(colonist["id"]), {})
+	if entry.is_empty():
+		return lines
+	lines.append(_text_table.format("status.happiness_label", [int(entry["value"])]))
+	for thought: Dictionary in entry["thoughts"]:
+		var name_text: String = _text_table.get_string("status.thought.%s" % thought["id"])
+		lines.append(_text_table.format("status.thought_label", [name_text, int(thought["weight"])]))
 	return lines
 
 ## Assigned colonists show their active job's kind. A colonist whose route is

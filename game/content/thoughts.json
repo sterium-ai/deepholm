@@ -1,0 +1,18 @@
+{
+  "base": 50,
+  "min": 0,
+  "max": 100,
+  "hungry": {"need": "food", "at_or_below": 25},
+  "slept_ground": {"need": "rest", "at_or_below": 25},
+  "meal_items": ["meal"],
+  "thoughts": [
+    {"id": "ate_meal", "weight": 10, "duration_days": 1.5, "repeat": "refresh", "stack_limit": 1},
+    {"id": "ate_raw", "weight": 0, "duration_days": 1, "repeat": "refresh", "stack_limit": 1},
+    {"id": "hungry", "weight": -12, "duration_days": 0.1, "repeat": "refresh", "stack_limit": 1},
+    {"id": "slept_ground", "weight": -8, "duration_days": 0.5, "repeat": "refresh", "stack_limit": 1},
+    {"id": "slept_bed", "weight": 8, "duration_days": 1.5, "repeat": "refresh", "stack_limit": 1},
+    {"id": "harvested", "weight": 2, "duration_days": 1, "repeat": "stack", "stack_limit": 3, "job_kinds": ["harvest"]},
+    {"id": "crafted", "weight": 2, "duration_days": 1, "repeat": "stack", "stack_limit": 3, "job_kinds": ["craft_work", "cook_work"]},
+    {"id": "colonist_died", "weight": -15, "duration_days": 5, "repeat": "stack", "stack_limit": 3}
+  ]
+}

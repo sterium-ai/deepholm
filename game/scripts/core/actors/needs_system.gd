@@ -8,6 +8,9 @@ extends RefCounted
 ## - paused_jobs (colonist_id -> job_id) is the only record of an interrupt-suspended job; shared
 ##   with CombatGiver, persisted as "pausedJobs" (sorted by colonist id), not hashed.
 ## - need_status is runtime only: never saved or hashed.
+## - pending_colony_deaths counts colony colonists who died since the last decay tick; the next
+##   decay_needs() gives each colony colonist that many "colonist_died" thoughts inside its colonist
+##   loop, then zeroes it. Persisted as the optional "pendingColonyDeaths" (written only when > 0).
 ## - ensure_needs() rebuilds in WorldSeeding._spawn_colonists()'s field order, never by appending
 ##   (state_hash() hashes JSON.stringify(colonists)).
 ## - Need definitions are WorldState's live Dictionary, shared by reference with NeedGiver.
@@ -37,6 +40,8 @@ const REASON_NEED_UNMET_PREFIX := "need_unmet:"
 var paused_jobs: Dictionary = {}
 ## colonist_id -> last exposed need reason ("" when none, colonist-ai.md 3.8).
 var need_status: Dictionary = {}
+## Colony deaths CombatSystem recorded since the last decay tick (F5c, ADR 066).
+var pending_colony_deaths: int = 0
 
 var _content: ContentRegistryType
 var _need_definitions: Dictionary
@@ -103,11 +108,27 @@ func _init(content: ContentRegistryType, need_definitions: Dictionary, need_full
 	_ensure_combat = ensure_combat
 
 ## The save field this module owns, in StateCodec's wire shape.
+## "pendingColonyDeaths" is present only when a death is still waiting for the next decay tick.
 func encode() -> Dictionary:
-	return {"pausedJobs": StateCodec._encode_paused_jobs(paused_jobs)}
+	var fields := {"pausedJobs": StateCodec._encode_paused_jobs(paused_jobs)}
+	if pending_colony_deaths > 0:
+		fields["pendingColonyDeaths"] = pending_colony_deaths
+	return fields
 
 func decode(state: Dictionary) -> void:
 	paused_jobs = StateCodec._decode_paused_jobs(state["pausedJobs"])
+	var pending: int = state.get("pendingColonyDeaths", 0)
+	pending_colony_deaths = pending
+
+## WorldState.state_hash() calls this: a pending death changes the next tick's thoughts.
+func hash_into(snapshot: Dictionary) -> void:
+	if pending_colony_deaths > 0:
+		snapshot["pending_colony_deaths"] = pending_colony_deaths
+
+## CombatSystem.apply_actor_death() calls this when a colony colonist dies; the thoughts land at
+## the next decay_needs(), through its existing colonist loop.
+func record_colony_death() -> void:
+	pending_colony_deaths += 1
 
 ## "" when no exposed need reason (colonist-ai.md 3.8), else need_unmet:<kind> or a transient
 ## blocked_source_* reason mid-search.
@@ -179,9 +200,20 @@ func decay_needs() -> void:
 	for kind in _need_definitions.keys():
 		rates[kind] = int(_need_definitions[kind].get("rate_per_day", 0))
 	var needs_tunables := {"rates": rates, "day_length_ticks": _calendar.day_length_ticks()}
+	var thought_rules := ActorThoughts.rules(_content)
+	var day_length := _calendar.day_length_ticks()
+	var bed_reachable := _bed_reachable_once()
 	for colonist in _get_colonists.call():
 		NeedsType.apply_tick(colonist, needs_tunables)
 		HealthType.apply_tick(colonist)
+		var thinker: Dictionary = colonist
+		ActorThoughts.apply_state_tick(thinker, thought_rules, _clock.tick, day_length, bed_reachable,
+			_content)
+		var faction: String = thinker.get("factionId", "colony")
+		if faction == "colony":
+			for _death in pending_colony_deaths:
+				add_thought(thinker, "colonist_died")
+	pending_colony_deaths = 0
 
 ## Pauses a colonist's current job (colonist-ai.md 3.6): suspends colonist.work, or reads the job
 ## off the assignment at a toil boundary. No-op without an assignment.
@@ -401,6 +433,7 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 		if bool(_tile_grid.get_room_at(target).get("has_bed", false)):
 			restore *= float(need_def.get("bedroom_rest_multiplier", 1.0))
 	var needs: Dictionary = _needs(colonist)
+	var eaten_kind := ""
 	if String(job["kind"]) == "eat_food":
 		var target: Vector3i = job["target"]
 		var item := _edible_item_at(target)
@@ -409,9 +442,48 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 			_item_table.consume_ground_berry(target)
 		else:
 			var item_id: String = item["id"]
+			eaten_kind = item["kind"]
 			restore = float(_satiety_of(item))
 			_item_table.remove_ground_item_units(item_id, 1)
 	needs[need_kind] = mini(_need_full, int(restore))
+	var job_kind: String = job["kind"]
+	add_thought(colonist, _need_thought(job_kind, eaten_kind))
+
+## F5c (ADR 066): adds thought id to colonist now (no-op for an empty id or undefined thought).
+func add_thought(colonist: Dictionary, id: String) -> void:
+	if not id.is_empty():
+		ActorThoughts.add(colonist, id, ActorThoughts.rules(_content), _clock.tick, _calendar.day_length_ticks(),
+			_content)
+
+## F5c (ADR 066): adds the thoughts thoughts.json's job_kinds give a completed job of job_kind.
+func add_job_thoughts(colonist: Dictionary, job_kind: String) -> void:
+	for id in ActorThoughts.ids_for_job_kind(ActorThoughts.rules(_content), job_kind):
+		add_thought(colonist, id)
+
+## The thought a completed need job gives: sleep "slept_bed" (sleep always targets a bed),
+## eat_food "ate_meal" for an item of thoughts.json's meal_items, else "ate_raw"; water none.
+func _need_thought(job_kind: String, eaten_kind: String) -> String:
+	match job_kind:
+		"sleep": return "slept_bed"
+		"eat_food":
+			var meals: Array = ActorThoughts.rules(_content).get("meal_items", [])
+			return "ate_meal" if meals.has(eaten_kind) else "ate_raw"
+		_: return ""
+
+## A Callable(colonist) -> bool, true when a bed is reachable from that colonist's own region
+## (region 0 reaches nothing, as in RegionMap.reachable()). The set of regions reaching a bed is
+## built at most once per call site (once per decay tick) and only when some colonist's rest is low.
+func _bed_reachable_once() -> Callable:
+	var cache := {}
+	return func(colonist: Dictionary) -> bool:
+		var regions := _tile_grid.get_regions()
+		if not cache.has("regions"):
+			var reaching := {}
+			for bed: Vector3i in _raw_need_sources("rest"):
+				for region: int in _regions_reaching(regions, bed):
+					reaching[region] = true
+			cache["regions"] = reaching
+		return (cache["regions"] as Dictionary).has(regions.region_of(TileGrid.tile_of(colonist)))
 
 ## F5b (ADR 065): the best restore an eat_food job at tile would give; 0 when nothing edible.
 ## A ground berry restores the food need's "restore"; an item its content "satiety".

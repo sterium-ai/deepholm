@@ -211,7 +211,7 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 	if not (value is Dictionary):
 		return _fail("invalid entity type")
 	var entity: Dictionary = value
-	if not _keys_allowed(entity, ["id", "kind", "x", "y", "z", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor"]):
+	if not _keys_allowed(entity, ["id", "kind", "x", "y", "z", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor", "thoughts"]):
 		return _fail("unexpected entity field")
 	if (not entity.has("id") or not entity.has("kind") or not entity.has("x") or not entity.has("y") or not entity.has("z")
 			or not entity.has("factionId") or not entity.has("health") or not entity.has("route") or not entity.has("trapped")):
@@ -271,7 +271,34 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 	for flag in ["wild", "visitor"]:
 		if entity.has(flag) and entity[flag] != true:
 			return _fail("invalid entity %s" % flag)
+	if entity.has("thoughts") and not _valid_thoughts(entity["thoughts"]):
+		return _fail("invalid entity thoughts")
 	return {"ok": true}
+
+## F5c (ADR 066): a non-empty [{"id", "until"}] sorted by id then until (ActorThoughts' order;
+## state_hash() is order-sensitive). An id the content does not define is legal and weighs nothing.
+static func _valid_thoughts(value: Variant) -> bool:
+	if not (value is Array) or (value as Array).is_empty():
+		return false
+	var previous_id := ""
+	var previous_until := -1
+	for raw: Variant in value:
+		if not (raw is Dictionary):
+			return false
+		var record: Dictionary = raw
+		if not _keys_allowed(record, ["id", "until"]) or not record.has("id") or not record.has("until"):
+			return false
+		if not (record["id"] is String) or typeof(record["until"]) != TYPE_INT:
+			return false
+		var id: String = record["id"]
+		var until: int = record["until"]
+		if not _matches_id_pattern(id) or until < 0:
+			return false
+		if previous_until >= 0 and (previous_id > id or (previous_id == id and previous_until > until)):
+			return false
+		previous_id = id
+		previous_until = until
+	return true
 
 ## "needs" and "needsAccumulator", each present only for the kinds that declare them, keyed by
 ## exactly the registry's need kinds.

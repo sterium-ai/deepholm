@@ -365,6 +365,7 @@ func _complete_job(job_id: String) -> void:
 	var result: Dictionary = _finish_job.call(job_id, "complete_job")
 	if result.get("ok", false) and not colonist.is_empty():
 		_toils.award_job_xp(colonist, kind)
+		_needs_system.add_job_thoughts(colonist, kind)
 
 func _toil_on_place_success(job_id: String) -> void:
 	_complete_job(job_id)

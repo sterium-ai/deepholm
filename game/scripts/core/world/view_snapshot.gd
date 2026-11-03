@@ -33,6 +33,8 @@ extends RefCounted
 ##   rescue_reasons   {detailed trapped id: get_colonist_rescue_reason()}
 ##   skills           {detailed id: {labour: {level, xp, next}}}: ActorSkills.progress() with
 ##                    skills.json's xp_to_next ("next" 0 at the top level; F3, ADR 062)
+##   happiness        {detailed colonist id: {value, thoughts: [{id, weight, remaining}]}}:
+##                    ActorThoughts.happiness() and active() at this tick (F5c, ADR 066)
 ##   assignments      the detailed workers' entries of get_assignments()
 ##   queued_job_summary, tool_items, items, construction_sites, zones,
 ##   pending_trade_offers   the getters of the same name, called once
@@ -42,6 +44,7 @@ const InventoryType = preload("res://scripts/core/actors/components/inventory.gd
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 const SkillsType = preload("res://scripts/core/actors/components/skills.gd")
+const ThoughtsType = preload("res://scripts/core/actors/thoughts.gd")
 
 ## `actors` is the live actor table, read and never written. `sources` holds the
 ## live read-only views job_kinds ({job id: kind}) and need_status ({id: reason}), the
@@ -182,6 +185,9 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 	var rescue_reasons := {}
 	var skills := {}
 	var skill_rules := SkillsType.rules(content)
+	var happiness := {}
+	var thought_rules := ThoughtsType.rules(content)
+	var now: int = snapshot["tick"]
 	# get_assignments()' full copy serves the job lookups; the snapshot keeps only the
 	# detailed workers' entries, which is all the panels read (and all that is frozen).
 	var assignments: Dictionary = snapshot["assignments"]
@@ -194,6 +200,9 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 		var actor: Dictionary = actors[row]
 		details[id] = actor_copy(actor)
 		skills[id] = SkillsType.progress(skill_rules, actor)
+		if ThoughtsType.applies(actor, content):
+			happiness[id] = {"value": ThoughtsType.happiness(actor, thought_rules, now),
+				"thoughts": ThoughtsType.active(actor, thought_rules, now)}
 		var job_ids: Array[String] = []
 		if assignments.has(id):
 			var assignment: Dictionary = assignments[id]
@@ -219,7 +228,7 @@ static func _add_details(snapshot: Dictionary, actors: Array, content: ContentRe
 			if not job_id.is_empty() and not jobs.has(job_id):
 				jobs[job_id] = get_job.call(job_id, assignments) # one assignments copy for every job
 	snapshot.merge({"details": details, "jobs": jobs, "need_job_ids": need_job_ids, "rescue_reasons": rescue_reasons,
-		"assignments": detailed_assignments, "skills": skills}, true)
+		"assignments": detailed_assignments, "skills": skills, "happiness": happiness}, true)
 
 ## One actor as get_colonists() shows it: a deep copy plus the "carrying" view.
 static func actor_copy(actor: Dictionary) -> Dictionary:

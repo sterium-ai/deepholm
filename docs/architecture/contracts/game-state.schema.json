@@ -438,7 +438,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 12 },
+    "schemaVersion": { "type": "integer", "const": 13 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -699,6 +699,20 @@
               "heal": { "$ref": "#/$defs/skillRecord" }
             }
           },
+          "thoughts": {
+            "description": "F5c (ADR 066, schema v13): a colonist's active thoughts, sorted by id then until; until is the absolute tick the thought expires at (active while tick < until). Absent when the colonist has none. Happiness is derived (thoughts.json base + weights, clamped), never saved.",
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "until"],
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+                "until": { "type": "integer", "minimum": 0 }
+              }
+            }
+          },
           "route": {
             "anyOf": [
               { "type": "null" },
@@ -883,6 +897,11 @@
         "seed": { "type": "integer" },
         "state": { "type": "integer" }
       }
+    },
+    "pendingColonyDeaths": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "ADR 066: colony colonist deaths recorded since the last needs decay tick; each colony colonist gets one colonist_died thought per death at that tick. Absent means none."
     },
     "incidentScheduler": {
       "type": "object",
