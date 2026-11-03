@@ -8,6 +8,9 @@ extends RefCounted
 ## - paused_jobs (colonist_id -> job_id) is the only record of an interrupt-suspended job; shared
 ##   with CombatGiver, persisted as "pausedJobs" (sorted by colonist id), not hashed.
 ## - need_status is runtime only: never saved or hashed.
+## - pending_colony_deaths counts colony colonists who died since the last decay tick; the next
+##   decay_needs() gives each colony colonist that many "colonist_died" thoughts inside its colonist
+##   loop, then zeroes it. Persisted as the optional "pendingColonyDeaths" (written only when > 0).
 ## - ensure_needs() rebuilds in WorldSeeding._spawn_colonists()'s field order, never by appending
 ##   (state_hash() hashes JSON.stringify(colonists)).
 ## - Need definitions are WorldState's live Dictionary, shared by reference with NeedGiver.
@@ -37,6 +40,8 @@ const REASON_NEED_UNMET_PREFIX := "need_unmet:"
 var paused_jobs: Dictionary = {}
 ## colonist_id -> last exposed need reason ("" when none, colonist-ai.md 3.8).
 var need_status: Dictionary = {}
+## Colony deaths CombatSystem recorded since the last decay tick (F5c, ADR 066).
+var pending_colony_deaths: int = 0
 
 var _content: ContentRegistryType
 var _need_definitions: Dictionary
@@ -103,11 +108,21 @@ func _init(content: ContentRegistryType, need_definitions: Dictionary, need_full
 	_ensure_combat = ensure_combat
 
 ## The save field this module owns, in StateCodec's wire shape.
+## "pendingColonyDeaths" is present only when a death is still waiting for the next decay tick.
 func encode() -> Dictionary:
-	return {"pausedJobs": StateCodec._encode_paused_jobs(paused_jobs)}
+	var fields := {"pausedJobs": StateCodec._encode_paused_jobs(paused_jobs)}
+	if pending_colony_deaths > 0:
+		fields["pendingColonyDeaths"] = pending_colony_deaths
+	return fields
 
 func decode(state: Dictionary) -> void:
 	paused_jobs = StateCodec._decode_paused_jobs(state["pausedJobs"])
+	pending_colony_deaths = int(state.get("pendingColonyDeaths", 0))
+
+## CombatSystem.apply_actor_death() calls this when a colony colonist dies; the thoughts land at
+## the next decay_needs(), through its existing colonist loop.
+func record_colony_death() -> void:
+	pending_colony_deaths += 1
 
 ## "" when no exposed need reason (colonist-ai.md 3.8), else need_unmet:<kind> or a transient
 ## blocked_source_* reason mid-search.
@@ -187,6 +202,10 @@ func decay_needs() -> void:
 		HealthType.apply_tick(colonist)
 		ActorThoughts.apply_state_tick(colonist, thought_rules, _clock.tick, day_length, bed_reachable,
 			_content)
+		if String(colonist.get("factionId", "colony")) == "colony":
+			for _death in pending_colony_deaths:
+				add_thought(colonist, "colonist_died")
+	pending_colony_deaths = 0
 
 ## Pauses a colonist's current job (colonist-ai.md 3.6): suspends colonist.work, or reads the job
 ## off the assignment at a toil boundary. No-op without an assignment.
@@ -442,14 +461,20 @@ func _need_thought(job_kind: String, eaten_kind: String) -> String:
 			return "ate_meal" if meals.has(eaten_kind) else "ate_raw"
 		_: return ""
 
-## A Callable() -> bool, true when some bed is reachable from a colonist's region; the lookup
-## runs at most once per call site (once per decay tick) and only when a colonist's rest is low.
+## A Callable(colonist) -> bool, true when a bed is reachable from that colonist's own region
+## (region 0 reaches nothing, as in RegionMap.reachable()). The set of regions reaching a bed is
+## built at most once per call site (once per decay tick) and only when some colonist's rest is low.
 func _bed_reachable_once() -> Callable:
 	var cache := {}
-	return func() -> bool:
-		if not cache.has("v"):
-			cache["v"] = not need_source_candidates("rest").is_empty()
-		return cache["v"]
+	return func(colonist: Dictionary) -> bool:
+		var regions := _tile_grid.get_regions()
+		if not cache.has("regions"):
+			var reaching := {}
+			for bed: Vector3i in _raw_need_sources("rest"):
+				for region: int in _regions_reaching(regions, bed):
+					reaching[region] = true
+			cache["regions"] = reaching
+		return (cache["regions"] as Dictionary).has(regions.region_of(TileGrid.tile_of(colonist)))
 
 ## F5b (ADR 065): the best restore an eat_food job at tile would give; 0 when nothing edible.
 ## A ground berry restores the food need's "restore"; an item its content "satiety".

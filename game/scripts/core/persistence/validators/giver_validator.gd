@@ -2,7 +2,7 @@ class_name GiverValidator
 extends SaveCheck
 
 ## Save validation for what NeedsSystem and the job givers persist: "pausedJobs",
-## "needJobAssignments", "rescueVictimAssignments", "combatBlockedTargets", "approachJobTargets".
+## "needJobAssignments", "rescueVictimAssignments", "combatBlockedTargets", "approachJobTargets", "pendingColonyDeaths".
 
 ## NeedsSystem.paused_jobs as [{colonistId, jobId}]: the job a critical need interrupted
 ## (colonist-ai.md 3.6), never a job record.
@@ -31,6 +31,13 @@ static func _valid_paused_job_entry(value) -> Dictionary:
 		return _fail("invalid pausedJobs entry colonistId")
 	if not _matches_id_pattern(entry["jobId"]):
 		return _fail("invalid pausedJobs entry jobId")
+	return {"ok": true}
+
+## NeedsSystem.pending_colony_deaths (ADR 066): written only when at least one death waits for the
+## next decay tick, so a present value is a positive int.
+static func _valid_pending_colony_deaths(value) -> Dictionary:
+	if not _is_int_min(value, 1):
+		return _fail("invalid pendingColonyDeaths")
 	return {"ok": true}
 
 ## NeedGiver's colonist -> need-job map, same shape as pausedJobs.

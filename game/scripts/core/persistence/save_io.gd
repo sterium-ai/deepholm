@@ -19,7 +19,7 @@ const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "saplings", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
-const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting"]
+const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting", "pendingColonyDeaths"]
 
 ## Every entry point takes the session's ContentRegistry (A13b, ADR 010 amendment 2): its
 ## version, packs and tile/job/need ids are what a save is checked against. null builds the
@@ -283,6 +283,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return CalendarValidator._valid_incident_scheduler(state.get("incidentScheduler")),
 		func() -> Dictionary: return CalendarValidator._valid_scenario_start(state.get("scenarioStart")),
 		func() -> Dictionary: return _optional(state, "digFindRng", func(v: Variant) -> Dictionary: return ItemValidator._valid_dig_find_rng(v)),
+		func() -> Dictionary: return _optional(state, "pendingColonyDeaths", func(v: Variant) -> Dictionary: return GiverValidator._valid_pending_colony_deaths(v)),
 	]
 	for check in checks:
 		var result: Dictionary = check.call()

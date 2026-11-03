@@ -53,16 +53,24 @@ the list is empty, so a colonist that never thought saves as before. Only coloni
 **Code.** `ActorThoughts` (`core/actors/thoughts.gd`) is a static module with no state and no
 clock: every function takes the tick. Hooks, each one line or a short block:
 - `NeedsSystem.decay_needs()` calls `ActorThoughts.apply_state_tick()` inside its existing
-  colonist loop (prune, then `hungry` / `slept_ground`; the bed lookup runs only when rest is low);
+  colonist loop (prune, then `hungry` / `slept_ground`). "No bed reachable" is judged from each
+  colonist's own region. The set of regions that reach a bed is built at most once per tick,
+  and only when some colonist's rest is low;
 - `NeedsSystem.apply_need_effect()` adds `ate_meal` / `ate_raw` / `slept_bed`;
 - `ToilBindings._complete_job()` calls `NeedsSystem.add_job_thoughts()` (by `job_kinds`);
-- `CombatSystem.apply_actor_death()` adds `colonist_died` to the surviving colony colonists.
+- `CombatSystem.apply_actor_death()` calls `NeedsSystem.record_colony_death()`, which counts a
+  pending death. The next tick's decay colonist loop gives `colonist_died` to each colony
+  colonist once per pending death, then clears the count. The thought lands one tick after
+  the death.
 
-No new per-colonist loop, no randomness. Happiness is derived in `ViewSnapshot`, which gains a
+No new per-colonist loop (every per-colonist step runs in the existing decay loop), no
+randomness. Happiness is derived in `ViewSnapshot`, which gains a
 `happiness` block `{colonist id: {value, thoughts}}` for detailed ids; the panel reads it.
 
 **Persistence.** Schema v13. Migration `_v12_to_v13` changes no data (the field is optional
-and absent means no thoughts); the validator checks the shape, and fixture
+and absent means no thoughts); the validator checks the shape. An optional top-level
+`pendingColonyDeaths` (integer ≥ 1, absent when 0) carries a death not yet applied across a
+save, so a save in that window restores exactly. Fixture
 `save_schema_v13_fixture.json` carries thoughts.
 
 ## Alternatives considered

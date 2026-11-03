@@ -40,7 +40,8 @@ static func encode(world: WorldState) -> Dictionary:
 	var object_table := world._object_table.encode()
 	var zone_table := world._zone_table.encode()
 	var work_progress := world._progress_table.encode()
-	return {
+	var needs_fields := world._needs_system.encode()
+	var state := {
 		"schemaVersion": SCHEMA_VERSION,
 		"contentVersion": world._content.version(),
 		# Ordered like ContentRegistry.packs(); SaveIO refuses to load it on any other list.
@@ -80,7 +81,7 @@ static func encode(world: WorldState) -> Dictionary:
 		"workProgressOwners": work_progress["workProgressOwners"],
 		# A suspended job's own ticks, kept apart so another job on that tile cannot inherit them.
 		"suspendedWorkProgress": work_progress["suspendedWorkProgress"],
-		"pausedJobs": world._needs_system.encode()["pausedJobs"],
+		"pausedJobs": needs_fields["pausedJobs"],
 		"toolItems": _encode_tool_items(world._tool_store.items, world._tool_store.next_id),
 		"toolReservations": world._tool_store.reservations.snapshot(),
 		"needJobAssignments": _encode_paused_jobs(world._need_giver.get_pending_assignments()),
@@ -99,6 +100,10 @@ static func encode(world: WorldState) -> Dictionary:
 		# ADR 057 (v4): the scenario calendar and incident list the world keeps running under.
 		"scenarioStart": world._setup.encode(),
 	}
+	# ADR 066: a colony death still waiting for the next decay tick; absent means none.
+	if needs_fields.has("pendingColonyDeaths"):
+		state["pendingColonyDeaths"] = needs_fields["pendingColonyDeaths"]
+	return state
 
 ## Reconstructs a WorldState that ticks identically to the one that produced state,
 ## including in-flight route searches; the constructor's own generation is overwritten.

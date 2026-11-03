@@ -28,6 +28,10 @@ func _init() -> void:
 	_check_harvest_adds_harvested()
 	_check_craft_adds_crafted()
 	_check_colonist_death_saddens_the_survivors()
+	_check_stack_limit_replaces_the_earliest()
+	_check_bed_reachability_is_per_region()
+	_check_repeated_meal_refreshes_one_instance()
+	_check_raw_food_adds_ate_raw()
 	if _failed:
 		quit(1)
 		return
@@ -227,15 +231,12 @@ func _check_craft_adds_crafted() -> void:
 	_expect(not _thought_ids(world, "colonist_1").has("crafted"), "a colonist that did not craft does not think crafted")
 
 ## Death: a colony colonist killed in combat gives every surviving colony colonist
-## "colonist_died" (-15); the hostile attacker does not think it.
+## "colonist_died" (-15) at the next needs tick (CombatSystem records a pending death, the
+## decay loop applies it); the hostile attacker does not think it. The pending death is saved.
 func _check_colonist_death_saddens_the_survivors() -> void:
-	var world := WorldStateType.new(660009, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false)
-	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).objects.clear()
-	TestAccess.colonists(world).clear()
-	Scenarios.isolate_need(world, "")
+	var world := _combat_world(660009)
 	var victim := _spawn(world, "victim", Vector3i(10, 10, 0), "colony")
-	var witness := _spawn(world, "witness", Vector3i(20, 20, 0), "colony")
+	_spawn(world, "witness", Vector3i(20, 20, 0), "colony")
 	var attacker := _spawn(world, "raider", Vector3i(11, 10, 0), "raiders")
 	world.tick()
 	victim["health"]["hp"] = 1
@@ -246,11 +247,122 @@ func _check_colonist_death_saddens_the_survivors() -> void:
 		if TestAccess.find_colonist(world, "victim").is_empty():
 			break
 	_expect(TestAccess.find_colonist(world, "victim").is_empty(), "the victim must die in combat")
-	_expect(_thought_ids(world, "witness").has("colonist_died"), "a surviving colonist must think colonist_died")
-	_expect(_happiness(world, "witness") == 35, "colonist_died alone gives 35, got %d" % _happiness(world, "witness"))
-	_expect(not TestAccess.find_colonist(world, "raider").has("thoughts"), "a raider does not mourn a colony colonist")
-	var saved := WorldStateType.from_save_state(world.to_save_state())
-	_expect(_thought_ids(saved, "witness") == _thought_ids(world, "witness"), "colonist_died survives save/load")
+	_expect(not _thought_ids(world, "witness").has("colonist_died"), "the death is applied at the next needs tick")
+	var state := world.to_save_state()
+	_expect(int(state.get("pendingColonyDeaths", 0)) == 1, "the pending death must be saved: %s" % [state.get("pendingColonyDeaths")])
+	var bad := state.duplicate(true)
+	bad["pendingColonyDeaths"] = 0
+	_expect(not bool(TestAccess.save_validate_state(bad).get("ok", true)), "pendingColonyDeaths 0 must be rejected (absent means none)")
+	var restored := WorldStateType.from_save_state(state)
+	_expect(restored.state_hash() == world.state_hash(), "save/load with a pending death keeps state_hash()")
+	Scenarios.isolate_need(restored, "")  # need rates are test-only runtime tuning, not saved
+	world.tick()
+	restored.tick()
+	for w: WorldStateType in [world, restored]:
+		_expect(_thought_ids(w, "witness").has("colonist_died"), "a surviving colonist must think colonist_died")
+		_expect(_happiness(w, "witness") == 35, "colonist_died alone gives 35, got %d" % _happiness(w, "witness"))
+		_expect(not TestAccess.find_colonist(w, "raider").has("thoughts"), "a raider does not mourn a colony colonist")
+		_expect(not w.to_save_state().has("pendingColonyDeaths"), "the pending count is cleared once applied")
+	_expect(restored.state_hash() == world.state_hash(), "the restored world applies the pending death identically")
+
+## Stack limit: colonist_died stacks to 3; a fourth death restarts the instance that expires
+## first, so the three kept instances are the three latest deaths.
+func _check_stack_limit_replaces_the_earliest() -> void:
+	var world := _combat_world(660013)
+	var attacker := _spawn(world, "raider", Vector3i(10, 10, 0), "raiders")
+	var spots := [Vector3i(9, 10, 0), Vector3i(11, 10, 0), Vector3i(10, 9, 0), Vector3i(10, 11, 0)]
+	for i in spots.size():
+		_spawn(world, "victim_%d" % i, spots[i], "colony")
+	_spawn(world, "witness", Vector3i(40, 40, 0), "colony")
+	world.tick()
+	attacker["combat"]["damage"] = 999
+	attacker["health"]["hp"] = 99999
+	var seen: Array[int] = []
+	for _i in 600:
+		world.tick()
+		for record: Dictionary in TestAccess.find_colonist(world, "witness").get("thoughts", []):
+			if String(record["id"]) == "colonist_died" and not seen.has(int(record["until"])):
+				seen.append(int(record["until"]))
+		if seen.size() >= 4:
+			break
+	_expect(seen.size() == 4, "four deaths at different ticks give four instances over time, saw %s" % [seen])
+	if seen.size() < 4:
+		return
+	var kept: Array[int] = []
+	for record: Dictionary in TestAccess.find_colonist(world, "witness")["thoughts"]:
+		if String(record["id"]) == "colonist_died":
+			kept.append(int(record["until"]))
+	seen.sort()
+	_expect(kept == seen.slice(1), "the earliest-expiring instance is the one replaced: kept %s of %s" % [kept, seen])
+	_expect(_happiness(world, "witness") == 5, "three colonist_died give 50 - 45 = 5, got %d" % _happiness(world, "witness"))
+
+## Beds are per region: with a rock wall splitting the map, only the tired colonist cut off
+## from the bed thinks slept_ground.
+func _check_bed_reachability_is_per_region() -> void:
+	var world := Scenarios.empty_floor_world(660010)
+	Scenarios.isolate_need(world, "")
+	for y in TestAccess.tile_grid(world).height:
+		TestAccess.set_tile(world, 15, y, WorldStateType.TILE_ROCK)
+	TestAccess.object_table(world).set_object(Vector3i(5, 8, 0), "bed", "colony", "")
+	TestAccess.tile_grid(world).reset_cells()
+	for spec: Array in [["near", 3], ["cut_off", 20]]:
+		var colonist := Scenarios.idle_colonist(String(spec[0]), int(spec[1]), 3)
+		colonist["needs"] = Scenarios.full_needs({"rest": 10})
+		TestAccess.colonists(world).append(colonist)
+	for _i in 5:
+		world.tick()
+	_expect(_thought_ids(world, "cut_off").has("slept_ground"), "a tired colonist with no bed in its region thinks slept_ground")
+	_expect(not _thought_ids(world, "near").has("slept_ground"), "a tired colonist with a bed in its region does not")
+
+## Two meals: ate_meal is "refresh", so the second meal restarts its one instance.
+func _check_repeated_meal_refreshes_one_instance() -> void:
+	var world := _meal_and_bed_world(660011, false)
+	TestAccess.need_definitions(world)["rest"]["rate_per_day"] = 0
+	TestAccess.find_colonist(world, ID)["needs"]["rest"] = 100
+	Scenarios.add_stock(world, "meal", 1, 9, 3)
+	var first := _wait_for_until(world, "ate_meal", -1)
+	_expect(first > 0, "the hungry colonist must eat the first meal")
+	TestAccess.find_colonist(world, ID)["needs"]["food"] = 20
+	var second := _wait_for_until(world, "ate_meal", first)
+	_expect(second > first, "the second meal restarts ate_meal later: %d then %d" % [first, second])
+	var count := 0
+	for record: Dictionary in TestAccess.find_colonist(world, ID)["thoughts"]:
+		count += 1 if String(record["id"]) == "ate_meal" else 0
+	_expect(count == 1, "a refreshed thought keeps one instance, got %d" % count)
+
+## Raw food: eating the "food" item (not in meal_items) gives ate_raw, which weighs 0.
+func _check_raw_food_adds_ate_raw() -> void:
+	var world := Scenarios.empty_floor_world(660012)
+	Scenarios.isolate_need(world, "food")
+	TestAccess.need_definitions(world)["food"]["rate_per_day"] = 0
+	var colonist := Scenarios.idle_colonist(ID, 5, 3)
+	colonist["needs"] = Scenarios.full_needs({"food": 20})
+	TestAccess.colonists(world).append(colonist)
+	Scenarios.add_stock(world, "food", 1, 8, 3)
+	_expect(_wait_for_until(world, "ate_raw", -1) > 0, "eating raw food must add ate_raw")
+	_expect(not _thought_ids(world, ID).has("ate_meal"), "raw food is not a meal")
+	# hungry (0.1 day) was refreshed until the colonist ate; once it lapses only ate_raw is left.
+	for _i in int(0.1 * DAY_TICKS) + 2:
+		world.tick()
+	_expect(_thought_ids(world, ID).size() == 1 and _thought_ids(world, ID).has("ate_raw"), "only ate_raw is left: %s" % [_thought_ids(world, ID)])
+	_expect(_happiness(world, ID) == 50, "ate_raw weighs 0, got %d" % _happiness(world, ID))
+
+## Ticks until id's instance has an until later than after; returns it, or -1 within a day.
+func _wait_for_until(world: WorldStateType, id: String, after: int) -> int:
+	for _i in DAY_TICKS:
+		world.tick()
+		for record: Dictionary in TestAccess.find_colonist(world, ID).get("thoughts", []):
+			if String(record["id"]) == id and int(record["until"]) > after:
+				return int(record["until"])
+	return -1
+
+func _combat_world(seed_value: int) -> WorldStateType:
+	var world := WorldStateType.new(seed_value, 10, WorldStateType.MAP_WIDTH, WorldStateType.MAP_HEIGHT, false)
+	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
+	TestAccess.object_table(world).objects.clear()
+	TestAccess.colonists(world).clear()
+	Scenarios.isolate_need(world, "")
+	return world
 
 func _spawn(world: WorldStateType, id: String, at: Vector3i, faction: String) -> Dictionary:
 	var actor: Dictionary = ActorTableType.spawn("colonist", at, TestAccess.content(world), id)

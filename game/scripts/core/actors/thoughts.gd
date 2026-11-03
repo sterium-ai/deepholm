@@ -93,7 +93,8 @@ static func active(actor: Dictionary, thought_rules: Dictionary, now: int) -> Ar
 ## Once per tick from NeedsSystem.decay_needs()'s colonist loop, after the needs decayed: drops
 ## expired thoughts, then refreshes "hungry" while the food need is at or below its threshold
 ## and "slept_ground" while rest is at or below its threshold and no bed is reachable.
-## bed_reachable is a Callable() -> bool so the bed lookup runs only when rest is low.
+## bed_reachable is a Callable(actor) -> bool (a bed reachable from that actor's region), called
+## only when rest is low so the bed lookup runs only then.
 static func apply_state_tick(actor: Dictionary, thought_rules: Dictionary, now: int, day_length_ticks: int,
 		bed_reachable: Callable, registry) -> void:
 	if not applies(actor, registry) or thought_rules.is_empty():
@@ -103,7 +104,7 @@ static func apply_state_tick(actor: Dictionary, thought_rules: Dictionary, now: 
 	var needs: Dictionary = needs_component if needs_component != null else {}
 	if _need_at_or_below(needs, thought_rules.get("hungry", {})):
 		add(actor, "hungry", thought_rules, now, day_length_ticks, registry)
-	if _need_at_or_below(needs, thought_rules.get("slept_ground", {})) and not bool(bed_reachable.call()):
+	if _need_at_or_below(needs, thought_rules.get("slept_ground", {})) and not bool(bed_reachable.call(actor)):
 		add(actor, "slept_ground", thought_rules, now, day_length_ticks, registry)
 
 static func _need_at_or_below(needs: Dictionary, rule: Dictionary) -> bool:

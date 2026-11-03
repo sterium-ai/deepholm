@@ -898,6 +898,11 @@
         "state": { "type": "integer" }
       }
     },
+    "pendingColonyDeaths": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "ADR 066: colony colonist deaths recorded since the last needs decay tick; each colony colonist gets one colonist_died thought per death at that tick. Absent means none."
+    },
     "incidentScheduler": {
       "type": "object",
       "additionalProperties": false,

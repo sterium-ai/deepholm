@@ -2,12 +2,12 @@
 
 ## Branch and commit
 
-- Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, on `origin/main` `5399153` (F5b,
-  #54). Fetched again before committing: `origin/main` had not moved, so no rebase was needed. One
-  commit, not pushed.
+- Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, rebased on `origin/main`
+  `f55e9b0` (the owner's F5c scope approval), which sits on L3 `bb3ff32` (#55, no schema bump)
+  and F5b `5399153` (#54). Two commits (the feature, then the review round-1 fixes), not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
-  if F5a-b (v13) landed first. It has not landed (`origin/main` is still at v12), so **no
-  renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
+  if F5a-b (v13) landed first. It has not landed (`origin/main` is still at v12 after L3), so
+  **no renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
   `SCHEMA_VERSION` constant, the schema `const` and the `13:` arm move up by one.
 - ADR: **066** (owner's allocation), `docs/decisions/066-happiness-from-thoughts.md`, status
   *proposed*, plus its row in `docs/decisions/README.md`.
@@ -39,7 +39,7 @@ Content:
 - `game/data/text/en.json`: the panel's happiness label and one label per thought id.
 
 Simulation:
-- New `game/scripts/core/actors/thoughts.gd` (`ActorThoughts`, 125 lines). It is a static module
+- New `game/scripts/core/actors/thoughts.gd` (`ActorThoughts`, 126 lines). It is a static module
   with no state and no clock: every function takes the tick.
   - `add` refreshes a thought, or stacks it up to `stack_limit` and then restarts the instance
     that expires first.
@@ -47,30 +47,38 @@ Simulation:
     `apply_state_tick` and `ids_for_job_kind`.
   - Colonist state: an optional `thoughts: [{id, until}]`, sorted by id then `until`. A thought
     is active while `tick < until`. The key is erased when the list empties.
-  - No randomness and no new per-colonist loop.
+  - No randomness and no new per-colonist loop: every per-colonist step runs inside the
+    existing colonist loop of `NeedsSystem.decay_needs()` (a combat death is recorded as a
+    count and applied there, see hook 4).
   - Only colonists think: `applies(actor, registry)` is true when the actor's definition has the
     `worker` component, and the needs are read through `ActorTable.get_component()`. This keeps
     `test_actor_field_lint` clean: no bare `"colonist"` literal and no direct `actor.get("needs")`.
 
 **Hooks** (the owner asked for a minimal list; `needs_system.gd` was not rewritten and
 `world_state.gd` did not change, still 767 lines):
-1. `needs_system.gd:182-188`, `decay_needs()`. Inside the existing colonist loop, one call to
-   `ActorThoughts.apply_state_tick()`: prune, then `hungry` and `slept_ground`. The bed lookup
-   (`_bed_reachable_once`, :445) runs at most once per tick and only when some colonist's rest
-   is low.
-2. `needs_system.gd:421`, `apply_need_effect()`. This adds `ate_meal`, `ate_raw` or `slept_bed`
-   through `_need_thought` (:435). New helpers: `add_thought` (:424) and `add_job_thoughts`
-   (:429).
+1. `needs_system.gd:188-208`, `decay_needs()`. Inside the existing colonist loop, one call to
+   `ActorThoughts.apply_state_tick()` (:203): prune, then `hungry` and `slept_ground`. The bed
+   check is **per colonist**: `_bed_reachable_once()` (:467) returns a `Callable(colonist)` that
+   is true when a bed is reachable from that colonist's own region. The set of regions that
+   reach a bed is built at most once per tick, and only when some colonist's rest is low.
+2. `needs_system.gd:417`, `apply_need_effect()`. This adds `ate_meal`, `ate_raw` or `slept_bed`
+   through `_need_thought` (:456). New helpers: `add_thought` (:444) and `add_job_thoughts`
+   (:450).
 3. `toil_bindings.gd:368`, `_complete_job()`. One line: `_needs_system.add_job_thoughts(colonist,
    kind)`.
-4. `combat_system.gd:129-133`, `apply_actor_death()`. When a colony colonist dies, every other
-   living colony colonist gets `colonist_died`.
+4. `combat_system.gd:129-131`, `apply_actor_death()`. When a colony colonist dies, one call to
+   `_needs_system.record_colony_death()` (`needs_system.gd:124`) increments
+   `pending_colony_deaths`. There is no loop in combat. The next tick's `decay_needs()` colonist
+   loop (:205-208) gives `colonist_died` once per pending death to each colony colonist, then
+   clears the count. Decay runs before combat in a tick, so the survivors think it one tick
+   after the death. That is 1 tick out of a 5-day thought.
 
 Presentation:
 - `view_snapshot.gd`: a `happiness` block, `{colonist id: {value, thoughts}}`, derived at the
   snapshot tick for detailed ids.
-- `viewer/colonist_panel.gd`: `_happiness_lines` shows "Happiness N" and one line per active
-  thought, with its weight and the days left.
+- `viewer/colonist_panel.gd`: `_happiness_lines` (:502) shows "Happiness: N/100" and one line
+  per active thought, with its name and weight. The snapshot carries each thought's
+  `remaining` ticks, but the panel does not show it.
 
 Persistence (schema v13):
 - `entity_codec.gd` encodes and decodes `thoughts` when present.
@@ -78,7 +86,15 @@ Persistence (schema v13):
 - `state_codec.gd`: `SCHEMA_VERSION` 13.
 - `save_migrations.gd`: `_v12_to_v13()` changes no data. The field is optional, and an absent
   field means no thoughts.
-- `game-state.schema.json`: `const 13` and the optional `thoughts` on a colonist.
+- `game-state.schema.json`: `const 13`, the optional `thoughts` on a colonist, and the optional
+  top-level `pendingColonyDeaths` (integer ≥ 1). It is present only when a colony colonist died
+  on the tick being saved; that is the window between the death and the next decay tick.
+  - `NeedsSystem` encodes and decodes it, through `state_codec.gd`.
+  - `save_io.gd` lists it among the optional top-level fields.
+  - `giver_validator.gd` (`_valid_pending_colony_deaths`) rejects 0, negatives and non-integers,
+    because absent means none.
+  - It is part of the same unreleased v13 bump, so it needs no further migration: a v12 save
+    never has a death pending.
 - New fixture `game/scripts/tests/fixtures/save_schema_v13_fixture.json`, written by
   `docs/orca/handoffs/F5c-write-save.gd`. It carries thoughts.
 - `state_hash()` hashes the whole colonist dictionary (`EntityCodec._hash_colonists`), so
@@ -94,17 +110,32 @@ Persistence (schema v13):
 - `crafted` counts only `craft_work`. `cook_work` is not counted; adding it is a one-word
   content change. The thought is given to the worker who completes the job.
 - `colonist_died` goes to every colony colonist. Relations are a non-goal.
-- The panel shows each thought's weight and the days it has left.
+- `colonist_died` lands one tick after the death, through the pending count (hook 4).
+- The panel shows each thought's name and weight, not its time left.
 
-## Owner approvals pending (files outside the listed owned paths)
+**Owner decision: awaiting.** No decision on these deviations is recorded in BACKLOG F5c yet.
+The owner is asked to accept or change each one. ADR 066 stays *proposed* until then.
+
+## Owner approvals (files outside the listed owned paths)
+
+**Owner decision: approved** for the scope, in BACKLOG F5c on `main`, commit `f55e9b0`:
+
+> **Review round 1 (owner's interface, 2026-11-03): scope.** `core/world/view_snapshot.gd`
+> (happiness and active thoughts for the panel) and `game/data/text/en.json` (thought labels)
+> are approved as F5c's scope, as declared in the handoff. The technical findings (per-actor
+> bed reachability, death thoughts through the existing actor iteration, trigger-driven tests
+> for stack limits/replacement/refresh/raw food) are fixed as Codex asks — no amendment.
 
 The owned paths allow "hooks where the triggering events are emitted", "persistence" and
 "viewer colonist panel". These files sit in or next to those areas but are not named:
-- hooks: `needs_system.gd`, `toil_bindings.gd`, `combat_system.gd`;
-- viewer data: `view_snapshot.gd`;
+- hooks: `needs_system.gd` (also `pending_colony_deaths`), `toil_bindings.gd`,
+  `combat_system.gd`;
+- **viewer data: `game/scripts/core/world/view_snapshot.gd`** (the `happiness` block the panel
+  reads; the panel cannot derive it itself);
 - persistence: `entity_codec.gd`, `entity_validator.gd`, `state_codec.gd`, `save_migrations.gd`,
+  `save_io.gd`, `validators/giver_validator.gd`,
   `docs/architecture/contracts/game-state.schema.json`, `test_save_migration.gd`;
-- text: `game/data/text/en.json`;
+- **text: `game/data/text/en.json`** (the happiness label and the thought names the panel shows);
 - ADR index: `docs/decisions/README.md`.
 
 ## Validation
@@ -127,22 +158,22 @@ Results at the branch head:
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
 - `lint_content_literals.ps1`: `PASS (no tile-id/work-ticks/move-ticks literal found outside the
   registry)`.
-- `measure_core.ps1`: `core total: 23133 lines in 113 files`. Touched files (lines, code lines,
+- `measure_core.ps1`: `core total: 23170 lines in 113 files`. Touched files (lines, code lines,
   functions, largest function and its length):
 
 | file | lines | code | funcs | largest function |
 |---|---|---|---|---|
 | `world_state.gd` | 767 (unchanged) | 593 | 114 | `state_hash` 30 |
-| `state_codec.gd` | 597 | 436 | 106 | `decode` 70 |
+| `state_codec.gd` | 602 | 440 | 107 | `decode` 70 |
 | `toil_bindings.gd` | 500 | 376 | 87 | `_init` 49 |
-| `needs_system.gd` | 489 | 382 | 72 | `ensure_needs` 45 |
+| `needs_system.gd` | 514 | 398 | 80 | `ensure_needs` 45 |
 
-  The other touched core files (`thoughts.gd` 125, `combat_system.gd` 201, `view_snapshot.gd`
-  264, `entity_codec.gd`, `entity_validator.gd` 320, `save_migrations.gd` 286) are far below
-  800 lines.
+  The other touched core files (`thoughts.gd` 126, `combat_system.gd` 199, `save_io.gd` 404,
+  `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd`,
+  `entity_validator.gd` 320, `save_migrations.gd` 286) are far below 800 lines.
 - Tests compared with `main`:
   - `test_*.gd` files: 136 on main, 137 on the branch (`+test_thoughts.gd`);
-  - `_check_` sites: 2130 on main, 2152 on the branch;
+  - `_check_` sites: 2130 on main, 2160 on the branch;
   - no test was deleted, skipped or loosened.
 
 `test_thoughts.gd` drives everything through real ticks, commands and jobs, never through
@@ -153,14 +184,40 @@ direct calls:
 3. Thoughts expire on schedule: `ate_meal` is still active at `until − 1` (happiness 60) and gone
    at `until` (50), and the key is erased.
 4. The same seed gives the same `state_hash()`.
-5. A save/load in the middle of a thought continues tick by tick with identical hashes.
+5. A save/load in the middle of a thought: the original and the restored world both run two
+   more days, then their `state_hash()` values are compared once and match.
 6. A recorded session replays to identical hashes.
 7. A harvest job gives `harvested` (happiness 52).
 8. A craft job gives `crafted` to the crafter only.
-9. A colonist's death in combat gives `colonist_died` to the witness (35) and nothing to the
-   raider. The thought survives save/load.
+9. A colonist's death in combat records `pendingColonyDeaths` 1, which is saved (a value of 0 is
+   rejected on load). At the next tick the witness gets `colonist_died` (35) in both the
+   original and the restored world, with identical hashes. The raider gets nothing.
+10. Stack limit: four deaths keep three `colonist_died` instances; the fourth replaces the
+    earliest (happiness 5).
+11. Per-region beds: with a rock wall between them, the colonist cut off from the bed gets
+    `slept_ground` and the one beside it does not.
+12. A repeated meal refreshes the one `ate_meal` instance instead of adding a second one.
+13. Raw food adds `ate_raw` only (happiness 50).
+
+## Review response (round 1, `.orca-review.md`, REQUEST_CHANGES)
+
+Blocking:
+1. **Bed reachability was colony-wide.** Fixed: it is now per colonist region (hook 1). Test 11.
+2. **A per-colonist loop was added in combat.** Fixed: combat records a pending count, and the
+   existing decay loop applies it (hook 4). The count is persisted as `pendingColonyDeaths`,
+   so a save in between is exact. Test 9.
+3. **Missing tests.** Added tests 10–13. Test 9 now also covers the pending count.
+4. **Scope amendment for `view_snapshot.gd` and `en.json`.** *Approved* by the owner in BACKLOG
+   F5c (`f55e9b0`, quoted under "Owner approvals"). Items 1–3 are fixed as Codex asks.
+5. **Deviations need the owner's quoted decision.** None is recorded in BACKLOG F5c, so each
+   is marked *awaiting* above and ADR 066 stays *proposed*.
+
+Non-blocking:
+- The panel shows name and weight only. The "days left" claim was removed.
+- Test 5 is described as it runs: two days, then one hash comparison. It does not compare
+  tick by tick.
 
 ## Limitations and next action
 
 - Happiness is information only. Its consequences (depression) are F5d.
-- The owner should review the deviations and pending approvals above, then sign off ADR 066.
+- The owner should review the deviations above, then sign off ADR 066.
