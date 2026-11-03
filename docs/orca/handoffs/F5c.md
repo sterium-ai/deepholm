@@ -4,10 +4,11 @@
 
 - Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, rebased on `origin/main`
   `f55e9b0` (the owner's F5c scope approval), which sits on L3 `bb3ff32` (#55, no schema bump)
-  and F5b `5399153` (#54). Three commits (the feature, the review round-1 fixes, the handoff figures after the rebase), not pushed.
+  and F5b `5399153` (#54). Four commits (the feature, the review round-1 fixes, the handoff figures after the rebase, the review round-2 fixes), not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
-  if F5a-b (v13) landed first. It has not landed (`origin/main` is still at v12 after L3), so
-  **no renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
+  if F5a-b (v13) landed first. F5a-b (tool hauling, its own v13 bump) is a different task from
+  F5b (#54, cooking, merged, v12). F5a-b has not landed: `origin/main` (`f55e9b0`) is still at
+  `SCHEMA_VERSION` 12 after L3. So there is **no renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
   `SCHEMA_VERSION` constant, the schema `const` and the `13:` arm move up by one.
 - ADR: **066** (owner's allocation), `docs/decisions/066-happiness-from-thoughts.md`, status
   *proposed*, plus its row in `docs/decisions/README.md`.
@@ -67,11 +68,13 @@ Simulation:
 3. `toil_bindings.gd:368`, `_complete_job()`. One line: `_needs_system.add_job_thoughts(colonist,
    kind)`.
 4. `combat_system.gd:129-131`, `apply_actor_death()`. When a colony colonist dies, one call to
-   `_needs_system.record_colony_death()` (`needs_system.gd:124`) increments
+   `_needs_system.record_colony_death()` (`needs_system.gd:129`) increments
    `pending_colony_deaths`. There is no loop in combat. The next tick's `decay_needs()` colonist
-   loop (:205-208) gives `colonist_died` once per pending death to each colony colonist, then
+   loop (:210-213) gives `colonist_died` once per pending death to each colony colonist, then
    clears the count. Decay runs before combat in a tick, so the survivors think it one tick
-   after the death. That is 1 tick out of a 5-day thought.
+   after the death. That is 1 tick out of a 5-day thought. The count is in `state_hash()`:
+   `NeedsSystem.hash_into()` adds `pending_colony_deaths` when it is above 0, called from the
+   existing `_crafting.hash_into(snapshot)` line, so `world_state.gd` stays at 767 lines.
 
 Presentation:
 - `view_snapshot.gd`: a `happiness` block, `{colonist id: {value, thoughts}}`, derived at the
@@ -113,8 +116,18 @@ Persistence (schema v13):
 - `colonist_died` lands one tick after the death, through the pending count (hook 4).
 - The panel shows each thought's name and weight, not its time left.
 
-**Owner decision: awaiting.** No decision on these deviations is recorded in BACKLOG F5c yet.
-The owner is asked to accept or change each one. ADR 066 stays *proposed* until then.
+**Owner decision: awaiting.** No decision on these deviations is recorded in BACKLOG F5c yet
+(`origin/main` is still `f55e9b0` at round 2). The owner is asked to accept or change each one.
+ADR 066 stays *proposed* until then.
+
+Why the code does not follow the design text literally instead:
+- **Ground sleep.** No sleep job ends on the floor: sleep need jobs always target a bed. A
+  literal "slept on the ground" event would need a new floor-sleep job, which is outside F5c and
+  would mean rewriting `needs_system`'s sleep path (the owner note forbids a rewrite).
+- **Death one tick late.** An immediate thought needs a loop over the survivors inside
+  `apply_actor_death()`. That loop is exactly what review round 1 rejected, and the owner's
+  round-1 note says to fix it as Codex asks. The pending count is the remaining way to use the
+  existing decay loop.
 
 ## Owner approvals (files outside the listed owned paths)
 
@@ -152,21 +165,21 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
 Results at the branch head:
-- Suite (after the rebase on `f55e9b0`): `run_tests: all 138 test(s) PASS  [1.037s]` (1037 s; the dot is the locale thousands separator)
+- Suite (review round 2, on `f55e9b0`): `run_tests: all 138 test(s) PASS  [995s]`
 - `test_thoughts.gd`: PASS.
 - `check_core_budgets.py`: `OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
 - `lint_content_literals.ps1`: `PASS (no tile-id/work-ticks/move-ticks literal found outside the
   registry)`.
-- `measure_core.ps1`: `core total: 23449 lines in 114 files` (L3 included). Touched files (lines, code lines,
-  functions, largest function and its length):
+- `measure_core.ps1`: `core total: 23454 lines in 114 files` (L3 included). Touched files (lines, code lines,
+  comment lines, largest function and its length):
 
-| file | lines | code | funcs | largest function |
+| file | lines | code | comments | largest function |
 |---|---|---|---|---|
 | `world_state.gd` | 767 (unchanged) | 593 | 114 | `state_hash` 30 |
 | `state_codec.gd` | 602 | 440 | 107 | `decode` 70 |
 | `toil_bindings.gd` | 500 | 376 | 87 | `_init` 49 |
-| `needs_system.gd` | 514 | 398 | 80 | `ensure_needs` 45 |
+| `needs_system.gd` | 519 | 401 | 81 | `ensure_needs` 45 |
 
   The other touched core files (`thoughts.gd` 126, `combat_system.gd` 199, `save_io.gd` 404,
   `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd`,
@@ -191,7 +204,9 @@ direct calls:
 8. A craft job gives `crafted` to the crafter only.
 9. A colonist's death in combat records `pendingColonyDeaths` 1, which is saved (a value of 0 is
    rejected on load). At the next tick the witness gets `colonist_died` (35) in both the
-   original and the restored world, with identical hashes. The raider gets nothing.
+   original and the restored world, with identical hashes. The raider gets nothing. A save
+   with the pending count removed loads to a different `state_hash()` (round 2: the count is
+   hashed; this assertion fails without the fix).
 10. Stack limit: four deaths keep three `colonist_died` instances; the fourth replaces the
     earliest (happiness 5).
 11. Per-region beds: with a rock wall between them, the colonist cut off from the bed gets
@@ -216,6 +231,22 @@ Non-blocking:
 - The panel shows name and weight only. The "days left" claim was removed.
 - Test 5 is described as it runs: two days, then one hash comparison. It does not compare
   tick by tick.
+
+## Review response (round 2, `.orca-review.md`, REQUEST_CHANGES)
+
+Blocking:
+1. **`pending_colony_deaths` was not in `state_hash()`.** Fixed: `NeedsSystem.hash_into()`
+   adds it when above 0 (hook 4). Test 9 checks that two worlds that differ only in the pending
+   count hash differently. With the hash line reverted, `test_thoughts` fails.
+2. **Deviations still lack the owner's decision.** No decision has been recorded on `main`
+   since `f55e9b0`. They stay *awaiting*. The section above now says why the design text
+   cannot be followed literally within F5c's limits. **For the owner:** accept or change the
+   ground-sleep substitute and the one-tick death delay.
+
+Non-blocking:
+- The measure table's `funcs` column is renamed `comments` (it is comment lines).
+- The schema bullet now says that F5a-b (tool hauling, v13, not landed) is not F5b (#54, v12,
+  merged). The branch stays at v13.
 
 ## Limitations and next action
 

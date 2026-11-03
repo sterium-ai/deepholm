@@ -119,6 +119,11 @@ func decode(state: Dictionary) -> void:
 	paused_jobs = StateCodec._decode_paused_jobs(state["pausedJobs"])
 	pending_colony_deaths = int(state.get("pendingColonyDeaths", 0))
 
+## WorldState.state_hash() calls this: a pending death changes the next tick's thoughts.
+func hash_into(snapshot: Dictionary) -> void:
+	if pending_colony_deaths > 0:
+		snapshot["pending_colony_deaths"] = pending_colony_deaths
+
 ## CombatSystem.apply_actor_death() calls this when a colony colonist dies; the thoughts land at
 ## the next decay_needs(), through its existing colonist loop.
 func record_colony_death() -> void:

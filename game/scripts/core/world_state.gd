@@ -397,7 +397,7 @@ func state_hash(include_incidents: bool = true) -> int:
 	_progress_table.hash_into(snapshot)
 	_construction.hash_into(snapshot)
 	_farm.hash_into(snapshot)
-	_crafting.hash_into(snapshot)
+	_crafting.hash_into(snapshot); _needs_system.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
 

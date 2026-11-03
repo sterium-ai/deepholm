@@ -61,7 +61,8 @@ clock: every function takes the tick. Hooks, each one line or a short block:
 - `CombatSystem.apply_actor_death()` calls `NeedsSystem.record_colony_death()`, which counts a
   pending death. The next tick's decay colonist loop gives `colonist_died` to each colony
   colonist once per pending death, then clears the count. The thought lands one tick after
-  the death.
+  the death. A pending count shapes the next tick, so `state_hash()` includes it
+  (`NeedsSystem.hash_into()`, only when above 0).
 
 No new per-colonist loop (every per-colonist step runs in the existing decay loop), no
 randomness. Happiness is derived in `ViewSnapshot`, which gains a

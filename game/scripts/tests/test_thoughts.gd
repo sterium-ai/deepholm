@@ -255,6 +255,9 @@ func _check_colonist_death_saddens_the_survivors() -> void:
 	_expect(not bool(TestAccess.save_validate_state(bad).get("ok", true)), "pendingColonyDeaths 0 must be rejected (absent means none)")
 	var restored := WorldStateType.from_save_state(state)
 	_expect(restored.state_hash() == world.state_hash(), "save/load with a pending death keeps state_hash()")
+	var forgotten := state.duplicate(true)
+	forgotten.erase("pendingColonyDeaths")
+	_expect(WorldStateType.from_save_state(forgotten).state_hash() != world.state_hash(), "state_hash() must see the pending death (it changes the next tick's thoughts)")
 	Scenarios.isolate_need(restored, "")  # need rates are test-only runtime tuning, not saved
 	world.tick()
 	restored.tick()
