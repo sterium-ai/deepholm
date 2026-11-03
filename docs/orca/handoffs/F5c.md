@@ -3,10 +3,11 @@
 ## Branch and commit
 
 - Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, rebased on `origin/main`
-  `f51498d` (the owner's round-2 decisions), on top of `f55e9b0` (the F5c scope approval), L3
+  `15211a7` (a BACKLOG-only L4 amendment) after `f51498d` (the owner's round-2 decisions), on top of `f55e9b0` (the F5c scope approval), L3
   `bb3ff32` (#55, no schema bump) and F5b `5399153` (#54). Five commits (the feature, the
   review round-1 fixes, the handoff figures after the rebase, the review round-2 fixes, the
-  owner round-2 change, plus a sixth with the review round-3 handoff wording), not pushed.
+  owner round-2 change, plus a sixth with the review round-3 handoff wording) and a seventh
+  typing the new code for the CI warnings gate, not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
   if F5a-b (v13) landed first. F5a-b (tool hauling, its own v13 bump) is a different task from
   F5b (#54, cooking, merged, v12). F5a-b has not landed: `origin/main` (`f51498d`) is still at
@@ -184,7 +185,7 @@ Results at the branch head:
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
 - `lint_content_literals.ps1`: `PASS (no tile-id/work-ticks/move-ticks literal found outside the
   registry)`.
-- `measure_core.ps1`: `core total: 23454 lines in 114 files` (L3 included). Touched files (lines, code lines,
+- `measure_core.ps1`: `core total: 23500 lines in 114 files` (after the CI warnings fix) (L3 included). Touched files (lines, code lines,
   comment lines, largest function and its length):
 
 | file | lines | code | comments | largest function |
@@ -192,11 +193,11 @@ Results at the branch head:
 | `world_state.gd` | 767 (unchanged) | 593 | 114 | `state_hash` 30 |
 | `state_codec.gd` | 602 | 440 | 107 | `decode` 70 |
 | `toil_bindings.gd` | 500 | 376 | 87 | `_init` 49 |
-| `needs_system.gd` | 519 | 401 | 81 | `ensure_needs` 45 |
+| `needs_system.gd` | 523 | 405 | 81 | `ensure_needs` 45 |
 
-  The other touched core files (`thoughts.gd` 126, `combat_system.gd` 199, `save_io.gd` 404,
-  `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd`,
-  `entity_validator.gd` 320, `save_migrations.gd` 286) are far below 800 lines.
+  The other touched core files (`thoughts.gd` 157, `combat_system.gd` 200, `save_io.gd` 404,
+  `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd` 274,
+  `entity_validator.gd` 326, `save_migrations.gd` 286) are far below 800 lines.
 - Tests compared with `main`:
   - `test_*.gd` files: 137 on main (`f51498d`), 138 on the branch (`+test_thoughts.gd`);
   - `_check_` sites: 2156 on main, 2188 on the branch;
@@ -281,6 +282,28 @@ Non-blocking:
   `_needs_system.hash_into(snapshot)` (hook 4).
 - **Full suite not rerun in the review sandbox.** Rerun here after the wording fix; the result
   is the round-3 suite line under Validation.
+
+## Owner note (CI warnings gate, PR #56)
+
+CI failed `check_core_warnings` (2862 against the 2795 baseline). The baseline file was **not**
+touched; the new code is typed instead:
+- `thoughts.gd`: `registry: ContentRegistry` parameters, typed locals everywhere, small typed
+  readers `_id_of()`, `_until_of()`, `_weight_of()`; behaviour unchanged (the bed callable still
+  runs only when rest is low).
+- `needs_system.gd`: typed locals for `pendingColonyDeaths`, the decay-loop colonist
+  (`thinker`), its faction, `eaten_kind` and the job kind. Hooks only, no rewrite.
+- `combat_system.gd`: a typed `faction` local before the death hook.
+- `entity_codec.gd`: `(… as Dictionary).get("thoughts", [])` and typed `id`/`until` in the encoder.
+- `entity_validator.gd` / `giver_validator.gd`: `value: Variant` parameters, `typeof()` checks
+  and typed locals (same accepted and rejected inputs).
+
+Gate (`GODOT=… tools/check_core_warnings.ps1`, baseline from `main`):
+`check_core_warnings: OK, 2795 warning(s), none above baseline` (untyped_declaration 507,
+unsafe_method_access 226, unsafe_call_argument 2035, other 27).
+
+Suite after the typing (on `15211a7`): `run_tests: all 138 test(s) PASS  [1.015s]` (1015 s).
+`test_thoughts.gd` and `test_save_migration.gd`: PASS. `check_core_budgets.py`: OK, no cap raised.
+`lint_content_literals.ps1`: PASS.
 
 ## Limitations and next action
 

@@ -117,7 +117,8 @@ func encode() -> Dictionary:
 
 func decode(state: Dictionary) -> void:
 	paused_jobs = StateCodec._decode_paused_jobs(state["pausedJobs"])
-	pending_colony_deaths = int(state.get("pendingColonyDeaths", 0))
+	var pending: int = state.get("pendingColonyDeaths", 0)
+	pending_colony_deaths = pending
 
 ## WorldState.state_hash() calls this: a pending death changes the next tick's thoughts.
 func hash_into(snapshot: Dictionary) -> void:
@@ -205,11 +206,13 @@ func decay_needs() -> void:
 	for colonist in _get_colonists.call():
 		NeedsType.apply_tick(colonist, needs_tunables)
 		HealthType.apply_tick(colonist)
-		ActorThoughts.apply_state_tick(colonist, thought_rules, _clock.tick, day_length, bed_reachable,
+		var thinker: Dictionary = colonist
+		ActorThoughts.apply_state_tick(thinker, thought_rules, _clock.tick, day_length, bed_reachable,
 			_content)
-		if String(colonist.get("factionId", "colony")) == "colony":
+		var faction: String = thinker.get("factionId", "colony")
+		if faction == "colony":
 			for _death in pending_colony_deaths:
-				add_thought(colonist, "colonist_died")
+				add_thought(thinker, "colonist_died")
 	pending_colony_deaths = 0
 
 ## Pauses a colonist's current job (colonist-ai.md 3.6): suspends colonist.work, or reads the job
@@ -439,11 +442,12 @@ func apply_need_effect(colonist: Dictionary, job: Dictionary) -> void:
 			_item_table.consume_ground_berry(target)
 		else:
 			var item_id: String = item["id"]
-			eaten_kind = String(item["kind"])
+			eaten_kind = item["kind"]
 			restore = float(_satiety_of(item))
 			_item_table.remove_ground_item_units(item_id, 1)
 	needs[need_kind] = mini(_need_full, int(restore))
-	add_thought(colonist, _need_thought(String(job["kind"]), eaten_kind))
+	var job_kind: String = job["kind"]
+	add_thought(colonist, _need_thought(job_kind, eaten_kind))
 
 ## F5c (ADR 066): adds thought id to colonist now (no-op for an empty id or undefined thought).
 func add_thought(colonist: Dictionary, id: String) -> void:

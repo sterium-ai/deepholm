@@ -41,8 +41,9 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 			entity["wild"] = true
 		if colonist.has("visitor"):
 			entity["visitor"] = true
-		if colonist.has("thoughts"):
-			entity["thoughts"] = _encode_thoughts(colonist["thoughts"])
+		var colonist_thoughts: Array = (colonist as Dictionary).get("thoughts", [])
+		if not colonist_thoughts.is_empty():
+			entity["thoughts"] = _encode_thoughts(colonist_thoughts)
 		entities.append(entity)
 	return entities
 
@@ -84,8 +85,9 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 			colonist["wild"] = true
 		if entity.has("visitor"):
 			colonist["visitor"] = true
-		if entity.has("thoughts"):
-			colonist["thoughts"] = _encode_thoughts(entity["thoughts"])
+		var entity_thoughts: Array = (entity as Dictionary).get("thoughts", [])
+		if not entity_thoughts.is_empty():
+			colonist["thoughts"] = _encode_thoughts(entity_thoughts)
 		colonists.append(colonist)
 	return colonists
 
@@ -170,7 +172,9 @@ static func _encode_skills(skills: Dictionary) -> Dictionary:
 static func _encode_thoughts(thoughts: Array) -> Array:
 	var encoded: Array = []
 	for record: Dictionary in thoughts:
-		encoded.append({"id": String(record["id"]), "until": int(record["until"])})
+		var id: String = record["id"]
+		var until: int = record["until"]
+		encoded.append({"id": id, "until": until})
 	return encoded
 
 static func _decode_labour_table(labour_table: Dictionary) -> Dictionary:

@@ -126,7 +126,8 @@ func apply_actor_death(actor: Dictionary) -> void:
 	var colonist_id: String = String(actor["id"])
 	_drop_inventory_contents(actor)
 	_remove_colonist_by_id.call(colonist_id, true)
-	if ActorThoughts.applies(actor, _content) and String(actor.get("factionId", "colony")) == "colony":
+	var faction: String = actor.get("factionId", "colony")
+	if ActorThoughts.applies(actor, _content) and faction == "colony":
 		# F5c (ADR 066): the survivors think "colonist_died" at the next decay tick.
 		_needs_system.record_colony_death()
 

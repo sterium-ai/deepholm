@@ -35,8 +35,8 @@ static func _valid_paused_job_entry(value) -> Dictionary:
 
 ## NeedsSystem.pending_colony_deaths (ADR 066): written only when at least one death waits for the
 ## next decay tick, so a present value is a positive int.
-static func _valid_pending_colony_deaths(value) -> Dictionary:
-	if not _is_int_min(value, 1):
+static func _valid_pending_colony_deaths(value: Variant) -> Dictionary:
+	if typeof(value) != TYPE_INT or (value as int) < 1:
 		return _fail("invalid pendingColonyDeaths")
 	return {"ok": true}
 

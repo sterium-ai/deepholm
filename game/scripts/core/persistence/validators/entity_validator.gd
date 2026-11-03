@@ -280,18 +280,24 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 static func _valid_thoughts(value: Variant) -> bool:
 	if not (value is Array) or (value as Array).is_empty():
 		return false
-	var previous: Dictionary = {}
-	for record: Variant in value:
-		if not (record is Dictionary) or not _keys_allowed(record, ["id", "until"]):
+	var previous_id := ""
+	var previous_until := -1
+	for raw: Variant in value:
+		if not (raw is Dictionary):
 			return false
-		if not record.has("id") or not record.has("until") or not (record["id"] is String):
+		var record: Dictionary = raw
+		if not _keys_allowed(record, ["id", "until"]) or not record.has("id") or not record.has("until"):
 			return false
-		if not _matches_id_pattern(record["id"]) or not _is_int_min(record["until"], 0):
+		if not (record["id"] is String) or typeof(record["until"]) != TYPE_INT:
 			return false
-		if not previous.is_empty() and (String(previous["id"]) > String(record["id"])
-				or (previous["id"] == record["id"] and int(previous["until"]) > int(record["until"]))):
+		var id: String = record["id"]
+		var until: int = record["until"]
+		if not _matches_id_pattern(id) or until < 0:
 			return false
-		previous = record
+		if previous_until >= 0 and (previous_id > id or (previous_id == id and previous_until > until)):
+			return false
+		previous_id = id
+		previous_until = until
 	return true
 
 ## "needs" and "needsAccumulator", each present only for the kinds that declare them, keyed by
