@@ -1212,6 +1212,13 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   to "materials only" moves the food to B within a day; deterministic `state_hash()`; save/load
   and replay identical; suite green.
 - **Non-goals:** per-item filters, stack limits, hauling priorities beyond the stockpile one.
+- **Approved amendments (owner's interface, 2026-11-03, review round 2):** (1) scope extension
+  to `game/scripts/core/crafting/crafting_system.gd` (`stock_tools()` respects the destination's
+  filters, ~9 lines) — approved; (2) an **already-stocked tool stays** in a stockpile that later
+  rejects tools until a colonist takes it: accepted as an F5a limitation, because hauling an
+  identity-bearing tool out needs a `ToolItemStore` haul path (ADR 061 territory). Follow-up
+  **F5a-b — haul rejected tools out of a stockpile** (`todo`, after F5a; owned: haul_giver,
+  tool_item_store, tool_*_toil, tests). The limitation is documented in the F5a handoff.
 
 ### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
 
