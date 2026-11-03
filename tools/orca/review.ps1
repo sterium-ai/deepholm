@@ -44,7 +44,7 @@ if (-not $SkipPreflight) {
         # audit 2026-10-30). Only code commits count.
         $mergeBase = (git merge-base $Base HEAD).Trim()
         $codeFiles = @(git diff --name-only "$mergeBase" "$Base" | Where-Object {
-            $_ -notmatch '\.md$' -and $_ -notmatch '^docs/(orca|decisions|design|art)/' -and $_ -notmatch '^(tools/orca|\.claude)/' })
+            $_ -notmatch '\.md$' -and $_ -notmatch '^docs/(orca|decisions|design|art)/' -and $_ -notmatch '^(tools|\.claude|\.github)/' })
         if ($codeFiles.Count -gt 0) {
             $behind = (git rev-list --count "HEAD..$Base")
             $problems += "the branch is $behind commit(s) behind ${Base} with code changes ($($codeFiles.Count) file(s)): fetch + rebase, rerun the warnings gate and the full suite on the rebased head"
