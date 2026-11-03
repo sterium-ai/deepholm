@@ -346,9 +346,12 @@ func haul_target_lost(job: Dictionary) -> bool:
 ## set down at the colonist's tile (_set_down_held()), every reservation of the job is released,
 ## execution state is cleared and on_toil_fail fails the job with invalid_target (remedy
 ## resubmit_order). HaulGiver offers the tool again with a fresh target the next tick.
+## Review round 9: the job's own cargo (item_id) held unreserved, as an interrupt leaves it before
+## ToolFetchToil re-reserves it, is set down too, so it never stays in the hand.
 func fail_for_invalid_target(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var held_id := String(colonist.get("held_tool", ""))
-	if not held_id.is_empty() and String(_tool_reservation_of.call(held_id)) == job_id:
+	var owner := "" if held_id.is_empty() else String(_tool_reservation_of.call(held_id))
+	if not held_id.is_empty() and (owner == job_id or (owner.is_empty() and held_id == String(job.get("item_id", "")))):
 		_set_down_held(held_id, TileGrid.tile_of(colonist))
 	_release_all_tool_reservations.call(job_id)
 	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")

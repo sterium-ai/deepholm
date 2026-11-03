@@ -26,7 +26,9 @@ extends SceneTree
 ##   resuming, the job reserves the pick again and stocks it in B; a pick walled off while its
 ##   haul_tool job goes to fetch it fails that job once (blocked_target_unreachable), stays stocked
 ##   in A, is not offered again while walled off, and is carried to B once the wall is gone; with
-##   the preferred accepting stockpile C walled off, the pick is carried to the reachable B instead.
+##   the preferred accepting stockpile C walled off, the pick is carried to the reachable B instead;
+##   B walled off mid-carry, or B rejecting tools while a need interrupts the carrier, fails the job
+##   with the pick set down, never left in a hand.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -69,6 +71,7 @@ func _init() -> void:
 	_check_walled_off_rejected_tool_fails_once_without_a_retry_loop()
 	_check_walled_off_preferred_stockpile_yields_to_a_reachable_one()
 	_check_destination_walled_off_mid_carry_sets_the_tool_down()
+	_check_destination_rejects_tools_during_an_interrupt_sets_the_tool_down()
 	if _failed:
 		quit(1)
 		return
@@ -845,3 +848,66 @@ func _check_destination_walled_off_mid_carry_sets_the_tool_down() -> void:
 	var open_ids := world.get_jobs(["haul_tool"]).filter(func(job: Dictionary) -> bool:
 		return job["status"] in ["queued", "active"]).map(func(job: Dictionary) -> String: return String(job["id"]))
 	_expect(owner.is_empty() or owner in open_ids, "the pick may only be reserved by an open job: %s" % [owner])
+
+## F5a-b review round 9: a critical food need interrupts the carrier while it holds the pick (the
+## suspend releases the pick's reservation), and B stops accepting tools before the job resumes.
+## The resumed job fails through the engine (invalid_target) before ToolFetchToil re-reserves the
+## pick, and the unreserved cargo is still set down where the carrier stands: never left in a hand,
+## which HaulGiver ignores. Set down inside B it is stocked there and hauled out again; neither A
+## nor B takes tools, so the pick ends on the ground outside every stockpile, with the same id.
+func _check_destination_rejects_tools_during_an_interrupt_sets_the_tool_down() -> void:
+	var world := _stocked_pick_world(64024, true)
+	Scenarios.isolate_need(world, "food")
+	var pick_id := String(world.get_tool_items()[0]["id"])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var job_id := ""
+	var carrier := ""
+	for _i in _day_ticks:
+		world.tick()
+		var location := _pick_location(world)
+		if String(location["type"]) == "held":
+			carrier = String(location["colonist_id"])
+			for job in world.get_jobs(["haul_tool"]):
+				if String(job["status"]) == "active":
+					job_id = String(job["id"])
+			break
+	_expect(not carrier.is_empty() and not job_id.is_empty(), "a colonist must pick the pick up for a haul_tool job")
+	if carrier.is_empty() or job_id.is_empty():
+		return
+	for colonist in TestAccess.colonists(world):
+		if String(colonist["id"]) == carrier:
+			colonist["needs"]["food"] = 5
+	var job_of := func() -> Dictionary:
+		for job in world.get_jobs(["haul_tool"]):
+			if String(job["id"]) == job_id:
+				return job
+		return {}
+	var interrupted := false
+	for _i in 60:
+		world.tick()
+		if String(job_of.call().get("status", "")) == "queued":
+			interrupted = true
+			break
+	_expect(interrupted, "the food need must interrupt the haul_tool job mid-carry: %s" % [world.get_jobs(["haul_tool"])])
+	if not interrupted:
+		return
+	_expect(String(_pick_location(world)["type"]) == "held" and world.get_tool_item_reservation(pick_id).is_empty(),
+		"the interrupted carrier holds the pick unreserved: %s" % [_pick_location(world)])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_2", "groups": "material", "priority": 1})
+	var ended := false
+	for _i in _day_ticks * 2:
+		world.tick()
+		if not (job_of.call().get("status", "") in ["queued", "active"]):
+			ended = true
+			break
+	_expect(ended and String(job_of.call()["status"]) == "failed" and String(job_of.call()["reason"]) == "invalid_target",
+		"the resumed haul_tool job must fail with invalid_target: %s" % [job_of.call()])
+	_expect(String(_pick_location(world)["type"]) != "held", "the failed job must set the pick down: %s" % [_pick_location(world)])
+	var outside := func() -> bool:
+		var location := _pick_location(world)
+		var cell := Vector2i(int(location.get("x", -1)), int(location.get("y", -1)))
+		return String(location["type"]) == "ground" and not A.has_point(cell) and not B.has_point(cell)
+	_expect(_tick_until(world, _day_ticks, outside) <= _day_ticks,
+		"the pick must end on the ground outside every stockpile: %s" % [_pick_location(world)])
+	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
+		"the same pick id must be the only tool: %s" % [world.get_tool_items()])

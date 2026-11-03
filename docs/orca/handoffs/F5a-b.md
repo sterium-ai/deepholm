@@ -123,8 +123,7 @@
        of the round 7 run are quoted below;
      - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
        game/scripts/core/world_state.gd` giving `2 2`; `tool_fetch_toil.gd` is unchanged.
-  11. Round 8, the commit that changes this file to the present text
-     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 8
+  11. Round 8, `707d681`. It answers review round 8
      (`.orca-review.md`, REQUEST_CHANGES):
      - (blocking) when the destination became unreachable while the tool was in the hand (for
        example B walled off mid-carry), `toil_on_unreachable` in `toil_bindings.gd` took the
@@ -148,6 +147,26 @@
      - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
        game/scripts/core/world_state.gd` giving `2 2`; `haul_giver.gd` and `tool_fetch_toil.gd`
        are unchanged.
+  12. Round 9, the commit that changes this file to the present text
+     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 9
+     (`.orca-review.md`, REQUEST_CHANGES):
+     - (blocking) a need interrupt suspends the job and releases its tool reservation, while
+       the carrier keeps the pick in the hand and the job keeps `item_id` (ToolFetchToil
+       re-reserves it on resume). If B stopped accepting tools before the job resumed, the
+       en-route recheck failed the job, but `fail_for_invalid_target()` only set the held tool
+       down when that job reserved it, so the pick stayed in the hand. Now it also sets the
+       held tool down when it is unreserved and is the job's own `item_id`. A tool reserved by
+       another job is still left alone. The round 8 unreachable arm goes through the same
+       function, so it gets the same fix;
+     - new tick-driven test
+       `_check_destination_rejects_tools_during_an_interrupt_sets_the_tool_down` (seed 64024,
+       see "Tests" below). With the fix disabled it fails with "the failed job must set the pick
+       down: held colonist_0". With the fix, the filtered run passes;
+     - (non-blocking) the full suite is still author-reported (the reviewer's sandbox is
+       read-only). The final line and the log path of the round 9 run are quoted below;
+     - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
+       game/scripts/core/world_state.gd` giving `2 2`; only `tool_drop_toil.gd` changes in
+       core.
 - Owner decision followed (round 5): rebase onto `origin/main` after L3, keep v13, and rerun the
   full suite since the rebase brings code changes.
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
@@ -161,22 +180,24 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 8)
+## Final suite line (author-reported, round 9)
 
 ```
-run_tests: all 137 test(s) PASS  [993s]
+run_tests: all 137 test(s) PASS  [898s]
 ```
 
-The line is quoted verbatim. The author ran this on the round 8 tree (this branch on
-`origin/main` `f55e9b0`, with schema v13, the two-line `world_state.gd` wiring and the round 8
-`toil_on_unreachable` arm), on Windows with Godot 4.7.2 headless, with
-`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 > suite_r8.log 2>&1`.
+The line is quoted verbatim. The author ran this on the round 9 tree (this branch on
+`origin/main` `f55e9b0`, with schema v13, the two-line `world_state.gd` wiring, the round 8
+`toil_on_unreachable` arm and the round 9 `fail_for_invalid_target()` change), on Windows with
+Godot 4.7.2 headless, with
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 > suite_r9.log 2>&1`.
 The full log is at
-`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\suite_r8.log`
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\suite_r9.log`
 (local to the author's machine, not committed). Its push_error stack lines come from the
 suite's expected-failure checks. It is still author-reported: the reviewer has reproduced
 `test_architecture_rules` alone, not the full suite. The branch is not rebased onto the
 current `origin/main` (`15211a7`); its base is still `f55e9b0`.
+The round 8 tree gave `run_tests: all 137 test(s) PASS  [993s]`, logged in `suite_r8.log`.
 The round 7 tree gave `run_tests: all 137 test(s) PASS  [916s]`, logged in `suite_r7.log`.
 The round 6 tree gave `run_tests: all 137 test(s) PASS  [1.022s]` (1022 seconds; the
 Windows locale prints a thousands separator), logged in `suite_r6.log`.
@@ -260,6 +281,11 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
     the colonist carries the tool, `toil_on_unreachable` sends a `haul_tool` job to
     `fail_for_invalid_target()` (above) instead of cancelling and resubmitting it, so the tool
     is set down and the job fails with `invalid_target`.
+  - **interrupt, then destination invalid** (round 9): a need interrupt releases the job's
+    reservation but leaves the tool in the hand and the job's `item_id`. If the target is lost
+    (or unreachable) before the job resumes, `fail_for_invalid_target()` sets down the held tool
+    when it is reserved by this job or, unreserved, is the job's `item_id`. It never sets down a
+    tool another job reserved.
 - `toil_bindings.gd` adds a `haul_tool` arm to the work-completion match and (round 8) a
   `haul_tool` arm to `toil_on_unreachable`. `toil_executor.gd` adds the one-line forwarders
   `place_hauled_tool()` and (round 8) `fail_hauled_tool()`, the 2-line en-route recheck and an
@@ -312,10 +338,16 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
       on no tick is an open `haul_tool` job left with an empty `item_id`. For a day after that
       the pick never reaches B. It ends on the ground or in a stockpile (not held), with the
       same single id, reserved by no one or by an open job only.
+    - Round 9, seed 64024: while an active `haul_tool` job carries the pick, the carrier's food
+      drops to 5, so a need interrupt sends the job back to `queued`, with the pick held and
+      unreserved. B then switches to materials only. The job ends `failed` with reason
+      `invalid_target`, the pick is no longer held, and it ends on the ground outside A and B
+      with the same id. If the carrier stands inside B when the job fails, the pick is first
+      stocked there and the giver hauls it out (by design).
     - Determinism and replay are checked by the seed 64018 case (with and without B) and the
       seed 64019 case: two worlds built from the same seed have equal `state_hash()` on every
-      tick, and the recorded session replays ok. The seed 64016, 64017, 64020, 64021, 64022 and
-      64023 cases run one world and do not check this.
+      tick, and the recorded session replays ok. The seed 64016, 64017, 64020, 64021, 64022,
+      64023 and 64024 cases run one world and do not check this.
   - `test_architecture_rules.gd`: `haul_tool` is added to the expected job kinds, and a
     `_run_and_verify("haul_tool", 207301, …)` scenario runs it end to end, like the other
     kinds.
@@ -404,6 +436,9 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered run (round 9): `test_stockpile_filters` PASS [21s]. With the round 9 change to
+  `fail_for_invalid_target()` reverted, the seed 64024 check fails ("the failed job must set
+  the pick down: held colonist_0").
 - Filtered run (round 8): `test_stockpile_filters` PASS [23s]. With the new
   `toil_on_unreachable` arm disabled, the seed 64023 check fails (the job ends `cancelled`,
   the pick stays held).
@@ -425,7 +460,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23456 lines in 113 files` (round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
+- `tools/measure_core.ps1`: `core total: 23459 lines in 113 files` (round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
   23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
 
   | File | Lines | Longest function |
@@ -433,7 +468,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   | `world_state.gd` | 767 (593 code, 114 comment) | `state_hash`, 30 |
   | `toil_executor.gd` | 654 (479 code, 127 comment) | `_start_current_toil`, 50 |
   | `toil_bindings.gd` | 504 (379 code, 88 comment) | `_init`, 49 |
-  | `tool_drop_toil.gd` | 358 | `_init`, 30 |
+  | `tool_drop_toil.gd` | 361 | `_init`, 30 |
   | `tool_fetch_toil.gd` | 290 | `advance`, 44 |
   | `haul_giver.gd` | 182 | — |
   | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
@@ -451,8 +486,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 - The ground fallback must share an edge with the tool's own stockpile, on the same layer. The
   tool is not taken further away.
 - The job has no hauling priority of its own (non-goal). It uses `haul`'s priority, 1.
-- When the job fails en route (target lost, or, since round 8, target unreachable mid-carry),
-  the tool is set down at the colonist's tile with no check that
+- When the job fails en route (target lost, or, since round 8, target unreachable mid-carry;
+  since round 9 also while suspended by an interrupt), the tool is set down at the colonist's tile with no check that
   the cell is free. If a stocked tool already lies there, the two share the cell until the giver
   hauls one out.
 - After a need interrupt the carrier keeps the tool in the hand while the job is queued again
