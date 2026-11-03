@@ -1,5 +1,6 @@
 {
   "model": "opus",
+  "autoCompactWindow": 120000,
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [

@@ -34,8 +34,18 @@ if (-not $SkipPreflight) {
     $problems = @()
     git merge-base --is-ancestor $Base HEAD 2>$null
     if ($LASTEXITCODE -ne 0) {
-        $behind = (git rev-list --count "HEAD..$Base")
-        $problems += "the branch is $behind commit(s) behind ${Base}: fetch + rebase, rerun the warnings gate and the full suite on the rebased head"
+        # Commits on main that only touch paths CI ignores (docs, backlog, ADRs) cannot change
+        # the suite or the gate: being behind by those alone is not a reason to rebase (token
+        # audit 2026-10-30). Only code commits count.
+        $mergeBase = (git merge-base $Base HEAD).Trim()
+        $codeFiles = @(git diff --name-only "$mergeBase" "$Base" | Where-Object {
+            $_ -notmatch '\.md$' -and $_ -notmatch '^docs/(orca|decisions|design|art)/' })
+        if ($codeFiles.Count -gt 0) {
+            $behind = (git rev-list --count "HEAD..$Base")
+            $problems += "the branch is $behind commit(s) behind ${Base} with code changes ($($codeFiles.Count) file(s)): fetch + rebase, rerun the warnings gate and the full suite on the rebased head"
+        } else {
+            Write-Output "review: behind ${Base} by docs-only commits; no rebase needed for the review"
+        }
     }
     $branchTests = @(git ls-tree -r --name-only HEAD -- game/scripts/tests | Where-Object { $_ -match "/test_[^/]+\.gd$" }).Count
     $handoff = Join-Path $root "docs\orca\handoffs\$taskId.md"

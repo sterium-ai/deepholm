@@ -1,10 +1,11 @@
 ﻿# Opens a backlog task as an Orca worktree with Claude Code inside and hands it the task.
-# Usage: tools\orca\new-task.ps1 R1 [-Agent claude] [-NoActivate]
+# Usage: tools\orca\new-task.ps1 R1 [-Agent claude] [-Model sonnet] [-NoActivate]
 # Requires: Orca installed (orca.exe on PATH), the repo registered in Orca (tools\orca\setup.ps1).
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)][string]$TaskId,
     [string]$Agent = "claude",
+    [string]$Model = "",        # provider model id for the agent (e.g. sonnet for mechanical tasks; empty = Orca default)
     [switch]$NoActivate
 )
 
@@ -37,10 +38,19 @@ if (-not $status.result.app.running) {
     orca open --json | Out-Null
 }
 
-$prompt = "Lee AGENTS.md y docs/orca/README.md. Tu encargo es la tarea $TaskId de docs/orca/BACKLOG.md: lee la entrada completa (goal, owned paths, acceptance, non-goals) y hazla siguiendo docs/orca/REFACTOR-PLAN.md si es una tarea R. Primero importa el proyecto y pasa la suite completa con tools/run_tests.ps1 para tener la linea base. No toques nada fuera de los owned paths. Antes de entregar lee docs/orca/REVIEW.md y comprueba que todo lo que pide ya se cumple. Escribe el informe de entrega de AGENTS.md en docs/orca/handoffs/$TaskId.md (el revisor solo ve el repo, no esta terminal), incluyendo la linea final del runner de tests, las cifras de tools/measure_core.ps1 y los comandos de verificacion reproducibles, y actualiza la fila de estado de $TaskId en BACKLOG.md. Haz commit al terminar; no hagas push."
+# Brief (token audit 2026-10-30): the task's own BACKLOG entry travels inside the prompt, so the
+# agent never loads the whole backlog (~25k tokens re-read on every turn afterwards).
+$lines = Get-Content -LiteralPath $backlog -Encoding UTF8
+$start = [array]::IndexOf($lines, $line)
+$end = $lines.Count
+for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match "^###+ ") { $end = $i; break } }
+$entry = ($lines[$start..($end - 1)] -join "`n").Trim()
+
+$prompt = "Lee AGENTS.md (solo ese; docs/orca/README.md y REVIEW.md solo cuando los necesites). Tu encargo es la tarea $TaskId; su entrada completa de docs/orca/BACKLOG.md va al final de este mensaje: NO leas BACKLOG.md entero (para cambiar la fila de estado de $TaskId usa grep y una edicion puntual). Hazla siguiendo docs/orca/REFACTOR-PLAN.md si es una tarea R. Primero importa el proyecto y pasa la suite completa con tools/run_tests.ps1 para tener la linea base; no vuelques salidas largas al contexto (filtra con Select-String/tail). No toques nada fuera de los owned paths. Trabaja por paquetes pequenos y usa subagentes para explorar codigo (que devuelvan un resumen, no ficheros). Presupuesto orientativo: 300 turnos; si la tarea no cabe, entrega lo cerrado y deja el resto anotado en el informe. Antes de entregar lee docs/orca/REVIEW.md y comprueba que todo lo que pide ya se cumple. Escribe el informe de entrega de AGENTS.md en docs/orca/handoffs/$TaskId.md (el revisor solo ve el repo, no esta terminal), incluyendo la linea final del runner de tests, las cifras de tools/measure_core.ps1 y los comandos de verificacion reproducibles, y actualiza la fila de estado de $TaskId en BACKLOG.md. Haz commit al terminar; no hagas push.`n`n--- ENTRADA $TaskId (docs/orca/BACKLOG.md) ---`n$entry"
 
 $args = @("worktree", "create", "--repo", "path:$repoRoot", "--name", $name, "--no-parent",
           "--agent", $Agent, "--prompt", $prompt, "--json")
+if ($Model) { $args += @("--model", $Model) }
 if (-not $NoActivate) { $args += "--activate" }
 
 Write-Output "new-task: creating worktree '$name' with $Agent..."

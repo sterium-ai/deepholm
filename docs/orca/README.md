@@ -154,6 +154,28 @@ Salen de medir la primera semana con Orca (33 PR, 49 h de reloj, ~10.750 turnos 
 - **Los cambios sólo de docs no pasan por la suite de CI** (`paths-ignore` en el workflow);
   `docs/architecture/` sí, porque ahí viven los presupuestos y la línea base de avisos.
 
+## Reglas de consumo (auditoría de tokens del 30-10-2026)
+
+El 75 % del coste de las 52 primeras tareas fue relectura de contexto (226 k tokens por turno de
+media, 18.500 turnos). El coste crece con turnos × contexto, no con la dificultad. Por eso:
+
+- **Compactación a 120 k** (`autoCompactWindow` en `.claude/settings.json`): el agente nunca
+  arrastra más de ~120 k tokens. No subirlo por comodidad.
+- **Tope por tarea: 300 turnos / 4 h.** Una entrada que no cabe se divide antes de abrirla
+  (L2 → paquetes; B1 habría sido tres tareas). El prompt se lo recuerda al agente; si no cabe,
+  entrega lo cerrado y anota el resto en el informe.
+- **Brief en el prompt, no el backlog entero:** `new-task.ps1` incluye la entrada de la tarea
+  en el prompt y prohíbe leer `BACKLOG.md` completo (la fila de estado se cambia con grep +
+  edición puntual).
+- **Modelo por tarea:** `new-task.ps1 <id> -Model sonnet` para barridos mecánicos, higiene de
+  tests, docs, renumeraciones; Opus (el valor por defecto) sólo para diseño y core.
+- **Exploración por subagentes** que devuelven un resumen; nunca volcar ficheros largos ni
+  salidas completas de la suite al contexto principal (filtrar con `Select-String`/`tail`).
+- **El preflight de `review.ps1` ignora los commits de main que sólo tocan docs**
+  (`*.md`, `docs/orca|decisions|design|art/`): no obligan a rebasar.
+- **Supervisión cada 45 min** mientras los agentes están a mitad de tarea; cada 20 min sólo
+  con un PR en CI o una revisión en curso.
+
 ## Cuando algo va mal
 
 - *Claude dice que no puede correr Godot:* comprueba que `$env:GODOT` existe en esa terminal
