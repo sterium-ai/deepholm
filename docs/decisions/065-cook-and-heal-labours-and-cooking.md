@@ -60,8 +60,9 @@ only `heal` is new. `world_state.gd` is at its 800-line cap and must not grow. Z
   (restore = its best item's `satiety`). `NeedsSystem.need_source_ranks()` gives each source
   tile its best restore, and `NeedGiver` ranks per colonist: after that colonist's own
   reachability filter and with claimed or reserved tiles dropped, the best rank wins and the
-  nearest within it, as before. Eating a tile takes whatever ranked it: a berry when the tile
-  has one and no item beats it, else one unit of its most filling unreserved item. A meal
+  nearest within it, as before. Eating a tile takes whatever ranked it: one unit of its most
+  filling unreserved item, unless the tile has a berry that restores more (an item wins a tie),
+  else a berry. A meal
   therefore goes before nearer raw food, and raw food is eaten when no better source is
   reachable and free for that colonist (a meal in another region or held by another job does
   not keep them from it). `consume`'s

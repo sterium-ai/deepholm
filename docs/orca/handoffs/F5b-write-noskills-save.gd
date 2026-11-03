@@ -4,7 +4,10 @@ extends SceneTree
 ## field is optional in a save and seeded on load). It takes F6a's v11 fixture, unpacks it,
 ## drops every colonist's "skills", keeps schemaVersion 11 and writes it through SaveIO's own
 ## commit_body(), whose read-back migrates it to v12 and validates it before the rename.
-## write_atomic() is not used: it accepts only the current schema. Run from the repo root:
+## write_atomic() is not used: it accepts only the current schema. The source is read the way
+## SaveIO.read() reads it: JSON.parse_string() gives every number as a float, so the seed and
+## the three RNG states are restored from their raw tokens (SaveJsonInts) before anything is
+## written; otherwise the 64-bit RNG states would round. Run from the repo root:
 ##   godot --headless --path game --script ../docs/orca/handoffs/F5b-write-noskills-save.gd -- <absolute-output-path>
 ## On the F5b branch it produced game/scripts/tests/fixtures/save_schema_v11_noskills_fixture.json.
 
@@ -19,8 +22,18 @@ func _init() -> void:
 		push_error("usage: -- <absolute-output-path>")
 		quit(2)
 		return
-	var state: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(SOURCE))["state"]
+	var text := FileAccess.get_file_as_string(SOURCE)
+	var state: Dictionary = JSON.parse_string(text)["state"]
+	var located := SaveJsonInts._locate_state_object(text)
 	SaveIOType._coerce_ints(state)
+	for restored: Dictionary in [SaveJsonInts._restore_exact_rng(state, located),
+			SaveJsonInts._restore_exact_seed(state, located),
+			SaveJsonInts._restore_exact_incident_rng(state, located),
+			SaveJsonInts._restore_exact_dig_find_rng(state, located)]:
+		if not restored["ok"]:
+			push_error("could not restore an exact integer from %s: %s" % [SOURCE, restored])
+			quit(1)
+			return
 	var unpacked := SaveWireType.unpack(state, 4096)
 	if not unpacked["ok"]:
 		push_error("could not unpack %s: %s" % [SOURCE, unpacked])

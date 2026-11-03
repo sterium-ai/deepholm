@@ -3,8 +3,9 @@
 ## Branch and commit
 
 - Branch: `antonelmejor50-hub/f5b-labours-cook-and-heal`, rebased (on the owner's note) onto
-  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it). One commit,
-  not pushed.
+  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it). Three commits,
+  not pushed: `a84211f` (F5b), `33589e0` (review round 1, the head Codex reviewed in round 2)
+  and the round-2 fix commit on top of it.
 - **Schema number.** Save schema **v12**, the owner's allocation: F5b's step is
   `_v11_to_v12()`, after F5a's v9 -> v10 and F6a's v10 -> v11, which are kept unchanged.
 - ADR: **065** (owner's allocation), `docs/decisions/065-cook-and-heal-labours-and-cooking.md`.
@@ -37,8 +38,8 @@ Simulation:
 - `needs_system.gd`: food sources are berry bushes (restore 100) and tiles holding an
   unreserved edible ground item (restore = best `satiety` on the tile).
   `need_source_ranks(kind)` gives each source tile its best restore in one pass over the
-  items. `consume` eats what ranked the tile: a berry when the tile has one and no item beats
-  it, else one unit of the most filling unreserved item; a gone target fails typed
+  items. `consume` eats what ranked the tile: one unit of the most filling unreserved item
+  unless a berry there restores more (an item wins a tie), else a berry; a gone target fails typed
   (`source_gone`). Items reserved by a haul/fetch are never eaten.
 - `need_giver.gd`: an optional `source_ranks` callable. Each colonist's candidates (after its
   own reachability filter, claimed and reserved tiles dropped) sort by rank, then distance;
@@ -105,7 +106,7 @@ lines are untouched.
   - a session recorded through the viewer's `CommandRecorder` replays every checkpoint.
 - Changed tests (no assertion removed or loosened; `_check_|_expect(|_fail(` counts vs
   `main`):
-  - `test_save_migration.gd` 235 -> 255: the v11 -> v12 step (F6a's v11 fixture migrates and
+  - `test_save_migration.gd` 235 -> 257: the v11 -> v12 step (F6a's v11 fixture migrates and
     gains only `heal`), the committed `save_schema_v11_noskills_fixture.json` (the v11
     fixture with colonist `skills` dropped, written by
     `docs/orca/handoffs/F5b-write-noskills-save.gd` through `SaveIO.commit_body()`, whose
@@ -163,7 +164,7 @@ Hash projection (from `game/`, `$G` = the Godot 4.7.2 console binary), expected 
 
 Results on the branch head:
 
-- Full suite, final line: `run_tests: all 136 test(s) PASS  [869s]`
+- Full suite, final line: `run_tests: all 136 test(s) PASS  [963s]` (rerun on the round-2 fixes)
 - `check_core_budgets`: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s)). No cap raised.
 - `check_core_warnings`: OK, 2798. Below the old baseline 2801 (typed locals in the new code
@@ -189,7 +190,7 @@ Blocking:
    colonist after its own filter (see `need_giver.gd` above). Test: unreachable meal and held
    meal both fall back to raw food.
 2. *Mixed berry + raw food tile ranked 100 but ate the raw item.* `apply_need_effect` now eats
-   what ranked the tile (berry unless an item's satiety beats it). Test: mixed tile.
+   what ranked the tile (its best unreserved item unless a berry restores more; an item wins a tie). Test: mixed tile.
 3. *Migration refused v11 colonists without `skills`.* `skills` is optional; the step adds
    `heal` only to the maps present. Committed fixture `save_schema_v11_noskills_fixture.json`
    and `_check_v11_without_skills_migrates` in `test_save_migration.gd`.
@@ -199,6 +200,24 @@ Blocking:
 Non-blocking:
 - Quadratic item scan: `need_source_ranks` builds the tile ranks in one pass.
 - Suite not rerun by the reviewer: rerun on the new head (the full-suite line under "Results on the branch head").
+
+## Review fixes, round 2 (Codex, REQUEST_CHANGES on `33589e0`, 2026-11-03)
+
+Blocking:
+1. *The skill-less fixture rounded the 64-bit RNG states* (`JSON.parse_string()` gives floats;
+   e.g. `rng.state` 6993670780567866400 became 6993670780567867392). The writer
+   `F5b-write-noskills-save.gd` now restores the seed and the three RNG states from their raw
+   tokens with `SaveJsonInts` (as `SaveIO.read()` does) before writing, and the fixture is
+   regenerated from it: its `rng`, `incidentScheduler.rng` and `digFindRng` states and seeds
+   are now the v11 fixture's exactly. `_check_v11_without_skills_migrates` reads both files
+   through the new `_exact_fixture_state()` (same exact restore), so the old rounded fixture
+   fails it (checked: `-Filter test_save_migration` failed on the old file, passes on the new).
+
+Non-blocking:
+- "One commit" was stale: the branch section now names the three commits.
+- Tie rule: ADR 065 and this report now say what the code and `items.schema.json` do (an
+  equally filling item is eaten before a berry on the same tile).
+- Full suite rerun on the round-2 fixes: `run_tests: all 136 test(s) PASS  [963s]`; gates unchanged (budgets OK, warnings 2798, `core total: 22910 lines in 112 files`).
 
 ## Known limitations
 
@@ -215,4 +234,4 @@ Non-blocking:
 
 ## Next action
 
-Codex review round 2 of the head.
+Codex review round 3 of the head.

@@ -402,9 +402,11 @@ func _check_v11_to_v12_adds_only_the_heal_labour() -> void:
 ## The committed skill-less v11 fixture (docs/orca/handoffs/F5b-write-noskills-save.gd) is the
 ## v11 fixture with every colonist's optional "skills" dropped; v11 -> v12 gives those colonists
 ## heal in their labourTable only, and the file loads through SaveIO.read() (skills seeded on decode).
+## Both files are read with exact 64-bit integers (as SaveIO.read() does), so a fixture whose
+## seed or RNG states were rounded by a float parse does not compare equal.
 func _check_v11_without_skills_migrates() -> void:
-	var skill_less := _unpacked_fixture_state(V11_NOSKILLS_FIXTURE)
-	var expected := _unpacked_fixture_state(V11_FIXTURE)
+	var skill_less := _exact_fixture_state(V11_NOSKILLS_FIXTURE)
+	var expected := _exact_fixture_state(V11_FIXTURE)
 	var stripped := 0
 	for entity: Dictionary in expected["entities"]:
 		if entity["kind"] == "colonist" and entity.erase("skills"):
@@ -523,6 +525,22 @@ func _check_stockpile_filter_round_trips_and_bad_ones_are_rejected() -> void:
 func _unpacked_fixture_state(path: String) -> Dictionary:
 	var state: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))["state"]
 	SaveIOType._coerce_ints(state)
+	var unpacked := SaveWireType.unpack(state, 4096)
+	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
+	return state
+
+## _unpacked_fixture_state() with the seed and the three RNG states restored from their raw
+## tokens (SaveJsonInts, as SaveIO.read() does) instead of JSON.parse_string()'s floats.
+func _exact_fixture_state(path: String) -> Dictionary:
+	var text := FileAccess.get_file_as_string(path)
+	var state: Dictionary = JSON.parse_string(text)["state"]
+	var located := SaveJsonInts._locate_state_object(text)
+	SaveIOType._coerce_ints(state)
+	for restored: Dictionary in [SaveJsonInts._restore_exact_rng(state, located),
+			SaveJsonInts._restore_exact_seed(state, located),
+			SaveJsonInts._restore_exact_incident_rng(state, located),
+			SaveJsonInts._restore_exact_dig_find_rng(state, located)]:
+		_expect(restored["ok"], "%s must restore its exact integers: %s" % [path, restored])
 	var unpacked := SaveWireType.unpack(state, 4096)
 	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
 	return state
