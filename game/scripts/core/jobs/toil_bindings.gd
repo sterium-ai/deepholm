@@ -256,6 +256,9 @@ func toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> voi
 	elif String(job["kind"]) in ["site_work", "craft_work", "cook_work"]:
 		# No cargo; ConstructionGiver/CraftGiver submit a replacement later.
 		_finish_job.call(job_id, "cancel_job")
+	elif String(job["kind"]) == "haul_tool" and not _find_job_colonist.call(job_id).is_empty():
+		# F5a-b: the carried tool is set down and the job fails; HaulGiver offers it again.
+		_toils.fail_hauled_tool(_find_job_colonist.call(job_id), job_id, job, hooks)
 	elif is_first or String(job["kind"]) != "haul":
 		_resubmit_unreachable_job.call(job_id, job)
 	else:

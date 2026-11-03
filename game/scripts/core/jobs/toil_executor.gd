@@ -626,6 +626,11 @@ func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 ## F5a-b: haul_tool's completion effect (ToolDropToil.place_hauled_tool()).
 func place_hauled_tool(c: Dictionary, job_id: String, target: Vector3i) -> void: _tool_drop.place_hauled_tool(c, job_id, target)
 
+## F5a-b review round 8: a haul_tool whose target became unreachable mid-carry sets the tool
+## down where the colonist stands and fails through the shared engine (ToolDropToil), never a
+## cancel-and-resubmit that would drop item_id and the reservation with the tool still held.
+func fail_hauled_tool(c: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void: _tool_drop.fail_for_invalid_target(c, job_id, job, hooks)
+
 ## Persistence passthrough: true while the in-flight route is a drop_tool leg, so a restored
 ## search uses the drop toil's plain passability.
 func is_dropping_leg(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> bool:
