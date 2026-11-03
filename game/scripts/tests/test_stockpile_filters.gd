@@ -11,7 +11,11 @@ extends SceneTree
 ## - with equal priority the nearest accepting stockpile wins; a stockpile accepting nothing
 ##   is never a destination; a new stockpile is the pre-F5a record (all groups, priority 2);
 ## - zone_set_stockpile is validated, and preview() agrees with apply();
-## - the viewer's stockpile panel shows each stockpile and changes it only through commands.
+## - the viewer's stockpile panel shows each stockpile and changes it only through commands, and
+##   rebuilds its rows for another world whose zones reuse the same ids;
+## - a loose tool delivered into a stockpile that stopped accepting tools mid-haul is not
+##   stocked there (CraftingSystem.stock_tools()) but hauled out to one that accepts it;
+## - the save snapshot never aliases a stockpile's live groups.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -41,6 +45,9 @@ func _init() -> void:
 	_check_stockpile_accepting_nothing_is_never_a_destination()
 	_check_commands_are_validated_and_preview_agrees()
 	_check_panel_changes_a_stockpile_through_commands()
+	_check_tool_delivered_after_its_stockpile_rejects_tools_is_hauled_out()
+	_check_save_snapshot_does_not_alias_the_live_filter()
+	_check_panel_rebuilds_for_another_world_with_the_same_zone_ids()
 	if _failed:
 		quit(1)
 		return
@@ -346,3 +353,83 @@ func _find_label(node: Node, prefix: String) -> Label:
 		if below != null:
 			return below
 	return null
+
+## Units of an axe in rect: loose ground stacks and ToolItemStore tools stocked there.
+func _axes_in(world: WorldStateType, rect: Rect2i) -> Dictionary:
+	var loose := _units_in(world, "axe", rect)
+	var stocked := 0
+	for tool_item in world.get_tool_items():
+		var location: Dictionary = tool_item["location"]
+		if String(tool_item["kind"]) == "axe" and String(location["type"]) == "stockpile" 				and rect.has_point(Vector2i(int(location["x"]), int(location["y"]))):
+			stocked += 1
+	return {"loose": loose, "stocked": stocked}
+
+## Review F5a (blocking 1): a loose axe is hauled towards A (every group); while it is carried A
+## stops accepting tools and B (every group) appears. The haul still lands in A (ADR 064), and the
+## axe must then neither become a stocked tool in A (stock_tools() respects the filter) nor stay:
+## it is hauled out and stocked in B.
+func _check_tool_delivered_after_its_stockpile_rejects_tools_is_hauled_out() -> void:
+	var world := _world(64010)
+	var zone_a := _add_zone(world, A)
+	Scenarios.add_stock(world, "axe", 1, 9, 12)
+	var carried := func() -> bool:
+		return _units(world, "axe") == 0 and not _no_haul_open(world)
+	_expect(_tick_until(world, _day_ticks, carried) <= _day_ticks, "the axe must be picked up for A within a day")
+	_command_ok(world, "zone_set_stockpile", {"id": zone_a, "groups": "food,material,seed,valuable", "priority": 2})
+	_add_zone(world, B)
+	var seen := {"stocked_in_a": false}
+	var in_b := func() -> bool:
+		var axes_a := _axes_in(world, A)
+		if int(axes_a["stocked"]) > 0:
+			seen["stocked_in_a"] = true
+		return int(_axes_in(world, B)["stocked"]) == 1
+	_expect(_tick_until(world, 2 * _day_ticks, in_b) <= 2 * _day_ticks,
+		"within two days the axe must be stocked in B: A %s, B %s" % [_axes_in(world, A), _axes_in(world, B)])
+	_expect(not bool(seen["stocked_in_a"]), "the axe must never become a stocked tool in A, which rejects tools")
+	_expect(_axes_in(world, A) == {"loose": 0, "stocked": 0}, "nothing of the axe may stay in A: %s" % [_axes_in(world, A)])
+
+## Review F5a (blocking 2): editing the save snapshot's groups never changes the live stockpile.
+func _check_save_snapshot_does_not_alias_the_live_filter() -> void:
+	var world := _world(64011)
+	var zone := _add_zone(world, B)
+	_command_ok(world, "zone_set_stockpile", {"id": zone, "groups": "food,seed", "priority": 3})
+	var before := world.state_hash()
+	var saved := world.to_save_state()
+	var saved_zone: Dictionary = (saved["zones"] as Array)[0]
+	(saved_zone["groups"] as Array).clear()
+	_expect(world.get_zone(zone).get("groups") == ["food", "seed"], "clearing the snapshot's groups must leave the zone's: %s" % [world.get_zone(zone)])
+	_expect(world.state_hash() == before, "and the state_hash()")
+
+## Review F5a (blocking 3): the panel is moved to another world whose stockpile reuses zone_1 at
+## another place; its heading follows and its buttons change the new world only.
+func _check_panel_rebuilds_for_another_world_with_the_same_zone_ids() -> void:
+	var first := _world(64012)
+	var second := _world(64013)
+	_add_zone(first, A)
+	_add_zone(second, B)
+	var panel := StockpilePanelType.new()
+	panel.setup(first, TextTableType.new())
+	var heading := _find_label(panel, "Stockpile (")
+	_expect(heading != null and heading.text == "Stockpile (%d, %d)" % [A.position.x, A.position.y],
+		"the heading must name A: %s" % [heading.text if heading else null])
+	panel.set_world(second)
+	heading = _find_label(panel, "Stockpile (")
+	_expect(heading != null and heading.text == "Stockpile (%d, %d)" % [B.position.x, B.position.y],
+		"after set_world() the heading must name the new world's stockpile: %s" % [heading.text if heading else null])
+	var food: Button = null
+	for button in _buttons(panel):
+		if button.text == "[x] Food":
+			food = button
+	_expect(food != null and _buttons(panel).size() == 2 + 5, "one row of buttons for the new world's stockpile")
+	if food != null:
+		food.pressed.emit()
+	_expect(second.get_zone("zone_1").get("groups") == ["material", "seed", "tool", "valuable"],
+		"the toggle must change the new world's zone_1: %s" % [second.get_zone("zone_1")])
+	_expect(not first.get_zone("zone_1").has("groups"), "and leave the old world's: %s" % [first.get_zone("zone_1")])
+	# The plain refresh path (a host that only reassigns world) rebuilds too: the rectangle differs.
+	panel.world = first
+	panel.refresh()
+	heading = _find_label(panel, "Stockpile (")
+	_expect(heading != null and heading.text == "Stockpile (%d, %d)" % [A.position.x, A.position.y],
+		"refresh() on a reassigned world must rebuild the heading: %s" % [heading.text if heading else null])
+	panel.free()

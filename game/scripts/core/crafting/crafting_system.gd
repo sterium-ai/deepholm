@@ -44,6 +44,8 @@ var _tile_grid: TileGridType
 var _passability: PassabilityType
 var _scheduler: AssignmentType
 var _is_in_any_zone: Callable
+## ZoneTable.accepts_item_at (F5a): only a stockpile accepting "tool" stocks a crafted tool.
+var _accepts_item_at: Callable
 ## (kind) -> bool, (kind, tile: Vector3i) -> String, (item_id, tile: Vector3i) -> bool, () -> Array[Dictionary].
 var _is_tool_kind: Callable
 var _spawn_ground_tool: Callable
@@ -60,7 +62,8 @@ var _site_deposit: Callable
 func _init(recipe_list: Array, object_table: ObjectTableType, item_table: ItemTableType, tile_grid: TileGridType,
 		passability: PassabilityType, scheduler: AssignmentType, is_in_any_zone: Callable, is_tool_kind: Callable,
 		spawn_ground_tool: Callable, set_tool_stockpile: Callable, get_tool_items: Callable, get_colonists: Callable,
-		finish_job: Callable, drop_carried_haul_item: Callable, site_exists: Callable, site_deposit: Callable) -> void:
+		finish_job: Callable, drop_carried_haul_item: Callable, site_exists: Callable, site_deposit: Callable,
+		accepts_item_at: Callable) -> void:
 	recipes = RecipeBookType.new(recipe_list)
 	_object_table = object_table
 	_item_table = item_table
@@ -68,6 +71,7 @@ func _init(recipe_list: Array, object_table: ObjectTableType, item_table: ItemTa
 	_passability = passability
 	_scheduler = scheduler
 	_is_in_any_zone = is_in_any_zone
+	_accepts_item_at = accepts_item_at
 	_is_tool_kind = is_tool_kind
 	_spawn_ground_tool = spawn_ground_tool
 	_set_tool_stockpile = set_tool_stockpile
@@ -321,7 +325,8 @@ func _is_free_source(item: Dictionary, committed: Dictionary) -> bool:
 		return false
 	return _scheduler.queue.get_reservation_table().owner(JobQueueType.ITEM_KEY_PREFIX + id).is_empty()
 
-## Stockpiled loose tools become ToolItemStore items on their cell, one per unit.
+## Loose tools in a stockpile that accepts them become ToolItemStore items on their cell, one
+## per unit. One in a stockpile that rejects tools stays loose, so HaulGiver hauls it out (F5a).
 func stock_tools() -> void:
 	for id: String in _sorted_item_ids():
 		var item: Dictionary = _item_table.items[id]
@@ -330,6 +335,9 @@ func stock_tools() -> void:
 		if not is_tool or not _is_free_source(item, {}):
 			continue
 		var tile := TileGrid.tile_of(item)
+		var accepted: bool = _accepts_item_at.call(tile, kind)
+		if not accepted:
+			continue
 		var count: int = item["count"]
 		for _unit in count:
 			var tool_id: String = _spawn_ground_tool.call(kind, tile)

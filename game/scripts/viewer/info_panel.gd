@@ -81,8 +81,7 @@ func set_world(world: WorldStateType) -> void:
 	work_table_panel.refresh()
 	workbench_panel.world = world
 	workbench_panel.refresh()
-	stockpile_panel.world = world
-	stockpile_panel.refresh()
+	stockpile_panel.set_world(world)
 
 func _refresh_date(snapshot: Dictionary = {}) -> void:
 	if snapshot.is_empty():

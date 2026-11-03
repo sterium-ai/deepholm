@@ -71,6 +71,11 @@ hauling priorities are out.
 - Tool drops (`ToolDropToil`, a colonist putting back a tool) receive
   `get_stockpile_zones_for_group("tool")` instead of every stockpile, so a tool is never dropped
   into a stockpile that does not accept tools. Only the Callable `WorldState` passes changed.
+- A loose tool (a crafted one, ADR 061) becomes a stocked `ToolItemStore` tool only in a
+  stockpile that accepts `tool`: `CraftingSystem.stock_tools()` asks
+  `ZoneTable.accepts_item_at()` (a constructor Callable) besides `is_in_any_zone()`. A loose
+  tool delivered into a stockpile that stopped accepting tools during the haul therefore stays
+  loose, and HaulGiver hauls it out like any rejected item (review of F5a).
 
 ### Command: `zone_set_stockpile`
 
@@ -118,8 +123,8 @@ button applies `zone_set_stockpile`; nothing else mutates. Texts under `stockpil
   place of `is_in_any_zone` and `get_zones`. Other `is_in_any_zone()` users (construction and
   crafting stock, rooms) still treat any stockpile tile as "in a stockpile", filter or not.
 - A stocked tool (ADR 061: a `ToolItemStore` item, not a ground item) has no haul path, so a
-  tool lying in a stockpile that stops accepting tools stays there until a colonist takes it;
-  only new drops respect the filter.
+  tool already stocked in a stockpile that later stops accepting tools stays there until a
+  colonist takes it; new drops and newly stocked crafted tools respect the filter.
 - `L2` (`Vector3i`, ADR 063): every ZoneTable/HaulGiver tile is a `Vector3i` and zones carry
   `z`; the distance uses `TileGrid.manhattan()` on one layer, and the rectangle clamp is the one
   planar step, inside the zone's own layer.

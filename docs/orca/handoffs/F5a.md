@@ -45,6 +45,35 @@ de esquema a v10 (migracion v9->v10 + fixture v10, conservando el paso v9 de L2)
 - **Warnings:** the rebase first raised the gate (2806 > L2's 2803: four on the new handler's
   rejection line, one in `_contains()`); fixed with typed locals, now 2801.
 
+## Review round 1 (Codex, `.orca-review.md`: REQUEST_CHANGES) and the fixes
+
+Blocking:
+1. **A loose tool delivered into a stockpile that stopped accepting tools was stocked there.**
+   `CraftingSystem.stock_tools()` turned any free loose tool in any stockpile into a
+   `ToolItemStore` tool (no haul path) before HaulGiver could haul it out. Fix:
+   `stock_tools()` also asks `ZoneTable.accepts_item_at(tile, kind)` (new last constructor
+   Callable, wired in `world_state.gd` on the existing line, still 767 lines). The loose tool now
+   stays loose in the rejecting stockpile and is hauled out. ADR 064 records it. Regression
+   `_check_tool_delivered_after_its_stockpile_rejects_tools_is_hauled_out()`: an axe is
+   picked up for A, A then drops `tool` and B appears; the haul lands in A, the axe is never a
+   stocked tool in A, and within two days it is stocked in B and nothing of it is left in A.
+2. **The save snapshot aliased the live `groups` array.** `StateCodec._encode_zones()` now
+   copies it. Regression `_check_save_snapshot_does_not_alias_the_live_filter()`: clearing
+   `world.to_save_state()["zones"][0]["groups"]` leaves the zone's groups and `state_hash()`.
+3. **The panel kept old rows for another world with the same zone ids.** Rows are now keyed by
+   `id@x,y,z` plus the group list, so a different rectangle or content rebuilds them, and
+   `set_world()` (now used by `info_panel.gd`) always rebuilds. Old rows are detached before
+   `queue_free()`. Regression `_check_panel_rebuilds_for_another_world_with_the_same_zone_ids()`:
+   two worlds whose `zone_1` sit at A and B; after `set_world()` the heading names B, Food
+   changes the new world's `zone_1` only, and a plain `world =` + `refresh()` rebuilds too.
+
+Each regression was checked to fail with its fix disabled (stock_tools filter off: 3 checks
+fail, the axe ends stocked in A; codec without the copy: 2 fail; panel keyed by id only and
+`set_world()` not clearing: the heading still names A), then the fixes were restored.
+
+Non-blocking, both taken: the budgets line now names the frozen exceptions (the 861-line
+`world_generator.gd`); the playtest line says it is a post-merge check.
+
 ## Branch and commit
 
 - Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities`, one commit on
@@ -54,10 +83,10 @@ de esquema a v10 (migracion v9->v10 + fixture v10, conservando el paso v9 de L2)
 - **Owner coordination note:** ADRs up to 063 are taken (this is **064**); `world_state.gd` must
   not grow (767 -> 767, three statements edited in place); new code uses `TileGrid` helpers.
 
-## Final suite line (branch head, after the rebase onto L2)
+## Final suite line (branch head, after the rebase onto L2 and the review-round-1 fixes)
 
 ```
-run_tests: all 134 test(s) PASS  [914s]
+run_tests: all 134 test(s) PASS  [922s]
 ```
 
 `origin/main` (3e7ba13) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
@@ -82,8 +111,10 @@ run_tests: all 134 test(s) PASS  [914s]
    a non-goal).
 4. With several *default* stockpiles the nearest now wins, where the lowest zone id won before.
    With one stockpile the chosen cell is exactly the old one.
-5. Tool drops (`ToolDropToil`) only use stockpiles accepting `tool`. A tool already stocked in a
-   stockpile that stops accepting tools stays (tools have no haul path, ADR 061); see limitations.
+5. Tool drops (`ToolDropToil`) only use stockpiles accepting `tool`, and a loose crafted tool is
+   stocked (`CraftingSystem.stock_tools()`) only in a stockpile accepting `tool`; one delivered
+   into a stockpile that stopped accepting tools is hauled out. A tool already stocked in a
+   stockpile that later stops accepting tools stays (tools have no haul path, ADR 061).
 6. A haul already carrying an item to a stockpile that stops accepting it delivers it, and
    HaulGiver then hauls it out (ADR 064, "Command").
 
@@ -106,7 +137,8 @@ ADR; this report.
 | `docs/architecture/contracts/game-state.schema.json`, `docs/architecture/save-system.md` | contract v10 |
 | `game/scripts/viewer/stockpile_panel.gd` (new), `game/scripts/viewer/info_panel.gd` | the panel and its place in the info column |
 | `game/data/text/en.json` | 4 rejection texts (ADR 052: every detail code has text) and the panel strings |
-| `game/scripts/core/world_state.gd` | composition only, 3 lines edited in place, 0 added: `ZoneTable.new(_item_definitions)`, HaulGiver's new Callables, `ToolDropToil` gets `get_stockpile_zones_for_group.bind("tool")` |
+| `game/scripts/core/world_state.gd` | composition only, 4 lines edited in place, 0 added: `ZoneTable.new(_item_definitions)`, HaulGiver's new Callables, `ToolDropToil` gets `get_stockpile_zones_for_group.bind("tool")`, `CraftingSystem` gets `_zone_table.accepts_item_at` |
+| `game/scripts/core/crafting/crafting_system.gd` | review fix: `stock_tools()` stocks a loose tool only where the stockpile accepts `tool` (outside the listed owned paths; the reviewer's blocking item 1 requires it) |
 | `docs/architecture/orders-and-movement.md` | the zone-command section and the haul-destination paragraph, which described the old rule |
 | `docs/decisions/064-stockpile-filters-and-priorities.md` (new), `docs/decisions/README.md` | ADR |
 | `game/scripts/tests/test_stockpile_filters.gd` (new), `test_save_migration.gd`, `test_text_pseudo_locale.gd` | tests (the last one adds the `stockpile` text prefix to its key census: more coverage) |
@@ -132,7 +164,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [914s]
+tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [922s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2801 warning(s), none above baseline (2803)
@@ -165,7 +197,10 @@ crop's real harvest and ticks (no direct internal calls):
   hash; groups stored sorted; all groups at priority 2 restores the bare record;
 - **panel:** the viewer's stockpile panel lists stockpiles only (not the farm zone), shows
   `Priority 2` and `[x] Food`; its buttons drop Food, raise the priority to 3 (label follows)
-  and restore every group, all through commands.
+  and restore every group, all through commands; moved to another world whose `zone_1` lies
+  elsewhere it rebuilds its rows (heading, buttons acting on the new world);
+- **review regressions:** a loose tool delivered into a stockpile that stopped accepting tools is
+  hauled out and stocked elsewhere; the save snapshot does not alias a live filter.
 
 Checked that the acceptance discriminates: with the priority comparison disabled the food goes
 to B ("within a day the food must lie in A ..." fails); with `accepts_item_at()` ignoring the
@@ -180,18 +215,19 @@ zone with a priority are `schema_error`; the v10 fixture re-encodes unchanged (L
 moved to v10 as F2, F3 and L2 did); the v1-v8 fixtures now load at v10.
 
 Assert sites (`_expect(`/`_fail(`, `origin/main` 3e7ba13 -> branch): `test_save_migration` 149 -> 164,
-`test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 43. No test removed, skipped
+`test_text_pseudo_locale` 21 -> 21, `test_stockpile_filters` new, 55. No test removed, skipped
 or loosened.
 
 ## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets)
 
-Core total: **22,407 lines** [21,818 lines]. The script counted 109 files in this worktree and
+Core total: **22,417 lines** [21,818 lines]. The script counted 109 files in this worktree and
 108 in a `git archive` copy of `origin/main`; the branch adds no core file (both track 108).
 
 | File | Total | Code |
 | --- | --- | --- |
 | `world_state.gd` | 767 [767] | 593 [593] |
-| `persistence/state_codec.gd` | 587 [574] | 432 [421] |
+| `persistence/state_codec.gd` | 589 [574] | 433 [421] |
+| `crafting/crafting_system.gd` | 573 [565] | 456 [450] |
 | `persistence/save_io.gd` | 400 [397] | 310 [308] |
 | `commands/command_checks.gd` | 282 [257] | 230 [208] |
 | `persistence/validators/object_validator.gd` | 241 [209] | 214 [186] |
@@ -201,7 +237,9 @@ Core total: **22,407 lines** [21,818 lines]. The script counted 109 files in thi
 | `commands/handlers/zone_handler.gd` | 85 [67] | 66 [52] |
 | `jobs/givers/haul_giver.gd` | 78 [66] | 62 [53] |
 
-`check_core_budgets.py`: OK; no core file above 800 lines, no function above 80; no cap raised.
+`check_core_budgets.py`: OK, with the existing frozen exceptions unchanged (among them the
+861-line `world_generator.gd`); every file this branch touches is under 800 lines and every
+function under 80 code lines; no cap raised or added.
 
 Warnings gate (branch head): OK, 2801 against the committed baseline 2803 (L2's). The gate
 suggests lowering the baseline with `-Update`; I did not (outside the owned paths; F0, F2 and
@@ -211,11 +249,11 @@ have.
 
 ## Known limitations
 
-- A tool stocked in a stockpile that stops accepting tools stays there (tools have no haul
-  path, ADR 061); new tool drops respect the filter.
+- A tool already stocked in a stockpile that later stops accepting tools stays there (tools
+  have no haul path, ADR 061); new tool drops and newly stocked crafted tools respect the filter.
 - The panel is minimal (list of stockpiles, no map selection), like F2's workbench panel.
-- Owner confirmation pending: the panel has had no playtest (`REVIEW.md` item 7: after the
-  merge, through the desktop shortcut).
+- Owner confirmation pending: the native panel playtest is a post-merge check (`REVIEW.md`
+  item 7, through the desktop shortcut); the headless panel tests are the pre-merge evidence.
 - Other `is_in_any_zone()` readers (construction and crafting "stockpiled" counts, rooms) still
   treat any stockpile tile as stocked, filter or not (ADR 064, Consequences).
 

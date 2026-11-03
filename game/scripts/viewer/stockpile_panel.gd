@@ -5,8 +5,8 @@ extends VBoxContainer
 ## one toggle button per item group. Every button issues a zone_set_stockpile command through
 ## world.apply(), the only mutation here (test_architecture_rules.gd's viewer-purity check).
 ##
-## Refresh follows the work table's A9 pattern: rows are rebuilt only when the set of
-## stockpiles changes; an ordinary tick-driven refresh() rewrites the already-alive labels and
+## Refresh follows the work table's A9 pattern: rows are rebuilt only when the stockpiles
+## (id and rectangle) or the groups change, or set_world() swaps the world; an ordinary tick-driven refresh() rewrites the already-alive labels and
 ## button texts in place, so a button the player is pressing is never freed under them.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -15,8 +15,8 @@ const ZoneTableType = preload("res://scripts/core/objects/zone_table.gd")
 
 var world: WorldStateType
 var _text_table: TextTableType
-## Ids of the stockpiles the rows were built for, in get_zones() order.
-var _zone_ids: Array[String] = []
+## "id@x,y,z" of the stockpiles the rows were built for, in get_zones() order, then the groups.
+var _row_keys: Array[String] = []
 ## zone id -> its priority Label; "zone_id:group" -> that group's toggle Button.
 var _priority_labels: Dictionary = {}
 var _group_buttons: Dictionary = {}
@@ -27,16 +27,23 @@ func setup(world_ref: WorldStateType, text_table: TextTableType) -> void:
 	_text_table = text_table
 	refresh()
 
+## Another world (a load): its zones may reuse this world's ids, so every row is rebuilt.
+func set_world(world_ref: WorldStateType) -> void:
+	world = world_ref
+	_row_keys.clear()
+	refresh()
+
 func refresh() -> void:
 	if world == null:
 		return
 	var stockpiles := _stockpiles()
-	var ids: Array[String] = []
+	var keys: Array[String] = []
 	for zone in stockpiles:
-		ids.append(String(zone["id"]))
-	if ids != _zone_ids:
+		keys.append("%s@%d,%d,%d" % [String(zone["id"]), int(zone["x"]), int(zone["y"]), int(zone["z"])])
+	keys.append(",".join(_groups()))
+	if keys != _row_keys:
 		_rebuild(stockpiles)
-		_zone_ids = ids
+		_row_keys = keys
 	for zone in stockpiles:
 		_update(zone)
 
@@ -49,6 +56,7 @@ func _groups() -> Array[String]:
 
 func _rebuild(stockpiles: Array[Dictionary]) -> void:
 	for child in get_children():
+		remove_child(child)
 		child.queue_free()
 	_priority_labels.clear()
 	_group_buttons.clear()

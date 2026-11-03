@@ -350,9 +350,11 @@ static func _encode_zones(zones: Dictionary) -> Array:
 		if zone.has("kind"):
 			entry["kind"] = zone["kind"]
 			entry["crop"] = zone["crop"]
-		for optional: String in ["groups", "priority"]:
-			if zone.has(optional):
-				entry[optional] = zone[optional]
+		# A copy: the save snapshot must never alias the live filter.
+		if zone.has("groups"):
+			entry["groups"] = (zone["groups"] as Array).duplicate()
+		if zone.has("priority"):
+			entry["priority"] = zone["priority"]
 		list.append(entry)
 	return list
 

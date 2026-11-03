@@ -244,7 +244,7 @@ func _build_systems() -> void:
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
 	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, func(kind: String, tile: Vector3i) -> String: return _tool_store.spawn_ground(kind, tile) if is_tool_kind(kind) else "",
-		_tool_store.set_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit)
+		_tool_store.set_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit, _zone_table.accepts_item_at)
 	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
 	_trench = TrenchSystemType.new(_content, _relations, _tile_grid, _passability, _scheduler, _progress_table, _clock,
 		func() -> Array[Dictionary]: return _colonists, _find_colonist, _find_job_colonist, _finish_job,
