@@ -84,11 +84,11 @@ func _check_save_io_round_trip_after_candidate_excluded() -> void:
 		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 6, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2) but walled off
 	world.spawn_ground_tool_item("pick", 5, 0) # farther (distance 5) but reachable
 
-	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 6, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 6, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -152,15 +152,15 @@ func _check_save_io_round_trip_mid_drop_tool_movement_matches_uninterrupted_run(
 	var world := WorldStateType.new(266008)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 4, "y": 0, "width": 1, "height": 1}).get("ok", false),
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 4, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 9, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 9, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(world.reserve_tool_item(pick_id, "foreign_job"), "reserving the held pick for a foreign job must succeed")
-	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 9, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 9, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "forage submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -230,15 +230,15 @@ func _check_save_io_round_trip_mid_drop_tool_route_search_matches_uninterrupted_
 	for y in range(11, 15):
 		TestAccess.set_tile(world, 10, y, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null})
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 10, "y": 15, "width": 1, "height": 1}).get("ok", false),
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null})
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 10, "y": 15, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 0, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 0, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
 	var pick_id := world.spawn_ground_tool_item("pick", 10, 10)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(world.reserve_tool_item(pick_id, "foreign_job"), "reserving the held pick for a foreign job must succeed")
-	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 0, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 0, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "forage submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -302,15 +302,15 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 	for x in range(0, 47):
 		TestAccess.set_tile(world, x, 6, WorldStateType.TILE_ROCK)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "route": null, "work": null})
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "kind": "berry_bush"}).get("ok", false),
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 5, "y": 5, "z": 0, "route": null, "work": null})
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 5, "y": 6, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement on the wall row must be accepted")
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 9, "width": 1, "height": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 9, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add south of the wall must be accepted")
 	var pick_id := world.spawn_ground_tool_item("pick", 5, 5)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(world.reserve_tool_item(pick_id, "foreign_job"), "reserving the held pick for a foreign job must succeed")
-	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 5, "y": 6, "priority": 1})
+	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 5, "y": 6, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "forage submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -353,7 +353,7 @@ func _check_save_io_round_trip_mid_drop_tool_search_impassable_target_between_ho
 			break
 	_expect(direct_completed, "the uninterrupted run must complete forage_1 once the pick is dropped")
 	_expect(restored_completed, "the SaveIO-restored run must also complete forage_1 once the pick is dropped")
-	_expect(world.get_tool_item(pick_id).get("location", {}) == {"type": "stockpile", "x": 5, "y": 9},
+	_expect(world.get_tool_item(pick_id).get("location", {}) == {"type": "stockpile", "x": 5, "y": 9, "z": 0},
 		"the pick must end on the stockpile cell, reached by the only legitimate crossing (the gap at the east edge), got %s" % [world.get_tool_item(pick_id).get("location", {})])
 
 ## Reconstructing the drop leg's identity from reservation state on restore
@@ -370,20 +370,20 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 10, 9, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 0, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
 
-	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush A placement must be accepted")
-	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush B placement must be accepted")
-	var forage_a_result := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "priority": 1})
+	var forage_a_result := Scenarios.command(world, "forage_a", "forage", {"x": 1, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_a_result.get("ok", false), "forage A submission must be accepted")
 	var forage_a_id := String(forage_a_result.get("job_id", ""))
 
@@ -412,7 +412,7 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 		if String(TestAccess.colonists(world)[i]["id"]) == "colonist_0":
 			TestAccess.colonists(world)[i]["needs"]["food"] = 20
 
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 9, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 9, "z": 0, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
 	var dig_id := String(dig_result.get("job_id", ""))
 
@@ -434,7 +434,7 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 	# keep a live colonist out of the forage pool) -- sequencing forage_b's
 	# submission after colonist_1 already committed keeps it out of
 	# contention without relying on a labour toggle forage does not have.
-	var forage_b_result := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "priority": 1})
+	var forage_b_result := Scenarios.command(world, "forage_b", "forage", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(forage_b_result.get("ok", false), "forage B submission must be accepted")
 	var forage_b_id := String(forage_b_result.get("job_id", ""))
 
@@ -518,18 +518,18 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 	# sorts, and therefore advances, before colonist_1, the holder, every tick --
 	# see the doc comment above for why this ordering is what makes the
 	# release gap actually observable across a tick() boundary.
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": labour_table_all_3})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null,
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": labour_table_all_but_chop})
 	var axe_id := world.spawn_ground_tool_item("axe", 20, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_1"), "moving the axe into colonist_1's hand must succeed")
 	var leftover_id := world.spawn_ground_tool_item("pick", 0, 0)
 	_expect(world.set_tool_item_held(leftover_id, "colonist_0"), "moving the leftover pick into colonist_0's hand must succeed")
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 15, "y": 0, "width": 1, "height": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 15, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
 
-	var submitted := Scenarios.command(world, "chop_1", "chop", {"x": 25, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "chop_1", "chop", {"x": 25, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "chop submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -544,9 +544,9 @@ func _check_save_io_round_trip_in_reservation_release_gap_with_unrelated_foreign
 
 	_expect(world.reserve_tool_item(leftover_id, "foreign_job"),
 		"reserving colonist_0's own leftover pick for a foreign job mid-fetch-travel must succeed")
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 20, "y": 10, "kind": "berry_bush"}).get("ok", false),
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 20, "y": 10, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
-	_expect(Scenarios.command(world, "forage_0", "forage", {"x": 20, "y": 10, "priority": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "forage_0", "forage", {"x": 20, "y": 10, "z": 0, "priority": 1}).get("ok", false),
 		"forage submission must be accepted")
 
 	# Advance until colonist_1's own drop_tool leg has actually completed (the
@@ -617,13 +617,13 @@ func _check_save_io_round_trip_ordinary_route_after_held_tool_foreign_reserved_m
 	var world := WorldStateType.new(266033)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
-	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 20, "y": 0, "kind": "berry_bush"}).get("ok", false),
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
+	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 20, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
 	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 
-	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 20, "y": 0, "priority": 1})
+	var submitted := Scenarios.command(world, "forage_1", "forage", {"x": 20, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "forage submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
 
@@ -683,7 +683,7 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 	var world := WorldStateType.new(266042)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "carrying": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	var axe_id := world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(world.set_tool_item_held(axe_id, "colonist_0"), "moving the axe into colonist_0's hand must succeed")
 	_expect(world.reserve_tool_item(axe_id, "foreign_job"),
@@ -693,9 +693,9 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 	# job's own destination reservation takes one of them at activation
 	# (before the colonist ever moves), leaving at least two still free for
 	# the axe's own, independent drop-cell search moments later.
-	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 3, "y": 0, "width": 3, "height": 1}).get("ok", false),
+	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 3, "y": 0, "z": 0, "width": 3, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 15, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 15, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 
 	var haul_job_id := ""
@@ -724,7 +724,7 @@ func _check_save_io_round_trip_mid_drop_during_haul_job_preserves_cargo_and_comp
 		"the haul job's own itemId must still name its cargo (item_1) while the axe's own drop leg is in flight")
 	_expect(String(mid_job.get("blocking_job_id", "")) == axe_id,
 		"the haul job's own blockingJobId must carry the in-flight drop-leg marker (the axe's id) while dropping")
-	var cell: Vector2i = mid_job["cell"]
+	var cell: Vector3i = mid_job["cell"]
 	_expect(TestAccess.scheduler(world).queue.get_reservation_table().owner("item:item_1") == haul_job_id,
 		"the haul job's own cargo reservation must still be intact mid-drop")
 	_expect(TestAccess.scheduler(world).queue.get_reservation_table().owner("cell:%d,%d" % [cell.x, cell.y]) == haul_job_id,

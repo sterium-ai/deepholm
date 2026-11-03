@@ -31,10 +31,10 @@ func _new_queue(reachability: Callable = Callable()) -> JobQueue:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 45
 	if not reachability.is_valid():
-		reachability = func(_target: Vector2i) -> bool: return true
+		reachability = func(_target: Vector3i) -> bool: return true
 	return QueueType.new(rng, reachability)
 
-func _submit(queue: JobQueue, target: Vector2i, priority: int = QueueType.Priority.NORMAL, kind: String = "dig") -> String:
+func _submit(queue: JobQueue, target: Vector3i, priority: int = QueueType.Priority.NORMAL, kind: String = "dig") -> String:
 	var result := queue.submit_dig(target, priority, kind)
 	_expect(result["ok"], "expected valid submission")
 	return result.get("job_id", "")
@@ -53,7 +53,7 @@ func _submit(queue: JobQueue, target: Vector2i, priority: int = QueueType.Priori
 func _check_labour_disabled_immediate_during_haul_backoff() -> void:
 	var queue := _new_queue()
 	queue.set_haul_backoff(10, 40)
-	var job_id := _submit(queue, Vector2i(5, 5), QueueType.Priority.NORMAL, "haul")
+	var job_id := _submit(queue, Vector3i(5, 5, 0), QueueType.Priority.NORMAL, "haul")
 	_expect(queue.attach_item(job_id, "item_1"), "attach_item must accept a queued haul job")
 	queue.set_haul_destination_finder(func(_item_id: String): return null)
 	queue.tick()
@@ -72,7 +72,7 @@ func _check_labour_disabled_immediate_during_haul_backoff() -> void:
 	queue.tick()
 	_expect(not _has_event(queue, "haul_destination_attempt"),
 		"no destination attempt may occur before the backoff naturally elapses")
-	_expect(queue.get_reservations().get(Vector2i(5, 5)) == job_id,
+	_expect(queue.get_reservations().get(Vector3i(5, 5, 0)) == job_id,
 		"the backed-off target must still report reserved while labour is disabled")
 
 	# Re-enabling labour mid-backoff: exactly one job_unblocked, still no
@@ -100,10 +100,10 @@ func _count_events(queue: JobQueue, event_type: String) -> int:
 
 func _check_reservations_and_recovery() -> void:
 	var queue := _new_queue()
-	var target := Vector2i(4, 5)
+	var target := Vector3i(4, 5, 0)
 	var owner := _submit(queue, target)
 	var waiter := _submit(queue, target)
-	var independent := _submit(queue, Vector2i(6, 5))
+	var independent := _submit(queue, Vector3i(6, 5, 0))
 	queue.tick()
 	_expect(queue.get_job(owner)["status"] == "active", "first job must activate")
 	var blocked := queue.get_job(waiter)
@@ -127,21 +127,21 @@ func _check_reservations_and_recovery() -> void:
 	_expect(queue.get_jobs().size() == 3, "blocked jobs must be retained")
 
 func _check_reachability_and_reason_changes() -> void:
-	var inaccessible := {Vector2i(1, 2): true}
-	var queue := _new_queue(func(target: Vector2i) -> bool: return not inaccessible.has(target))
-	var blocked := _submit(queue, Vector2i(1, 2), QueueType.Priority.HIGH)
-	var other := _submit(queue, Vector2i(3, 2), QueueType.Priority.LOW)
+	var inaccessible := {Vector3i(1, 2, 0): true}
+	var queue := _new_queue(func(target: Vector3i) -> bool: return not inaccessible.has(target))
+	var blocked := _submit(queue, Vector3i(1, 2, 0), QueueType.Priority.HIGH)
+	var other := _submit(queue, Vector3i(3, 2, 0), QueueType.Priority.LOW)
 	queue.tick()
 	_expect(queue.get_job(blocked)["reason"] == "blocked_target_unreachable", "unreachable needs specific reason")
 	_expect(queue.get_job(blocked)["remedy"] == "restore_target_access", "unreachable needs remedy")
-	_expect(not queue.get_reservations().has(Vector2i(1, 2)), "unreachable target must not be reserved")
+	_expect(not queue.get_reservations().has(Vector3i(1, 2, 0)), "unreachable target must not be reserved")
 	_expect(queue.get_job(other)["status"] == "active", "unreachable high priority must not stop low priority")
 	inaccessible.clear()
 	queue.tick()
 	_expect(queue.get_job(blocked)["status"] == "active", "reachability change must retry original job")
-	var waiter := _submit(queue, Vector2i(1, 2))
+	var waiter := _submit(queue, Vector3i(1, 2, 0))
 	queue.tick()
-	inaccessible[Vector2i(1, 2)] = true
+	inaccessible[Vector3i(1, 2, 0)] = true
 	queue.cancel(blocked)
 	queue.tick()
 	var changed := queue.get_job(waiter)
@@ -150,21 +150,21 @@ func _check_reachability_and_reason_changes() -> void:
 	inaccessible.clear()
 	queue.tick()
 	_expect(queue.get_job(waiter)["status"] == "active", "job must recover after multiple block causes")
-	var malformed := _new_queue(func(_target: Vector2i) -> int: return 1)
-	var malformed_id := _submit(malformed, Vector2i.ZERO)
+	var malformed := _new_queue(func(_target: Vector3i) -> int: return 1)
+	var malformed_id := _submit(malformed, Vector3i.ZERO)
 	malformed.tick()
 	_expect(malformed.get_job(malformed_id)["reason"] == "blocked_reachability_unavailable", "non-boolean callback must fail closed")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 45
 	var missing := QueueType.new(rng, Callable())
-	var missing_id := _submit(missing, Vector2i.ZERO)
+	var missing_id := _submit(missing, Vector3i.ZERO)
 	missing.tick()
 	_expect(missing.get_job(missing_id)["reason"] == "blocked_reachability_unavailable", "missing callback must explain block")
 
 func _check_terminal_releases() -> void:
 	for operation in ["cancel", "fail", "invalidate", "complete"]:
 		var queue := _new_queue()
-		var target := Vector2i(8, 8)
+		var target := Vector3i(8, 8, 0)
 		var owner := _submit(queue, target)
 		var waiter := _submit(queue, target)
 		queue.tick()
@@ -188,51 +188,51 @@ func _check_terminal_releases() -> void:
 		_expect(queue.get_reservations()[target] == waiter, "old owner must never release new owner's reservation")
 	for operation in ["cancel", "fail", "invalidate"]:
 		var queue := _new_queue()
-		var owner := _submit(queue, Vector2i.ZERO)
-		var waiter := _submit(queue, Vector2i.ZERO)
+		var owner := _submit(queue, Vector3i.ZERO)
+		var waiter := _submit(queue, Vector3i.ZERO)
 		queue.tick()
 		var result: Dictionary = queue.call(operation, waiter)
 		_expect(result["ok"], "blocked job must allow terminal commands")
-		_expect(queue.get_reservations()[Vector2i.ZERO] == owner, "terminating waiter must not release owner's reservation")
+		_expect(queue.get_reservations()[Vector3i.ZERO] == owner, "terminating waiter must not release owner's reservation")
 
 func _check_priorities_and_rejections() -> void:
 	var queue := _new_queue()
 	_expect(QueueType.Priority.size() == 3, "exactly three priority levels required")
 	for priority in [-1, 3, 99]:
-		var result := queue.submit_dig(Vector2i.ZERO, priority)
+		var result := queue.submit_dig(Vector3i.ZERO, priority)
 		_expect(not result["ok"] and result["rejection"]["reason"] == "invalid_priority", "invalid priority must reject")
-	_expect(not queue.submit_dig(Vector2i(-1, 0))["ok"], "negative target must reject")
+	_expect(not queue.submit_dig(Vector3i(-1, 0, 0))["ok"], "negative target must reject")
 	_expect(queue.get_jobs().is_empty(), "rejections must not create jobs")
-	var low := _submit(queue, Vector2i.ZERO, QueueType.Priority.LOW)
-	var normal := _submit(queue, Vector2i.ZERO, QueueType.Priority.NORMAL)
-	var high := _submit(queue, Vector2i.ZERO, QueueType.Priority.HIGH)
+	var low := _submit(queue, Vector3i.ZERO, QueueType.Priority.LOW)
+	var normal := _submit(queue, Vector3i.ZERO, QueueType.Priority.NORMAL)
+	var high := _submit(queue, Vector3i.ZERO, QueueType.Priority.HIGH)
 	_expect(low == "job_1", "rejections must not consume IDs")
 	_expect(not queue.complete(low)["ok"], "queued job cannot complete")
 	_expect(not queue.cancel("missing")["ok"], "unknown ID must reject")
 	queue.tick()
-	_expect(queue.get_reservations()[Vector2i.ZERO] == high, "high priority evaluated first")
+	_expect(queue.get_reservations()[Vector3i.ZERO] == high, "high priority evaluated first")
 	queue.complete(high)
 	queue.tick()
-	_expect(queue.get_reservations()[Vector2i.ZERO] == normal, "normal priority before low")
+	_expect(queue.get_reservations()[Vector3i.ZERO] == normal, "normal priority before low")
 	_expect(queue.get_job(low)["blocking_job_id"] == normal, "block owner must refresh when reservation changes")
 	queue.complete(normal)
 	queue.tick()
-	_expect(queue.get_reservations()[Vector2i.ZERO] == low, "low priority remains eligible")
+	_expect(queue.get_reservations()[Vector3i.ZERO] == low, "low priority remains eligible")
 
 func _check_custom_job_kind() -> void:
 	var queue := _new_queue()
-	var result := queue.submit_dig(Vector2i(2, 2), QueueType.Priority.NORMAL, "chop")
+	var result := queue.submit_dig(Vector3i(2, 2, 0), QueueType.Priority.NORMAL, "chop")
 	_expect(result["ok"], "custom job kind submission must succeed")
 	if result["ok"]:
 		_expect(queue.get_job(result["job_id"])["kind"] == "chop", "custom job kind must be stored on the job")
-	var default_result := queue.submit_dig(Vector2i(3, 2))
+	var default_result := queue.submit_dig(Vector3i(3, 2, 0))
 	_expect(default_result["ok"], "default job kind submission must succeed")
 	if default_result["ok"]:
 		_expect(queue.get_job(default_result["job_id"])["kind"] == "dig", "default job kind must remain dig")
 
 func _check_isolation() -> void:
 	var queue := _new_queue()
-	var job_id := _submit(queue, Vector2i.ZERO)
+	var job_id := _submit(queue, Vector3i.ZERO)
 	queue.tick()
 	var job := queue.get_job(job_id)
 	job["status"] = "cancelled"
@@ -246,19 +246,19 @@ func _check_isolation() -> void:
 	events.clear()
 	_expect(queue.get_job(job_id)["status"] == "active", "job getter must detach state")
 	_expect(queue.get_jobs().size() == 1 and queue.get_job(job_id)["reason"] == "", "jobs getter must deep copy")
-	_expect(queue.get_reservations()[Vector2i.ZERO] == job_id, "reservations getter must detach state")
+	_expect(queue.get_reservations()[Vector3i.ZERO] == job_id, "reservations getter must detach state")
 	_expect(not queue.get_events()[0]["data"].has("mutated"), "events getter must deep copy")
 	_expect(queue.get_job("missing").is_empty(), "unknown read must be empty")
 
 func _replay() -> JobQueue:
-	var unavailable := {Vector2i(7, 7): true}
-	var queue := _new_queue(func(target: Vector2i) -> bool: return not unavailable.has(target))
-	var first := _submit(queue, Vector2i.ZERO)
-	_submit(queue, Vector2i.ZERO)
-	_submit(queue, Vector2i(7, 7))
+	var unavailable := {Vector3i(7, 7, 0): true}
+	var queue := _new_queue(func(target: Vector3i) -> bool: return not unavailable.has(target))
+	var first := _submit(queue, Vector3i.ZERO)
+	_submit(queue, Vector3i.ZERO)
+	_submit(queue, Vector3i(7, 7, 0))
 	# Exercise lexical IDs beyond job_9 as well as insertion order.
 	for x in range(1, 12):
-		_submit(queue, Vector2i(x, 3), x % 3)
+		_submit(queue, Vector3i(x, 3, 0), x % 3)
 	queue.tick()
 	queue.cancel(first)
 	unavailable.clear()
@@ -297,9 +297,9 @@ func _check_replay() -> void:
 ## terminal transition, no reservation may outlive its job.
 func _check_reservation_invariants_after_scripted_sequence() -> void:
 	var queue := _new_queue()
-	var targets: Array[Vector2i] = []
+	var targets: Array[Vector3i] = []
 	for i in range(6):
-		targets.append(Vector2i(i, 9))
+		targets.append(Vector3i(i, 9, 0))
 	var jobs: Array[String] = []
 	for target in targets:
 		jobs.append(_submit(queue, target))
@@ -331,7 +331,7 @@ func _check_reservation_invariants_after_scripted_sequence() -> void:
 func _check_shared_table_releases_every_owned_key() -> void:
 	for operation in ["cancel", "fail", "invalidate", "complete"]:
 		var queue := _new_queue()
-		var target := Vector2i(9, 9)
+		var target := Vector3i(9, 9, 0)
 		var owner := _submit(queue, target)
 		queue.tick()
 		var table := queue.get_reservation_table()
@@ -365,7 +365,7 @@ func _check_shared_table_releases_every_owned_key() -> void:
 ## set_active_item_marker(job_id, "") clearing it back to empty on completion.
 func _check_active_item_marker() -> void:
 	var queue := _new_queue()
-	var target := Vector2i(4, 4)
+	var target := Vector3i(4, 4, 0)
 	var job_id := _submit(queue, target)
 
 	queue.set_active_item_marker(job_id, "tool_1")

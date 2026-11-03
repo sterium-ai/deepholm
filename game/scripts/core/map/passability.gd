@@ -29,7 +29,7 @@ var _actor_faction: Callable
 ## (colonist_id) -> Dictionary: the live roster actor, {} when unknown.
 var _find_colonist: Callable
 
-## The per-tile cache (class doc), sized _width * TileGrid.height when _built.
+## The per-tile cache (class doc), sized TileGrid.tiles.size() (every layer) when _built.
 var _built := false
 var _width := 0
 var _flags := PackedByteArray()
@@ -55,55 +55,56 @@ func _init(content: ContentRegistryType, tile_grid: TileGridType, object_table: 
 	tile_grid.bind_passability(refresh_cell, reset_cells, passable_at, door_at, passable_mask, room_cell_flags)
 
 ## The public rule as a Dictionary, for callers outside the hot paths.
-func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary:
-	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
+func passability(tile: Vector3i, faction_id: String = "colony") -> Dictionary:
+	if not _tile_grid.contains(tile):
 		return {"passable": false, "cost": 0, "is_door": false}
-	var index := _fresh_index(x, y)
+	var index := _fresh_index(tile)
 	var flags := _flags[index]
 	if flags & DOOR and not _faction_may_pass_doors(faction_id):
 		return {"passable": false, "cost": 0, "is_door": true}
 	return {"passable": flags & PASSABLE != 0, "cost": _cost[index], "is_door": flags & DOOR != 0}
 
-## passability(x, y)["passable"] (colony): regions' and rooms' rule.
+## passability(tile)["passable"] (colony) on layer 0: regions' and rooms' planar rule
+## (they cover the surface until L3).
 func passable_at(x: int, y: int) -> bool:
 	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
 		return false
-	return _colony_passable[_fresh_index(x, y)] == 1
+	return _colony_passable[_fresh_index(Vector3i(x, y, TileGridType.SURFACE))] == 1
 
-## passability(x, y)["is_door"] (any faction).
+## passability(tile)["is_door"] (any faction) on layer 0, for rooms.
 func door_at(x: int, y: int) -> bool:
 	if x < 0 or x >= _tile_grid.width or y < 0 or y >= _tile_grid.height:
 		return false
-	return _flags[_fresh_index(x, y)] & DOOR != 0
+	return _flags[_fresh_index(Vector3i(x, y, TileGridType.SURFACE))] & DOOR != 0
 
-## Every tile's passable_at() as 1/0, row-major (RegionMap's full build).
+## Layer 0's passable_at() as 1/0, row-major (RegionMap's full build).
 func passable_mask() -> PackedByteArray:
 	_refresh_all()
-	return _colony_passable
+	return _colony_passable.slice(0, _tile_grid.layer_size())
 
-## Every tile's passable_at() (bit 1) and door_at() (bit 2), row-major (RoomMap's full build).
+## Layer 0's passable_at() (bit 1) and door_at() (bit 2), row-major (RoomMap's full build).
 func room_cell_flags() -> PackedByteArray:
 	_refresh_all()
 	var flags := PackedByteArray()
-	flags.resize(_colony_passable.size())
+	flags.resize(_tile_grid.layer_size())
 	for index in flags.size():
 		flags[index] = _colony_passable[index] | (2 if _flags[index] & DOOR else 0)
 	return flags
 
-## TileGrid.mark_dirty()'s hook: (x, y)'s tile kind or object changed.
-func refresh_cell(x: int, y: int) -> void:
+## TileGrid.mark_dirty()'s hook: tile's kind or object changed.
+func refresh_cell(tile: Vector3i) -> void:
 	if _built:
-		_write_cell(TileGridType.flat_index(x, y, _width))
+		_write_cell(_tile_grid.index_of(tile))
 
 ## TileGrid.reset_cells()'s hook: rebuilt on the next query.
 func reset_cells() -> void:
 	_built = false
 
-## (x, y)'s index into the arrays (in bounds), built and fresh (class doc).
-func _fresh_index(x: int, y: int) -> int:
+## tile's index into the arrays (in bounds), built and fresh (class doc).
+func _fresh_index(tile: Vector3i) -> int:
 	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size():
 		_build()
-	var index := TileGridType.flat_index(x, y, _width)
+	var index := _tile_grid.index_of(tile)
 	if _tile_grid.tiles[index] != _kind[index]:
 		_write_cell(index)
 	return index
@@ -119,7 +120,7 @@ func _refresh_all() -> void:
 
 func _build() -> void:
 	_width = _tile_grid.width
-	var size := _width * _tile_grid.height
+	var size := _tile_grid.tiles.size()
 	_kind.resize(size)
 	_flags.resize(size)
 	_cost.resize(size)
@@ -194,33 +195,33 @@ func colonist_may_be_ordered(colonist_id: String) -> bool:
 func colonist_may_reserve_colony_items(colonist_id: String) -> bool:
 	return faction_may_reserve_colony_items(_actor_faction.call(colonist_id))
 
-## RouteSearch's colony cost callable: passability(x, y)["cost"].
-func is_passable(tile: Vector2i) -> float:
-	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
+## RouteSearch's colony cost callable: passability(tile)["cost"].
+func is_passable(tile: Vector3i) -> float:
+	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height or tile.z < 0 or tile.z >= _tile_grid.layer_count:
 		return 0.0
 	# _fresh_index() inlined: this runs four times per route expansion.
-	var index := TileGridType.flat_index(tile.x, tile.y, _width)
+	var index := TileGridType.index_in(tile, _width, _tile_grid.height)
 	if not _built or _width != _tile_grid.width or _kind.size() != _tile_grid.tiles.size() or _tile_grid.tiles[index] != _kind[index]:
-		index = _fresh_index(tile.x, tile.y)
+		index = _fresh_index(tile)
 	return float(_colony_cost[index])
 
 ## Faction-aware cost callable: is_passable() would let wildlife through colony doors.
-func passable_for_faction(tile: Vector2i, faction_id: String) -> float:
-	if tile.x < 0 or tile.x >= _tile_grid.width or tile.y < 0 or tile.y >= _tile_grid.height:
+func passable_for_faction(tile: Vector3i, faction_id: String) -> float:
+	if not _tile_grid.contains(tile):
 		return 0.0
-	var index := _fresh_index(tile.x, tile.y)
+	var index := _fresh_index(tile)
 	if _flags[index] & DOOR and not _faction_may_pass_doors(faction_id):
 		return 0.0
 	return float(_cost[index])
 
 ## GlobalAssignment's autonomous passability (F5): an incident actor routes under its own faction.
-func passable_for_worker(actor_id: String, tile: Vector2i) -> float:
+func passable_for_worker(actor_id: String, tile: Vector3i) -> float:
 	return passable_for_faction(tile, _actor_faction.call(actor_id))
 
 ## CombatGiver's flee-candidate check: the full passability() under the actor's own faction.
-func passable_for_flee(actor_id: String, x: int, y: int) -> Dictionary:
-	return passability(x, y, _actor_faction.call(actor_id))
+func passable_for_flee(actor_id: String, tile: Vector3i) -> Dictionary:
+	return passability(tile, _actor_faction.call(actor_id))
 
 ## CombatGiver's flee check: never a tile in a pocket disconnected from the actor.
-func region_reachable(from: Vector2i, target: Vector2i) -> bool:
+func region_reachable(from: Vector3i, target: Vector3i) -> bool:
 	return _tile_grid.get_regions().reachable(from, target)

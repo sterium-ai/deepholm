@@ -50,7 +50,7 @@ static func isolate_need(world: WorldStateType, kind: String) -> void:
 
 ## An idle colonist record with full needs, ready to append to the roster.
 static func idle_colonist(id: String, x: int, y: int) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y,
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"route": null, "work": null, "carrying": null}
 
@@ -64,7 +64,7 @@ static func full_needs(overrides: Dictionary = {}) -> Dictionary:
 ## Drops a ground stack of `kind` at (x, y) straight into the item table.
 static func add_stock(world: WorldStateType, kind: String, count: int, x: int, y: int) -> void:
 	var id := "item_%d" % TestAccess.item_table(world).next_item_id
-	TestAccess.item_table(world).items[id] = {"id": id, "x": x, "y": y, "kind": kind, "count": count}
+	TestAccess.item_table(world).items[id] = {"id": id, "x": x, "y": y, "z": 0, "kind": kind, "count": count}
 	TestAccess.item_table(world).next_item_id += 1
 
 ## Public job views of one kind, in get_jobs() order.

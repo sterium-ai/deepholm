@@ -49,7 +49,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _colonist(id: String, x: int, y: int, needs: Dictionary) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y, "needs": needs.duplicate(),
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0, "needs": needs.duplicate(),
 		"route": null, "work": null, "hands": []}
 
 func _check_mixed_hands_render() -> void:
@@ -232,7 +232,7 @@ func _check_sleeping_colonist_shows_activity_and_toil() -> void:
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
 	var place_result: Dictionary = world.apply({
 		"actor": "test", "command_id": "place_bed", "tick": world.get_tick(),
-		"type": "place_object", "payload": {"x": 5, "y": 0, "kind": "bed"},
+		"type": "place_object", "payload": {"x": 5, "y": 0, "z": 0, "kind": "bed"},
 	})
 	_expect(place_result.get("ok", false), "placing the bed fixture object must be accepted")
 

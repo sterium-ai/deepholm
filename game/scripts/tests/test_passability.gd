@@ -33,10 +33,10 @@ func _check_objects() -> void:
 	TestAccess.set_tile(world, 2, 2, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 3, 2, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 4, 2, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(1, 2, "chair")
-	TestAccess.object_table(world).set_object(2, 2, "door")
-	TestAccess.object_table(world).set_object(3, 2, "wall")
-	TestAccess.object_table(world).set_object(4, 2, "table")
+	TestAccess.object_table(world).set_object(Vector3i(1, 2, 0), "chair")
+	TestAccess.object_table(world).set_object(Vector3i(2, 2, 0), "door")
+	TestAccess.object_table(world).set_object(Vector3i(3, 2, 0), "wall")
+	TestAccess.object_table(world).set_object(Vector3i(4, 2, 0), "table")
 	var chair := world.passability(1, 2)
 	var door := world.passability(2, 2)
 	_expect(chair["passable"] and chair["cost"] == 3, "chair must be passable with cost 3")
@@ -46,13 +46,13 @@ func _check_objects() -> void:
 func _check_dig_rejects_blocked_object() -> void:
 	var world := WorldStateType.new(180, 10)
 	TestAccess.set_tile(world, 10, 10, WorldStateType.TILE_SOIL)
-	TestAccess.object_table(world).set_object(10, 10, "wall")
+	TestAccess.object_table(world).set_object(Vector3i(10, 10, 0), "wall")
 	var result := world.apply({
 		"command_id": "blocked-dig",
 		"actor": "player",
 		"tick": 0,
 		"type": "dig",
-		"payload": {"x": 10, "y": 10, "priority": 1}
+		"payload": {"x": 10, "y": 10, "z": 0, "priority": 1}
 	})
 	_expect(not result["ok"] and result["rejection"]["reason"] == "invalid_target", "dig on a wall must be rejected as invalid_target")
 
@@ -65,7 +65,7 @@ func _check_footprint_object_blocks_every_tile() -> void:
 	var world := WorldStateType.new(181, 10)
 	TestAccess.set_tile(world, 6, 6, WorldStateType.TILE_FLOOR)
 	TestAccess.set_tile(world, 7, 6, WorldStateType.TILE_FLOOR)
-	TestAccess.object_table(world).set_object(6, 6, "test_footprint_crate", "colony", "horizontal")
+	TestAccess.object_table(world).set_object(Vector3i(6, 6, 0), "test_footprint_crate", "colony", "horizontal")
 	_expect(not bool(world.passability(6, 6)["passable"]), "the origin footprint tile must be impassable")
 	_expect(not bool(world.passability(7, 6)["passable"]), "the second footprint tile must be impassable")
 

@@ -94,7 +94,7 @@ func _init(content: ContentRegistryType, calendar: CalendarServiceType, clock: S
 				job_kinds.append(kind)
 	_dirty_cursor = tile_grid.get_dirty_cells_since(0)["next"]
 	giver = FarmGiverType.new(get_farm_zones, get_items, view_jobs_of_kinds.bind(job_kinds), submit, passability,
-		tile_grid.get_tile, ripe_harvests, sow_open, sow_job_of, _sow_seeds)
+		tile_grid.tile_at, ripe_harvests, sow_open, sow_job_of, _sow_seeds)
 
 ## The "farming" tick phase.
 func advance() -> void:
@@ -103,7 +103,7 @@ func advance() -> void:
 	if stream["truncated"]:
 		reconcile_all()
 	else:
-		for cell: Vector2i in stream["cells"]:
+		for cell: Vector3i in stream["cells"]:
 			_reconcile(cell)
 	_grow(_clock.tick)
 	giver.advance(_clock.tick)
@@ -119,12 +119,12 @@ func reconcile_all() -> void:
 
 ## One cell: a stage tile gets a record (growth at its stage's threshold) unless it already
 ## has one of the same crop; any other tile loses its record.
-func _reconcile(cell: Vector2i) -> void:
+func _reconcile(cell: Vector3i) -> void:
 	var key := _key(cell)
-	if not _stage_of_tile.has(_tile_grid.get_tile(cell.x, cell.y)):
+	if not _stage_of_tile.has(_tile_grid.tile_at(cell)):
 		crops.erase(key)
 		return
-	var stage: Array = _stage_of_tile[_tile_grid.get_tile(cell.x, cell.y)]
+	var stage: Array = _stage_of_tile[_tile_grid.tile_at(cell)]
 	var crop_id: String = stage[0]
 	var stage_index: int = stage[1]
 	if crops.has(key):
@@ -167,12 +167,12 @@ func _stage_threshold(rule: CropRule, stage: int) -> int:
 
 ## Writes a stage change through the dirty log (every stage is the crop's own passable tile,
 ## but mark_dirty() refreshes the cell like any tile change).
-func _set_tile(cell: Vector2i, kind: String) -> void:
+func _set_tile(cell: Vector3i, kind: String) -> void:
 	var index := _tile_grid.index_of(cell)
 	if _tile_grid.tiles[index] == kind:
 		return
 	_tile_grid.tiles[index] = kind
-	_tile_grid.mark_dirty(cell.x, cell.y)
+	_tile_grid.mark_dirty(cell)
 
 ## FarmGiver's harvest list: [tile, the crop's harvest job kind] for every ripe crop, in key order.
 func ripe_harvests() -> Array:
@@ -202,9 +202,9 @@ func sow_job_of(crop_id: String) -> String:
 	var rule: CropRule = _rules[crop_id]
 	return rule.sow_job
 
-## {} when (x, y) holds no crop; else {"crop", "growth", "ripe_growth"} (viewer/tests).
-func crop_at(x: int, y: int) -> Dictionary:
-	var key := _key(Vector2i(x, y))
+## {} when tile holds no crop; else {"crop", "growth", "ripe_growth"} (viewer/tests).
+func crop_at(tile: Vector3i) -> Dictionary:
+	var key := _key(tile)
 	if not crops.has(key):
 		return {}
 	var record: Dictionary = (crops[key] as Dictionary).duplicate()
@@ -220,7 +220,7 @@ func encode() -> Dictionary:
 	for key: String in keys:
 		var cell := _tile_of(key)
 		var record: Dictionary = crops[key]
-		list.append({"target": {"x": cell.x, "y": cell.y}, "crop": record["crop"], "growth": record["growth"]})
+		list.append({"target": {"x": cell.x, "y": cell.y, "z": cell.z}, "crop": record["crop"], "growth": record["growth"]})
 	return {"crops": list}
 
 ## Restores the records, then reconciles them with the decoded tiles (a migrated v4 save's
@@ -230,21 +230,19 @@ func decode(state: Dictionary) -> void:
 	var list: Array = state.get("crops", [])
 	for entry: Dictionary in list:
 		var target: Dictionary = entry["target"]
-		var x: int = target["x"]
-		var y: int = target["y"]
 		var crop_id: String = entry["crop"]
 		var growth: int = entry["growth"]
-		crops[_key(Vector2i(x, y))] = {"crop": crop_id, "growth": growth}
+		crops[_key(TileGrid.tile_of(target))] = {"crop": crop_id, "growth": growth}
 	reconcile_all()
 
 func hash_into(snapshot: Dictionary) -> void:
 	if not crops.is_empty():
 		snapshot["crops"] = crops
 
-## The crops key, TileGrid's "x,y" format (ADR 045 §2: TileGrid owns every tile key format).
-func _key(cell: Vector2i) -> String:
-	return TileGridType.comma_key(cell.x, cell.y)
+## The crops key, TileGrid's "x,y[,z]" format (ADR 045 §2: TileGrid owns every tile key format).
+func _key(cell: Vector3i) -> String:
+	return TileGridType.comma_key(cell)
 
 ## _key()'s inverse.
-func _tile_of(key: String) -> Vector2i:
-	return Vector2i(key.get_slice(",", 0).to_int(), key.get_slice(",", 1).to_int())
+func _tile_of(key: String) -> Vector3i:
+	return TileGridType.coord_of_comma_key(key)

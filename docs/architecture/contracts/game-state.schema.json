@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://deepholm.example/schemas/game-state.schema.json",
-  "title": "Deepholm save state, schema v8",
-  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. v7 (ADR 061) adds crafting, the workbench targets, orders and bills; a v6 state is migrated with no configured bench {benches: [], nextOrderId: 1}. v8 (ADR 062) adds entities[].skills, a colonist's level and XP per labour; a v7 state is migrated by giving every colonist each labour of its labourTable at level 0, XP 0. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
+  "title": "Deepholm save state, schema v9",
+  "description": "The state object inside a save envelope {format: \"deepholm-save\", integrity, state}. Schema reset to v1 before release (ADR 049); envelopes with format \"deepholm-save-v1\" are pre-release saves and are rejected, not migrated. v2 (ADR 053) lists open jobs only; a v1 state is migrated by dropping its terminal jobs. v3 (ADR 010 amendment 2) records contentPacks, the ordered content packs the save was made on; SaveIO refuses to load it unless the session loads exactly those packs (content_packs_mismatch), and a v2 state is migrated with an empty list. The map tile, job kind and need enums below are the base bundle's ids: SaveIO._validate_state() reads them from the session ContentRegistry, so a pack's ids are valid in a save made on that pack. v4 (ADR 057) adds scenarioStart, the scenario calendar and incident list; a v3 state is migrated by adding the base start {calendar: null, enabledIncidents: []}. v5 (ADR 058) adds routeState.cost, the accumulated cost of each visited tile, so a restored search continues exactly; a v4 state is migrated without it (its costs are rebuilt from the map). v6 (ADR 059) adds farm zones (zone kind \"farm\" with a crop) and crops, FarmSystem's growth record of every sown tile; a v5 state is migrated by adding an empty list. v7 (ADR 061) adds crafting, the workbench targets, orders and bills; a v6 state is migrated with no configured bench {benches: [], nextOrderId: 1}. v8 (ADR 062) adds entities[].skills, a colonist's level and XP per labour; a v7 state is migrated by giving every colonist each labour of its labourTable at level 0, XP 0. v9 (ADR 045 §5, L2) gives every tile a layer: z (0 = surface, below map.layerCount) beside every x/y, in tile objects and in the flat x/y records (entities, items, zones, benches, tool locations, area orders), and map.layerCount, with map.tiles holding layerCount*width*height kinds in flat-index order (layer by layer, row-major); a v8 state is migrated with layerCount 1 and z 0 everywhere. This schema describes the unpacked state: on disk SaveIO writes it in the SaveWire encoding (palette and tile runs for map.tiles, base64 bitsets and arrays for route searches, record tables for entities, jobs, crops and scheduling.waiting; save-system.md \"Wire encoding\"), which SaveIO.read() unpacks before validating. Mirrors StateCodec.encode() and SaveIO._validate_state().",
   "type": "object",
   "additionalProperties": false,
   "required": ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"],
@@ -10,20 +10,22 @@
     "tile": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y"],
+      "required": ["x", "y", "z"],
       "properties": {
         "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
+        "y": { "type": "integer", "minimum": 0 },
+        "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." }
       }
     },
     "item": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "x", "y", "kind", "count", "factionId"],
+      "required": ["id", "x", "y", "z", "kind", "count", "factionId"],
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "x": { "type": "integer", "minimum": 0 },
         "y": { "type": "integer", "minimum": 0 },
+        "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
         "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
         "count": { "type": "integer", "minimum": 1 },
         "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" }
@@ -245,20 +247,22 @@
       "oneOf": [
         {
           "additionalProperties": false,
-          "required": ["type", "x", "y"],
+          "required": ["type", "x", "y", "z"],
           "properties": {
             "type": { "const": "ground" },
             "x": { "type": "integer", "minimum": 0 },
-            "y": { "type": "integer", "minimum": 0 }
+            "y": { "type": "integer", "minimum": 0 },
+            "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." }
           }
         },
         {
           "additionalProperties": false,
-          "required": ["type", "x", "y"],
+          "required": ["type", "x", "y", "z"],
           "properties": {
             "type": { "const": "stockpile" },
             "x": { "type": "integer", "minimum": 0 },
-            "y": { "type": "integer", "minimum": 0 }
+            "y": { "type": "integer", "minimum": 0 },
+            "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." }
           }
         },
         {
@@ -294,13 +298,14 @@
     "zone": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "x", "y", "width", "height"],
+      "required": ["id", "x", "y", "z", "width", "height"],
       "description": "A stockpile has no kind/crop; a farm zone (F1, ADR 059) has both.",
       "dependentRequired": { "kind": ["crop"], "crop": ["kind"] },
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "x": { "type": "integer", "minimum": 0 },
         "y": { "type": "integer", "minimum": 0 },
+        "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
         "kind": { "const": "farm" },
@@ -408,7 +413,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 8 },
+    "schemaVersion": { "type": "integer", "const": 9 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -429,12 +434,14 @@
     "map": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["width", "height", "tiles", "generatorVersion"],
+      "required": ["width", "height", "layerCount", "tiles", "generatorVersion"],
       "properties": {
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
+        "layerCount": { "type": "integer", "minimum": 1, "maximum": 64, "description": "Layers 0..layerCount-1, all width*height (ADR 045 §2); never shrinks. maximum is TileGrid.MAX_LAYER_COUNT." },
         "tiles": {
           "type": "array",
+          "description": "layerCount*width*height tile kinds in flat-index order: z*width*height + y*width + x.",
           "items": { "type": "string", "enum": ["rock", "soil", "floor", "plowed_soil", "planted", "crop_grown", "crop_ripe", "hazard", "tree", "water", "trench"] }
         },
         "generatorVersion": { "type": "integer", "minimum": 1 }
@@ -470,10 +477,11 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["x", "y", "targets", "orders", "bill"],
+            "required": ["x", "y", "z", "targets", "orders", "bill"],
             "properties": {
               "x": { "type": "integer", "minimum": 0 },
               "y": { "type": "integer", "minimum": 0 },
+              "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
               "targets": {
                 "type": "array",
                 "items": {
@@ -582,7 +590,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "kind", "x", "y", "route", "factionId", "health", "trapped"],
+        "required": ["id", "kind", "x", "y", "z", "route", "factionId", "health", "trapped"],
         "allOf": [
           {
             "if": { "properties": { "kind": { "const": "colonist" } } },
@@ -602,6 +610,7 @@
           "kind": { "type": "string", "enum": ["colonist", "wolf", "trader"] },
           "x": { "type": "integer", "minimum": 0 },
           "y": { "type": "integer", "minimum": 0 },
+          "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
           "factionId": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
           "health": { "$ref": "#/$defs/health" },
           "trapped": {
@@ -883,7 +892,7 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"],
+            "required": ["id", "order", "actor", "commandId", "x", "y", "z", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"],
             "properties": {
               "id": { "type": "integer", "minimum": 1 },
               "order": { "enum": ["dig", "chop", "forage", "till", "sow", "mine", "cancel", "remove_object"] },
@@ -891,6 +900,7 @@
               "commandId": { "type": "string", "minLength": 1 },
               "x": { "type": "integer", "minimum": 0 },
               "y": { "type": "integer", "minimum": 0 },
+              "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
               "width": { "type": "integer", "minimum": 1 },
               "height": { "type": "integer", "minimum": 1 },
               "priority": { "type": "integer" },

@@ -25,7 +25,7 @@ var _need_full: int
 var _retry_base_ticks: int
 var _retry_cap_ticks: int
 var _priority: int
-var _bounds_max: Vector2i
+var _bounds_max: Vector3i
 var _reservation_table
 var _claimed_targets: Callable
 var _source_candidates: Callable
@@ -60,7 +60,7 @@ var _alerted: Dictionary = {}
 ## submit the same source.
 ## region_reachable is Passability.region_reachable (ADR 054); invalid means no region check.
 func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, retry_cap_ticks: int,
-		priority: int, bounds_max: Vector2i, reservation_table, claimed_targets: Callable,
+		priority: int, bounds_max: Vector3i, reservation_table, claimed_targets: Callable,
 		source_candidates: Callable, tile_key: Callable, routable_to: Callable, submit_job: Callable,
 		set_reason: Callable, emit_need_unmet: Callable, interrupt_current_job: Callable,
 		resume_interrupted_job: Callable, content_registry, region_reachable: Callable = Callable()) -> void:
@@ -206,17 +206,17 @@ func _is_backed_off(colonist_id: String, kind: String, tick: int) -> bool:
 ## Reserved/claimed candidates are dropped here and rechecked at commit (searches span ticks).
 func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var colonist_id: String = colonist["id"]
-	var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
+	var start := TileGrid.tile_of(colonist)
 	var claimed: Dictionary = _claimed_targets.call()
-	var candidates: Array[Vector2i] = []
+	var candidates: Array[Vector3i] = []
 	if not _candidates_this_pass.has(kind):
 		_candidates_this_pass[kind] = _source_candidates.call(kind)
 	for tile in (_candidates_this_pass[kind] as Array):
 		if claimed.has(tile):
 			continue
-		if not _reservation_table.is_reserved(String(_tile_key.call(tile.x, tile.y))):
+		if not _reservation_table.is_reserved(String(_tile_key.call(tile))):
 			candidates.append(tile)
-	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+	candidates.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
 		var da := TileGrid.manhattan(a, start)
 		var db := TileGrid.manhattan(b, start)
 		if da != db:
@@ -258,11 +258,11 @@ func _advance_search(colonist: Dictionary, tick: int) -> void:
 func _advance_candidate_search(colonist: Dictionary, state: Dictionary, cursor: int) -> void:
 	var candidates: Array = state["candidates"]
 	var found: Array = state["found"]
-	var target: Vector2i = candidates[cursor]
+	var target: Vector3i = candidates[cursor]
 	var search: RerouteType = state.get("search")
 	if search == null:
-		var start := Vector2i(int(colonist["x"]), int(colonist["y"]))
-		search = RerouteType.new(start, target, _routable_to.call(target), Vector2i.ZERO, _bounds_max, _region_reachable)
+		var start := TileGrid.tile_of(colonist)
+		search = RerouteType.new(start, target, _routable_to.call(target), Vector3i.ZERO, _bounds_max, _region_reachable)
 		state["search"] = search
 	if not search.is_terminal():
 		search.resume()
@@ -303,9 +303,9 @@ func _advance_commit(colonist_id: String, kind: String, state: Dictionary, tick:
 		_onset_failed(colonist_id, kind, tick)
 		return
 	var entry: Dictionary = ranked[commit_cursor]
-	var target: Vector2i = entry["target"]
+	var target: Vector3i = entry["target"]
 	var claimed: Dictionary = _claimed_targets.call()
-	if _reservation_table.is_reserved(String(_tile_key.call(target.x, target.y))) or claimed.has(target):
+	if _reservation_table.is_reserved(String(_tile_key.call(target))) or claimed.has(target):
 		_set_reason.call(colonist_id, REASON_BLOCKED_SOURCE_RESERVED)
 		state["commit_cursor"] = commit_cursor + 1
 		return
@@ -313,7 +313,7 @@ func _advance_commit(colonist_id: String, kind: String, state: Dictionary, tick:
 	_commit(colonist_id, kind, target, tick)
 
 ## A rejected submit (same-tick race) is dropped; the next advance() re-evaluates.
-func _commit(colonist_id: String, kind: String, target: Vector2i, tick: int) -> void:
+func _commit(colonist_id: String, kind: String, target: Vector3i, tick: int) -> void:
 	var job_kind := String(JOB_KIND_BY_NEED.get(kind, ""))
 	var result: Dictionary = _submit_job.call(target, _priority, tick, job_kind, colonist_id)
 	if not result.get("ok", false):

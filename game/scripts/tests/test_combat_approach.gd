@@ -222,8 +222,8 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 	if _failed: return
 	var world := _build_arena(111)
 	_spawn_actor(world, "raiders", "wrecker", 0, 5)
-	TestAccess.object_table(world).set_object(10, 5, "wooden_wall") # nearer object target (defaults to colony faction, hostile to raiders)
-	TestAccess.object_table(world).set_object(30, 5, "wooden_wall") # farther object target
+	TestAccess.object_table(world).set_object(Vector3i(10, 5, 0), "wooden_wall") # nearer object target (defaults to colony faction, hostile to raiders)
+	TestAccess.object_table(world).set_object(Vector3i(30, 5, 0), "wooden_wall") # farther object target
 	world.tick() # backfills "combat"/"health" before this test mutates it
 
 	var approach_job_id := ""
@@ -234,7 +234,7 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 		if job.is_empty():
 			continue
 		var target: Dictionary = TestAccess.approach_giver(world).get_job_targets().get(String(job["id"]), {})
-		if String(target.get("kind", "")) == "object" and target.get("tile") == Vector2i(10, 5):
+		if String(target.get("kind", "")) == "object" and target.get("tile") == Vector3i(10, 5, 0):
 			approach_job_id = String(job["id"])
 			break
 	_expect(not approach_job_id.is_empty(), "the wrecker must commit to the nearer wall first for this check to be meaningful")
@@ -243,7 +243,7 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 	_expect(String(TestAccess.get_job(world, approach_job_id).get("status", "")) in ["queued", "active"],
 		"the approach job must still be in flight when its target is destroyed for this check to be meaningful")
 
-	TestAccess.object_table(world).set_object(10, 5, "") # simulates the current object target being destroyed/cleared
+	TestAccess.object_table(world).set_object(Vector3i(10, 5, 0), "") # simulates the current object target being destroyed/cleared
 	_assert_no_orphaned_reservations(world, "immediately after the object's destruction")
 
 	var retargeted := false
@@ -254,7 +254,7 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 		if job.is_empty():
 			continue
 		var target: Dictionary = TestAccess.approach_giver(world).get_job_targets().get(String(job["id"]), {})
-		if String(target.get("kind", "")) == "object" and target.get("tile") == Vector2i(30, 5):
+		if String(target.get("kind", "")) == "object" and target.get("tile") == Vector3i(30, 5, 0):
 			retargeted = true
 			break
 	_expect(retargeted, "destroying the current object target must cause the hostile to pick the next nearest reachable target")
@@ -271,7 +271,7 @@ func _check_approach_retargets_when_object_target_destroyed() -> void:
 ## next to the hunter's own current tile every loop iteration (never a one-shot
 ## placement): the hunter's tracked job keeps walking it toward its own now-dead
 ## target's tile even after death, since the job's own target is a fixed
-## Vector2i established at commit time, so a one-shot placement could drift out
+## Vector3i established at commit time, so a one-shot placement could drift out
 ## of adjacency before ApproachGiver's own post-movement rule-1 check ever saw
 ## it.
 func _check_approach_cancels_stale_target_while_adjacent_to_different_hostile() -> void:
@@ -344,7 +344,7 @@ func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> voi
 	world.tick() # backfills "combat"/"health" before this test mutates them
 
 	var approach_job_id := ""
-	var target := Vector2i.ZERO
+	var target := Vector3i.ZERO
 	for i in 60:
 		world.tick()
 		_assert_no_orphaned_reservations(world, "pre-seal tick %d" % world.get_tick())
@@ -364,9 +364,9 @@ func _check_approach_retargets_when_queued_job_goes_blocked_unreachable() -> voi
 	# hostile target (mirrors _check_approach_falls_back_to_incident_when_fully_walled_off()'s
 	# own trick).
 	for y in WorldStateType.MAP_HEIGHT:
-		TestAccess.object_table(world).set_object(15, y, "wooden_wall", "raiders")
+		TestAccess.object_table(world).set_object(Vector3i(15, y, 0), "wooden_wall", "raiders")
 	var hunter := TestAccess.find_colonist(world, "hunter")
-	_expect(not TestAccess.passability(world).region_reachable(Vector2i(int(hunter["x"]), int(hunter["y"])), target),
+	_expect(not TestAccess.passability(world).region_reachable(TileGrid.tile_of(hunter), target),
 		"the tracked job's own target must actually become unreachable once the corridor is sealed, for this check to be meaningful")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
@@ -432,7 +432,7 @@ func _check_approach_falls_back_to_incident_when_fully_walled_off() -> void:
 			var ny := wy + dy
 			if nx < 0 or ny < 0 or nx >= WorldStateType.MAP_WIDTH or ny >= WorldStateType.MAP_HEIGHT:
 				continue
-			TestAccess.object_table(world).set_object(nx, ny, "wooden_wall", "wildlife")
+			TestAccess.object_table(world).set_object(Vector3i(nx, ny, 0), "wooden_wall", "wildlife")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the wolf in")
 
 	var stopped_pursuing := false
@@ -477,7 +477,7 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 	# it completes (and despawns the actor) well within this check's own tick
 	# budget below; its target (0, 15) sits on the actor's own side of the
 	# corridor sealed further down, so the seal never affects it.
-	var incident_job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 0, 0), Vector2i(0, 15), 5)
+	var incident_job_id := TestAccess.incidents(world).propose(_make_incident_actor(world, actor_id, 0, 0), Vector3i(0, 15, 0), 5)
 	_expect(not incident_job_id.is_empty(), "the incident proposal must be accepted")
 	_spawn_actor(world, "colony", "villager", 30, 0) # the actor's own separate, unrelated hostile target
 
@@ -502,7 +502,7 @@ func _check_approach_fallback_never_interferes_with_unrelated_incident_job() -> 
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
 	for y in WorldStateType.MAP_HEIGHT:
-		TestAccess.object_table(world).set_object(15, y, "wooden_wall", "raiders")
+		TestAccess.object_table(world).set_object(Vector3i(15, y, 0), "wooden_wall", "raiders")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
 	var incident_completed := false
@@ -562,7 +562,7 @@ func _check_approach_fallback_resumes_same_actors_own_incident_job() -> void:
 	# Mirrors the corridor-sealing trick above: (0, 15) sits on the actor's
 	# own side (x < 15) of the wall column sealed further down, so the
 	# incident job's own target stays reachable regardless of the seal.
-	var incident_target := Vector2i(0, 15)
+	var incident_target := Vector3i(0, 15, 0)
 	var incident_job_id := TestAccess.submit_incident_job(world, actor_id, incident_target)
 	_expect(not incident_job_id.is_empty(), "the actor's own incident-kind job must be accepted")
 	if incident_job_id.is_empty():
@@ -578,7 +578,7 @@ func _check_approach_fallback_resumes_same_actors_own_incident_job() -> void:
 	# own trick) so the seal itself is never a new hostile target -- the
 	# incident job's own target (0, 15) is untouched by it.
 	for y in WorldStateType.MAP_HEIGHT:
-		TestAccess.object_table(world).set_object(15, y, "wooden_wall", "raiders")
+		TestAccess.object_table(world).set_object(Vector3i(15, y, 0), "wooden_wall", "raiders")
 	_assert_no_orphaned_reservations(world, "immediately after sealing the corridor")
 
 	var approach_cancelled := false

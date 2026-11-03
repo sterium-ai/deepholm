@@ -32,7 +32,7 @@ func apply_zone_add_command(command: Dictionary) -> Dictionary:
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var crop: String = payload.get("crop", "")
-	var zone_id := _zone_table.add(int(payload["x"]), int(payload["y"]), int(payload["width"]), int(payload["height"]), crop)
+	var zone_id := _zone_table.add(TileGrid.tile_of(payload), int(payload["width"]), int(payload["height"]), crop)
 	var applied := _event_log.applied(command)
 	applied["zone_id"] = zone_id
 	return applied
@@ -45,12 +45,16 @@ func apply_zone_remove_command(command: Dictionary) -> Dictionary:
 	var payload: Dictionary = command["payload"]
 	var zone_id: String = payload["id"]
 	var removed := _zone_table.remove(zone_id)
-	_fail_haul_jobs_targeting_removed_zone(int(removed["x"]), int(removed["y"]), int(removed["width"]), int(removed["height"]))
+	_fail_haul_jobs_targeting_removed_zone(removed)
 	_event_log.collect_queue_events()
 	return _event_log.applied(command)
 
 ## Scans every active haul job, since a zone is rarely removed.
-func _fail_haul_jobs_targeting_removed_zone(x: int, y: int, width: int, height: int) -> void:
+func _fail_haul_jobs_targeting_removed_zone(zone: Dictionary) -> void:
+	var x: int = zone["x"]
+	var y: int = zone["y"]
+	var width: int = zone["width"]
+	var height: int = zone["height"]
 	for job in _scheduler.queue.get_jobs():
 		if String(job["kind"]) != "haul" or job["status"] != "active":
 			continue
@@ -59,5 +63,5 @@ func _fail_haul_jobs_targeting_removed_zone(x: int, y: int, width: int, height: 
 			continue
 		var cx: int = cell.x
 		var cy: int = cell.y
-		if cx >= x and cx < x + width and cy >= y and cy < y + height:
+		if cell.z == int(zone["z"]) and cx >= x and cx < x + width and cy >= y and cy < y + height:
 			_terminate_haul_job_by_id.call(job["id"], "blocked_destination_gone", "choose_reachable_destination")

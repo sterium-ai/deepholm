@@ -39,7 +39,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "factionId": "colony",
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
@@ -48,7 +48,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	return world
 
 func _spawn_colonist(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var colonist: Dictionary = ActorTableType.spawn("colonist", x, y, TestAccess.content(world), id)
+	var colonist: Dictionary = ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), id)
 	colonist.erase("carrying")
 	colonist["hands"] = []
 	colonist["factionId"] = "colony"
@@ -103,7 +103,7 @@ func _trap_colonist_0(world: WorldStateType) -> void:
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
-	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(colonist["id"]))
+	var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", String(colonist["id"]))
 	_expect(submit.get("ok", false), "setup: till submission must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: colonist_0 must become trapped")
 
@@ -112,12 +112,12 @@ func _trap_colonist_0(world: WorldStateType) -> void:
 ## directly -- the same recipe _trap_colonist_0() uses, generalized to any
 ## tile for the route-safety checks below, which need the trench somewhere
 ## other than (1, 0).
-func _trap_colonist_at(world: WorldStateType, colonist: Dictionary, trench: Vector2i) -> void:
+func _trap_colonist_at(world: WorldStateType, colonist: Dictionary, trench: Vector3i) -> void:
 	colonist["x"] = trench.x - 1
 	colonist["y"] = trench.y
 	TestAccess.set_tile(world, trench.x, trench.y, WorldStateType.TILE_TRENCH)
 	TestAccess.set_tile(world, trench.x + 1, trench.y, WorldStateType.TILE_SOIL)
-	var submit := TestAccess.scheduler(world).submit(Vector2i(trench.x + 1, trench.y), 1, world.get_tick(), "till", String(colonist["id"]))
+	var submit := TestAccess.scheduler(world).submit(Vector3i(trench.x + 1, trench.y, 0), 1, world.get_tick(), "till", String(colonist["id"]))
 	_expect(submit.get("ok", false), "setup: till submission for the custom trap must be accepted")
 	_expect(_tick_until_trapped(world, colonist, TRAP_TICK_BOUND), "setup: colonist must become trapped at the requested tile")
 
@@ -130,7 +130,7 @@ func _tick_until_rescue_progress(world: WorldStateType, colonist: Dictionary, jo
 		var job := TestAccess.scheduler(world).queue.get_job(job_id)
 		if job.is_empty() or String(job.get("status", "")) != "active":
 			continue
-		var target: Vector2i = job["target"]
+		var target: Vector3i = job["target"]
 		var key := "%s:%d_%d" % [job_id, target.x, target.y]
 		if colonist.get("work") != null and TestAccess.progress_table(world).progress.has(key):
 			return key

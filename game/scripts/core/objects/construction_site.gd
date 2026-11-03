@@ -17,7 +17,7 @@ static func _materials_copy(materials: Array) -> Array[Dictionary]:
 	return copy
 
 ## Creates a site (held_materials zeroed per build_cost item); returns a detached copy.
-func create(kind: String, origin: Vector2i, orientation: String, required_materials: Array,
+func create(kind: String, origin: Vector3i, orientation: String, required_materials: Array,
 		build_ticks: int, max_builders: int) -> Dictionary:
 	var id := "site_%d" % _next_id
 	_next_id += 1
@@ -131,7 +131,7 @@ func add_progress(id: String, amount: int) -> int:
 	site["progress"] = int(site["progress"]) + amount
 	return int(site["progress"])
 
-func find_at_origin(origin: Vector2i) -> String:
+func find_at_origin(origin: Vector3i) -> String:
 	for id in _sites.keys():
 		if _sites[id]["origin"] == origin:
 			return id

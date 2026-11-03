@@ -11,6 +11,7 @@ extends RefCounted
 ## - v5 -> v6 (F1, ADR 059): farm zones and the "crops" growth records.
 ## - v6 -> v7 (F2, ADR 061): workbench targets, orders and bills ("crafting").
 ## - v7 -> v8 (F3, ADR 062): every colonist saves its skills.
+## - v8 -> v9 (L2, ADR 045 §5): map layers ("map.layerCount") and "z" on every tile.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -46,6 +47,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v6_to_v7(state)
 		7:
 			return _v7_to_v8(state)
+		8:
+			return _v8_to_v9(state)
 		_:
 			return {
 				"ok": false,
@@ -149,6 +152,36 @@ static func _v7_to_v8(state: Dictionary) -> Dictionary:
 		entity["skills"] = skills
 	migrated["schemaVersion"] = 8
 	return {"ok": true, "state": migrated}
+
+
+## v8 -> v9 (L2, ADR 045 §5): a v8 world is one layer. "map" gains "layerCount": 1 and keeps
+## its tiles (layer 0's flat indices are the v8 row-major ones). Every object with integer "x"
+## and "y" and no "z" gains "z": 0: in the v8 schema those are exactly the tiles ({x, y}
+## targets, origins, routes, trapped tiles) and the flat x/y records (entities, items, zones,
+## benches, tool locations, area orders), game-state.schema.json. Nothing else changes.
+static func _v8_to_v9(state: Dictionary) -> Dictionary:
+	if not (state.get("map") is Dictionary) or (state["map"] as Dictionary).has("layerCount"):
+		return {"ok": false, "code": "schema_error", "message": "v8 save has no map or already has map.layerCount"}
+	var migrated: Dictionary = _on_surface(state)
+	migrated["map"]["layerCount"] = 1
+	migrated["schemaVersion"] = 9
+	return {"ok": true, "state": migrated}
+
+## A deep copy of value with "z": 0 beside every integer x/y pair (_v8_to_v9()).
+static func _on_surface(value: Variant) -> Variant:
+	if value is Dictionary:
+		var copy: Dictionary = {}
+		for key: Variant in (value as Dictionary):
+			copy[key] = _on_surface((value as Dictionary)[key])
+		if typeof(copy.get("x")) == TYPE_INT and typeof(copy.get("y")) == TYPE_INT and not copy.has("z"):
+			copy["z"] = 0
+		return copy
+	if value is Array:
+		var items: Array = []
+		for item: Variant in (value as Array):
+			items.append(_on_surface(item))
+		return items
+	return value
 
 # --- content-version renames ---------------------------------------------
 

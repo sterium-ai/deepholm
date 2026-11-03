@@ -2,7 +2,8 @@ extends RefCounted
 
 ## The debug viewer's order input: which tool and wall kind are selected,
 ## the toolbar buttons that show it, and how a tool + tile rectangle turns
-## into WorldState commands (applied, or dry-run through WorldState.preview()
+## into WorldState commands (on the surface, "z" = TileGrid.SURFACE, until L4's active layer;
+## applied, or dry-run through WorldState.preview()
 ## for hover colouring). Holds no world or map view of its own: boot.gd owns
 ## those references and passes them in on every call, so a test that swaps
 ## boot.world or boot._map_view is picked up immediately. WorldState.preview()
@@ -40,7 +41,7 @@ func preview_validity(world: WorldStateType, preview: Callable, map_view: MapVie
 	elif selected_tool == Tool.ZONE or selected_tool == Tool.FARM_ZONE:
 		var first := tiles[0]
 		var last := tiles[-1]
-		var payload := {"x": first.x, "y": first.y, "width": last.x - first.x + 1, "height": last.y - first.y + 1}
+		var payload := {"x": first.x, "y": first.y, "z": TileGrid.SURFACE, "width": last.x - first.x + 1, "height": last.y - first.y + 1}
 		payload.merge(zone_payload(world, selected_tool))
 		var outcome: Dictionary = preview.call({
 			"actor": "player", "command_id": "preview_zone", "tick": world.get_tick(), "type": "zone_add",
@@ -84,7 +85,7 @@ static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool:
 			return {
 				"actor": "player", "command_id": "viewer_cancel_site_%s" % site["id"],
 				"tick": world.get_tick(), "type": "cancel_site",
-				"payload": {"x": int(site["origin"].x), "y": int(site["origin"].y)},
+				"payload": {"x": int(site["origin"].x), "y": int(site["origin"].y), "z": int(site["origin"].z)},
 			}
 		var candidate := _cancel_job_for_tile(world, tile)
 		if candidate.is_empty():
@@ -100,14 +101,14 @@ static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool:
 			"command_id": "viewer_remove_object_%d_%d_%d" % [world.get_tick(), tile.x, tile.y],
 			"tick": world.get_tick(),
 			"type": "remove_object",
-			"payload": {"x": tile.x, "y": tile.y},
+			"payload": {"x": tile.x, "y": tile.y, "z": TileGrid.SURFACE},
 		}
 	# Build tools: the same command map_view.gd's
 	# click path submits, so preview_validity()'s hover colouring runs the
 	# identical read-only rule (WorldState.preview() -> _check_build_command()).
 	var build_kind := build_kind_for_tool(tool)
 	if not build_kind.is_empty():
-		var payload := {"kind": build_kind, "x": tile.x, "y": tile.y}
+		var payload := {"kind": build_kind, "x": tile.x, "y": tile.y, "z": TileGrid.SURFACE}
 		if build_kind_is_rotatable(world, build_kind):
 			payload["orientation"] = map_view.get_build_orientation() if map_view != null else "horizontal"
 		return {
@@ -125,14 +126,14 @@ static func command_for_tile(world: WorldStateType, map_view: MapViewType, tool:
 		"command_id": "viewer_%s_%d_%d_%d" % [command_type, world.get_tick(), tile.x, tile.y],
 		"tick": world.get_tick(),
 		"type": command_type,
-		"payload": {"x": tile.x, "y": tile.y, "priority": 1},
+		"payload": {"x": tile.x, "y": tile.y, "z": TileGrid.SURFACE, "priority": 1},
 	}
 
 ## The tile a pending order is interacted with at: a site_fetch/site_work
 ## job's construction site (its "target" is the fetch source tile or the
 ## site itself, but "site" always names the site); for any other job, its
 ## target.
-static func _order_tile(job: Dictionary) -> Vector2i:
+static func _order_tile(job: Dictionary) -> Vector3i:
 	if job.get("site") != null:
 		return job["site"]
 	return job["target"]
@@ -150,9 +151,11 @@ static func _order_tile(job: Dictionary) -> Vector2i:
 ## before ever asking for a job.
 static func _cancel_job_for_tile(world: WorldStateType, tile: Vector2i) -> Dictionary:
 	var best := {}
-	for job_id in world.get_pending_job_ids_at(tile):
+	# The viewer's tiles are on the surface until L4's active layer (ADR 045 §7).
+	var map_tile := Vector3i(tile.x, tile.y, TileGrid.SURFACE)
+	for job_id in world.get_pending_job_ids_at(map_tile):
 		var job: Dictionary = world.get_job(job_id)
-		if job.is_empty() or job["status"] not in ["queued", "active"] or _order_tile(job) != tile:
+		if job.is_empty() or job["status"] not in ["queued", "active"] or _order_tile(job) != map_tile:
 			continue
 		if best.is_empty() or _cancel_job_before(job, best):
 			best = job
@@ -196,7 +199,7 @@ func commit_rectangle(world: WorldStateType, map_view: MapViewType, tiles: Array
 		var result: Dictionary = world.apply({"actor": "player",
 			"command_id": "viewer_area_%d_%d" % [world.get_tick(), _next_area_order], "tick": world.get_tick(),
 			"type": "area_order", "payload": {"order": area_order_kind(selected_tool), "x": rect.position.x,
-				"y": rect.position.y, "width": rect.size.x, "height": rect.size.y, "priority": 1}})
+				"y": rect.position.y, "z": TileGrid.SURFACE, "width": rect.size.x, "height": rect.size.y, "priority": 1}})
 		if not result.get("ok", false):
 			for tile in tiles:
 				rejected.append({"tile": tile, "reason": String(result["rejection"]["reason"])})
@@ -259,7 +262,7 @@ static func build_kind_for_tool(tool: int) -> String:
 func wall_command(world: WorldStateType, tiles: Array[Vector2i]) -> Dictionary:
 	var payload_tiles: Array[Dictionary] = []
 	for tile in tiles:
-		payload_tiles.append({"x": tile.x, "y": tile.y})
+		payload_tiles.append({"x": tile.x, "y": tile.y, "z": TileGrid.SURFACE})
 	return {"actor": "player", "command_id": "viewer_wall_%d" % world.get_tick(),
 		"tick": world.get_tick(), "type": "build_line",
 		"payload": {"kind": wall_kind, "tiles": payload_tiles}}

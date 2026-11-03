@@ -8,11 +8,11 @@ extends RefCounted
 ## Manhattan-nearest tool of `kind` that is unreserved or already reserved by job_id
 ## (a retry reuses its own reservation); ties broken by item id for determinism.
 ## excluded_ids skips candidates already proven unreachable in this fetch attempt.
-static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
+static func find_nearest_free_tool(kind: String, from: Vector3i, job_id: String,
 		tool_items: Array[Dictionary], reservation_of: Callable, colonist_positions: Dictionary,
 		excluded_ids: Array = []) -> Dictionary:
 	var best_id := ""
-	var best_target := Vector2i.ZERO
+	var best_target := Vector3i.ZERO
 	var best_distance := -1
 	for item in tool_items:
 		if String(item.get("kind", "")) != kind:
@@ -39,7 +39,7 @@ static func find_nearest_free_tool(kind: String, from: Vector2i, job_id: String,
 static func colonist_position_map(colonists: Array) -> Dictionary:
 	var positions: Dictionary = {}
 	for c in colonists:
-		positions[String(c["id"])] = Vector2i(int(c["x"]), int(c["y"]))
+		positions[String(c["id"])] = TileGrid.tile_of(c)
 	return positions
 
 ## The tile a tool item occupies: its ground/stockpile cell, or its holder's position;
@@ -48,7 +48,7 @@ static func item_target(item: Dictionary, colonist_positions: Dictionary):
 	var location: Dictionary = item.get("location", {})
 	match String(location.get("type", "")):
 		"ground", "stockpile":
-			return Vector2i(int(location["x"]), int(location["y"]))
+			return TileGrid.tile_of(location)
 		"held":
 			var holder := String(location.get("colonist_id", ""))
 			if not colonist_positions.has(holder):

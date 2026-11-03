@@ -205,7 +205,7 @@ func _build_map(p_width: int, p_height: int) -> void:
 	_mapgen = _content.document("mapgen").duplicate(true)
 	var resolved_size := WorldGeneratorType.resolve_size(p_width, p_height, _mapgen)
 	_zone_table = ZoneTableType.new()
-	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, get_object, _zone_table.is_in_any_zone)
+	_tile_grid = TileGridType.new(resolved_size.x, resolved_size.y, func(tile: Vector3i) -> String: return _object_table.get_object(tile), _zone_table.is_in_any_zone)
 	_object_table = ObjectTableType.new(_object_definitions, _tile_grid)
 	_passability = PassabilityType.new(_content, _tile_grid, _object_table, _object_definitions, _tile_definitions,
 		_actor_faction, _find_colonist)
@@ -222,7 +222,7 @@ func _build_scheduling(dig_find_random: RandomNumberGenerator) -> void:
 	_scheduler = AssignmentType.new(_random, _content)
 	_event_log = EventLogType.new(_clock, _scheduler.queue, PRIORITY_COMMAND)
 	_item_table = ItemTableType.new(_content, dig_find_random, func() -> Array[Dictionary]: return _colonists,
-		passability, get_tile, _zone_table.is_in_any_zone, _scheduler.queue.get_reservation_table,
+		_passability.passability, _tile_grid.tile_at, _zone_table.is_in_any_zone, _scheduler.queue.get_reservation_table,
 		_fail_haul_jobs_referencing_item, func(colonist_id: String) -> void: _toil_bindings.cancel_haul_job_carrying_consumed_item(colonist_id))
 	# F3: the faction gates read this world's actors, never a hardcoded "colony".
 	_scheduler.set_order_eligibility(_passability.colonist_may_be_ordered)
@@ -233,7 +233,7 @@ func _build_scheduling(dig_find_random: RandomNumberGenerator) -> void:
 	_combat_giver = CombatGiverType.new(_scheduler.submit_autonomous, _get_job, _scheduler.queue.get_jobs,
 		_job_restricted_to, func(colonist: Dictionary) -> void: _needs_system.interrupt_current_job(colonist),
 		func(colonist_id: String) -> void: _needs_system.resume_interrupted_job(colonist_id), _passability.passable_for_flee,
-		_actor_may_reserve_target, _passability.region_reachable, Vector2i(_tile_grid.width - 1, _tile_grid.height - 1), _content, _relations,
+		_actor_may_reserve_target, _passability.region_reachable, _tile_grid.bounds_max(), _content, _relations,
 		_flee_target_reserved, _cancel_autonomous_job)
 
 func _build_systems() -> void:
@@ -243,8 +243,8 @@ func _build_systems() -> void:
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
-	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, spawn_ground_tool_item,
-		set_tool_item_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit)
+	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, func(kind: String, tile: Vector3i) -> String: return _tool_store.spawn_ground(kind, tile) if is_tool_kind(kind) else "",
+		_tool_store.set_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit)
 	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
 	_trench = TrenchSystemType.new(_content, _relations, _tile_grid, _passability, _scheduler, _progress_table, _clock,
 		func() -> Array[Dictionary]: return _colonists, _find_colonist, _find_job_colonist, _finish_job,
@@ -256,8 +256,8 @@ func _build_systems() -> void:
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	_farm = FarmSystemType.new(_content, _calendar, _clock, _tile_grid, _zone_table.get_farm_zones, _item_table.get_items,
-		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, passability)
-	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
+		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability)
+	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), _construction.get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:
 	# Every CommandChecks rule takes the world; handlers get it only through this Callable.
@@ -272,13 +272,13 @@ func _build_commands() -> void:
 			func(incident_id: String, tick: int) -> Array: return _incidents.force_spawn(incident_id, tick)), _crafting)
 
 func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
-	_toils = ToilExecutorType.new(int(_content.list("tiles")[0]["move_ticks_per_tile"]), _work_ticks, passability, _get_job,
+	_toils = ToilExecutorType.new(int(_content.list("tiles")[0]["move_ticks_per_tile"]), _work_ticks, _passability.passability, _get_job,
 		_content, _item_table.item_lookup, _item_table.remove_ground_item_units, _item_table.place_new_ground_item, _is_cell_occupied,
 		func(job_id: String) -> bool: return _needs_system.consume_source_valid(job_id),
 		_resume_work_progress, _set_work_progress, _progress_table.clear, _reroutes, _route_search_factory,
 		get_tool_items, get_tool_item, get_tool_item_reservation, reserve_tool_item, release_tool_item_reservation,
-		set_tool_item_held, set_tool_item_ground, _worker_view, _route_budget,
-		_zone_table.get_stockpile_zones, is_cell_free, set_tool_item_stockpile, _tool_store.release_all, get_tool_reservation_table,
+		set_tool_item_held, _tool_store.set_ground, _worker_view, _route_budget,
+		_zone_table.get_stockpile_zones, _cell_free, _tool_store.set_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
 		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
@@ -294,7 +294,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 	_combat_system = CombatSystemType.new(_content, _relations, PRIORITY_TICK, _scheduler, _progress_table, _tool_store,
 		_item_table, _object_table, _event_log, _needs_system, _combat_giver, func() -> Array[Dictionary]: return _colonists,
 		func(actor_id: String) -> void: _approach_giver.forget(actor_id), _job_restricted_to, _finish_job,
-		_resolve_giver_association, _remove_colonist_by_id, is_tool_kind, spawn_ground_tool_item)
+		_resolve_giver_association, _remove_colonist_by_id, is_tool_kind, func(kind: String, tile: Vector3i) -> String: return _tool_store.spawn_ground(kind, tile) if is_tool_kind(kind) else "")
 	# Last of the modules: its hooks reach every system above.
 	_toil_bindings = ToilBindingsType.new(_scheduler, _toils, _item_table, _tool_store, _tile_grid, _object_table, _passability,
 		_construction, _trench, _needs_system, _reroutes, tool_requirements_by_kind, func() -> Array[Dictionary]: return _colonists,
@@ -308,7 +308,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.is_in_any_zone, _scheduler.submit,
-		_scheduler.queue.attach_item, _zone_table.get_stockpile_zones, is_cell_free, passability, _is_cell_occupied)
+		_scheduler.queue.attach_item, _zone_table.get_stockpile_zones, _cell_free, _passability.passability, _is_cell_occupied)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,
@@ -321,7 +321,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 ## and the TickPipeline over them. StateCodec.decode() calls it again after setting a saved
 ## map's exact size; _seed, already restored by then, salts IncidentScheduler's RNG.
 func _build_dimension_services(incidents_enabled: bool) -> void:
-	var bounds_max := Vector2i(_tile_grid.width - 1, _tile_grid.height - 1)
+	var bounds_max := _tile_grid.bounds_max()
 	var need_config := ContentTablesType.need_config(_content)
 	_need_giver = NeedGiverType.new(_need_definitions, _need_full, int(need_config["retry_base_ticks"]), int(need_config["retry_cap_ticks"]),
 		int(need_config["job_priority"]), bounds_max, _scheduler.queue.get_reservation_table(), _needs_system.need_job_targets,
@@ -336,7 +336,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	_approach_giver = ApproachGiverType.new(_scheduler.submit_autonomous, _get_job, _scheduler.queue.get_jobs,
 		_job_restricted_to, _passability.passable_for_flee, _actor_may_reserve_target, _passability.region_reachable,
 		_flee_target_reserved, _routable_to, bounds_max, _content, _relations, _route_budget,
-		_combat_giver.owns, get_objects, get_object, _object_table.object_health_at, get_object_faction_id,
+		_combat_giver.owns, get_objects, _object_table.get_object, _object_table.object_health_at, _object_table.get_object_faction_id,
 		_cancel_autonomous_job)
 	_incidents = IncidentSchedulerType.new(_seed, _content, _append_colonist, _remove_colonist_by_id,
 		_tile_grid.width, _tile_grid.height, _passability.passable_for_faction, _is_bare_tile, _tile_grid.get_regions, _submit_incident_job,
@@ -419,27 +419,27 @@ func get_map_width() -> int: return _tile_grid.width
 func get_map_height() -> int: return _tile_grid.height
 func get_generator_version() -> int: return _generator_version
 func get_move_ticks_per_tile() -> int: return int(_content.list("tiles")[0]["move_ticks_per_tile"])
-func get_tile(x: int, y: int) -> String: return _tile_grid.get_tile(x, y)
+func get_tile(x: int, y: int) -> String: return _tile_grid.get_tile(x, y) # (x, y) queries: the surface (TileGrid.SURFACE)
 func get_tiles() -> Array[String]: return _tile_grid.get_tiles()
-func get_ground_wood(x: int, y: int) -> int: return _item_table.get_ground_wood(x, y)
+func get_ground_wood(x: int, y: int) -> int: return _item_table.get_ground_wood(Vector3i(x, y, TileGrid.SURFACE))
 func get_items() -> Array[Dictionary]: return _item_table.get_items()
-func get_ground_berries(x: int, y: int) -> int: return _item_table.get_ground_berries(x, y)
-func get_ground_berries_faction_id(x: int, y: int) -> String: return _item_table.get_ground_berries_faction_id(x, y)
-func get_object(x: int, y: int) -> String: return _object_table.get_object(x, y)
-func get_object_faction_id(x: int, y: int) -> String: return _object_table.get_object_faction_id(x, y)
+func get_ground_berries(x: int, y: int) -> int: return _item_table.get_ground_berries(Vector3i(x, y, TileGrid.SURFACE))
+func get_ground_berries_faction_id(x: int, y: int) -> String: return _item_table.get_ground_berries_faction_id(Vector3i(x, y, TileGrid.SURFACE))
+func get_object(x: int, y: int) -> String: return _object_table.get_object(Vector3i(x, y, TileGrid.SURFACE))
+func get_object_faction_id(x: int, y: int) -> String: return _object_table.get_object_faction_id(Vector3i(x, y, TileGrid.SURFACE))
 func get_objects() -> Array[Dictionary]: return _object_table.get_objects()
 func get_construction_sites() -> Array[Dictionary]: return _construction.get_construction_sites()
-func get_construction_site(x: int, y: int) -> Dictionary: return _construction.get_construction_site(x, y)
+func get_construction_site(x: int, y: int) -> Dictionary: return _construction.get_construction_site(Vector3i(x, y, TileGrid.SURFACE))
 ## Every colony workbench with its targets, orders and bill (F2, ADR 061), for the viewer's panel.
 func get_crafting_benches() -> Array[Dictionary]: return _crafting.get_benches()
 func get_zones() -> Array[Dictionary]: return _zone_table.get_zones()
 func get_zone(id: String) -> Dictionary: return _zone_table.get_zone(id)
-func get_crop_at(x: int, y: int) -> Dictionary: return _farm.crop_at(x, y) # {} or {crop, growth, ripe_growth}
+func get_crop_at(x: int, y: int) -> Dictionary: return _farm.crop_at(Vector3i(x, y, TileGrid.SURFACE)) # {} or {crop, growth, ripe_growth}
 func get_actors_with_health() -> Array[Dictionary]: return _combat_system.get_actors_with_health()
 func get_pending_trade_offers() -> Array[Dictionary]: return _trade.get_pending_trade_offers()
 func get_queued_job_summary() -> Dictionary: return _scheduler.queue.get_index().queued_summary()
 func get_designation_changes(from: int) -> Dictionary: return _scheduler.queue.get_index().designation_changes(from)
-func get_pending_job_ids_at(tile: Vector2i) -> Array[String]: return _scheduler.queue.get_index().pending_ids_at(tile)
+func get_pending_job_ids_at(tile: Vector3i) -> Array[String]: return _scheduler.queue.get_index().pending_ids_at(tile)
 func get_reservations() -> Dictionary: return _scheduler.queue.get_reservations()
 func get_colonist_need_reason(colonist_id: String) -> String: return _needs_system.get_colonist_need_reason(colonist_id)
 func get_active_need_job_id(colonist_id: String) -> String: return _need_giver.get_pending_job(colonist_id)
@@ -450,7 +450,7 @@ func get_scheduling_metrics() -> Dictionary: return _scheduler.get_metrics()
 func get_assignments() -> Dictionary: return _scheduler.get_assignments()
 ## Cursor stream of the cells whose tile kind or object changed (map/tile_grid.gd, A6).
 func get_dirty_cells_since(cursor: int) -> Dictionary: return _tile_grid.get_dirty_cells_since(cursor)
-func get_room_at(x: int, y: int) -> Dictionary: return _tile_grid.get_room_at(x, y)
+func get_room_at(x: int, y: int) -> Dictionary: return _tile_grid.get_room_at(Vector3i(x, y, TileGrid.SURFACE))
 func get_events(types: Array = []) -> Array[Dictionary]: return _event_log.get_events(types)
 func get_events_since(sequence: int, types: Array = []) -> Dictionary: return _event_log.get_events_since(sequence, types)
 func get_spawn_clearing() -> Dictionary: return _spawn_clearing.duplicate()
@@ -459,15 +459,16 @@ func get_content_list(kind: String) -> Array: return _content.list(kind)
 ## Test-only: the simulation stream's seed/state, to compare with a pristine same-seed RNG.
 func get_simulation_random_state() -> Dictionary: return {"seed": _random.seed, "state": _random.state}
 ## The one authoritative movement rule for a tile and its object; faction_id (F3) only matters for a door.
-func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary: return _passability.passability(x, y, faction_id)
+func passability(x: int, y: int, faction_id: String = "colony") -> Dictionary: return _passability.passability(Vector3i(x, y, TileGrid.SURFACE), faction_id)
 ## True when no job/haul reservation owns (x, y)'s "cell:" key.
-func is_cell_free(x: int, y: int) -> bool: return not _scheduler.queue.get_reservation_table().is_reserved(_cell_key(x, y))
+func is_cell_free(x: int, y: int) -> bool: return _cell_free(Vector3i(x, y, TileGrid.SURFACE))
+func _cell_free(tile: Vector3i) -> bool: return not _scheduler.queue.get_reservation_table().is_reserved(_cell_key(tile))
 
 # Tool item CRUD and reservations, delegated to _tool_store (tool_item_store.gd).
 func get_tool_items() -> Array[Dictionary]: return _tool_store.get_items()
 func get_tool_item(item_id: String) -> Dictionary: return _tool_store.get_item(item_id)
-func set_tool_item_ground(item_id: String, x: int, y: int) -> bool: return _tool_store.set_ground(item_id, x, y)
-func set_tool_item_stockpile(item_id: String, x: int, y: int) -> bool: return _tool_store.set_stockpile(item_id, x, y)
+func set_tool_item_ground(item_id: String, x: int, y: int) -> bool: return _tool_store.set_ground(item_id, Vector3i(x, y, TileGrid.SURFACE))
+func set_tool_item_stockpile(item_id: String, x: int, y: int) -> bool: return _tool_store.set_stockpile(item_id, Vector3i(x, y, TileGrid.SURFACE))
 func set_tool_item_held(item_id: String, colonist_id: String) -> bool: return _tool_store.set_held(item_id, colonist_id)
 func reserve_tool_item(item_id: String, job_id: String) -> bool: return _tool_store.reserve(item_id, job_id)
 func release_tool_item_reservation(item_id: String, job_id: String) -> bool: return _tool_store.release(item_id, job_id)
@@ -481,7 +482,7 @@ func is_tool_kind(kind: String) -> bool: return String(_item_definitions.get(kin
 func spawn_ground_tool_item(kind: String, x: int, y: int) -> String:
 	if not is_tool_kind(kind):
 		return ""
-	return _tool_store.spawn_ground(kind, x, y)
+	return _tool_store.spawn_ground(kind, Vector3i(x, y, TileGrid.SURFACE))
 
 ## The only path that finishes a scheduler job. Tool reservations are released only
 ## once the scheduler accepts the transition (a rejected one keeps them); an incident
@@ -538,8 +539,8 @@ func get_job(job_id: String, assignments: Dictionary = {}) -> Dictionary:
 	ToolHandoverType.apply(job, assignments if not assignments.is_empty() else _scheduler.get_assignments(), _toils)
 	return job
 
-## CombatGiver's flee-destination check: true when (x, y) is already another job's "tile:" target.
-func _flee_target_reserved(x: int, y: int) -> bool: return _scheduler.queue.get_reservation_table().is_reserved(_tile_key(x, y))
+## CombatGiver's flee-destination check: true when tile is already another job's "tile:" target.
+func _flee_target_reserved(tile: Vector3i) -> bool: return _scheduler.queue.get_reservation_table().is_reserved(_tile_key(tile))
 ## CombatGiver retires a stuck queued flee job through the shared finish boundary.
 func _cancel_autonomous_job(job_id: String) -> void: _finish_job(job_id, "cancel_job")
 
@@ -552,32 +553,32 @@ func _actor_faction(actor_id: String) -> String:
 
 ## Autonomous reservation gate (ADR 014 Amendment). A trapped actor may reserve only its own
 ## tile; colony-item factions reserve anything; others their own tile or a bare one.
-func _actor_may_reserve_target(actor_id: String, target: Vector2i) -> bool:
+func _actor_may_reserve_target(actor_id: String, target: Vector3i) -> bool:
 	var trapped_actor := _find_colonist(actor_id)
 	if not trapped_actor.is_empty() and trapped_actor.get("trapped") != null:
-		return Vector2i(int(trapped_actor["x"]), int(trapped_actor["y"])) == target
+		return TileGrid.tile_of(trapped_actor) == target
 	if _passability.faction_may_reserve_colony_items(_actor_faction(actor_id)):
 		return true
-	if not trapped_actor.is_empty() and Vector2i(int(trapped_actor["x"]), int(trapped_actor["y"])) == target:
+	if not trapped_actor.is_empty() and TileGrid.tile_of(trapped_actor) == target:
 		return true
 	return _is_bare_tile(target)
 
 ## No colony-owned thing on this tile; IncidentScheduler picks targets with it so the gate accepts them.
-func _is_bare_tile(tile: Vector2i) -> bool:
-	if not get_object(tile.x, tile.y).is_empty() or get_ground_berries(tile.x, tile.y) > 0 or _zone_table.is_in_any_zone(tile.x, tile.y):
+func _is_bare_tile(tile: Vector3i) -> bool:
+	if not _object_table.get_object(tile).is_empty() or _item_table.get_ground_berries(tile) > 0 or _zone_table.is_in_any_zone(tile):
 		return false
-	if _item_table.has_item_at(tile.x, tile.y):
+	if _item_table.has_item_at(tile):
 		return false
 	for tool_item in _tool_store.get_items():
 		var location: Dictionary = tool_item.get("location", {})
-		if int(location.get("x", -1)) == tile.x and int(location.get("y", -1)) == tile.y:
+		if location.has("x") and TileGrid.tile_of(location) == tile:
 			return false
 	return true
 
 func _get_job(job_id: String) -> Dictionary: return _scheduler.queue.get_job(job_id)
 ## IncidentScheduler's submit_job (ADR 014 Amendment): autonomous, restricted to
 ## actor_id, activated only in the scheduler phase. "" when the queue rejected it.
-func _submit_incident_job(actor_id: String, target: Vector2i) -> String:
+func _submit_incident_job(actor_id: String, target: Vector3i) -> String:
 	var result := _scheduler.submit_autonomous(target, 1, _clock.tick, "incident", actor_id)
 	return String(result["job_id"]) if result.get("ok", false) else ""
 
@@ -593,8 +594,8 @@ func enable_incidents() -> void:
 	_incidents.reserve_actor_ordinal_above(_colonists)
 
 ## cell_occupied callable for _toils's place precondition.
-func _is_cell_occupied(x: int, y: int, excluding_colonist_id: String) -> bool:
-	return _actor_index.any_at(_colonists, x, y, excluding_colonist_id) or _item_table.has_item_at(x, y)
+func _is_cell_occupied(tile: Vector3i, excluding_colonist_id: String) -> bool:
+	return _actor_index.any_at(_colonists, tile, excluding_colonist_id) or _item_table.has_item_at(tile)
 
 ## command_checks.gd's sow precondition reads this name through the world.
 func _has_item_of_kind(kind: String) -> bool: return _item_table.has_item_of_kind(kind)
@@ -609,7 +610,7 @@ func _fail_haul_jobs_referencing_item(item_id: String) -> void:
 		_terminate_haul_job_by_id(String(job["id"]), "blocked_missing_input", "resubmit_order")
 
 ## start_work()'s resume lookup; a site_work job's duration always comes from its site.
-func _resume_work_progress(target: Vector2i, job_id: String):
+func _resume_work_progress(target: Vector3i, job_id: String):
 	var job := _get_job(job_id)
 	if String(job.get("kind", "")) == "site_work":
 		return _construction.site_work_ticks_remaining(job, target)
@@ -617,7 +618,7 @@ func _resume_work_progress(target: Vector2i, job_id: String):
 
 ## Every work tick of every work-toil job; job_id, when set, owns the key. site_work counts on
 ## its site instead (one counter for N builders); a trader posts its offer on its first work tick.
-func _set_work_progress(target: Vector2i, ticks_remaining: int, job_id: String = "") -> void:
+func _set_work_progress(target: Vector3i, ticks_remaining: int, job_id: String = "") -> void:
 	if not job_id.is_empty() and String(_scheduler.queue.get_job(job_id).get("kind", "")) == "site_work":
 		var job := _get_job(job_id)
 		_construction.add_site_work(job.get("site", target), "")
@@ -649,7 +650,7 @@ func _resolve_refused_reservations() -> void:
 
 ## NeedsSystem.resume_paused_job()'s first go_to leg; unreachable goes through
 ## ToilBindings.toil_on_unreachable(), never a plain resubmit.
-func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dictionary, target: Vector2i) -> void:
+func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dictionary, target: Vector3i) -> void:
 	var on_arrive := Callable(_toils, "start_work") if _toils.leads_into_work(String(job["kind"]), true) else Callable(_toil_bindings, "toil_no_op_arrive")
 	if _toils.advance_go_to(colonist, job_id, target, _routable_to(target, String(colonist.get("factionId", "colony"))), "go_to", on_arrive) != "unreachable":
 		return
@@ -660,7 +661,7 @@ func _advance_go_to_or_resubmit(colonist: Dictionary, job_id: String, job: Dicti
 func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 	var priority: int = int(job["priority"])
 	var kind: String = String(job["kind"])
-	var target: Vector2i = job["target"]
+	var target: Vector3i = job["target"]
 	var need_colonist_id := _need_giver.colonist_for_job(job_id)
 	var restrict_to := need_colonist_id if not need_colonist_id.is_empty() else _scheduler.restrict_to_for(job_id)
 	_finish_job(job_id, "cancel_job")
@@ -670,22 +671,21 @@ func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 		else: _need_giver.resolve_job(job_id)
 
 ## A fresh bounded re-route search within this map's bounds (injected into _toils).
-func _route_search_factory(start: Vector2i, target: Vector2i, passable: Callable) -> RerouteType:
-	var bounds_max := Vector2i(_tile_grid.width - 1, _tile_grid.height - 1)
-	return RerouteType.new(start, target, passable, Vector2i.ZERO, bounds_max, _passability.region_reachable)
+func _route_search_factory(start: Vector3i, target: Vector3i, passable: Callable) -> RerouteType:
+	return RerouteType.new(start, target, passable, Vector3i.ZERO, _tile_grid.bounds_max(), _passability.region_reachable)
 
 ## Faction passability with the scheduler's target-tile exception: a route may end on
 ## its own impassable target (a chop job's tree).
-func _routable_to(target: Vector2i, faction_id: String = "colony") -> Callable:
-	return func(tile: Vector2i) -> float:
+func _routable_to(target: Vector3i, faction_id: String = "colony") -> Callable:
+	return func(tile: Vector3i) -> float:
 		var cost := _passability.passable_for_faction(tile, faction_id)
 		if tile == target and cost <= 0.0:
 			return 1.0
 		return cost
 
 ## Chebyshev adjacency, matching pick_up()/place()'s "on or adjacent to".
-func _colonist_within_reach(colonist: Dictionary, tile: Vector2i) -> bool:
-	var colonist_tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+func _colonist_within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
+	var colonist_tile := TileGrid.tile_of(colonist)
 	return TileGridType.chebyshev(colonist_tile, tile) <= 1
 
 ## The colonist currently assigned to job_id, or {} when none.
@@ -699,7 +699,7 @@ func _find_job_colonist(job_id: String) -> Dictionary:
 	return {}
 
 ## Delegations to ToilBindings for modules built before it.
-func _work_target_for(job: Dictionary) -> Vector2i: return _toil_bindings.work_target_for(job)
+func _work_target_for(job: Dictionary) -> Vector3i: return _toil_bindings.work_target_for(job)
 func _drop_carried_haul_item(job_id: String) -> void: _toil_bindings.drop_carried_haul_item(job_id)
 func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void: _toil_bindings.terminate_haul_job_by_id(job_id, reason, remedy)
 func _resolve_giver_association(job_id: String, kind: String) -> void: _toil_bindings.resolve_giver_association(job_id, kind)
@@ -721,8 +721,8 @@ func _job_restricted_to(job_id: String) -> String:
 	return _scheduler.waiting_restrict_to(job_id)
 
 ## JobQueue's "tile:" target keys and is_cell_free()'s distinct "cell:" keys (colonist-ai.md 3.4).
-func _tile_key(x: int, y: int) -> String: return TileGridType.target_key(x, y)
-func _cell_key(x: int, y: int) -> String: return TileGridType.cell_key(x, y)
+func _tile_key(tile: Vector3i) -> String: return TileGridType.target_key(tile)
+func _cell_key(tile: Vector3i) -> String: return TileGridType.cell_key(tile)
 
 ## ActorTable.spawn()'s default labourTable, also NeedsSystem.ensure_needs()'s backfill.
 func _default_labour_table() -> Dictionary:
@@ -736,11 +736,11 @@ func _fail_startup(message: String) -> void:
 
 ## Travel cost from `from` to `to` under the same rule the go_to toil moves by, run to
 ## completion (bounded by the map). -1 when unreachable.
-func _route_cost(from: Vector2i, to: Vector2i, faction_id: String) -> int:
+func _route_cost(from: Vector3i, to: Vector3i, faction_id: String) -> int:
 	return 0 if from == to else RerouteType.finish_steps(_route_search_factory(from, to, _routable_to(to, faction_id)))
 
-func _colonist_at(x: int, y: int) -> bool:
-	return _actor_index.any_at(_colonists, x, y)
+func _colonist_at(tile: Vector3i) -> bool:
+	return _actor_index.any_at(_colonists, tile)
 
 ## The live colonist Dictionary for colonist_id, or {} when unknown.
 func _find_colonist(colonist_id: String) -> Dictionary:

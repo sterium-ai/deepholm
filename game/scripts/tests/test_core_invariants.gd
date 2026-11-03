@@ -56,14 +56,14 @@ func _issue_orders(world: WorldStateType) -> void:
 			var kind := world.get_tile(x, y)
 			if not wanted.has(kind) or int(wanted[kind][1]) <= 0:
 				continue
-			if _apply(world, String(wanted[kind][0]), {"x": x, "y": y, "priority": 1}).get("ok", false):
+			if _apply(world, String(wanted[kind][0]), {"x": x, "y": y, "z": 0, "priority": 1}).get("ok", false):
 				accepted += 1
 				wanted[kind][1] = int(wanted[kind][1]) - 1
 	if accepted == 0:
 		_fail("setup: no order was accepted")
 	for y in range(HALF - 8, HALF + 8):
 		for x in range(HALF - 8, HALF + 8):
-			if _apply(world, "zone_add", {"x": x, "y": y, "width": 3, "height": 3}).get("ok", false):
+			if _apply(world, "zone_add", {"x": x, "y": y, "z": 0, "width": 3, "height": 3}).get("ok", false):
 				return
 
 func _check_hands(world: WorldStateType) -> void:

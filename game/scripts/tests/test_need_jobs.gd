@@ -49,7 +49,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _colonist(id: String, x: int, y: int, needs: Dictionary) -> Dictionary:
-	return {"id": id, "kind": "colonist", "x": x, "y": y, "needs": needs.duplicate(),
+	return {"id": id, "kind": "colonist", "x": x, "y": y, "z": 0, "needs": needs.duplicate(),
 		"route": null, "work": null, "hands": []}
 
 func _need_unmet_events(world: WorldStateType, colonist_id: String, kind: String = "") -> Array[Dictionary]:
@@ -163,7 +163,7 @@ func _run_mid_dig_then_eat_scenario(seed_value: int, mutate_at_tick: int, total_
 	TestAccess.item_table(world).ground_berries["15_0"] = 1
 	world.spawn_ground_tool_item("pick", 0, 0)
 
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
 
@@ -203,7 +203,7 @@ func _check_no_reachable_food_exposes_need_unmet_once_and_keeps_working() -> voi
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"food": 20})))
 	TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
 	world.spawn_ground_tool_item("pick", 0, 0)
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 5, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 5, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
 
@@ -319,7 +319,7 @@ func _check_sleep_completes_and_releases_bed() -> void:
 	var world := Scenarios.floor_world(100001)
 	Scenarios.isolate_need(world, "rest")
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"rest": 20})))
-	var place_result := Scenarios.command(world, "place_bed", "place_object", {"x": 5, "y": 0, "kind": "bed"})
+	var place_result := Scenarios.command(world, "place_bed", "place_object", {"x": 5, "y": 0, "z": 0, "kind": "bed"})
 	_expect(place_result["ok"], "placing the bed fixture object must be accepted")
 
 	var completed := false
@@ -391,7 +391,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	TestAccess.item_table(world).ground_berries["9_20"] = 1
 	world.spawn_ground_tool_item("pick", 9, 0)
 
-	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "priority": 1})
+	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
 
@@ -499,12 +499,12 @@ func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> voi
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"food": 20})))
 
 	for x in range(1, 22):
-		TestAccess.object_table(world).set_object(x, 1, "wall")
-		TestAccess.object_table(world).set_object(x, 21, "wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 1, 0), "wall")
+		TestAccess.object_table(world).set_object(Vector3i(x, 21, 0), "wall")
 	for y in range(1, 22):
-		TestAccess.object_table(world).set_object(1, y, "wall")
+		TestAccess.object_table(world).set_object(Vector3i(1, y, 0), "wall")
 		if y != 11:
-			TestAccess.object_table(world).set_object(21, y, "wall")
+			TestAccess.object_table(world).set_object(Vector3i(21, y, 0), "wall")
 	TestAccess.item_table(world).ground_berries["2_2"] = 1
 	TestAccess.item_table(world).ground_berries["0_20"] = 1
 
@@ -519,8 +519,8 @@ func _check_prefers_shortest_real_route_over_closer_manhattan_candidate() -> voi
 	_expect(not job.is_empty(), "an eat_food job must be submitted within the tick budget")
 	if job.is_empty():
 		return
-	var target: Vector2i = job["target"]
-	_expect(target == Vector2i(0, 20),
+	var target: Vector3i = job["target"]
+	_expect(target == Vector3i(0, 20, 0),
 		("NeedGiver must choose the shorter real route (0,20), not the Manhattan-nearer "
 			+ "but route-blocked (2,2) (got %s)") % [target])
 
@@ -587,10 +587,10 @@ func _check_urgent_need_interrupts_haul_at_toil_boundary() -> void:
 	var world := Scenarios.floor_world(160001)
 	Scenarios.isolate_need(world, "food")
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs()))
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 9, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	TestAccess.item_table(world).ground_berries["9_5"] = 1
-	var zone_result := Scenarios.command(world, "zone1", "zone_add", {"x": 5, "y": 1, "width": 1, "height": 1})
+	var zone_result := Scenarios.command(world, "zone1", "zone_add", {"x": 5, "y": 1, "z": 0, "width": 1, "height": 1})
 	_expect(zone_result["ok"], "the haul destination zone_add must be accepted")
 
 	var haul_job_id := ""

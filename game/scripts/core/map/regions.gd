@@ -5,6 +5,8 @@ extends RefCounted
 ## The full build numbers regions in row-major order of their first tile (row-run union, A2);
 ## on_passability_changed() only re-floods the changed tile's neighbourhood (split or merge
 ## into the lowest id), never the whole map.
+## Covers the surface layer (z = 0) only: a tile on any other layer has no region until L3
+## builds one map per layer (ADR 045 §4).
 
 var _width: int
 var _height: int
@@ -37,21 +39,25 @@ func region_id(x: int, y: int) -> int:
 		return 0
 	return _region_of[_index(x, y)]
 
+## region_id() of a map tile: 0 off the surface (class doc).
+func region_of(tile: Vector3i) -> int:
+	return region_id(tile.x, tile.y) if tile.z == TileGrid.SURFACE else 0
+
 ## True when a and b share a nonzero region id; false for any out-of-bounds or impassable endpoint.
-func same_region(a: Vector2i, b: Vector2i) -> bool:
-	var ra := region_id(a.x, a.y)
+func same_region(a: Vector3i, b: Vector3i) -> bool:
+	var ra := region_of(a)
 	if ra == 0:
 		return false
-	return region_id(b.x, b.y) == ra
+	return region_of(b) == ra
 
 ## A job target's reachability: an impassable target (worked from beside it) is reachable
 ## when an orthogonal neighbour shares from's region; out of bounds never is.
-func reachable(from: Vector2i, target: Vector2i) -> bool:
-	if not _in_bounds(target.x, target.y):
+func reachable(from: Vector3i, target: Vector3i) -> bool:
+	if target.z != TileGrid.SURFACE or not _in_bounds(target.x, target.y):
 		return false
 	if same_region(from, target):
 		return true
-	if region_id(target.x, target.y) != 0:
+	if region_of(target) != 0:
 		return false
 	for neighbour in _orthogonal(target):
 		if same_region(from, neighbour):
@@ -69,9 +75,9 @@ func on_passability_changed(x: int, y: int) -> void:
 		return
 	if not is_passable:
 		_region_of[index] = 0
-		_resplit_neighbours(Vector2i(x, y))
+		_resplit_neighbours(Vector3i(x, y, TileGrid.SURFACE))
 		return
-	_merge_neighbours(Vector2i(x, y))
+	_merge_neighbours(Vector3i(x, y, TileGrid.SURFACE))
 
 ## The constructor's full partition: row runs unioned with overlapping runs above, ids handed
 ## out in row-major order of each region's first tile.
@@ -140,7 +146,7 @@ func _union(parent: PackedInt32Array, a: int, b: int) -> void:
 
 ## One removed cell can only disconnect its own neighbours: the first keeps old_id, any
 ## neighbour no longer reachable from it is relabelled as a fresh component.
-func _resplit_neighbours(tile: Vector2i) -> void:
+func _resplit_neighbours(tile: Vector3i) -> void:
 	var neighbours := _passable_neighbours(tile)
 	if neighbours.size() < 2:
 		return
@@ -148,7 +154,7 @@ func _resplit_neighbours(tile: Vector2i) -> void:
 	_visit_epoch += 1
 	_flood_visit(_index(neighbours[0].x, neighbours[0].y), old_id)
 	for i in range(1, neighbours.size()):
-		var neighbour: Vector2i = neighbours[i]
+		var neighbour: Vector3i = neighbours[i]
 		if _visited[_index(neighbour.x, neighbour.y)] == _visit_epoch:
 			continue
 		_flood_relabel(_index(neighbour.x, neighbour.y), old_id, _next_id)
@@ -157,7 +163,7 @@ func _resplit_neighbours(tile: Vector2i) -> void:
 ## The newly passable tile joins the lowest id among its passable
 ## neighbours' regions (or starts a fresh one with none); every other
 ## neighbour region relabels to that id.
-func _merge_neighbours(tile: Vector2i) -> void:
+func _merge_neighbours(tile: Vector3i) -> void:
 	var index := _index(tile.x, tile.y)
 	var neighbours := _passable_neighbours(tile)
 	if neighbours.is_empty():
@@ -223,16 +229,16 @@ func _step(index: int, direction: int) -> int:
 		_:
 			return index + _width if index < _region_of.size() - _width else -1
 
-func _passable_neighbours(tile: Vector2i) -> Array[Vector2i]:
-	var result: Array[Vector2i] = []
+func _passable_neighbours(tile: Vector3i) -> Array[Vector3i]:
+	var result: Array[Vector3i] = []
 	for neighbour in _orthogonal(tile):
 		if _in_bounds(neighbour.x, neighbour.y) and bool(_passable.call(neighbour.x, neighbour.y)):
 			result.append(neighbour)
 	return result
 
-func _orthogonal(tile: Vector2i) -> Array[Vector2i]:
-	return [Vector2i(tile.x, tile.y - 1), Vector2i(tile.x - 1, tile.y),
-		Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]
+func _orthogonal(tile: Vector3i) -> Array[Vector3i]:
+	return [Vector3i(tile.x, tile.y - 1, tile.z), Vector3i(tile.x - 1, tile.y, tile.z),
+		Vector3i(tile.x + 1, tile.y, tile.z), Vector3i(tile.x, tile.y + 1, tile.z)]
 
 func _index(x: int, y: int) -> int:
 	return TileGrid.flat_index(x, y, _width)

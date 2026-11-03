@@ -107,7 +107,7 @@ func _build_world(seed_value: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0,
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
 		"route": null, "work": null, "carrying": null, "held_tool": ""})
 	return world
@@ -214,21 +214,21 @@ func _check_execution_trace() -> void:
 	_run_and_verify("dig", 201001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
 		world.spawn_ground_tool_item("pick", 0, 0)
-		_expect(_command(world, "dig", {"x": 5, "y": 0, "priority": 1})["ok"], "dig order must be accepted"))
+		_expect(_command(world, "dig", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "dig order must be accepted"))
 	_run_and_verify("mine", 201501, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_ROCK)
 		world.spawn_ground_tool_item("pick", 0, 0)
-		_expect(_command(world, "mine", {"x": 5, "y": 0, "priority": 1})["ok"], "mine order must be accepted"))
+		_expect(_command(world, "mine", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "mine order must be accepted"))
 	_run_and_verify("chop", 202001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_TREE)
 		world.spawn_ground_tool_item("axe", 0, 0)
-		_expect(_command(world, "chop", {"x": 5, "y": 0, "priority": 1})["ok"], "chop order must be accepted"))
+		_expect(_command(world, "chop", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "chop order must be accepted"))
 	_run_and_verify("forage", 203001, func(world: WorldStateType) -> void:
-		_expect(_command(world, "place_object", {"x": 5, "y": 0, "kind": "berry_bush"})["ok"],
+		_expect(_command(world, "place_object", {"x": 5, "y": 0, "z": 0, "kind": "berry_bush"})["ok"],
 			"berry_bush placement must be accepted")
-		_expect(_command(world, "forage", {"x": 5, "y": 0, "priority": 1})["ok"], "forage order must be accepted"))
+		_expect(_command(world, "forage", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "forage order must be accepted"))
 	_run_and_verify("sleep", 204001, func(world: WorldStateType) -> void:
-		_expect(_command(world, "place_object", {"x": 5, "y": 0, "kind": "bed"})["ok"], "bed placement must be accepted"))
+		_expect(_command(world, "place_object", {"x": 5, "y": 0, "z": 0, "kind": "bed"})["ok"], "bed placement must be accepted"))
 	_run_and_verify("eat_food", 205001, func(world: WorldStateType) -> void:
 		TestAccess.item_table(world).ground_berries["5_0"] = 1)
 	_run_and_verify("drink_water", 206001, func(world: WorldStateType) -> void:
@@ -238,25 +238,25 @@ func _check_execution_trace() -> void:
 	_check_crafting_execution_trace(207601)
 	_run_and_verify("till", 208001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
-		_expect(_command(world, "till", {"x": 5, "y": 0, "priority": 1})["ok"], "till order must be accepted"))
+		_expect(_command(world, "till", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "till order must be accepted"))
 	_run_and_verify("sow", 209001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_PLOWED_SOIL)
-		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "seed", "count": 1}
+		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "z": 0, "kind": "seed", "count": 1}
 		TestAccess.item_table(world).next_item_id = 2
-		_expect(_command(world, "sow", {"x": 5, "y": 0, "priority": 1})["ok"], "sow order must be accepted"))
+		_expect(_command(world, "sow", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "sow order must be accepted"))
 	# F1 (ADR 059): no command orders a harvest; FarmGiver submits one for a ripe crop tile,
 	# which FarmSystem picks up from the dirty-cell stream like a completed sow's tile.
 	_run_and_verify("harvest", 209501, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, "crop_ripe")
-		TestAccess.tile_grid(world).mark_dirty(5, 0))
+		TestAccess.tile_grid(world).mark_dirty(Vector3i(5, 0, 0)))
 	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
 	# -- this test proves only that the "incident" kind itself runs through
 	# the ordinary ToilExecutor dispatch once activated/assigned.
 	_run_and_verify("incident", 210001, func(world: WorldStateType) -> void:
-		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, TestAccess.content(world), "arch_wolf")
+		var wolf: Dictionary = ActorTableType.spawn("wolf", Vector3i(0, 5, 0), TestAccess.content(world), "arch_wolf")
 		wolf["factionId"] = "wildlife"
-		_expect(not TestAccess.incidents(world).propose(wolf, Vector2i(1, 5), 5).is_empty(),
+		_expect(not TestAccess.incidents(world).propose(wolf, Vector3i(1, 5, 0), 5).is_empty(),
 			"incident job submission must be accepted"))
 	# ADR 026 (trench escape): walks a hostile actor into a trench through a
 	# real incident job (setup's own ticking, cleared from the trace by
@@ -264,9 +264,9 @@ func _check_execution_trace() -> void:
 	# only the escape_trench job's own go_to/work toils are traced.
 	_run_and_verify("escape_trench", 211001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 1, 5, WorldStateType.TILE_TRENCH)
-		var wolf: Dictionary = ActorTableType.spawn("wolf", 0, 5, TestAccess.content(world), "arch_wolf_trap")
+		var wolf: Dictionary = ActorTableType.spawn("wolf", Vector3i(0, 5, 0), TestAccess.content(world), "arch_wolf_trap")
 		wolf["factionId"] = "wildlife"
-		_expect(not TestAccess.incidents(world).propose(wolf, Vector2i(1, 5), 5).is_empty(),
+		_expect(not TestAccess.incidents(world).propose(wolf, Vector3i(1, 5, 0), 5).is_empty(),
 			"incident job submission for the trap scenario must be accepted")
 		for _i in 50:
 			world.tick()
@@ -289,7 +289,7 @@ func _check_execution_trace() -> void:
 	# ToilExecutor trace with an unrelated go_to/work pair.
 	_run_and_verify("flee", 212001, func(world: WorldStateType) -> void:
 		TestAccess.colonists(world)[0]["health"] = {"hp": 1, "maxHp": 100, "dead": false}
-		var threat: Dictionary = ActorTableType.spawn("trader", 10, 0, TestAccess.content(world), "arch_threat")
+		var threat: Dictionary = ActorTableType.spawn("trader", Vector3i(10, 0, 0), TestAccess.content(world), "arch_threat")
 		threat["factionId"] = "raiders"
 		TestAccess.append_colonist(world, threat))
 	# ADR 026 (rescue): traps colonist_0 through a real till job's route
@@ -299,14 +299,14 @@ func _check_execution_trace() -> void:
 	_run_and_verify("rescue", 213001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 		TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-		var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", "colonist_0")
+		var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", "colonist_0")
 		_expect(submit.get("ok", false), "setup: till submission for the rescue trap scenario must be accepted")
 		for _i in 50:
 			world.tick()
 			if TestAccess.colonists(world)[0].get("trapped") != null:
 				break
 		_expect(TestAccess.colonists(world)[0].get("trapped") != null, "setup: colonist_0 must be trapped before the rescue trace assertions run")
-		var rescuer: Dictionary = ActorTableType.spawn("colonist", 5, 5, TestAccess.content(world), "arch_rescuer")
+		var rescuer: Dictionary = ActorTableType.spawn("colonist", Vector3i(5, 5, 0), TestAccess.content(world), "arch_rescuer")
 		rescuer.erase("carrying")
 		rescuer["hands"] = []
 		rescuer["factionId"] = "colony"
@@ -317,7 +317,7 @@ func _check_execution_trace() -> void:
 	# "approach" kind itself runs through the ordinary ToilExecutor dispatch
 	# once submitted/assigned, exactly like "flee"/"incident" already do.
 	_run_and_verify("approach", 214001, func(world: WorldStateType) -> void:
-		var threat: Dictionary = ActorTableType.spawn("colonist", 10, 0, TestAccess.content(world), "arch_approacher")
+		var threat: Dictionary = ActorTableType.spawn("colonist", Vector3i(10, 0, 0), TestAccess.content(world), "arch_approacher")
 		threat.erase("carrying")
 		threat["hands"] = []
 		threat["factionId"] = "raiders"
@@ -337,9 +337,9 @@ func _check_haul_execution_trace(seed_value: int) -> void:
 		return
 	var toils: Array = _jobs_content[kind]
 	var result := _run_scenario(kind, seed_value, func(world: WorldStateType) -> void:
-		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+		TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 		TestAccess.item_table(world).next_item_id = 2
-		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted"))
+		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "z": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted"))
 	var world: WorldStateType = result["world"]
 	_verify_trace_against_toils(kind, toils, world, result["statuses"], result["completed"])
 	# place() always mints a fresh item id (hands entries have no id of their
@@ -369,10 +369,10 @@ func _check_construction_execution_trace(seed_value: int) -> void:
 			return
 	var world := _build_world(seed_value)
 	Scenarios.isolate_need(world, "")
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
-	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
-	var build_result := _command(world, "build", {"kind": "wooden_wall", "x": 10, "y": 0})
+	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
+	var build_result := _command(world, "build", {"kind": "wooden_wall", "x": 10, "y": 0, "z": 0})
 	_expect(build_result["ok"], "build order must be accepted")
 	TestAccess.toils(world).clear_trace()
 	# TestAccess.toils(world).trace is one shared buffer across every job/toil in the
@@ -414,11 +414,11 @@ func _check_crafting_execution_trace(seed_value: int) -> void:
 			return
 	var world := _build_world(seed_value)
 	Scenarios.isolate_need(world, "")
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
-	TestAccess.object_table(world).set_object(10, 2, "workbench", "colony", "")
-	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
-	_expect(_command(world, "craft_add_order", {"x": 10, "y": 2, "recipe": "planks", "count": 1})["ok"], "craft order must be accepted")
+	TestAccess.object_table(world).set_object(Vector3i(10, 2, 0), "workbench", "colony", "")
+	_expect(_command(world, "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
+	_expect(_command(world, "craft_add_order", {"x": 10, "y": 2, "z": 0, "recipe": "planks", "count": 1})["ok"], "craft order must be accepted")
 	TestAccess.toils(world).clear_trace()
 	var fetch_statuses: Dictionary = {}
 	var fetch_verified := false

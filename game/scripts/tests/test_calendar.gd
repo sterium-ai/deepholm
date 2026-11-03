@@ -239,7 +239,7 @@ func _check_world_state_alert_fires_once_when_conditions_met() -> void:
 	var window_id := "fires_once_test"
 	var world := _synthetic_alert_world(window_id)
 	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "z": 0, "kind": "seed", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	for _i in 80:
 		world.tick()
@@ -267,7 +267,7 @@ func _check_world_state_labour_enabled_suppresses_alert() -> void:
 	var window_id := "labour_suppresses_test"
 	var world := _synthetic_alert_world(window_id)
 	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "z": 0, "kind": "seed", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	for _i in 10:
 		world.tick()
@@ -344,7 +344,7 @@ func _check_fired_alert_survives_save_restore() -> void:
 	var window_id := "save_restore_test"
 	var world := _synthetic_alert_world(window_id)
 	TestAccess.set_tile(world, 0, 0, WorldStateType.TILE_PLOWED_SOIL)
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "kind": "seed", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 1, "y": 0, "z": 0, "kind": "seed", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	for _i in 60:
 		world.tick()

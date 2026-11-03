@@ -88,7 +88,7 @@ func _world(registry: ContentRegistryType) -> WorldStateType:
 	TestAccess.colonists(world).clear()
 	var labours := {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
 	for i in COLONISTS:
-		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": 1, "y": 1 + i,
+		TestAccess.colonists(world).append({"id": "colonist_%d" % i, "kind": "colonist", "x": 1, "y": 1 + i, "z": 0,
 			"route": null, "work": null, "labourTable": labours})
 	for farm: Rect2i in [TURNIP_FARM, BEAN_FARM]:
 		for y in range(farm.position.y, farm.end.y):
@@ -119,11 +119,11 @@ func _check_two_crops_through_commands_and_ticks() -> void:
 	if not registry.is_valid():
 		return
 	var world := _world(registry)
-	_expect(Scenarios.command(world, "stock", "zone_add", {"x": STOCKPILE.position.x, "y": STOCKPILE.position.y,
+	_expect(Scenarios.command(world, "stock", "zone_add", {"x": STOCKPILE.position.x, "y": STOCKPILE.position.y, "z": 0,
 		"width": STOCKPILE.size.x, "height": STOCKPILE.size.y}).get("ok", false), "the stockpile zone must be accepted")
 	for entry: Array in [["turnip", TURNIP_FARM], ["bean", BEAN_FARM]]:
 		var rect: Rect2i = entry[1]
-		var result := Scenarios.command(world, "farm_" + String(entry[0]), "zone_add", {"x": rect.position.x, "y": rect.position.y,
+		var result := Scenarios.command(world, "farm_" + String(entry[0]), "zone_add", {"x": rect.position.x, "y": rect.position.y, "z": 0,
 			"width": rect.size.x, "height": rect.size.y, "kind": "farm", "crop": entry[0]})
 		_expect(result.get("ok", false), "the %s farm zone must be accepted: %s" % [entry[0], result])
 	var turnip_tiles: Dictionary = {}

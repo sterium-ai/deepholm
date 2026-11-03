@@ -34,8 +34,8 @@ func _init(get_sites: Callable, get_jobs: Callable, get_items: Callable, is_in_a
 func _site_key(origin) -> String:
 	if origin == null:
 		return ""
-	var tile: Vector2i = origin
-	return TileGrid.comma_key(tile.x, tile.y)
+	var tile: Vector3i = origin
+	return TileGrid.comma_key(tile)
 
 ## Runs once per tick (TickPipeline). The submitted source is a position-agnostic seed:
 ## ConstructionSystem swaps it for the nearest reachable one when a colonist activates the job.
@@ -59,7 +59,7 @@ func advance(tick: int) -> void:
 		else:
 			work_counts[key] = int(work_counts.get(key, 0)) + 1
 	for site in (_get_sites.call() as Array):
-		var origin: Vector2i = site["origin"]
+		var origin: Vector3i = site["origin"]
 		var key := _site_key(origin)
 			# Busy = fetch + work jobs holding this site's slots; never more than max_builders.
 		var busy: int = int(fetch_counts.get(key, 0)) + int(work_counts.get(key, 0))
@@ -94,7 +94,7 @@ func _choose_source(site: Dictionary, committed_items: Dictionary) -> Dictionary
 			var id := String(item["id"])
 			if committed_items.has(id):
 				continue
-			if not bool(_is_in_any_zone.call(int(item["x"]), int(item["y"]))):
+			if not bool(_is_in_any_zone.call(TileGrid.tile_of(item))):
 				continue
 			if not String(_reservation_owner.call(id)).is_empty():
 				continue
@@ -103,5 +103,5 @@ func _choose_source(site: Dictionary, committed_items: Dictionary) -> Dictionary
 			continue
 		candidates.sort_custom(func(a, b): return String(a["id"]) < String(b["id"]))
 		var chosen: Dictionary = candidates[0]
-		return {"item_id": String(chosen["id"]), "tile": Vector2i(int(chosen["x"]), int(chosen["y"]))}
+		return {"item_id": String(chosen["id"]), "tile": TileGrid.tile_of(chosen)}
 	return {}

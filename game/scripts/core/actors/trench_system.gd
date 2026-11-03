@@ -25,7 +25,7 @@ const DEFAULT_TRENCH_CLIMB_TICKS := 40 ## content/actors.json tunables.wild.tren
 ## victim colonist_id -> last exposed rescue reason ("" when none, colonist-ai.md 3.8).
 var rescue_status: Dictionary = {}
 ## The advancing colonist's tile before its ToilExecutor.advance(); scratch, never saved.
-var trap_tile_before: Vector2i = Vector2i.ZERO
+var trap_tile_before: Vector3i = Vector3i.ZERO
 ## (actor) -> void after a rescue or escape writes x/y: WorldState's ActorIndex.moved (A4).
 var on_actor_moved: Callable = func(_actor: Dictionary) -> void: pass
 
@@ -118,11 +118,11 @@ func set_rescue_reason(colonist_id: String, reason: String) -> void:
 
 ## RescueGiver's target candidates: every passable, non-trench tile cardinally adjacent to
 ## the victim, in ADR 026's row-major order. RescueGiver ranks them by real route length.
-func rescue_target_candidates(victim_tile: Vector2i) -> Array[Vector2i]:
-	var candidates: Array[Vector2i] = []
-	for neighbor in [Vector2i(victim_tile.x, victim_tile.y - 1), Vector2i(victim_tile.x - 1, victim_tile.y),
-			Vector2i(victim_tile.x + 1, victim_tile.y), Vector2i(victim_tile.x, victim_tile.y + 1)]:
-		if bool(_passability.passability(neighbor.x, neighbor.y)["passable"]) and _tile_grid.get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
+func rescue_target_candidates(victim_tile: Vector3i) -> Array[Vector3i]:
+	var candidates: Array[Vector3i] = []
+	for neighbor in [Vector3i(victim_tile.x, victim_tile.y - 1, victim_tile.z), Vector3i(victim_tile.x - 1, victim_tile.y, victim_tile.z),
+			Vector3i(victim_tile.x + 1, victim_tile.y, victim_tile.z), Vector3i(victim_tile.x, victim_tile.y + 1, victim_tile.z)]:
+		if bool(_passability.passability(neighbor)["passable"]) and _tile_grid.tile_at(neighbor) != TILE_TRENCH:
 			candidates.append(neighbor)
 	return candidates
 
@@ -141,10 +141,10 @@ func _rescue_victim_for_job(job_id: String) -> Dictionary:
 ## A freshly activated rescue may be driven as-is: target still passable and non-trench, and a
 ## path starting at the rescuer ends on the target and avoids trenches.
 func rescue_activation_safe(colonist: Dictionary, job: Dictionary, path: Array) -> bool:
-	var target: Vector2i = job["target"]
-	if is_trench_tile(target) or not bool(_passability.passability(target.x, target.y, String(colonist.get("factionId", "colony")))["passable"]):
+	var target: Vector3i = job["target"]
+	if is_trench_tile(target) or not bool(_passability.passability(target, String(colonist.get("factionId", "colony")))["passable"]):
 		return false
-	if path.is_empty() or path[0] != Vector2i(int(colonist["x"]), int(colonist["y"])):
+	if path.is_empty() or path[0] != TileGrid.tile_of(colonist):
 		return true
 	if path[path.size() - 1] != target:
 		return false
@@ -165,13 +165,13 @@ func retire_rescue_job(job_id: String, job: Dictionary = {}) -> void:
 
 ## Trench tiles impassable and no impassable-target exception, so a blocked target reads as
 ## unreachable. `_target` is unused (hook-signature symmetry).
-func rescue_routable_to(_target: Vector2i, faction_id: String = "colony") -> Callable:
-	return func(tile: Vector2i) -> float:
+func rescue_routable_to(_target: Vector3i, faction_id: String = "colony") -> Callable:
+	return func(tile: Vector3i) -> float:
 		return 0.0 if is_trench_tile(tile) else _passability.passable_for_faction(tile, faction_id)
 
 ## is_trench callable for RescueGiver.
-func is_trench_tile(tile: Vector2i) -> bool:
-	return _tile_grid.get_tile(tile.x, tile.y) == TILE_TRENCH
+func is_trench_tile(tile: Vector3i) -> bool:
+	return _tile_grid.tile_at(tile) == TILE_TRENCH
 
 ## The rescue arm of the work-complete hook: the rescuer lifts its own committed victim
 ## onto the rescuer's tile.
@@ -179,8 +179,7 @@ func complete_rescue(job_id: String) -> void:
 	var rescuer: Dictionary = _find_job_colonist.call(job_id)
 	var victim := _rescue_victim_for_job(job_id)
 	if not rescuer.is_empty() and not victim.is_empty():
-		victim["x"] = rescuer["x"]
-		victim["y"] = rescuer["y"]
+		TileGrid.write_tile(victim, TileGrid.tile_of(rescuer))
 		on_actor_moved.call(victim)
 		victim["trapped"] = null
 
@@ -188,21 +187,21 @@ func complete_rescue(job_id: String) -> void:
 
 ## ADR 026: traps an actor whose route step lands it on a trench (the "still routing"
 ## case; trap_on_work_complete() covers arrival and completion in the same tick).
-func check_trench_arrival(colonist: Dictionary, job_id: String, tile_before: Vector2i) -> void:
+func check_trench_arrival(colonist: Dictionary, job_id: String, tile_before: Vector3i) -> void:
 	if colonist.get("trapped") != null: return
-	var tile_after := Vector2i(int(colonist["x"]), int(colonist["y"]))
-	if tile_after == tile_before or _tile_grid.get_tile(tile_after.x, tile_after.y) != TILE_TRENCH: return
+	var tile_after := TileGrid.tile_of(colonist)
+	if tile_after == tile_before or _tile_grid.tile_at(tile_after) != TILE_TRENCH: return
 	if not _actor_traps_on_trench(colonist): return
 	_trap_actor(colonist, job_id, tile_before)
 
 ## Arrival and work completion can land in the same tick, so trapping pre-empts the completion
 ## effect; true when it trapped. trap_tile_before != target excludes an actor already on a target
 ## that changed kind; the position check rejects a stale one. escape_trench falls through.
-func trap_on_work_complete(job_id: String, job: Dictionary, target: Vector2i) -> bool:
-	if String(job.get("kind", "")) != "escape_trench" and trap_tile_before != target and _tile_grid.get_tile(target.x, target.y) == TILE_TRENCH:
+func trap_on_work_complete(job_id: String, job: Dictionary, target: Vector3i) -> bool:
+	if String(job.get("kind", "")) != "escape_trench" and trap_tile_before != target and _tile_grid.tile_at(target) == TILE_TRENCH:
 		var arriving_actor: Dictionary = _find_job_colonist.call(job_id)
 		if not arriving_actor.is_empty() and arriving_actor.get("trapped") == null \
-				and Vector2i(int(arriving_actor["x"]), int(arriving_actor["y"])) == target \
+				and TileGrid.tile_of(arriving_actor) == target \
 				and _actor_traps_on_trench(arriving_actor):
 			_trap_actor(arriving_actor, job_id, trap_tile_before)
 			return true
@@ -216,8 +215,8 @@ func _actor_traps_on_trench(actor: Dictionary) -> bool:
 	return _relations.is_hostile({"faction_id": String(actor.get("factionId", "colony"))}, {"faction_id": "colony"})
 
 ## Releases job_id like cancel_job, records `trapped`, and submits escape_trench when hostile.
-func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> void:
-	var tile := Vector2i(int(colonist["x"]), int(colonist["y"]))
+func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector3i) -> void:
+	var tile := TileGrid.tile_of(colonist)
 	var hostile: bool = _relations.is_hostile({"faction_id": String(colonist.get("factionId", "colony"))}, {"faction_id": "colony"})
 	# Key order matches EntityCodec._decode_trapped_field(): state_hash() is insertion-order-sensitive.
 	colonist["trapped"] = ({"tile": tile, "ticksRemaining": _trench_climb_ticks(colonist), "fromTile": from_tile}
@@ -236,7 +235,7 @@ func _trap_actor(colonist: Dictionary, job_id: String, from_tile: Vector2i) -> v
 
 ## Submits (or re-submits, after a blocked climb-out) the actor's own escape_trench job
 ## targeting its own tile (the self-tile reservation exception).
-func _submit_trench_escape(colonist: Dictionary, tile: Vector2i) -> void:
+func _submit_trench_escape(colonist: Dictionary, tile: Vector3i) -> void:
 	_scheduler.submit_autonomous(tile, 1, _clock.tick, "escape_trench", String(colonist["id"]))
 
 ## Once per tick, before colonists advance: stamps each newly active escape_trench duration onto
@@ -247,7 +246,7 @@ func activate_pending_escapes() -> void:
 		var job_id: String = String(assignments[worker_id]["job_id"])
 		var job := _scheduler.queue.get_job(job_id)
 		if String(job.get("kind", "")) != "escape_trench" or String(job.get("status", "")) != "active": continue
-		var target: Vector2i = job["target"]
+		var target: Vector3i = job["target"]
 		if _progress_table.get_progress(target) != null: continue
 		var actor: Dictionary = _find_colonist.call(worker_id)
 		if actor.is_empty(): continue
@@ -260,14 +259,14 @@ func _trench_climb_ticks(colonist: Dictionary) -> int: # content/actors.json tun
 
 ## Called with every work-progress write: an escaping actor's trapped.ticksRemaining
 ## follows its escape_trench job's real work timer.
-func mirror_climb_ticks(target: Vector2i, ticks_remaining: int) -> void:
+func mirror_climb_ticks(target: Vector3i, ticks_remaining: int) -> void:
 	var escaping := _escaping_actor_at(target)
 	if not escaping.is_empty() and escaping.get("trapped") != null:
 		(escaping["trapped"] as Dictionary)["ticksRemaining"] = ticks_remaining
 
 ## The actor with an active escape_trench job targeting `target`, found through the
 ## scheduler's assignments (never trapped.tile alone: two actors may share a trench tile).
-func _escaping_actor_at(target: Vector2i) -> Dictionary:
+func _escaping_actor_at(target: Vector3i) -> Dictionary:
 	var assignments := _scheduler.get_assignments()
 	for worker_id in assignments:
 		var job_id: String = String(assignments[worker_id]["job_id"])
@@ -279,16 +278,15 @@ func _escaping_actor_at(target: Vector2i) -> Dictionary:
 
 ## The escape_trench arm of the work-complete hook: climbs out to from_tile when passable,
 ## else the first passable non-trench neighbour; with no exit it stays trapped and retries.
-func complete_escape(job_id: String, target: Vector2i) -> void:
+func complete_escape(job_id: String, target: Vector3i) -> void:
 	var actor: Dictionary = _find_job_colonist.call(job_id)
 	if not actor.is_empty():
 		var trapped_state: Dictionary = actor.get("trapped", {})
-		var from_tile: Vector2i = trapped_state.get("fromTile", target)
+		var from_tile: Vector3i = trapped_state.get("fromTile", target)
 		var actor_faction := String(actor.get("factionId", "colony"))
 		var exit_tile := _trench_exit_tile(target, from_tile, actor_faction)
 		if exit_tile.x >= 0:
-			actor["x"] = exit_tile.x
-			actor["y"] = exit_tile.y
+			TileGrid.write_tile(actor, exit_tile)
 			on_actor_moved.call(actor)
 			actor["trapped"] = null
 		else:
@@ -296,12 +294,12 @@ func complete_escape(job_id: String, target: Vector2i) -> void:
 			_submit_trench_escape(actor, target)
 
 ## escape_trench's exit rule: from_tile when passable for the actor's faction, else
-## ADR 026's row-major neighbour order. Vector2i(-1, -1) means no exit (caller retries).
-func _trench_exit_tile(tile: Vector2i, from_tile: Vector2i, faction_id: String) -> Vector2i:
-	if from_tile != tile and bool(_passability.passability(from_tile.x, from_tile.y, faction_id)["passable"]) \
-			and _tile_grid.get_tile(from_tile.x, from_tile.y) != TILE_TRENCH:
+## ADR 026's row-major neighbour order. Vector3i(-1, -1, 0) means no exit (caller retries).
+func _trench_exit_tile(tile: Vector3i, from_tile: Vector3i, faction_id: String) -> Vector3i:
+	if from_tile != tile and bool(_passability.passability(from_tile, faction_id)["passable"]) \
+			and _tile_grid.tile_at(from_tile) != TILE_TRENCH:
 		return from_tile
-	for neighbor in [Vector2i(tile.x, tile.y - 1), Vector2i(tile.x - 1, tile.y), Vector2i(tile.x + 1, tile.y), Vector2i(tile.x, tile.y + 1)]:
-		if bool(_passability.passability(neighbor.x, neighbor.y, faction_id)["passable"]) and _tile_grid.get_tile(neighbor.x, neighbor.y) != TILE_TRENCH:
+	for neighbor in [Vector3i(tile.x, tile.y - 1, tile.z), Vector3i(tile.x - 1, tile.y, tile.z), Vector3i(tile.x + 1, tile.y, tile.z), Vector3i(tile.x, tile.y + 1, tile.z)]:
+		if bool(_passability.passability(neighbor, faction_id)["passable"]) and _tile_grid.tile_at(neighbor) != TILE_TRENCH:
 			return neighbor
-	return Vector2i(-1, -1)
+	return Vector3i(-1, -1, 0)

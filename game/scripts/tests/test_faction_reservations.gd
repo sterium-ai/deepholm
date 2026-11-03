@@ -65,10 +65,10 @@ func _set_faction(world: WorldStateType, command_id: String, target: String, fac
 ## across the river from wherever this seed's colonists actually spawned,
 ## failing the job "blocked_target_unreachable" instead of the
 ## not_ordered_by_player refusal these checks isolate).
-func _find_soil(world: WorldStateType) -> Vector2i:
+func _find_soil(world: WorldStateType) -> Vector3i:
 	var width := world.get_map_width()
 	var height := world.get_map_height()
-	var origin := Vector2i(int(world.get_colonists()[0]["x"]), int(world.get_colonists()[0]["y"]))
+	var origin := Vector3i(int(world.get_colonists()[0]["x"]), int(world.get_colonists()[0]["y"]), 0)
 	var max_radius := maxi(width, height)
 	for radius in range(0, max_radius + 1):
 		for y in range(origin.y - radius, origin.y + radius + 1):
@@ -80,8 +80,8 @@ func _find_soil(world: WorldStateType) -> Vector2i:
 				if maxi(absi(x - origin.x), absi(y - origin.y)) != radius:
 					continue
 				if world.get_tile(x, y) == "soil" and bool(world.passability(x, y)["passable"]):
-					return Vector2i(x, y)
-	return Vector2i(-1, -1)
+					return Vector3i(x, y, 0)
+	return Vector3i(-1, -1, 0)
 
 ## Submits target directly through GlobalAssignment.submit()'s restrict_to
 ## (bypassing the command layer's own may_be_ordered gate), then ticks until
@@ -89,7 +89,7 @@ func _find_soil(world: WorldStateType) -> Vector2i:
 ## "till" rather than "dig": till needs no tool (content/jobs.json), so a
 ## freshly spawned colonist with no picks reaches the reserve step directly
 ## instead of blocking on fetch_tool first.
-func _submit_and_await_refusal(world: WorldStateType, colonist_id: String, target: Vector2i) -> Dictionary:
+func _submit_and_await_refusal(world: WorldStateType, colonist_id: String, target: Vector3i) -> Dictionary:
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
@@ -126,7 +126,7 @@ func _check_raiders_cannot_reserve() -> void:
 	_expect(_set_faction(world, "set_raider", colonist_id, "raiders").get("ok", false),
 		"set_faction to raiders must be accepted")
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	var job := _submit_and_await_refusal(world, colonist_id, target)
 	_expect(String(job.get("status", "")) == "failed" and String(job.get("reason", "")) == "not_ordered_by_player",
 		"a raiders-faction actor's job must be refused not_ordered_by_player, typed, on the reserve step")
@@ -142,7 +142,7 @@ func _check_allies_follow_their_own_rule() -> void:
 	_expect(_set_faction(world, "set_allies", colonist_id, "allies").get("ok", false),
 		"set_faction to allies must be accepted")
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	var job := _submit_and_await_refusal(world, colonist_id, target)
 	# allies' own content/factions.json rules.may_reserve_colony_items is
 	# false today; this reads that value through the registry rather than
@@ -167,15 +167,15 @@ func _check_haul_item_and_cell_reservations_refused_for_disallowed_reserver() ->
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
 	_expect(_set_faction(world, "set_allies_haul_reserve", colonist_id, "allies").get("ok", false),
 		"set_faction to allies must be accepted")
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
@@ -205,7 +205,7 @@ func _check_resume_after_faction_change_refuses_reacquisition() -> void:
 	var world := WorldStateType.new(4, 10)
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
@@ -245,12 +245,12 @@ func _check_haul_job_never_offered_to_order_ineligible_worker() -> void:
 	var world := WorldStateType.new(5, 10)
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_elig", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
 	# ADR 033: "traders" rather than "raiders" -- both share the
 	# same may_be_ordered=false/may_reserve_colony_items=false rules this check
@@ -295,15 +295,15 @@ func _build_two_row_colony_world(seed_value: int) -> WorldStateType:
 		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
 		TestAccess.set_tile(world, x, 1, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "z": 0, "route": null, "work": null, "hands": []})
 	# dig needs_tool "pick" (content/jobs.json); spawned on colonist_0's own
 	# tile so fetch_tool resolves immediately, matching test_reroute.gd's own
 	# _build_two_row_world() fixture.
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
-func _find_queued_job_for_target(world: WorldStateType, target: Vector2i) -> Dictionary:
+func _find_queued_job_for_target(world: WorldStateType, target: Vector3i) -> Dictionary:
 	for job in world.get_jobs():
 		if job["target"] == target and job["status"] == "queued":
 			return job
@@ -324,9 +324,9 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 	if _failed:
 		return
 	var world := _build_two_row_colony_world(9010)
-	var enclosed_target := Vector2i(4, 0)
+	var enclosed_target := Vector3i(4, 0, 0)
 	var dig_result := world.apply({"actor": "player", "command_id": "assignee_dig", "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": enclosed_target.x, "y": enclosed_target.y, "assignee": "colonist_0"}})
+		"type": "dig", "payload": {"x": enclosed_target.x, "y": enclosed_target.y, "z": 0, "assignee": "colonist_0"}})
 	_expect(dig_result.get("ok", false), "an assignee'd dig command on a valid soil target must be accepted")
 
 	var walled := false
@@ -339,8 +339,8 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 		ticks += 1
 		var colonist_0 := world.get_colonists()[0]
 		if not walled and int(colonist_0["x"]) == 2 and int(colonist_0["y"]) == 0:
-			TestAccess.object_table(world).set_object(3, 0, "wall")
-			TestAccess.object_table(world).set_object(4, 1, "wall")
+			TestAccess.object_table(world).set_object(Vector3i(3, 0, 0), "wall")
+			TestAccess.object_table(world).set_object(Vector3i(4, 1, 0), "wall")
 			walled = true
 		if walled and not released:
 			var blocked_job := _find_queued_job_for_target(world, enclosed_target)
@@ -349,8 +349,8 @@ func _check_assignee_preserved_across_unreachable_resubmission() -> void:
 				replacement_job_id = String(blocked_job["id"])
 				_expect(_waiting_restrict_to(world, replacement_job_id) == "colonist_0",
 					"the replacement job must preserve the original assignee's restrict_to")
-				TestAccess.object_table(world).set_object(3, 0, "")
-				TestAccess.object_table(world).set_object(4, 1, "")
+				TestAccess.object_table(world).set_object(Vector3i(3, 0, 0), "")
+				TestAccess.object_table(world).set_object(Vector3i(4, 1, 0), "")
 		if released:
 			var assignments := TestAccess.scheduler(world).get_assignments()
 			if assignments.has("colonist_1") and String(assignments["colonist_1"]["job_id"]) == replacement_job_id:
@@ -381,13 +381,13 @@ func _check_refused_resumption_returns_carried_haul_item() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
@@ -434,13 +434,13 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 2, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_carry_return_blocked", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
@@ -454,9 +454,9 @@ func _check_refused_resumption_returns_carried_item_when_own_tile_blocked() -> v
 	if not carrying:
 		return
 	var carrier := TestAccess.find_colonist(world, colonist_id)
-	var blocker_tile := Vector2i(int(carrier["x"]), int(carrier["y"]))
+	var blocker_tile := TileGrid.tile_of(carrier)
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist",
-		"x": blocker_tile.x, "y": blocker_tile.y, "route": null, "work": null, "hands": []})
+		"x": blocker_tile.x, "y": blocker_tile.y, "z": 0, "route": null, "work": null, "hands": []})
 	TestAccess.needs_system(world).interrupt_current_job(TestAccess.find_colonist(world, colonist_id))
 	_expect(String(TestAccess.scheduler(world).queue.get_job(job_id).get("status", "")) == "queued",
 		"interrupting a mid-carry haul must suspend its reservation back to queued")
@@ -490,7 +490,7 @@ func _check_reservation_gate_refuses_initial_tile_reservation() -> void:
 	var world := WorldStateType.new(13, 10)
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
 	TestAccess.scheduler(world).set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
@@ -518,15 +518,15 @@ func _check_reservation_gate_refuses_haul_item_and_cell_reservation() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	var colonist_id := "colonist_0"
-	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": []})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.colonists(world).append({"id": colonist_id, "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 5, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	var zone_result := world.apply({"actor": "test", "command_id": "zone_haul_reserve_gate", "tick": world.get_tick(),
-		"type": "zone_add", "payload": {"x": 10, "y": 0, "width": 1, "height": 1}})
+		"type": "zone_add", "payload": {"x": 10, "y": 0, "z": 0, "width": 1, "height": 1}})
 	_expect(zone_result.get("ok", false), "zone_add must be accepted")
 	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
 	TestAccess.scheduler(world).set_reservation_gate(func(worker: String) -> bool: return worker != colonist_id)
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(5, 0), 1, world.get_tick(), "haul", colonist_id)
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(5, 0, 0), 1, world.get_tick(), "haul", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission of a haul job must be accepted")
 	var job_id: String = String(submit_result.get("job_id", ""))
 	_expect(TestAccess.scheduler(world).queue.attach_item(job_id, "item_1"), "attach_item must succeed for a queued haul job")
@@ -552,7 +552,7 @@ func _check_reservation_gate_refuses_suspended_resumption() -> void:
 	var world := WorldStateType.new(15, 10)
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	TestAccess.scheduler(world).set_order_eligibility(func(_worker: String) -> bool: return true)
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
@@ -594,7 +594,7 @@ func _check_command_boundary_drains_refusal_without_manual_call() -> void:
 	var world := WorldStateType.new(7, 10)
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)
 	_expect(submit_result.get("ok", false), "direct scheduler submission must be accepted")
 	var till_job_id: String = String(submit_result.get("job_id", ""))
@@ -647,7 +647,7 @@ func _check_order_eligibility_revalidated_independent_of_reservation_gate() -> v
 	var world := WorldStateType.new(8, 10)
 	var colonist_id: String = world.get_colonists()[0]["id"]
 	var target := _find_soil(world)
-	_expect(target != Vector2i(-1, -1), "expected a soil tile for this check")
+	_expect(target != Vector3i(-1, -1, 0), "expected a soil tile for this check")
 	TestAccess.scheduler(world).set_order_eligibility(func(worker: String) -> bool: return worker != colonist_id)
 	TestAccess.scheduler(world).set_reservation_gate(func(_worker: String) -> bool: return true)
 	var submit_result: Dictionary = TestAccess.scheduler(world).submit(target, 1, world.get_tick(), "till", colonist_id)

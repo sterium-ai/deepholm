@@ -100,13 +100,13 @@ func _build_dig_test_world(seed_value: int) -> WorldStateType:
 	for x in range(0, 8):
 		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
 	world.spawn_ground_tool_item("pick", 0, 0)
 	return world
 
-func _complete_dig(world: WorldStateType, target: Vector2i, command_id: String) -> bool:
+func _complete_dig(world: WorldStateType, target: Vector3i, command_id: String) -> bool:
 	var result := world.apply({"actor": "test", "command_id": command_id, "tick": world.get_tick(),
-		"type": "dig", "payload": {"x": target.x, "y": target.y, "priority": 1}})
+		"type": "dig", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1}})
 	if not result.get("ok", false):
 		return false
 	var ticks := 0
@@ -115,7 +115,7 @@ func _complete_dig(world: WorldStateType, target: Vector2i, command_id: String) 
 		ticks += 1
 	return world.get_tile(target.x, target.y) == WorldStateType.TILE_TRENCH
 
-func _item_kinds_near(world: WorldStateType, target: Vector2i) -> Array:
+func _item_kinds_near(world: WorldStateType, target: Vector3i) -> Array:
 	var kinds: Array = []
 	for item in world.get_items():
 		if maxi(absi(int(item["x"]) - target.x), absi(int(item["y"]) - target.y)) <= 1:
@@ -132,7 +132,7 @@ func _item_kinds_near(world: WorldStateType, target: Vector2i) -> Array:
 ## in memory.
 func _check_completed_dig_saves_and_reloads_through_save_io() -> void:
 	var world := _build_dig_test_world(730001)
-	var target := Vector2i(0, 0)
+	var target := Vector3i(0, 0, 0)
 	_expect(_complete_dig(world, target, "dig_1"), "the dig order must complete within the tick budget")
 
 	var state := world.to_save_state()
@@ -159,7 +159,7 @@ func _check_completed_dig_saves_and_reloads_through_save_io() -> void:
 func _check_dig_find_rng_continuation_survives_save_io_round_trip() -> void:
 	var live := _build_dig_test_world(730002)
 	for x in range(0, 3):
-		_expect(_complete_dig(live, Vector2i(x, 0), "dig_%d" % x), "dig %d must complete within the tick budget" % x)
+		_expect(_complete_dig(live, Vector3i(x, 0, 0), "dig_%d" % x), "dig %d must complete within the tick budget" % x)
 
 	var state := live.to_save_state()
 	var path := "user://test-save-reproducibility-dig-find-rng.json"
@@ -178,7 +178,7 @@ func _check_dig_find_rng_continuation_survives_save_io_round_trip() -> void:
 	# Continue both the live run and its SaveIO-restored counterpart through one
 	# more completed dig each, at the same target, and compare the resulting
 	# find item and state_hash() -- a restored run must diverge from neither.
-	var next_target := Vector2i(3, 0)
+	var next_target := Vector3i(3, 0, 0)
 	_expect(_complete_dig(live, next_target, "dig_live_continue"), "the live run's continuation dig must complete")
 	_expect(_complete_dig(restored, next_target, "dig_restored_continue"), "the restored run's continuation dig must complete")
 	_expect(_item_kinds_near(live, next_target) == _item_kinds_near(restored, next_target),

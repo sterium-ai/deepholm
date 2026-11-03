@@ -65,7 +65,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	TestAccess.object_table(world).objects.clear()
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "factionId": "colony",
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "factionId": "colony",
 		"needs": {"food": 100, "water": 100, "rest": 100},
 		"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
@@ -74,7 +74,7 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	return world
 
 func _spawn_colonist(world: WorldStateType, id: String, x: int, y: int) -> Dictionary:
-	var colonist: Dictionary = ActorTableType.spawn("colonist", x, y, TestAccess.content(world), id)
+	var colonist: Dictionary = ActorTableType.spawn("colonist", Vector3i(x, y, 0), TestAccess.content(world), id)
 	colonist.erase("carrying")
 	colonist["hands"] = []
 	colonist["factionId"] = "colony"
@@ -82,16 +82,16 @@ func _spawn_colonist(world: WorldStateType, id: String, x: int, y: int) -> Dicti
 	return colonist
 
 func _check_key_codec_round_trips() -> void:
-	for case in [[Vector2i(44, 33), ""], [Vector2i(44, 33), "job_120"], [Vector2i(0, 12), "job_1"],
-			[Vector2i(7, 0), "raid_wave-3_9"]]:
-		var tile: Vector2i = case[0]
+	for case in [[Vector3i(44, 33, 0), ""], [Vector3i(44, 33, 0), "job_120"], [Vector3i(0, 12, 0), "job_1"],
+			[Vector3i(7, 0, 0), "raid_wave-3_9"]]:
+		var tile: Vector3i = case[0]
 		var scope: String = case[1]
 		var key := WorkProgressType.key_of(tile, scope)
 		var parts := WorkProgressType.key_parts(key)
 		_expect(parts["tile"] == tile and parts["scope"] == scope,
 			"key_parts(key_of(%s, '%s')) must give the same tile and scope back, got %s from '%s'" % [tile, scope, parts, key])
-	_expect(WorkProgressType.key_of(Vector2i(44, 33), "") == "44_33", "a plain key must stay the tile key")
-	_expect(WorkProgressType.key_of(Vector2i(44, 33), "job_120") == "job_120:44_33", "a scoped key must be '<job_id>:<x>_<y>'")
+	_expect(WorkProgressType.key_of(Vector3i(44, 33, 0), "") == "44_33", "a plain key must stay the tile key")
+	_expect(WorkProgressType.key_of(Vector3i(44, 33, 0), "job_120") == "job_120:44_33", "a scoped key must be '<job_id>:<x>_<y>'")
 
 ## The R2/R4 probe failure in miniature: a rescue in its own work toil, saved
 ## through SaveIO, must load back with the same scoped key, the same owner and
@@ -101,7 +101,7 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 	TestAccess.set_tile(world, 1, 0, WorldStateType.TILE_TRENCH)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
 	var victim: Dictionary = TestAccess.colonists(world)[0]
-	var submit := TestAccess.scheduler(world).submit(Vector2i(2, 0), 1, world.get_tick(), "till", String(victim["id"]))
+	var submit := TestAccess.scheduler(world).submit(Vector3i(2, 0, 0), 1, world.get_tick(), "till", String(victim["id"]))
 	_expect(submit.get("ok", false), "setup: till submission must be accepted")
 	for _i in TRAP_TICK_BOUND:
 		world.tick()
@@ -133,7 +133,7 @@ func _check_rescue_mid_work_saves_and_loads_with_identical_hash() -> void:
 			owner_entry = entry
 	_expect(not owner_entry.is_empty(), "the scoped key's owner must be encoded with its ownerJobId")
 	var parts := WorkProgressType.key_parts(scoped_key)
-	_expect(owner_entry.get("target") == {"x": parts["tile"].x, "y": parts["tile"].y},
+	_expect(owner_entry.get("target") == {"x": parts["tile"].x, "y": parts["tile"].y, "z": 0},
 		"the owner entry must name the rescue's own target tile, got %s" % [owner_entry.get("target")])
 
 	var read_state := _save_and_read(state, "rescue_mid_work.json")
@@ -167,7 +167,7 @@ func _owners_state(owners: Array) -> Dictionary:
 	return state
 
 func _check_owner_validation_allows_two_rescues_on_one_tile() -> void:
-	var tile := {"x": 3, "y": 4}
+	var tile := {"x": 3, "y": 4, "z": 0}
 	var two_rescues := _owners_state([
 		{"target": tile, "jobId": "job_10", "ownerJobId": "job_10"},
 		{"target": tile, "jobId": "job_9", "ownerJobId": "job_9"},
@@ -189,19 +189,19 @@ func _check_ground_berries_change_state_hash() -> void:
 	var a := WorldStateType.new(450003, 2)
 	var b := WorldStateType.new(450003, 2)
 	_expect(a.state_hash() == b.state_hash(), "setup: two worlds from one seed must hash equal")
-	TestAccess.item_table(b).spawn_berries_item(3, 3)
+	TestAccess.item_table(b).spawn_berries_item(Vector3i(3, 3, 0))
 	_expect(a.state_hash() != b.state_hash(), "a world with ground berries must not hash equal to one without")
-	TestAccess.item_table(a).spawn_berries_item(3, 3)
+	TestAccess.item_table(a).spawn_berries_item(Vector3i(3, 3, 0))
 	_expect(a.state_hash() == b.state_hash(), "the same ground berries must hash equal")
-	TestAccess.item_table(b).spawn_berries_item(3, 3)
+	TestAccess.item_table(b).spawn_berries_item(Vector3i(3, 3, 0))
 	_expect(a.state_hash() != b.state_hash(), "a different berry count must change state_hash()")
-	TestAccess.item_table(b).consume_ground_berry(3, 3)
+	TestAccess.item_table(b).consume_ground_berry(Vector3i(3, 3, 0))
 	_expect(a.state_hash() == b.state_hash(), "eating back to the same count must hash equal again")
 
 func _check_ground_berry_factions_survive_save_load() -> void:
 	var world := WorldStateType.new(450004, 2)
-	TestAccess.item_table(world).spawn_berries_item(2, 2)
-	TestAccess.item_table(world).spawn_berries_item(5, 1)
+	TestAccess.item_table(world).spawn_berries_item(Vector3i(2, 2, 0))
+	TestAccess.item_table(world).spawn_berries_item(Vector3i(5, 1, 0))
 	TestAccess.item_table(world).ground_berries_factions["5_1"] = "wildlife"
 	var state := world.to_save_state()
 	var read_state := _save_and_read(state, "berry_factions.json")

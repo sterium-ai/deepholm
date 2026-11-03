@@ -81,8 +81,8 @@ var _open_grid := PackedByteArray()
 func _init() -> void:
 	_record = OS.get_cmdline_user_args().has("--record")
 	var world := WorldStateType.new(SEED, 10, SIZE, SIZE)
-	var start := Vector2i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]))
-	var by_distance := _tiles_at_distances(func(tile: Vector2i) -> bool:
+	var start := Vector3i(int(TestAccess.colonists(world)[0]["x"]), int(TestAccess.colonists(world)[0]["y"]), 0)
+	var by_distance := _tiles_at_distances(func(tile: Vector3i) -> bool:
 		return bool(world.passability(tile.x, tile.y)["passable"]), start)
 	for distance in DISTANCES:
 		if by_distance.has(distance):
@@ -91,15 +91,15 @@ func _init() -> void:
 	_open_grid.resize(SIZE * SIZE)
 	_open_grid.fill(1)
 	for distance in DISTANCES:
-		var target := Vector2i(mini(distance, SIZE - 1), distance - mini(distance, SIZE - 1))
-		_check_case("open/d%d" % distance, Vector2i.ZERO, target, _open_cost, SIZE)
-	var walled := Vector2i(200, 200)
-	for step in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
+		var target := Vector3i(mini(distance, SIZE - 1), distance - mini(distance, SIZE - 1), 0)
+		_check_case("open/d%d" % distance, Vector3i.ZERO, target, _open_cost, SIZE)
+	var walled := Vector3i(200, 200, 0)
+	for step in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
 		_open_grid[(walled + step).y * SIZE + (walled + step).x] = 0
-	_check_case("open/unreachable", Vector2i.ZERO, walled, _open_cost, SIZE)
+	_check_case("open/unreachable", Vector3i.ZERO, walled, _open_cost, SIZE)
 
-	for target in [Vector2i(63, 63), Vector2i(40, 5), Vector2i(5, 60), Vector2i(33, 33)]:
-		_check_case("weighted/%d_%d" % [target.x, target.y], Vector2i(1, 1), target, _weighted_cost, WEIGHTED_SIZE)
+	for target in [Vector3i(63, 63, 0), Vector3i(40, 5, 0), Vector3i(5, 60, 0), Vector3i(33, 33, 0)]:
+		_check_case("weighted/%d_%d" % [target.x, target.y], Vector3i(1, 1, 0), target, _weighted_cost, WEIGHTED_SIZE)
 
 	if not _record:
 		_expect(_seen == RECORDED.size() + RECORDED_ASTAR.size(),
@@ -118,7 +118,7 @@ func _expect(condition: bool, message: String) -> void:
 
 ## Runs one case as Dijkstra and as A*: each against its own table, and the
 ## A* path must cost what the Dijkstra one does.
-func _check_case(label: String, start: Vector2i, target: Vector2i, cost_fn: Callable, size: int) -> void:
+func _check_case(label: String, start: Vector3i, target: Vector3i, cost_fn: Callable, size: int) -> void:
 	var dijkstra := _check_mode(label, start, target, cost_fn, size, 0.0, RECORDED)
 	var astar := _check_mode(label, start, target, cost_fn, size, MeasuredRouteType.MIN_TILE_COST, RECORDED_ASTAR)
 	if _record:
@@ -131,11 +131,11 @@ func _check_case(label: String, start: Vector2i, target: Vector2i, cost_fn: Call
 		_expect(int(astar[2]) <= ASTAR_D256_MAX_RESUME_CALLS, "%s: A* resume calls %d > %d" % [label, astar[2], ASTAR_D256_MAX_RESUME_CALLS])
 
 ## [status, expansions, resume_calls, path] of one mode, checked against table.
-func _check_mode(label: String, start: Vector2i, target: Vector2i, cost_fn: Callable, size: int,
+func _check_mode(label: String, start: Vector3i, target: Vector3i, cost_fn: Callable, size: int,
 		min_cost: float, table: Dictionary) -> Array:
-	var bounds_max := Vector2i(size - 1, size - 1)
-	var search := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, bounds_max, Callable(), min_cost)
-	var probe := MeasuredRouteType.new(start, target, cost_fn, Vector2i.ZERO, bounds_max, Callable(), min_cost)
+	var bounds_max := Vector3i(size - 1, size - 1, 0)
+	var search := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, bounds_max, Callable(), min_cost)
+	var probe := MeasuredRouteType.new(start, target, cost_fn, Vector3i.ZERO, bounds_max, Callable(), min_cost)
 	while not probe.is_terminal():
 		probe.resume()
 	var mid_call := probe.resume_calls / 2
@@ -150,7 +150,7 @@ func _check_mode(label: String, start: Vector2i, target: Vector2i, cost_fn: Call
 		_path_letters(search.get_path()), _snapshot_sha(mid_snapshot)]
 
 	var result := [actual[0], actual[1], actual[2], search.get_path()]
-	var restored := MeasuredRouteType.new(start, start, cost_fn, Vector2i.ZERO, bounds_max, Callable(), min_cost)
+	var restored := MeasuredRouteType.new(start, start, cost_fn, Vector3i.ZERO, bounds_max, Callable(), min_cost)
 	restored.restore(mid_snapshot)
 	while not restored.is_terminal():
 		restored.resume()
@@ -175,67 +175,73 @@ func _check_mode(label: String, start: Vector2i, target: Vector2i, cost_fn: Call
 	return result
 
 ## Sum of cost_fn over every tile entered (the start tile is not entered).
-func _path_cost(path: Array[Vector2i], cost_fn: Callable) -> float:
+func _path_cost(path: Array[Vector3i], cost_fn: Callable) -> float:
 	var total := 0.0
 	for i in range(1, path.size()):
 		total += float(cost_fn.call(path[i]))
 	return total
 
-func _open_cost(tile: Vector2i) -> float:
+func _open_cost(tile: Vector3i) -> float:
 	return float(_open_grid[tile.y * SIZE + tile.x])
 
 ## Costs 1..4 with scattered walls, so the frontier holds many equal-cost
 ## tiles and the (cost, insertion order) tie-break decides the expansion order.
-func _weighted_cost(tile: Vector2i) -> float:
-	if tile != Vector2i(1, 1) and (tile.x * 31 + tile.y * 17) % 11 == 0:
+func _weighted_cost(tile: Vector3i) -> float:
+	if tile != Vector3i(1, 1, 0) and (tile.x * 31 + tile.y * 17) % 11 == 0:
 		return 0.0
 	return float(1 + (tile.x * 7 + tile.y * 13) % 4)
 
-func _path_letters(path: Array[Vector2i]) -> String:
+func _path_letters(path: Array[Vector3i]) -> String:
 	var letters := ""
 	for i in range(1, path.size()):
 		match path[i] - path[i - 1]:
-			Vector2i(0, -1): letters += "N"
-			Vector2i(-1, 0): letters += "W"
-			Vector2i(1, 0): letters += "E"
-			Vector2i(0, 1): letters += "S"
+			Vector3i(0, -1, 0): letters += "N"
+			Vector3i(-1, 0, 0): letters += "W"
+			Vector3i(1, 0, 0): letters += "E"
+			Vector3i(0, 1, 0): letters += "S"
 			_: letters += "?"
 	return letters
 
 ## Order-sensitive digest of snapshot(): status, frontier in order, visited
 ## keys in insertion order, came_from pairs in insertion order, path.
 func _snapshot_sha(state: Dictionary) -> String:
-	var parts := PackedStringArray([str(state["start"]), str(state["target"]), String(state["status"])])
+	var parts := PackedStringArray([_planar(state["start"]), _planar(state["target"]), String(state["status"])])
 	parts.append("frontier")
 	for tile in state["frontier"]:
-		parts.append(str(tile))
+		parts.append(_planar(tile))
 	parts.append("visited")
 	for tile in (state["visited"] as Dictionary).keys():
-		parts.append(str(tile))
+		parts.append(_planar(tile))
 	parts.append("came_from")
 	var came_from: Dictionary = state["came_from"]
 	for child in came_from.keys():
-		parts.append("%s<%s" % [child, came_from[child]])
+		parts.append("%s<%s" % [_planar(child), _planar(came_from[child])])
 	parts.append("path")
 	for tile in state["path"]:
-		parts.append(str(tile))
+		parts.append(_planar(tile))
 	return ";".join(parts).sha256_text()
+
+## A layer-0 tile printed as "(x, y)", the Vector2i form the tables were recorded with before
+## L2 (ADR 045): every case runs on layer 0, so the recorded hashes stay valid unchanged.
+func _planar(tile: Vector3i) -> String:
+	assert(tile.z == 0)
+	return str(Vector2i(tile.x, tile.y))
 
 ## First tile found at each requested BFS path distance from start (the same
 ## target choice as bench_route_search.gd).
-func _tiles_at_distances(passable: Callable, start: Vector2i) -> Dictionary:
+func _tiles_at_distances(passable: Callable, start: Vector3i) -> Dictionary:
 	var result := {}
 	var dist := {start: 0}
-	var frontier: Array[Vector2i] = [start]
+	var frontier: Array[Vector3i] = [start]
 	var head := 0
 	while head < frontier.size():
-		var tile: Vector2i = frontier[head]
+		var tile: Vector3i = frontier[head]
 		head += 1
 		var d: int = dist[tile]
 		if DISTANCES.has(d) and not result.has(d):
 			result[d] = tile
-		for step in [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1)]:
-			var next: Vector2i = tile + step
+		for step in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
+			var next: Vector3i = tile + step
 			if dist.has(next) or next.x < 0 or next.y < 0 or next.x >= SIZE or next.y >= SIZE:
 				continue
 			if not passable.call(next):

@@ -6,9 +6,9 @@ extends RefCounted
 ## side's runtime "factionId", never Relations.is_hostile() (it reads content's "faction_id").
 
 ## Cardinals first, then diagonals: resolves "nearest" adjacent without float distances.
-const NEIGHBOR_OFFSETS: Array[Vector2i] = [
-	Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0),
-	Vector2i(-1, -1), Vector2i(1, -1), Vector2i(-1, 1), Vector2i(1, 1),
+const NEIGHBOR_OFFSETS: Array[Vector3i] = [
+	Vector3i(0, -1, 0), Vector3i(0, 1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0),
+	Vector3i(-1, -1, 0), Vector3i(1, -1, 0), Vector3i(-1, 1, 0), Vector3i(1, 1, 0),
 ]
 
 static func actor_faction(actor: Dictionary) -> String:
@@ -27,9 +27,7 @@ static func actors_by_tile(actors: Array) -> Dictionary:
 	for other: Dictionary in actors:
 		if _is_dead(other) or not other.has("health"):
 			continue
-		var x: int = other["x"]
-		var y: int = other["y"]
-		var tile := Vector2i(x, y)
+		var tile := TileGrid.tile_of(other)
 		if not by_tile.has(tile):
 			by_tile[tile] = []
 		(by_tile[tile] as Array).append(other)
@@ -39,21 +37,19 @@ static func actors_by_tile(actors: Array) -> Dictionary:
 ## actors_by_tile() built after the last move; object callables are ObjectTable/WorldState lookups.
 static func nearest_adjacent_hostile(actor: Dictionary, by_tile: Dictionary, relations,
 		object_at: Callable, object_health_at: Callable, object_faction_at: Callable) -> Dictionary:
-	var ax := int(actor["x"])
-	var ay := int(actor["y"])
+	var own_tile := TileGrid.tile_of(actor)
 	var own_faction := actor_faction(actor)
 	for offset in NEIGHBOR_OFFSETS:
-		var x := ax + offset.x
-		var y := ay + offset.y
-		var occupants: Array = by_tile.get(Vector2i(x, y), [])
+		var tile := own_tile + offset
+		var occupants: Array = by_tile.get(tile, [])
 		if not occupants.is_empty():
 			var other := _pick_hostile_occupant(occupants, relations, own_faction)
 			if not other.is_empty():
-				return {"type": "actor", "x": x, "y": y, "actor": other}
-		if not String(object_at.call(x, y)).is_empty():
-			var health: Dictionary = object_health_at.call(x, y)
-			if not health.is_empty() and _is_hostile(relations, own_faction, String(object_faction_at.call(x, y))):
-				return {"type": "object", "x": x, "y": y}
+				return {"type": "actor", "x": tile.x, "y": tile.y, "z": tile.z, "actor": other}
+		if not String(object_at.call(tile)).is_empty():
+			var health: Dictionary = object_health_at.call(tile)
+			if not health.is_empty() and _is_hostile(relations, own_faction, String(object_faction_at.call(tile))):
+				return {"type": "object", "x": tile.x, "y": tile.y, "z": tile.z}
 	return {}
 
 ## The hostile occupant with the smallest id (actors may share a tile); {} when none.
@@ -71,8 +67,7 @@ static func _pick_hostile_occupant(occupants: Array, relations, own_faction: Str
 ## The nearest living hostile actor anywhere (Manhattan, ties by id); {} when none.
 static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -> Dictionary:
 	var own_faction := actor_faction(actor)
-	var ax := int(actor["x"])
-	var ay := int(actor["y"])
+	var own_tile := TileGrid.tile_of(actor)
 	var best: Dictionary = {}
 	var best_distance := -1
 	for other in actors:
@@ -80,7 +75,7 @@ static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -
 			continue
 		if not _is_hostile(relations, own_faction, actor_faction(other)):
 			continue
-		var distance := TileGrid.manhattan(Vector2i(int(other["x"]), int(other["y"])), Vector2i(ax, ay))
+		var distance := TileGrid.manhattan(TileGrid.tile_of(other), own_tile)
 		if best.is_empty() or distance < best_distance or (distance == best_distance and String(other["id"]) < String(best["id"])):
 			best = other
 			best_distance = distance

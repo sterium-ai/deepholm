@@ -7,7 +7,7 @@ extends SaveCheck
 ## Optional keys: "health" only for kinds with max_health; "orientation" is "horizontal",
 ## "vertical", "" or absent ("" and absent both mean unrotated). Both go through the
 ## required+optional union of _keys_allowed(), since _require_fields() allows only required.
-static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_object(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid objects entry type")
 	var object_entry: Dictionary = value
@@ -18,7 +18,7 @@ static func _valid_object(value, map_width: int, map_height: int) -> Dictionary:
 	for key in required:
 		if not object_entry.has(key):
 			return _fail_missing("missing objects entry field '%s'" % key)
-	var target_check := _valid_tile(object_entry["target"], map_width, map_height)
+	var target_check := _valid_tile(object_entry["target"], map_width, map_height, layer_count)
 	if not target_check["ok"]:
 		return target_check
 	if not _matches_id_pattern(object_entry["kind"]):
@@ -47,7 +47,7 @@ static func _valid_object_health(value) -> Dictionary:
 	return {"ok": true}
 
 ## One record per active construction site, independent of any job.
-static func _valid_construction_site(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_construction_site(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid constructionSites entry type")
 	var site: Dictionary = value
@@ -61,7 +61,7 @@ static func _valid_construction_site(value, map_width: int, map_height: int) -> 
 		return _fail("invalid constructionSites entry id")
 	if not _matches_id_pattern(site["kind"]):
 		return _fail("invalid constructionSites entry kind")
-	var origin_check := _valid_tile(site["origin"], map_width, map_height)
+	var origin_check := _valid_tile(site["origin"], map_width, map_height, layer_count)
 	if not origin_check["ok"]:
 		return origin_check
 	if not (site["orientation"] == "" or site["orientation"] == "horizontal" or site["orientation"] == "vertical"):
@@ -104,12 +104,12 @@ static func _valid_material_entry(value) -> Dictionary:
 	return {"ok": true}
 
 ## crop_ids: the session's crops.json ids, which a farm zone's "crop" must name (F1).
-static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
+static func _valid_zones(value, map_width: int, map_height: int, layer_count: int, crop_ids: Array[String] = []) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid zones type")
 	var seen_ids := {}
 	for zone in (value as Array):
-		var zone_check := _valid_zone(zone, map_width, map_height, crop_ids)
+		var zone_check := _valid_zone(zone, map_width, map_height, layer_count, crop_ids)
 		if not zone_check["ok"]:
 			return zone_check
 		var zone_id: String = (zone as Dictionary)["id"]
@@ -118,12 +118,12 @@ static func _valid_zones(value, map_width: int, map_height: int, crop_ids: Array
 		seen_ids[zone_id] = true
 	return {"ok": true}
 
-## A stockpile is exactly {id, x, y, width, height}; a farm zone adds "kind": "farm" and a known "crop".
-static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[String] = []) -> Dictionary:
+## A stockpile is exactly {id, x, y, z, width, height}; a farm zone adds "kind": "farm" and a known "crop".
+static func _valid_zone(value, map_width: int, map_height: int, layer_count: int, crop_ids: Array[String] = []) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid zone type")
 	var zone: Dictionary = value
-	var required := ["id", "x", "y", "width", "height"]
+	var required := ["id", "x", "y", "z", "width", "height"]
 	if zone.has("kind") or zone.has("crop"):
 		required.append_array(["kind", "crop"])
 		if not zone.has("kind") or zone["kind"] != "farm" or not zone.has("crop") or not crop_ids.has(zone["crop"]):
@@ -133,7 +133,7 @@ static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[
 		return check
 	if not _matches_id_pattern(zone["id"]):
 		return _fail("invalid zone id")
-	if not _is_int_min(zone["x"], 0) or not _is_int_min(zone["y"], 0):
+	if not _is_int_min(zone["x"], 0) or not _is_int_min(zone["y"], 0) or not _valid_layer(zone["z"], layer_count):
 		return _fail("invalid zone position")
 	if not _is_int_min(zone["width"], 1) or not _is_int_min(zone["height"], 1):
 		return _fail("invalid zone dimensions")
@@ -144,7 +144,7 @@ static func _valid_zone(value, map_width: int, map_height: int, crop_ids: Array[
 ## "areaOrders" (ADR 044): {nextId, list, created}. Each list entry has a known kind, a
 ## non-empty in-map rectangle, next inside it and distinct "done" indexes from next on; each
 ## "created" entry is a [first, end, order id] range, ascending and disjoint.
-static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_area_orders(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid areaOrders type")
 	if not _keys_allowed(value, ["nextId", "list", "created"]):
@@ -161,7 +161,7 @@ static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictio
 		if int(created[0]) < range_end or int(created[1]) <= int(created[0]) or int(created[2]) < 1 or int(created[2]) >= int(value["nextId"]):
 			return _fail("invalid areaOrders created range")
 		range_end = int(created[1])
-	var fields := ["id", "order", "actor", "commandId", "x", "y", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"]
+	var fields := ["id", "order", "actor", "commandId", "x", "y", "z", "width", "height", "priority", "next", "done", "jobLimit", "siteLimit"]
 	for entry in value["list"]:
 		if not (entry is Dictionary) or not _keys_allowed(entry, fields):
 			return _fail("invalid areaOrders entry")
@@ -177,7 +177,7 @@ static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictio
 			if not _is_int(entry[key]):
 				return _fail("invalid areaOrders entry %s" % key)
 		var rect := Rect2i(int(entry["x"]), int(entry["y"]), int(entry["width"]), int(entry["height"]))
-		if not rect.has_area() or not Rect2i(0, 0, map_width, map_height).encloses(rect):
+		if not rect.has_area() or not Rect2i(0, 0, map_width, map_height).encloses(rect) or not _valid_layer(entry["z"], layer_count):
 			return _fail("invalid areaOrders entry rectangle")
 		if int(entry["next"]) < 0 or int(entry["next"]) >= rect.get_area() or int(entry["id"]) >= int(value["nextId"]):
 			return _fail("invalid areaOrders entry next or id")
@@ -190,20 +190,20 @@ static func _valid_area_orders(value, map_width: int, map_height: int) -> Dictio
 			seen[int(index)] = true
 	return {"ok": true}
 
-static func _valid_objects(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_objects(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid objects type")
 	for object_entry in value:
-		var object_check := _valid_object(object_entry, map_width, map_height)
+		var object_check := _valid_object(object_entry, map_width, map_height, layer_count)
 		if not object_check["ok"]:
 			return object_check
 	return {"ok": true}
 
-static func _valid_construction_sites(value, map_width: int, map_height: int) -> Dictionary:
+static func _valid_construction_sites(value, map_width: int, map_height: int, layer_count: int) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid constructionSites type")
 	for site_entry in value:
-		var site_check := _valid_construction_site(site_entry, map_width, map_height)
+		var site_check := _valid_construction_site(site_entry, map_width, map_height, layer_count)
 		if not site_check["ok"]:
 			return site_check
 	return {"ok": true}

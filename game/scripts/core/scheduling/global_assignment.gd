@@ -88,7 +88,7 @@ func _is_autonomous(entry: Dictionary) -> bool:
 
 func _passable_for(worker: String, entry: Dictionary, passable: Callable) -> Callable:
 	if _is_autonomous(entry) and _passable_autonomous.is_valid():
-		return func(tile: Vector2i): return _passable_autonomous.call(worker, tile)
+		return func(tile: Vector3i): return _passable_autonomous.call(worker, tile)
 	return passable
 
 ## Cleared on read so the caller resolves each refusal exactly once.
@@ -101,7 +101,7 @@ func take_refused_reservations() -> Array[Dictionary]:
 ## need-interrupted job); tick()'s committed_needs, not this flag, makes a need precede work.
 ## autonomous entries skip only the order-eligibility gate; the flag is stored only when true
 ## so ordinary entries and saves keep their shape.
-func submit(target: Vector2i, priority: int, tick_number: int, kind: String = "dig", restrict_to: String = "",
+func submit(target: Vector3i, priority: int, tick_number: int, kind: String = "dig", restrict_to: String = "",
 		autonomous: bool = false) -> Dictionary:
 	var result := queue.submit_dig(target, priority, kind)
 	if result["ok"]:
@@ -121,7 +121,7 @@ func submit(target: Vector2i, priority: int, tick_number: int, kind: String = "d
 
 ## An incident actor's own job (ADR 014 Amendment): restricted to `worker` and exempt only
 ## from _worker_may_be_ordered(); every other gate, the reservation check and routing apply.
-func submit_autonomous(target: Vector2i, priority: int, tick_number: int, kind: String, worker: String) -> Dictionary:
+func submit_autonomous(target: Vector3i, priority: int, tick_number: int, kind: String, worker: String) -> Dictionary:
 	return submit(target, priority, tick_number, kind, worker, true)
 
 func finish(job_id: String, operation: String) -> Dictionary:
@@ -157,7 +157,7 @@ func finish(job_id: String, operation: String) -> Dictionary:
 ## all_colonists is the full roster for labour_disabled; committed_needs (worker -> job id)
 ## means nothing else is proposed to that worker; region_check(a, b) unset fails open.
 func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
-		bounds_min: Vector2i, bounds_max: Vector2i,
+		bounds_min: Vector3i, bounds_max: Vector3i,
 		get_job_labour: Callable = Callable(), get_calendar_boost: Callable = Callable(),
 		all_colonists: Array[Dictionary] = [], committed_needs: Dictionary = {},
 		region_check: Callable = Callable()) -> void:
@@ -351,7 +351,7 @@ func _pending_matches_job(worker: String, job_id: String) -> bool:
 func _score_candidate(worker: String, colonist: Dictionary, entry: Dictionary, job_kinds: Dictionary,
 		labour_table: Dictionary, tick_number: int, get_job_labour: Callable, get_calendar_boost: Callable) -> Dictionary:
 	var bracket := _priority_bracket(entry, job_kinds, labour_table, tick_number, get_job_labour, get_calendar_boost)
-	var start := Vector2i(colonist["x"], colonist["y"])
+	var start := TileGrid.tile_of(colonist)
 	var ticks_waiting := tick_number - int(entry["submitted_tick"])
 	var skill := 0
 	if get_job_labour.is_valid():
@@ -393,7 +393,7 @@ func _most_skilled_free(scanned: Dictionary, proposals_by_job: Dictionary, claim
 	var job_proposals: Array = proposals_by_job[job_id]
 	var best := scanned
 	var best_skill: int = scanned["skill"]
-	var target: Vector2i = scanned["entry"]["target"]
+	var target: Vector3i = scanned["entry"]["target"]
 	for proposal: Dictionary in job_proposals:
 		var worker: String = proposal["worker"]
 		var skill: int = proposal["skill"]
@@ -492,7 +492,7 @@ func get_pending() -> Dictionary:
 
 ## Restores continuation state from a save; routes rebuild through _passable_for() like
 ## tick(), so an autonomous entry keeps its own faction's passability. region_check as in tick().
-func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i, region_check: Callable = Callable()) -> void:
+func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Vector3i, bounds_max: Vector3i, region_check: Callable = Callable()) -> void:
 	_waiting = state["waiting"].duplicate(true)
 	_waiting_index.restore(_waiting, state.get("activated_entries", {}))
 	_next_ordinal = state["next_ordinal"]
@@ -544,8 +544,8 @@ func snapshot() -> Dictionary:
 		"activated_entries": _activated_entries.duplicate(true)}
 
 ## Lets a search end on an impassable target tile (a tree), costed 1.
-func _routable(target: Vector2i, cost_fn: Callable) -> Callable:
-	return func(tile: Vector2i):
+func _routable(target: Vector3i, cost_fn: Callable) -> Callable:
+	return func(tile: Vector3i):
 		if tile == target:
 			var underlying: Variant = cost_fn.call(tile)
 			return underlying if _is_passable_value(underlying) else 1
@@ -576,7 +576,7 @@ func _priority_bracket(entry: Dictionary, job_kinds: Dictionary, labour_table: D
 	return mini(order_priority + calendar_boost + LABOUR_LEVEL_MAX - labour_level, MAX_PRIORITY_BRACKET)
 
 ## Unbounded re-run of a found search; region_check (ADR 054) refuses a target cut off since.
-func _resolve_path(start: Vector2i, target: Vector2i, passable: Callable, bounds_min: Vector2i, bounds_max: Vector2i, region_check: Callable) -> Array:
+func _resolve_path(start: Vector3i, target: Vector3i, passable: Callable, bounds_min: Vector3i, bounds_max: Vector3i, region_check: Callable) -> Array:
 	var route := RouteType.new(start, target, _routable(target, passable), bounds_min, bounds_max, region_check)
 	while not route.is_terminal():
 		route.resume()

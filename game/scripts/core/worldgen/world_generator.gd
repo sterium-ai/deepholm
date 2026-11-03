@@ -3,7 +3,8 @@ extends RefCounted
 
 ## Pure terrain generation (ADR 019, ADR 020): no scenes, content-registry instances or global
 ## randomness. Every draw comes from the injected RandomNumberGenerator in a fixed order, so a
-## seed reproduces the same terrain for the same width, height and mapgen document.
+## seed reproduces the same terrain for the same width, height and mapgen document. It generates
+## the surface: every tile it returns has z = TileGrid.SURFACE, and its own index math is planar.
 
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 
@@ -55,20 +56,20 @@ const DEFAULT_SPAWN_TREE_STEP_LIMIT := 50
 ## this many distinct reachable bushes, not one short route to the nearest.
 const FOOD_SOURCES_PER_COLONIST := 1
 
-const NEI4: Array[Vector2i] = [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]
+const NEI4: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0)]
 
 ## Clamps into mapgen's min/max_world_size (module defaults when the document omits them).
-static func resolve_size(requested_width: int, requested_height: int, mapgen: Dictionary) -> Vector2i:
+static func resolve_size(requested_width: int, requested_height: int, mapgen: Dictionary) -> Vector2i: # planar: a size
 	var min_size := int(mapgen.get("min_world_size", DEFAULT_MIN_WORLD_SIZE))
 	var max_size := int(mapgen.get("max_world_size", DEFAULT_MAX_WORLD_SIZE))
-	return Vector2i(
+	return Vector2i( # planar
 		clampi(requested_width, min_size, max_size),
 		clampi(requested_height, min_size, max_size)
 	)
 
 ## The new-game UI size, read from content.
-static func default_new_game_size(mapgen: Dictionary) -> Vector2i:
-	return Vector2i(
+static func default_new_game_size(mapgen: Dictionary) -> Vector2i: # planar: a size
+	return Vector2i( # planar
 		int(mapgen.get("default_new_game_width", 256)),
 		int(mapgen.get("default_new_game_height", 256))
 	)
@@ -161,7 +162,7 @@ static func _scatter_tree_groves(random: RandomNumberGenerator, map: Array[Strin
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
+			if TileGrid.distance_sq(Vector3i(offset_x, offset_y, 0), Vector3i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)
@@ -233,8 +234,8 @@ static func _random_soil_neighbor(random: RandomNumberGenerator, map: Array[Stri
 
 ## Returns bush positions only (bushes are objects, not tiles); soil tiles only, never mutates
 ## `map`.
-static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary, scale: float) -> Array[Vector2i]:
-	var positions: Array[Vector2i] = []
+static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary, scale: float) -> Array[Vector3i]:
+	var positions: Array[Vector3i] = []
 	var total_bushes := _scaled(int(mapgen.get("berry_bush_count", DEFAULT_BERRY_BUSH_COUNT)), scale)
 	var total_attempts := _scaled(int(mapgen.get("berry_bush_placement_attempts", DEFAULT_BERRY_BUSH_PLACEMENT_ATTEMPTS)), scale)
 	var grove_count := _scaled(int(mapgen.get("berry_bush_grove_count", DEFAULT_BERRY_BUSH_GROVE_COUNT)), scale)
@@ -255,7 +256,7 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 			attempts += 1
 			var offset_x := random.randi_range(-radius, radius)
 			var offset_y := random.randi_range(-radius, radius)
-			if TileGrid.distance_sq(Vector2i(offset_x, offset_y), Vector2i.ZERO) > radius * radius:
+			if TileGrid.distance_sq(Vector3i(offset_x, offset_y, 0), Vector3i.ZERO) > radius * radius:
 				continue
 			var x := clampi(center_x + offset_x, 0, width - 1)
 			var y := clampi(center_y + offset_y, 0, height - 1)
@@ -263,7 +264,7 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 			if map[index] != TILE_SOIL or used.has(index):
 				continue
 			used[index] = true
-			positions.append(Vector2i(x, y))
+			positions.append(Vector3i(x, y, TileGrid.SURFACE))
 			placed += 1
 
 	return positions
@@ -272,8 +273,8 @@ static func _scatter_berry_bush_groves(random: RandomNumberGenerator, map: Array
 ## random control points. The offset is single-valued per axis position, so each cross-section is
 ## one contiguous run (its width) and the band cannot self-intersect. Widths stay within
 ## [river_min_width, river_max_width], so consecutive stamps overlap: one 4-connected band.
-static func _carve_river(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary) -> Array[Vector2i]:
-	var water_tiles: Array[Vector2i] = []
+static func _carve_river(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary) -> Array[Vector3i]:
+	var water_tiles: Array[Vector3i] = []
 	var horizontal := random.randi_range(0, 1) == 0
 	var dominant := width if horizontal else height
 	var transversal := height if horizontal else width
@@ -327,7 +328,7 @@ static func _carve_river(random: RandomNumberGenerator, map: Array[String], widt
 			var x := pos if horizontal else cross
 			var y := cross if horizontal else pos
 			map[TileGrid.flat_index(x, y, width)] = TILE_WATER
-			water_tiles.append(Vector2i(x, y))
+			water_tiles.append(Vector3i(x, y, TileGrid.SURFACE))
 
 	return water_tiles
 
@@ -405,21 +406,21 @@ static func _qualifying_outcrop_tiles(map: Array[String], width: int, height: in
 	return qualifying
 
 ## Row-major footprint of a rect candidate (tiers 1/2).
-static func _rect_tiles(anchor_x: int, anchor_y: int, clearing_width: int, clearing_height: int) -> Array[Vector2i]:
-	var tiles: Array[Vector2i] = []
+static func _rect_tiles(anchor_x: int, anchor_y: int, clearing_width: int, clearing_height: int) -> Array[Vector3i]:
+	var tiles: Array[Vector3i] = []
 	for y in range(anchor_y, anchor_y + clearing_height):
 		for x in range(anchor_x, anchor_x + clearing_width):
-			tiles.append(Vector2i(x, y))
+			tiles.append(Vector3i(x, y, TileGrid.SURFACE))
 	return tiles
 
 ## Distinct bushes reachable within `limit` from EVERY footprint tile: the shuffle may put a
 ## colonist anywhere in it. A cheap multi-source BFS finds candidates, then one bounded BFS per
 ## bush confirms the worst-case tile.
-static func _count_reachable_food_sources(map: Array[String], width: int, height: int, footprint: Array[Vector2i], bush_lookup: Dictionary, limit: int) -> int:
+static func _count_reachable_food_sources(map: Array[String], width: int, height: int, footprint: Array[Vector3i], bush_lookup: Dictionary, limit: int) -> int:
 	if limit < 0 or footprint.is_empty():
 		return 0
 	var visited: Dictionary = {}
-	var queue: Array[Vector2i] = []
+	var queue: Array[Vector3i] = []
 	for pos in footprint:
 		var index := TileGrid.flat_index(pos.x, pos.y, width)
 		if not visited.has(index):
@@ -428,7 +429,7 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 	var candidate_bushes: Dictionary = {}
 	var head := 0
 	while head < queue.size():
-		var current: Vector2i = queue[head]
+		var current: Vector3i = queue[head]
 		head += 1
 		var dist: int = visited[TileGrid.flat_index(current.x, current.y, width)]
 		var next_dist := dist + 1
@@ -446,7 +447,7 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 			if map[nindex] != TILE_SOIL or visited.has(nindex):
 				continue
 			visited[nindex] = next_dist
-			queue.append(Vector2i(nx, ny))
+			queue.append(Vector3i(nx, ny, TileGrid.SURFACE))
 
 	if candidate_bushes.is_empty():
 		return 0
@@ -457,19 +458,19 @@ static func _count_reachable_food_sources(map: Array[String], width: int, height
 
 	var confirmed := 0
 	for bush_index in candidate_bushes.keys():
-		var bush := TileGrid.flat_coord(int(bush_index), width)
+		var bush := TileGrid.coord_in(int(bush_index), width, height)
 		if _reaches_every_tile(map, width, height, bush, footprint_lookup, bush_lookup, limit):
 			confirmed += 1
 	return confirmed
 
 ## True when a bounded BFS from `bush` reaches every target; other bushes block like objects, so
 ## a route cannot cut through them.
-static func _reaches_every_tile(map: Array[String], width: int, height: int, bush: Vector2i, targets: Dictionary, bush_lookup: Dictionary, limit: int) -> bool:
+static func _reaches_every_tile(map: Array[String], width: int, height: int, bush: Vector3i, targets: Dictionary, bush_lookup: Dictionary, limit: int) -> bool:
 	var remaining := targets.size()
 	if remaining <= 0:
 		return true
 	var visited: Dictionary = {}
-	var queue: Array[Vector2i] = []
+	var queue: Array[Vector3i] = []
 	for offset in NEI4:
 		var nx := bush.x + offset.x
 		var ny := bush.y + offset.y
@@ -481,12 +482,12 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 		visited[nindex] = 1
 		if targets.has(nindex):
 			remaining -= 1
-		queue.append(Vector2i(nx, ny))
+		queue.append(Vector3i(nx, ny, TileGrid.SURFACE))
 	if remaining <= 0:
 		return true
 	var head := 0
 	while head < queue.size():
-		var current: Vector2i = queue[head]
+		var current: Vector3i = queue[head]
 		head += 1
 		var dist: int = visited[TileGrid.flat_index(current.x, current.y, width)]
 		var next_dist := dist + 1
@@ -505,7 +506,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 				remaining -= 1
 				if remaining <= 0:
 					return true
-			queue.append(Vector2i(nx, ny))
+			queue.append(Vector3i(nx, ny, TileGrid.SURFACE))
 	return remaining <= 0
 
 ## Bounded deterministic spawn search in four tiers, each run only if the previous found nothing:
@@ -517,7 +518,7 @@ static func _reaches_every_tile(map: Array[String], width: int, height: int, bus
 ## Distance fields expand over soil only, so resources are on the same shore. Water is never
 ## overwritten. "fallback" reports any tier past the first.
 static func place_spawn(random: RandomNumberGenerator, map: Array[String], width: int, height: int, mapgen: Dictionary,
-		water_tiles: Array[Vector2i], berry_bush_tiles: Array[Vector2i], colonist_count: int) -> Dictionary:
+		water_tiles: Array[Vector3i], berry_bush_tiles: Array[Vector3i], colonist_count: int) -> Dictionary:
 	var clearing_width := maxi(1, mini(int(mapgen.get("spawn_area_width", 6)), width))
 	var clearing_height := maxi(1, mini(int(mapgen.get("spawn_area_height", 6)), height))
 	var attempts := maxi(1, int(mapgen.get("spawn_search_attempts", DEFAULT_SPAWN_SEARCH_ATTEMPTS)))
@@ -547,7 +548,7 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 	for attempt in attempts:
 		if water_tiles.is_empty():
 			break
-		var seed_tile: Vector2i = water_tiles[random.randi_range(0, water_tiles.size() - 1)]
+		var seed_tile: Vector3i = water_tiles[random.randi_range(0, water_tiles.size() - 1)]
 		var anchor_x := clampi(seed_tile.x + random.randi_range(-water_limit, water_limit), 0, max_anchor_x)
 		var anchor_y := clampi(seed_tile.y + random.randi_range(-water_limit, water_limit), 0, max_anchor_y)
 		var candidate := _evaluate_clearing(map, anchor_x, anchor_y, clearing_width, clearing_height, width, water_dist, tree_dist, food_dist, outcrop_dist, bush_lookup, true)
@@ -588,7 +589,7 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 			"outcrop": -1 if found.is_empty() else 0,
 			"food_sources": 0 if found.is_empty() else _count_reachable_food_sources(map, width, height, found, bush_lookup, food_limit)}
 
-	var land_tiles: Array[Vector2i] = []
+	var land_tiles: Array[Vector3i] = []
 	var clearing_x: int
 	var clearing_y: int
 	var report_width: int
@@ -616,9 +617,9 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 				if map[index] != TILE_WATER:
 					map[index] = TILE_FLOOR
 				if map[TileGrid.flat_index(x, y, width)] == TILE_FLOOR:
-					land_tiles.append(Vector2i(x, y))
+					land_tiles.append(Vector3i(x, y, TileGrid.SURFACE))
 	else:
-		var reserved: Array[Vector2i] = repaired.get("land_tiles", [])
+		var reserved: Array[Vector3i] = repaired.get("land_tiles", [])
 		for pos in reserved:
 			map[TileGrid.flat_index(pos.x, pos.y, width)] = TILE_FLOOR
 			land_tiles.append(pos)
@@ -641,15 +642,15 @@ static func place_spawn(random: RandomNumberGenerator, map: Array[String], width
 	var land_lookup: Dictionary = {}
 	for pos in land_tiles:
 		land_lookup[TileGrid.flat_index(pos.x, pos.y, width)] = true
-	var remaining_berry_bush_tiles: Array[Vector2i] = []
+	var remaining_berry_bush_tiles: Array[Vector3i] = []
 	for pos in berry_bush_tiles:
 		if not land_lookup.has(TileGrid.flat_index(pos.x, pos.y, width)):
 			remaining_berry_bush_tiles.append(pos)
 
 	_shuffle_positions(random, land_tiles)
-	var colonist_positions: Array[Vector2i] = land_tiles.slice(0, mini(colonist_count, land_tiles.size()))
+	var colonist_positions: Array[Vector3i] = land_tiles.slice(0, mini(colonist_count, land_tiles.size()))
 	# Leftover reserved tiles are safe spots for new_game_setup.gd's starting tools and beds.
-	var tool_tiles: Array[Vector2i] = land_tiles.slice(colonist_positions.size())
+	var tool_tiles: Array[Vector3i] = land_tiles.slice(colonist_positions.size())
 
 	return {
 		"clearing": {
@@ -711,7 +712,7 @@ static func _repair_land_clearing(map: Array[String], width: int, height: int, c
 	for component in components:
 		if component.size() < colonist_count:
 			continue
-		var reserved: Array[Vector2i] = component.slice(0, mini(component.size(), needed_cells))
+		var reserved: Array[Vector3i] = component.slice(0, mini(component.size(), needed_cells))
 		var worst_water := 0
 		var worst_food := 0
 		var worst_tree := 0
@@ -779,14 +780,14 @@ static func _land_components(map: Array[String], width: int, height: int, bush_l
 			var index := TileGrid.flat_index(x, y, width)
 			if map[index] != TILE_SOIL or bush_lookup.has(index) or visited.has(index):
 				continue
-			var component: Array[Vector2i] = []
+			var component: Array[Vector3i] = []
 			var queue: Array[int] = [index]
 			visited[index] = true
 			var head := 0
 			while head < queue.size():
 				var current: int = queue[head]
 				head += 1
-				var tile := TileGrid.flat_coord(current, width)
+				var tile := TileGrid.coord_in(current, width, height)
 				component.append(tile)
 				for offset in NEI4:
 					var nx := tile.x + offset.x
@@ -803,8 +804,8 @@ static func _land_components(map: Array[String], width: int, height: int, bush_l
 
 ## Tier 4: rings outward, at most max(width, height); never touches non-soil terrain.
 static func _expanding_soil_search(map: Array[String], width: int, height: int, origin_x: int, origin_y: int,
-		bush_lookup: Dictionary, max_needed: int) -> Array[Vector2i]:
-	var found: Array[Vector2i] = []
+		bush_lookup: Dictionary, max_needed: int) -> Array[Vector3i]:
+	var found: Array[Vector3i] = []
 	var max_radius := maxi(width, height)
 	for radius in range(0, max_radius + 1):
 		for y in range(origin_y - radius, origin_y + radius + 1):
@@ -813,11 +814,11 @@ static func _expanding_soil_search(map: Array[String], width: int, height: int, 
 			for x in range(origin_x - radius, origin_x + radius + 1):
 				if x < 0 or x >= width:
 					continue
-				if TileGrid.chebyshev(Vector2i(x, y), Vector2i(origin_x, origin_y)) != radius:
+				if TileGrid.chebyshev(Vector3i(x, y, TileGrid.SURFACE), Vector3i(origin_x, origin_y, TileGrid.SURFACE)) != radius:
 					continue
 				var index := TileGrid.flat_index(x, y, width)
 				if map[index] == TILE_SOIL and not bush_lookup.has(index):
-					found.append(Vector2i(x, y))
+					found.append(Vector3i(x, y, TileGrid.SURFACE))
 					if found.size() >= max_needed:
 						return found
 	return found
@@ -852,7 +853,7 @@ static func _evaluate_clearing(map: Array[String], anchor_x: int, anchor_y: int,
 	return {"x": anchor_x, "y": anchor_y, "water": worst_water, "food": worst_food, "tree": worst_tree, "outcrop": worst_outcrop}
 
 ## Fisher-Yates.
-static func _shuffle_positions(random: RandomNumberGenerator, positions: Array[Vector2i]) -> void:
+static func _shuffle_positions(random: RandomNumberGenerator, positions: Array[Vector3i]) -> void:
 	for i in range(positions.size() - 1, 0, -1):
 		var j := random.randi_range(0, i)
 		var temp := positions[i]

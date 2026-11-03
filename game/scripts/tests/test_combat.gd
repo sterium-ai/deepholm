@@ -47,7 +47,7 @@ func _check_death_drops_inventory_and_removes_from_scheduling() -> void:
 	_spawn_actor(world, "colony", "victim", 6, 5)
 	# "till" (no needs_tool, unlike "dig"/"chop") keeps this a plain
 	# reserve/go_to/work job so the assignment activates within one tick.
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(7, 5), 1, world.get_tick(), "till", "victim")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(7, 5, 0), 1, world.get_tick(), "till", "victim")
 	_expect(submit_result.get("ok", false), "the victim's own till job must be accepted")
 	var job_id := String(submit_result.get("job_id", ""))
 	world.tick()
@@ -76,15 +76,15 @@ func _check_wall_destroyed_at_zero_hp() -> void:
 	if _failed: return
 	var world := _build_arena(3)
 	_spawn_actor(world, "raiders", "wall_attacker", 5, 5)
-	TestAccess.object_table(world).set_object(6, 5, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(6, 5, 0), "wooden_wall")
 	world.tick()
-	_expect(not TestAccess.object_table(world).object_health_at(6, 5).is_empty(), "a freshly placed wall must carry per-instance health")
+	_expect(not TestAccess.object_table(world).object_health_at(Vector3i(6, 5, 0)).is_empty(), "a freshly placed wall must carry per-instance health")
 	var attacker := TestAccess.find_colonist(world, "wall_attacker")
 	attacker["combat"]["damage"] = 999
 	attacker["combat"]["cooldown_remaining"] = 0
 	world.tick()
 	_expect(world.get_object(6, 5) == "", "a wall reduced to 0 hp must clear to no object (floor underneath)")
-	_expect(TestAccess.object_table(world).object_health_at(6, 5).is_empty(), "a destroyed object's health entry must be cleared")
+	_expect(TestAccess.object_table(world).object_health_at(Vector3i(6, 5, 0)).is_empty(), "a destroyed object's health entry must be cleared")
 
 ## Cooldown must elapse on wall-clock ticks, not only while an
 ## adjacent target exists -- an actor that attacks, disengages for longer
@@ -147,15 +147,15 @@ func _check_targeting_prefers_hostile_among_multiple_occupants() -> void:
 func _check_object_health_survives_save_load() -> void:
 	if _failed: return
 	var world := _build_arena(10)
-	TestAccess.object_table(world).set_object(6, 5, "wooden_wall")
-	TestAccess.object_table(world).set_object(7, 5, "door")
+	TestAccess.object_table(world).set_object(Vector3i(6, 5, 0), "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(7, 5, 0), "door")
 	world.tick()
-	var wall_max := int(TestAccess.object_table(world).object_health_at(6, 5)["maxHp"])
-	var door_max := int(TestAccess.object_table(world).object_health_at(7, 5)["maxHp"])
-	TestAccess.object_table(world).damage_object(6, 5, 30)
-	TestAccess.object_table(world).damage_object(7, 5, 15)
-	var wall_hp_before := int(TestAccess.object_table(world).object_health_at(6, 5)["hp"])
-	var door_hp_before := int(TestAccess.object_table(world).object_health_at(7, 5)["hp"])
+	var wall_max := int(TestAccess.object_table(world).object_health_at(Vector3i(6, 5, 0))["maxHp"])
+	var door_max := int(TestAccess.object_table(world).object_health_at(Vector3i(7, 5, 0))["maxHp"])
+	TestAccess.object_table(world).damage_object(Vector3i(6, 5, 0), 30)
+	TestAccess.object_table(world).damage_object(Vector3i(7, 5, 0), 15)
+	var wall_hp_before := int(TestAccess.object_table(world).object_health_at(Vector3i(6, 5, 0))["hp"])
+	var door_hp_before := int(TestAccess.object_table(world).object_health_at(Vector3i(7, 5, 0))["hp"])
 	_expect(wall_hp_before == wall_max - 30, "a damaged wall must carry its exact damaged hp before save")
 	_expect(door_hp_before == door_max - 15, "a damaged door must carry its exact damaged hp before save")
 	_expect(wall_hp_before != wall_max and door_hp_before != door_max,
@@ -164,15 +164,15 @@ func _check_object_health_survives_save_load() -> void:
 	var loaded := StateCodecType.decode(StateCodecType.encode(world))
 	_expect(loaded.get_object(6, 5) == "wooden_wall", "a wall must survive a save/load round trip")
 	_expect(loaded.get_object(7, 5) == "door", "a door must survive a save/load round trip")
-	_expect(int(TestAccess.object_table(loaded).object_health_at(6, 5).get("hp", -1)) == wall_hp_before,
+	_expect(int(TestAccess.object_table(loaded).object_health_at(Vector3i(6, 5, 0)).get("hp", -1)) == wall_hp_before,
 		"a damaged wall's exact hp must survive save/load, not reset to full")
-	_expect(int(TestAccess.object_table(loaded).object_health_at(7, 5).get("hp", -1)) == door_hp_before,
+	_expect(int(TestAccess.object_table(loaded).object_health_at(Vector3i(7, 5, 0)).get("hp", -1)) == door_hp_before,
 		"a damaged door's exact hp must survive save/load, not reset to full")
 
-	TestAccess.object_table(loaded).damage_object(6, 5, wall_hp_before)
+	TestAccess.object_table(loaded).damage_object(Vector3i(6, 5, 0), wall_hp_before)
 	_expect(loaded.get_object(6, 5) == "", "a wall already damaged before save must clear to floor once its persisted hp (not a reset full hp) reaches 0 after load")
-	TestAccess.object_table(loaded).damage_object(7, 5, door_hp_before - 1)
-	_expect(int(TestAccess.object_table(loaded).object_health_at(7, 5).get("hp", -1)) == 1,
+	TestAccess.object_table(loaded).damage_object(Vector3i(7, 5, 0), door_hp_before - 1)
+	_expect(int(TestAccess.object_table(loaded).object_health_at(Vector3i(7, 5, 0)).get("hp", -1)) == 1,
 		"further damage after load must land relative to the persisted hp, not a reset full hp")
 
 ## A dead actor's queued (not-yet-activated) job restricted
@@ -185,7 +185,7 @@ func _check_death_releases_queued_job_and_held_tool() -> void:
 	_spawn_actor(world, "colony", "victim", 6, 5)
 	var victim := TestAccess.find_colonist(world, "victim")
 
-	var active_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(7, 5), 1, world.get_tick(), "till", "victim")
+	var active_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(7, 5, 0), 1, world.get_tick(), "till", "victim")
 	_expect(active_result.get("ok", false), "the victim's own active till job must be accepted")
 	var active_job_id := String(active_result.get("job_id", ""))
 	world.tick()
@@ -193,12 +193,12 @@ func _check_death_releases_queued_job_and_held_tool() -> void:
 
 	# A second job restricted to the same, already-busy victim: it can only
 	# ever sit queued, never activated, since the victim has no free capacity.
-	var queued_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(8, 5), 1, world.get_tick(), "till", "victim")
+	var queued_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(8, 5, 0), 1, world.get_tick(), "till", "victim")
 	_expect(queued_result.get("ok", false), "a second job restricted to the victim must still be accepted onto the queue")
 	var queued_job_id := String(queued_result.get("job_id", ""))
 	_expect(String(TestAccess.get_job(world, queued_job_id).get("status", "")) == "queued", "the second job restricted to the busy victim must remain queued, never activated")
 
-	var tool_item_id := TestAccess.tool_store(world).spawn_ground("axe", int(victim["x"]), int(victim["y"]))
+	var tool_item_id := TestAccess.tool_store(world).spawn_ground("axe", Vector3i(int(victim["x"]), int(victim["y"]), 0))
 	TestAccess.tool_store(world).set_held(tool_item_id, "victim")
 	_expect(String(TestAccess.tool_store(world).get_item(tool_item_id)["location"]["type"]) == "held", "the victim must be holding the tool before death")
 
@@ -254,7 +254,7 @@ func _check_death_during_need_job_releases_paused_work() -> void:
 	world.tick() # backfills "combat"/"health" before this test mutates them
 
 	# An unrestricted work job (restrict_to defaults to "" -- any eligible worker may take it).
-	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(7, 5), 1, world.get_tick(), "till")
+	var work_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(7, 5, 0), 1, world.get_tick(), "till")
 	_expect(work_result.get("ok", false), "the unrestricted till job must be accepted")
 	var work_job_id := String(work_result.get("job_id", ""))
 	world.tick()
@@ -267,7 +267,7 @@ func _check_death_during_need_job_releases_paused_work() -> void:
 	_expect(String(TestAccess.get_job(world, work_job_id).get("status", "")) == "queued", "the interrupted till job must be suspended back to queued")
 	_expect(String(TestAccess.needs_system(world).paused_jobs.get("worker", "")) == work_job_id, "the interrupted till job must be recorded as this worker's own paused job")
 
-	var need_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(8, 5), 1, world.get_tick(), "drink_water", "worker")
+	var need_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(8, 5, 0), 1, world.get_tick(), "drink_water", "worker")
 	_expect(need_result.get("ok", false), "the worker's own restricted need job must be accepted")
 	var need_job_id := String(need_result.get("job_id", ""))
 	TestAccess.need_giver_pending(world)["worker"] = need_job_id
@@ -354,7 +354,7 @@ func _check_death_drops_generic_inventory_tools_into_tool_store() -> void:
 func _check_object_health_validation() -> void:
 	if _failed: return
 	var world := _build_arena(38)
-	TestAccess.object_table(world).set_object(6, 5, "wooden_wall")
+	TestAccess.object_table(world).set_object(Vector3i(6, 5, 0), "wooden_wall")
 	world.tick()
 	var state: Dictionary = StateCodecType.encode(world)
 	var objects: Array = state["objects"]
@@ -436,7 +436,7 @@ func _check_dead_worker_pending_search_frees_job_for_other_worker() -> void:
 	# (5,25) is Manhattan distance 20 from doomed_worker and 15 from
 	# rescue_worker -- both >= MAX_TRAVEL_PENALTY, so both proposals tie on
 	# score and the tie-break falls to worker id.
-	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector2i(5, 25), 1, world.get_tick(), "till")
+	var submit_result: Dictionary = TestAccess.scheduler(world).submit(Vector3i(5, 25, 0), 1, world.get_tick(), "till")
 	_expect(submit_result.get("ok", false), "the unrestricted till job must be accepted")
 	var job_id := String(submit_result.get("job_id", ""))
 
@@ -527,8 +527,8 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	_spawn_actor(world, "colony", "miner", 6, 20)
 	TestAccess.set_tile(world, 22, 5, WorldStateType.TILE_TREE)
 	TestAccess.set_tile(world, 6, 22, WorldStateType.TILE_SOIL)
-	var chop := world.apply({"actor": "test", "command_id": "chop_1", "tick": world.get_tick(), "type": "chop", "payload": {"x": 22, "y": 5, "priority": 1}})
-	var dig := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(), "type": "dig", "payload": {"x": 6, "y": 22, "priority": 1}})
+	var chop := world.apply({"actor": "test", "command_id": "chop_1", "tick": world.get_tick(), "type": "chop", "payload": {"x": 22, "y": 5, "z": 0, "priority": 1}})
+	var dig := world.apply({"actor": "test", "command_id": "dig_1", "tick": world.get_tick(), "type": "dig", "payload": {"x": 6, "y": 22, "z": 0, "priority": 1}})
 	_expect(chop.get("ok", false) and dig.get("ok", false), "chop and dig orders must be accepted: %s / %s" % [chop, dig])
 	var chop_id := String(chop.get("job_id", ""))
 	var dig_id := String(dig.get("job_id", ""))

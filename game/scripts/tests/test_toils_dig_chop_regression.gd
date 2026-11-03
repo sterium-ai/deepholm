@@ -63,8 +63,12 @@ const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## and the hash): 2864118119 / 698856797 became the values below. With the old
 ## "jobs": get_jobs() entry put back, the A5 branch still reproduced both old
 ## literals, so stepping did not change (docs/orca/handoffs/A5.md).
-const EXPECTED_HASH := 1312885732
-const COLONY_EXPECTED_HASH := 4178825690
+## L2 (ADR 045 §5) added the layer to every hashed tile ("z" beside every x/y, Vector3i job
+## targets, the tile grid's layer_count): 1312885732 / 4178825690 became the values below.
+## The same snapshot printed in its pre-L2 shape still hashes to both old literals
+## (docs/orca/handoffs/L2-hash_projection.gd), so stepping did not change.
+const EXPECTED_HASH := 195318204
+const COLONY_EXPECTED_HASH := 4154555954
 const TOTAL_TICKS := 260
 
 var _failed := false
@@ -167,8 +171,8 @@ func _build_world(seed_value: int) -> WorldType:
 	TestAccess.set_tile(world, 9, 0, WorldType.TILE_TREE)
 	TestAccess.set_tile(world, 9, 2, WorldType.TILE_TREE)
 	TestAccess.colonists(world).clear()
-	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "z": 0, "route": null, "work": null})
 	# Axe sits past every dig target (x=8, just short of the tree at x=9),
 	# pick at the start (x=0, before every dig target) -- see _run_scenario()'s
 	# own comment for why this placement, combined with its priorities, keeps
@@ -197,14 +201,14 @@ func _build_world(seed_value: int) -> WorldType:
 ## tree at 9: no dig target is ever revisited after the trap-on-entry rule
 ## turns it to trench.
 func _run_scenario(world: WorldType) -> void:
-	Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "priority": 2})
-	Scenarios.command(world, "dig_2", "dig", {"x": 5, "y": 0, "priority": 2})
+	Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 2})
+	Scenarios.command(world, "dig_2", "dig", {"x": 5, "y": 0, "z": 0, "priority": 2})
 	world.tick()
 	world.tick()
-	Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "priority": 1})
-	Scenarios.command(world, "dig_3", "dig", {"x": 3, "y": 2, "priority": 2})
+	Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "z": 0, "priority": 1})
+	Scenarios.command(world, "dig_3", "dig", {"x": 3, "y": 2, "z": 0, "priority": 2})
 	world.tick()
 	world.tick()
 	world.tick()
-	Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 2, "priority": 1})
-	Scenarios.command(world, "dig_4", "dig", {"x": 7, "y": 0, "priority": 2})
+	Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 2, "z": 0, "priority": 1})
+	Scenarios.command(world, "dig_4", "dig", {"x": 7, "y": 0, "z": 0, "priority": 2})

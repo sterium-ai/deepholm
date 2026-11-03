@@ -19,17 +19,18 @@ const STATUS_SEARCHING := "searching"
 const STATUS_FOUND := "found"
 const STATUS_UNREACHABLE := "unreachable"
 
-## Neighbours are discovered in row-major order (y, then x); with the frontier order below this
-## fixes which of several equally cheap paths is returned. The offsets already are in that order.
-const NEIGHBOR_OFFSETS: Array[Vector2i] = [
-	Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0), Vector2i(0, 1),
+## Neighbours are discovered in row-major order (y, then x), i.e. ascending flat index on one
+## layer (ADR 045 §2); with the frontier order below this fixes which of several equally cheap
+## paths is returned. The offsets already are in that order; they stay on the current layer.
+const NEIGHBOR_OFFSETS: Array[Vector3i] = [
+	Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0),
 ]
 
-var _start: Vector2i
-var _target: Vector2i
+var _start: Vector3i
+var _target: Vector3i
 var _cost_fn: Callable
-var _bounds_min: Vector2i
-var _bounds_max: Vector2i
+var _bounds_min: Vector3i
+var _bounds_max: Vector3i
 var _min_cost: float
 
 var _status: String = STATUS_SEARCHING
@@ -40,7 +41,7 @@ var _came_from: Dictionary = {}
 var _g: Dictionary = {}
 ## True once _start is visited; false for a search that ended in _init().
 var _seeded := false
-var _path: Array[Vector2i] = []
+var _path: Array[Vector3i] = []
 ## Frontier ordered by (f = g + h, h, latest insertion): a min-heap of insertion numbers over
 ## _entry_f/_entry_h/_entry_tile. _open maps each open tile to its live entry; a tile whose g
 ## drops is pushed again (moving to the end of _open) and its stale entry skipped when popped,
@@ -50,15 +51,15 @@ var _open: Dictionary = {}
 var _heap := PackedInt64Array()
 var _entry_f := PackedFloat64Array()
 var _entry_h := PackedFloat64Array()
-var _entry_tile: Array[Vector2i] = []
+var _entry_tile: Array[Vector3i] = []
 ## Tiles expanded by the latest resume(); read by MeasuredRoute, not part of snapshot().
 var _last_resume_steps := 0
 
-func _init(start: Vector2i, target: Vector2i, cost_fn: Callable,
-		bounds_min: Vector2i, bounds_max: Vector2i, reachable: Callable = Callable(),
+func _init(start: Vector3i, target: Vector3i, cost_fn: Callable,
+		bounds_min: Vector3i, bounds_max: Vector3i, reachable: Callable = Callable(),
 		min_cost: float = MIN_TILE_COST) -> void:
 	assert(cost_fn.is_valid())
-	assert(bounds_min.x <= bounds_max.x and bounds_min.y <= bounds_max.y)
+	assert(bounds_min.x <= bounds_max.x and bounds_min.y <= bounds_max.y and bounds_min.z <= bounds_max.z)
 	assert(min_cost >= 0.0)
 	_start = start
 	_target = target
@@ -90,7 +91,7 @@ func is_terminal() -> bool:
 	return _status != STATUS_SEARCHING
 
 ## Inclusive tile path from start to target; empty until STATUS_FOUND.
-func get_path() -> Array[Vector2i]:
+func get_path() -> Array[Vector3i]:
 	return _path.duplicate()
 
 ## Advances by at most STEP_BUDGET expansions. Terminal statuses are sticky; unreachable is only
@@ -119,6 +120,7 @@ func resume() -> String:
 			var known := _came_from.has(neighbor)
 			if known and not _open.has(neighbor):
 				continue
+			# A planar offset keeps current's z, already inside the bounds.
 			if neighbor.x < min_x or neighbor.x > max_x or neighbor.y < min_y or neighbor.y > max_y:
 				continue
 			var result: Variant = _cost_fn.call(neighbor)
@@ -149,12 +151,12 @@ func resume() -> String:
 	_last_resume_steps = steps
 	return _status
 
-## Native-Variant continuation state; callers translate Vector2i through their codec
+## Native-Variant continuation state; callers translate Vector3i through their codec
 ## (state_codec.gd). Copies the whole search: for save/hash time only, per-tick readers use summary().
 ## "cost" is the accumulated cost g of every visited tile (A7): a search can span a map change,
 ## so its costs are part of the continuation and are never recomputed from the current map.
 func snapshot() -> Dictionary:
-	var frontier: Array[Vector2i] = []
+	var frontier: Array[Vector3i] = []
 	frontier.assign(_open.keys())
 	return {"start": _start, "target": _target, "status": _status,
 		"frontier": frontier, "visited": _visited_in_insertion_order(),
@@ -201,8 +203,8 @@ func restore(state: Dictionary) -> void:
 		var g: float = _g[tile]
 		_frontier_push(tile, g)
 
-func _reconstruct_path(end: Vector2i) -> Array[Vector2i]:
-	var path: Array[Vector2i] = [end]
+func _reconstruct_path(end: Vector3i) -> Array[Vector3i]:
+	var path: Array[Vector3i] = [end]
 	var cursor := end
 	while cursor != _start:
 		cursor = _came_from[cursor]
@@ -211,7 +213,7 @@ func _reconstruct_path(end: Vector2i) -> Array[Vector2i]:
 	return path
 
 ## bool true = cost 1, false = impassable; numbers as-is. resume() inlines the same rule.
-func _cost_of(tile: Vector2i) -> float:
+func _cost_of(tile: Vector3i) -> float:
 	var result: Variant = _cost_fn.call(tile)
 	if typeof(result) == TYPE_BOOL:
 		return 1.0 if result else 0.0
@@ -225,22 +227,23 @@ func _rebuild_costs() -> Dictionary:
 		_cost_up_to(tile, costs)
 	return costs
 
-func _cost_up_to(tile: Vector2i, costs: Dictionary) -> float:
+func _cost_up_to(tile: Vector3i, costs: Dictionary) -> float:
 	if costs.has(tile):
 		return costs[tile]
-	var parent: Vector2i = _came_from[tile]
+	var parent: Vector3i = _came_from[tile]
 	var cost := _cost_up_to(parent, costs) + _cost_of(tile)
 	costs[tile] = cost
 	return cost
 
-func _in_bounds(tile: Vector2i) -> bool:
+func _in_bounds(tile: Vector3i) -> bool:
 	return (tile.x >= _bounds_min.x and tile.x <= _bounds_max.x
-		and tile.y >= _bounds_min.y and tile.y <= _bounds_max.y)
+		and tile.y >= _bounds_min.y and tile.y <= _bounds_max.y
+		and tile.z >= _bounds_min.z and tile.z <= _bounds_max.z)
 
 # --- frontier --------------------------------------------------------------
 
 ## Opens tile (or re-opens it at a lower g) with the next insertion number.
-func _frontier_push(tile: Vector2i, g: float) -> void:
+func _frontier_push(tile: Vector3i, g: float) -> void:
 	var h := float(TileGrid.manhattan(tile, _target)) * _min_cost
 	var seq := _entry_tile.size()
 	_entry_f.append(g + h)
@@ -260,7 +263,7 @@ func _frontier_push(tile: Vector2i, g: float) -> void:
 
 ## Pops the first open tile in frontier order, skipping stale entries; only called while _open
 ## is not empty, so a live entry is always found.
-func _frontier_pop() -> Vector2i:
+func _frontier_pop() -> Vector3i:
 	var tile := _start
 	while not _heap.is_empty():
 		var seq := _heap[0]

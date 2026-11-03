@@ -43,14 +43,15 @@ func _check_bars(world: WorldStateType, row: Vector2i) -> void:
 		var origin := row + Vector2i(3 * i, 0)
 		var result: Dictionary = world.apply({"actor": "test", "command_id": "site_%d" % i,
 			"tick": world.get_tick(), "type": "build",
-			"payload": {"kind": SPECS[i][0], "x": origin.x, "y": origin.y, "orientation": SPECS[i][1]}})
+			"payload": {"kind": SPECS[i][0], "x": origin.x, "y": origin.y, "z": 0, "orientation": SPECS[i][1]}})
 		_expect(bool(result.get("ok", false)), "build %s %s must be accepted: %s" % [SPECS[i][0], SPECS[i][1], result])
 		expected_size[origin] = SPECS[i][2]
 	var sites := world.get_construction_sites()
 	_expect(sites.size() == SPECS.size(), "expected %d sites, got %d" % [SPECS.size(), sites.size()])
 	var tile := MapViewType.TILE_SIZE
 	for site in sites:
-		var origin := Vector2i(site["origin"])
+		var site_origin: Vector3i = site["origin"]
+		var origin := Vector2i(site_origin.x, site_origin.y)
 		var label := "%s %s at %s" % [site["kind"], site.get("orientation", ""), origin]
 		var footprint := MapViewType.construction_site_footprint_rect(site)
 		_expect(footprint == Rect2(Vector2(origin) * tile, Vector2(expected_size.get(origin, Vector2i.ONE)) * tile),

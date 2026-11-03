@@ -234,16 +234,16 @@ func _core_sources(dir_path: String) -> Array[String]:
 func _check_real_rejections_render(english: TextTableType) -> void:
 	var world := WorldStateType.new(4242, 10, 16, 16)
 	var commands := [
-		{"type": "chop", "payload": {"x": 0, "y": 0, "priority": 1}},
-		{"type": "dig", "payload": {"x": 99, "y": 0, "priority": 1}},
-		{"type": "place_object", "payload": {"x": 1, "y": 1, "kind": "no_such_kind"}},
+		{"type": "chop", "payload": {"x": 0, "y": 0, "z": 0, "priority": 1}},
+		{"type": "dig", "payload": {"x": 99, "y": 0, "z": 0, "priority": 1}},
+		{"type": "place_object", "payload": {"x": 1, "y": 1, "z": 0, "kind": "no_such_kind"}},
 		{"type": "set_faction", "payload": {"target": "nobody", "faction_id": "no_such_faction"}},
 		{"type": "set_labour", "payload": {"colonist": "c1", "kind": "juggle", "level": 9}},
 		{"type": "spawn_incident", "payload": {"id": "no_such_incident"}},
 		{"type": "zone_remove", "payload": {"id": "no_such_zone"}},
 		{"type": "cancel_job", "payload": {"job_id": "no_such_job"}},
 		{"type": "accept_trade", "payload": {"trader_id": "nobody"}},
-		{"type": "area_order", "payload": {"order": "juggle", "x": 0, "y": 0, "width": 1, "height": 1}},
+		{"type": "area_order", "payload": {"order": "juggle", "x": 0, "y": 0, "z": 0, "width": 1, "height": 1}},
 		{"type": "no_such_command", "payload": {}},
 	]
 	for i in commands.size():

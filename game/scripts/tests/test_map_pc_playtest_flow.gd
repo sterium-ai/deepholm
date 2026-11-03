@@ -189,7 +189,7 @@ func _run() -> void:
 		boot._select_tool(-1)
 		var till_job_for_second_target := false
 		for job in boot.world.get_jobs():
-			if String(job.get("kind", "")) == "till" and job.get("target") == second_target:
+			if String(job.get("kind", "")) == "till" and job.get("target") == Vector3i(second_target.x, second_target.y, 0):
 				till_job_for_second_target = true
 				break
 		_expect(till_job_for_second_target,

@@ -46,7 +46,7 @@ func _check_whole_map_matches_per_tile_path() -> void:
 	var reference = WorldStateType.new(SEED, 10, SIZE, SIZE)
 	for y in SIZE:
 		for x in SIZE:
-			_apply(reference, "dig", {"x": x, "y": y, "priority": 1})
+			_apply(reference, "dig", {"x": x, "y": y, "z": 0, "priority": 1})
 	var expected := _dig_targets(reference)
 	_expect(expected.size() > SIZE * SIZE / 3, "sanity: the reference map must offer plenty of dig targets, got %d" % expected.size())
 	var world = WorldStateType.new(SEED, 10, SIZE, SIZE)
@@ -124,9 +124,9 @@ func _check_step_budget_and_small_rectangles() -> void:
 	var expected_rejected: Array[Dictionary] = []
 	for y in range(rect.position.y, rect.end.y):
 		for x in range(rect.position.x, rect.end.x):
-			var result := _apply(reference, "chop", {"x": x, "y": y, "priority": 1})
+			var result := _apply(reference, "chop", {"x": x, "y": y, "z": 0, "priority": 1})
 			if not result.get("ok", false):
-				expected_rejected.append({"x": x, "y": y, "reason": String(result["rejection"]["reason"])})
+				expected_rejected.append({"x": x, "y": y, "z": 0, "reason": String(result["rejection"]["reason"])})
 	var result := _area(world, "chop", rect)
 	_expect(int(result.get("remaining", -1)) == 0, "a one-step rectangle must finish at release")
 	_expect(result.get("skipped") == expected_rejected, "a one-step rectangle must report the per-tile rejections")
@@ -138,11 +138,11 @@ func _check_invalid_payloads() -> void:
 	var world = WorldStateType.new(SEED, 10, SIZE, SIZE)
 	var hash_before: int = world.state_hash()
 	for payload in [
-		{"order": "build", "x": 0, "y": 0, "width": 2, "height": 2},
-		{"order": "dig", "x": 0, "y": 0, "width": 0, "height": 2},
-		{"order": "dig", "x": SIZE - 1, "y": 0, "width": 2, "height": 1},
-		{"order": "dig", "x": 0, "y": 0, "width": 1, "height": 1, "colour": "red"},
-		{"order": "dig", "x": "0", "y": 0, "width": 1, "height": 1},
+		{"order": "build", "x": 0, "y": 0, "z": 0, "width": 2, "height": 2},
+		{"order": "dig", "x": 0, "y": 0, "z": 0, "width": 0, "height": 2},
+		{"order": "dig", "x": SIZE - 1, "y": 0, "z": 0, "width": 2, "height": 1},
+		{"order": "dig", "x": 0, "y": 0, "z": 0, "width": 1, "height": 1, "colour": "red"},
+		{"order": "dig", "x": "0", "y": 0, "z": 0, "width": 1, "height": 1},
 	]:
 		_n += 1
 		var command := {"actor": "player", "command_id": "bad%d" % _n, "tick": world.get_tick(), "type": "area_order", "payload": payload}
@@ -153,7 +153,7 @@ func _check_invalid_payloads() -> void:
 			"preview and apply must agree on %s" % [payload])
 	_expect(world.state_hash() == hash_before, "rejected area orders must not change the state")
 	var ok_preview: Dictionary = world.preview({"actor": "player", "command_id": "fine", "tick": world.get_tick(), "type": "area_order",
-		"payload": {"order": "cancel", "x": 0, "y": 0, "width": SIZE, "height": SIZE}})
+		"payload": {"order": "cancel", "x": 0, "y": 0, "z": 0, "width": SIZE, "height": SIZE}})
 	_expect(ok_preview.get("ok", false), "a valid area_order must preview as accepted: %s" % ok_preview)
 
 func _check_cancel_covers_earlier_pending_orders() -> void:
@@ -171,10 +171,10 @@ func _check_cancel_covers_earlier_pending_orders() -> void:
 	for job in world.get_jobs():
 		if String(job["kind"]) != "dig" or String(job["status"]) not in ["queued", "active"]:
 			continue
-		var tile: Vector2i = job["target"]
-		if redug.has_point(tile):
+		var tile: Vector3i = job["target"]
+		if redug.has_point(Vector2i(tile.x, tile.y)):
 			redug_pending += 1
-		elif cancelled.has_point(tile):
+		elif cancelled.has_point(Vector2i(tile.x, tile.y)):
 			inside += 1
 		else:
 			outside += 1
@@ -194,29 +194,29 @@ func _check_queued_orders_get_their_own_results() -> void:
 	# same per-tile commands in acceptance order): each single-tile order
 	# completes at once.
 	var reference = WorldStateType.new(SEED, 10, SIZE, SIZE)
-	var no_tree := Vector2i(-1, -1)
-	var tree := Vector2i(-1, -1)
+	var no_tree := Vector3i(-1, -1, 0)
+	var tree := Vector3i(-1, -1, 0)
 	var expected_reason := ""
 	for x in SIZE:
-		_apply(reference, "dig", {"x": x, "y": SIZE - 1, "priority": 1})
-		var probe := _apply(reference, "chop", {"x": x, "y": SIZE - 1, "priority": 1})
+		_apply(reference, "dig", {"x": x, "y": SIZE - 1, "z": 0, "priority": 1})
+		var probe := _apply(reference, "chop", {"x": x, "y": SIZE - 1, "z": 0, "priority": 1})
 		if probe.get("ok", false) and tree.x < 0:
-			tree = Vector2i(x, SIZE - 1)
+			tree = Vector3i(x, SIZE - 1, 0)
 		elif not probe.get("ok", false) and no_tree.x < 0:
-			no_tree = Vector2i(x, SIZE - 1)
+			no_tree = Vector3i(x, SIZE - 1, 0)
 			expected_reason = String(probe["rejection"]["reason"])
 	_expect(no_tree.x >= 0 and tree.x >= 0, "sanity: the last row must offer a rejected and an accepted chop")
-	var rejected := _area(world, "chop", Rect2i(no_tree, Vector2i.ONE))
+	var rejected := _area(world, "chop", Rect2i(Vector2i(no_tree.x, no_tree.y), Vector2i.ONE))
 	_expect(int(rejected.get("remaining", -1)) == 0, "a single-tile order behind a backlog must complete at acceptance")
-	_expect(rejected.get("skipped") == [{"x": no_tree.x, "y": no_tree.y, "reason": expected_reason}],
+	_expect(rejected.get("skipped") == [{"x": no_tree.x, "y": no_tree.y, "z": 0, "reason": expected_reason}],
 		"a queued order must report only its own rejections: %s" % [rejected.get("skipped")])
-	var chopped := _area(world, "chop", Rect2i(tree, Vector2i.ONE))
+	var chopped := _area(world, "chop", Rect2i(Vector2i(tree.x, tree.y), Vector2i.ONE))
 	_expect(int(chopped.get("remaining", -1)) == 0 and (chopped.get("skipped") as Array).is_empty(),
 		"a valid single-tile order behind a backlog must complete at acceptance: %s" % chopped)
 	_expect(_pending_kinds_at(world, tree).has("chop"), "the single-tile chop must exist at once")
 	# Cancel on a backlog tile not yet expanded: the Dig comes first there.
 	var dig_tile := _find_tile(world, "dig", true, SIZE - 2)
-	var undo := _area(world, "cancel", Rect2i(dig_tile, Vector2i.ONE))
+	var undo := _area(world, "cancel", Rect2i(Vector2i(dig_tile.x, dig_tile.y), Vector2i.ONE))
 	_expect(int(undo.get("remaining", -1)) == 0, "a single-tile Cancel behind a backlog must complete at acceptance")
 	_expect(not _pending_kinds_at(world, dig_tile).has("dig"), "the Cancel must act after the backlog's Dig on its tile")
 	_expect(TestAccess.area_orders(world).remaining_tiles(backlog_id) == backlog_left - 3,
@@ -230,16 +230,16 @@ func _check_queued_orders_get_their_own_results() -> void:
 	_expect(TestAccess.area_orders(world).is_idle(), "every queued order must finish")
 
 ## The first tile of `row` where `type` previews as `valid`.
-func _find_tile(world, type: String, valid: bool, row: int) -> Vector2i:
+func _find_tile(world, type: String, valid: bool, row: int) -> Vector3i:
 	for x in SIZE:
 		var preview: Dictionary = world.preview({"actor": "player", "command_id": "probe", "tick": world.get_tick(), "type": type,
-			"payload": {"x": x, "y": row, "priority": 1}})
+			"payload": {"x": x, "y": row, "z": 0, "priority": 1}})
 		if bool(preview.get("ok", false)) == valid:
-			return Vector2i(x, row)
+			return Vector3i(x, row, 0)
 	_expect(false, "sanity: row %d must have a tile where %s is %s" % [row, type, valid])
-	return Vector2i(0, row)
+	return Vector3i(0, row, 0)
 
-func _pending_kinds_at(world, tile: Vector2i) -> Array:
+func _pending_kinds_at(world, tile: Vector3i) -> Array:
 	var kinds: Array = []
 	for job in world.get_jobs():
 		if job["target"] == tile and String(job["status"]) in ["queued", "active"]:
@@ -270,7 +270,7 @@ func _targets(world, kind: String) -> Array:
 func _area(world, order: String, rect: Rect2i) -> Dictionary:
 	_n += 1
 	return world.apply({"actor": "player", "command_id": "area%d" % _n, "tick": world.get_tick(), "type": "area_order",
-		"payload": {"order": order, "x": rect.position.x, "y": rect.position.y, "width": rect.size.x, "height": rect.size.y, "priority": 1}})
+		"payload": {"order": order, "x": rect.position.x, "y": rect.position.y, "z": 0, "width": rect.size.x, "height": rect.size.y, "priority": 1}})
 
 func _apply(world, type: String, payload: Dictionary) -> Dictionary:
 	_n += 1

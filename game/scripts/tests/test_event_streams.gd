@@ -60,7 +60,7 @@ func _check_incremental_read_equals_full_log() -> void:
 		if t % 25 == 0:
 			for k in 4:
 				var kind: String = ["dig", "chop", "forage", "till", "mine"][rng.randi_range(0, 4)]
-				world.apply(_cmd(world, kind, {"x": rng.randi_range(0, 47), "y": rng.randi_range(0, 47), "priority": 1}))
+				world.apply(_cmd(world, kind, {"x": rng.randi_range(0, 47), "y": rng.randi_range(0, 47), "z": 0, "priority": 1}))
 			world.apply(_cmd(world, "bogus", {}))
 		if t == 60:
 			world.apply(_cmd(world, "spawn_incident", {"id": "trader_visit"}))
@@ -174,7 +174,7 @@ func _check_labour_burst_reaches_world_log() -> void:
 		for x in world.get_map_width():
 			if accepted == target:
 				break
-			if world.get_tile(x, y) == WorldStateType.TILE_SOIL and bool(world.apply(_cmd(world, "till", {"x": x, "y": y, "priority": 1})).get("ok", false)):
+			if world.get_tile(x, y) == WorldStateType.TILE_SOIL and bool(world.apply(_cmd(world, "till", {"x": x, "y": y, "z": 0, "priority": 1})).get("ok", false)):
 				accepted += 1
 	_expect(accepted == target, "setup: %d till orders must be accepted, got %d" % [target, accepted])
 	for i in 5:
@@ -209,15 +209,15 @@ func _check_dirty_cell_retention() -> void:
 	var max_size := 0
 	var total := TileGridType.MAX_DIRTY_CELLS + 700
 	for i in total:
-		grid.mark_dirty(i % 8, (i / 8) % 8)
+		grid.mark_dirty(Vector3i(i % 8, (i / 8) % 8, 0))
 		max_size = maxi(max_size, grid.dirty_cells.size())
 	_expect(max_size <= TileGridType.MAX_DIRTY_CELLS, "the dirty-cell log must never exceed %d, peaked at %d" % [TileGridType.MAX_DIRTY_CELLS, max_size])
 	var all: Dictionary = grid.get_dirty_cells_since(cursor)
 	_expect(bool(all["truncated"]) and int(all["next"]) == total, "a cursor behind dropped cells must read back truncated, next = %d" % total)
 	var recent: Dictionary = grid.get_dirty_cells_since(total - 3)
-	var expected: Array[Vector2i] = []
+	var expected: Array[Vector3i] = []
 	for i in range(total - 3, total):
-		expected.append(Vector2i(i % 8, (i / 8) % 8))
+		expected.append(Vector3i(i % 8, (i / 8) % 8, 0))
 	_expect(not bool(recent["truncated"]) and recent["cells"] == expected, "a recent cursor must read exactly the newest cells, got %s" % [recent["cells"]])
 	_expect((grid.get_dirty_cells_since(total)["cells"] as Array).is_empty(), "a read at the head returns no cells")
 
@@ -231,11 +231,11 @@ func _check_map_view_full_rebuild_on_truncation() -> void:
 	world.tick()
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == 0, "setup: a tick with no change touches no cell")
-	TestAccess.tile_grid(world).mark_dirty(3, 3)
+	TestAccess.tile_grid(world).mark_dirty(Vector3i(3, 3, 0))
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == 1, "one dirty cell must touch one cell, got %d" % map_view.last_tile_map_cells_touched)
 	for i in TileGridType.MAX_DIRTY_CELLS + 1:
-		TestAccess.tile_grid(world).mark_dirty(i % 32, (i / 32) % 32)
+		TestAccess.tile_grid(world).mark_dirty(Vector3i(i % 32, (i / 32) % 32, 0))
 	map_view.refresh()
 	_expect(map_view.last_tile_map_cells_touched == full_count,
 		"a truncated dirty-cell read must rebuild every cell (%d), got %d" % [full_count, map_view.last_tile_map_cells_touched])

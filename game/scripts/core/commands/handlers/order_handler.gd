@@ -60,7 +60,7 @@ func apply_job_command(command: Dictionary) -> Dictionary:
 		var check: Dictionary = _check.call(CommandChecks.check_target_job_command, command)
 		if not check.is_empty():
 			return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
-		var target := Vector2i(payload["x"], payload["y"])
+		var target := TileGrid.tile_of(payload)
 		# assignee (F3), dig/chop/forage/mine only: submit()'s restrict_to, as need_giver.gd uses it.
 		var assignee := String(payload.get("assignee", "")) if command["type"] in ["dig", "chop", "forage", "mine"] else ""
 		result = _scheduler.submit(target, payload.get("priority", 1), _clock.tick, command["type"], assignee)

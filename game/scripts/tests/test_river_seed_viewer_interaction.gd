@@ -265,7 +265,7 @@ func _tile_screen_center(tile: Vector2i) -> Vector2:
 
 func _job_at(world, tile: Vector2i, kind: String) -> Dictionary:
 	for job in world.get_jobs():
-		if String(job["kind"]) == kind and job["target"] == tile:
+		if String(job["kind"]) == kind and job["target"] == Vector3i(tile.x, tile.y, 0):
 			return job
 	return {}
 
