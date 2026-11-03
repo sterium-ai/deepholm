@@ -127,13 +127,18 @@ func _check_plant_grow_replant_and_replay() -> void:
 	print("test_forest_zone: planted %d/%d by tick %d" % [_count(world, STAGES), tiles, world.get_tick()])
 	_expect(planted, "one farmer must plant all %d forest tiles within 2 days, got %d" % [tiles, _count(world, STAGES)])
 	_expect(world.get_jobs(["sow"]).is_empty() and world.get_jobs(["till"]).is_empty(), "a forest zone neither tills nor sows")
+	_expect(_count(world, [TREE]) == 0, "no forest tile may be a tree while planting (day %.2f)" % (float(world.get_tick()) / _day_ticks))
 	var saw_stages: Dictionary = {}
+	var first_tree := {"tick": -1}
 	var grown := _tick_until(world, (GROW_DAYS + 2) * _day_ticks, func() -> bool:
 		saw_stages[world.get_tile(FOREST.position.x, FOREST.position.y)] = true
+		if first_tree["tick"] < 0 and _count(world, [TREE]) > 0:
+			first_tree["tick"] = world.get_tick()
 		return _count(world, [TREE]) == tiles - 1, log)
 	print("test_forest_zone: %d/%d trees by tick %d (day %.2f)" % [_count(world, [TREE]), tiles, world.get_tick(), float(world.get_tick()) / _day_ticks])
 	_expect(grown, "every forest tile but the farmer's must be a tree by day %d, got %d" % [GROW_DAYS + 2, _count(world, [TREE])])
-	_expect(world.get_tick() >= GROW_DAYS * _day_ticks, "no sapling may become a tree before %d days" % GROW_DAYS)
+	print("test_forest_zone: first tree at tick %d (day %.2f)" % [first_tree["tick"], float(first_tree["tick"]) / _day_ticks])
+	_expect(first_tree["tick"] >= GROW_DAYS * _day_ticks, "no sapling may become a tree before %d days, the first did at tick %d" % [GROW_DAYS, first_tree["tick"]])
 	for stage in STAGES:
 		_expect(saw_stages.has(stage), "a forest tile must show stage %s on the way (saw %s)" % [stage, saw_stages.keys()])
 	_tick_until(world, world.get_tick() + 50, func() -> bool: return false, log)

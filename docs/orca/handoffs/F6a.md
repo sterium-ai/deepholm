@@ -153,9 +153,19 @@ The branch matches it:
 | Out-of-scope edits need an owner-approved amendment | Approved by the owner in `2bc29b9`, quoted above. |
 | Occupied-sapling exception needs an owner decision | Decided by the owner in `2bc29b9`, quoted above; the acceptance table states it. |
 
+## Review round 2 (Codex verdict APPROVE, no blocking items)
+
+| Non-blocking note | Response |
+|---|---|
+| `test_forest_zone.gd:136` checked the tick when eight trees exist, not when the first one grows | Fixed. The growth loop now records the first tick on which any forest tile is a tree, checking every tick, and asserts it is no earlier than day 8. The test also asserts there are no trees right after planting, so the planting ticks are covered too. Run output: `first tree at tick 17654 (day 8.02)`. |
+| The reviewer could not rerun the suite in a read-only sandbox | Rerun here after the test change; the line is under Gate. |
+| Owner confirmation on the native build after merge | Still pending (see Pending). |
+
 ## Gate
 
-- Branch head after the review fixes, rebased on `2bc29b9` (`f74e94d`), full suite: `run_tests: all 135 test(s) PASS  [814s]`
+- Branch head after the round-2 test fix (the round-2 commit on top of `f00c5e8`), full suite: `run_tests: all 135 test(s) PASS  [815s]`
+  - `test_forest_zone` alone: `run_tests: all 1 test(s) PASS  [22s]`; the A11 replay of the forest run still matches.
+- Earlier, after the round-1 review fixes, rebased on `2bc29b9` (`f74e94d`): `run_tests: all 135 test(s) PASS  [814s]`
   - The first run after the rebase ended `run_tests: 1 of 135 test(s) failed: test_map_experience_fps_measurement  [870s]`. That test is a wall-clock FPS measurement. Run alone it passed (`run_tests: all 1 test(s) PASS  [68s]`, avg 128.44 FPS, min 127), and the full rerun above passed on the same tree with no change. The rebase itself only brought in the docs-only `2bc29b9`.
 - `game/scripts/tests/lint_content_literals.ps1`:
   `lint_content_literals: PASS (no tile-id/work-ticks/move-ticks literal found outside the registry)`
