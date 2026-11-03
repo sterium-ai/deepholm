@@ -1289,6 +1289,9 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   (the interrupt hook the uniform rule needs) is approved as F5a-b's scope, as declared in the
   handoff. The giver skipping ground tools contradicts the rule's "re-plans from the ground":
   fix as Codex asks (a dropped tool outside a stockpile is a haul candidate again).
+- **Review round 13 (owner's interface, 2026-11-03): scope** — core/commands/handlers/
+  order_handler.gd and core/actors/trench_system.gd (job-ending paths routed through the
+  shared set-down cleanup, as the uniform rule requires) are approved as F5a-b's scope.
 
 ### F5b — Labours: cook and heal; cooking · `review (antonelmejor50-hub/f5b-labours-cook-and-heal)` · after F2 · Design: closed 2026-10-30
 
