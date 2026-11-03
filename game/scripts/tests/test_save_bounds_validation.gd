@@ -104,7 +104,7 @@ func _base_state() -> Dictionary:
 			"health": {"hp": 10, "maxHp": 10, "dead": false},
 			"needs": {"food": 100, "water": 100, "rest": 100},
 			"needsAccumulator": {"food": 0, "water": 0, "rest": 0},
-			"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3},
+			"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3, "heal": 3},
 			"route": entity_route, "work": null, "hands": [], "trapped": null,
 		}],
 		"inventory": {},

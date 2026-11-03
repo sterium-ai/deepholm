@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2801
-untyped_declaration 508
+total 2798
+untyped_declaration 507
 unsafe_property_access 0
 unsafe_method_access 226
-unsafe_call_argument 2040
+unsafe_call_argument 2038
 other 27
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
@@ -17,7 +17,7 @@ file game/scripts/core/actors/components/mover.gd 1
 file game/scripts/core/actors/components/needs.gd 16
 file game/scripts/core/actors/components/wild.gd 1
 file game/scripts/core/actors/components/worker.gd 12
-file game/scripts/core/actors/needs_system.gd 36
+file game/scripts/core/actors/needs_system.gd 33
 file game/scripts/core/actors/trench_system.gd 40
 file game/scripts/core/calendar/calendar_service.gd 8
 file game/scripts/core/combat/approach_giver.gd 79

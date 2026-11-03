@@ -8,6 +8,9 @@ extends RefCounted
 ## The one cap on a recipe quantity, a target or order count and a saved held quantity, so a
 ## recipe the registry accepts can always be saved (CraftingValidator, CraftingSystem).
 const MAX_COUNT := 999
+## The work job kinds a recipe may name in "job" (F5b, ADR 065); jobs.json gives each its
+## labour. The first is the default.
+const WORK_KINDS := ["craft_work", "cook_work"]
 
 var _recipes: Dictionary = {}
 var _ids: Array[String] = []
@@ -35,6 +38,11 @@ func is_bench_kind(kind: String) -> bool:
 func bench_of(id: String) -> String:
 	var recipe: Dictionary = _recipes.get(id, {})
 	return recipe.get("bench", "")
+
+## The recipe's work job kind (WORK_KINDS); craft_work when it names none or is unknown.
+func work_kind_of(id: String) -> String:
+	var recipe: Dictionary = _recipes.get(id, {})
+	return recipe.get("job", WORK_KINDS[0])
 
 ## [{item, quantity}]; [] for an unknown id.
 func inputs(id: String) -> Array:

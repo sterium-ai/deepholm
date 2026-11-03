@@ -26,6 +26,14 @@
             "type": "string",
             "minLength": 1
           },
+          "job": {
+            "type": "string",
+            "enum": [
+              "craft_work",
+              "cook_work"
+            ],
+            "description": "F5b (ADR 065): the work job that makes the recipe (RecipeBook.WORK_KINDS); its jobs.json labour picks the worker. Default craft_work (labour craft); the kitchen's meal uses cook_work (labour cook)."
+          },
           "inputs": {
             "type": "array",
             "minItems": 1,

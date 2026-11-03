@@ -138,6 +138,8 @@ v10 lets a stockpile carry its item-group filter and priority (see "Stockpile zo
 [ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
 v11 adds forest zones and the sapling growth records (see "Saplings" below and
 [ADR 067](../decisions/067-forest-zones-and-saplings.md)).
+v12 adds the `heal` labour to every colonist's labour table and skills
+([ADR 065](../decisions/065-cook-and-heal-labours-and-cooking.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -271,6 +273,16 @@ returns a new dictionary and never mutates its input. Steps today:
   sapling tile, so nothing else changes, and a v10 state that already has the field is refused.
   The v1 to v10 fixtures all migrate exactly to `save_schema_v11_fixture.json` (the same
   session, written packed by `docs/orca/handoffs/F6a-write-save.gd`).
+- **v11 → v12** (F5b, ADR 065): adds `heal` to every colonist's `labourTable` (level 3, the
+  spawn default) and, when present, `skills` (`{level: 0, xp: 0}`; `skills` is optional and a
+  colonist without it stays valid). A colonist that already has `heal`, lacks `labourTable`, or
+  has a non-map `skills`, is refused. Kitchens, meal bills and meals are ordinary workbench and item
+  state, so nothing else changes. `save_schema_v12_fixture.json` is the same session written by
+  this build (`docs/orca/handoffs/F5b-write-save.gd`); its colonists were seeded with `heal` among
+  their labours, which shifts the other seeded levels, so (as with v8) older fixtures migrate to
+  `heal` at zero rather than to that file. `save_schema_v11_noskills_fixture.json` is the v11
+  fixture with every colonist's `skills` dropped (`docs/orca/handoffs/F5b-write-noskills-save.gd`):
+  it migrates with `heal` in the labour table only.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -597,10 +609,10 @@ value an integer 0-100 that decays at its content-declared rate
 [orders-and-movement.md](orders-and-movement.md)'s "Need jobs" section);
 `needsAccumulator` holds the matching non-negative per-need decay
 accumulators. A colonist also carries a `labourTable`, a fixed
-`{mine, chop, farm, haul, build, craft, cook}` map of integers 0-4 (a
+`{mine, chop, farm, haul, build, craft, cook, heal}` map of integers 0-4 (a
 priority level, 0 disables that labour kind), editable via the `set_labour`
 command and all-3 for a freshly spawned colonist. Since v8 a colonist also
-carries `skills` ([ADR 062](../decisions/062-skills-and-xp-per-labour.md)): the same seven
+carries `skills` ([ADR 062](../decisions/062-skills-and-xp-per-labour.md)): the same eight
 labours, each `{level, xp}` with `level` 0-10 (the length of `skills.json`'s `xp_to_next`) and
 `xp` the progress inside that level (`0 <= xp < xp_to_next[level]`, 0 at level 10). A new
 world seeds the levels from its seed; completed jobs raise them; nothing lowers them. The

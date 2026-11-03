@@ -32,6 +32,11 @@
             "type": "string",
             "minLength": 1,
             "description": "The item's group: one of `groups` when that list is declared."
+          },
+          "satiety": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "F5b (ADR 065): makes the item edible. Eating one unit sets the food need to min(full, satiety); a hungry colonist eats the most filling reachable food first (a berry bush counts as needs.json food restore, and loses ties to an item)."
           }
         },
         "additionalProperties": false

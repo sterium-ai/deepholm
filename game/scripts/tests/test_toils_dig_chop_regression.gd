@@ -64,11 +64,15 @@ const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## "jobs": get_jobs() entry put back, the A5 branch still reproduced both old
 ## literals, so stepping did not change (docs/orca/handoffs/A5.md).
 ## L2 (ADR 045 §5) added the layer to every hashed tile ("z" beside every x/y, Vector3i job
-## targets, the tile grid's layer_count): 1312885732 / 4178825690 became the values below.
+## targets, the tile grid's layer_count): 1312885732 / 4178825690 became 195318204 / 4154555954.
 ## The same snapshot printed in its pre-L2 shape still hashes to both old literals
 ## (docs/orca/handoffs/L2-hash_projection.gd), so stepping did not change.
-const EXPECTED_HASH := 195318204
-const COLONY_EXPECTED_HASH := 4154555954
+## F5b (ADR 065) appended the `heal` labour: both colonists' labour table and skills gain a
+## `heal` entry, and 195318204 / 4154555954 became the values below. The same snapshot with
+## `heal` dropped still hashes to both old literals
+## (docs/orca/handoffs/F5b-hash_projection.gd), so stepping did not change.
+const EXPECTED_HASH := 3133873738
+const COLONY_EXPECTED_HASH := 2587936448
 const TOTAL_TICKS := 260
 
 var _failed := false
@@ -139,10 +143,10 @@ func _check_jobs_content_file() -> void:
 		for toil in entry.get("toils", []):
 			_expect(ToilExecutorType.is_known_toil(String(toil)),
 				"%s declares unknown toil '%s'" % [kind, toil])
-	_expect(kinds.size() == 21 and kinds.has("dig") and kinds.has("mine") and kinds.has("chop") and kinds.has("forage") and kinds.has("till")
+	_expect(kinds.size() == 22 and kinds.has("cook_work") and kinds.has("dig") and kinds.has("mine") and kinds.has("chop") and kinds.has("forage") and kinds.has("till")
 			and kinds.has("sow") and kinds.has("harvest") and kinds.has("plant_sapling") and kinds.has("haul") and kinds.has("site_fetch") and kinds.has("site_work") and kinds.has("craft_fetch") and kinds.has("craft_work") and kinds.has("eat_food") and kinds.has("drink_water") and kinds.has("sleep")
 			and kinds.has("incident") and kinds.has("escape_trench") and kinds.has("flee") and kinds.has("rescue") and kinds.has("approach"),
-		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, harvest, plant_sapling, haul, site_fetch, site_work, craft_fetch, craft_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
+		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, harvest, plant_sapling, haul, site_fetch, site_work, craft_fetch, craft_work, cook_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
 
 ## Two parallel corridors (y=0, y=2; x=0..9) with a tree at the far end of
 ## each row and a one-tile rock buffer (y=1) between them; everything else is

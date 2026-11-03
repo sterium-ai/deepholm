@@ -14,6 +14,7 @@ extends RefCounted
 ## - v8 -> v9 (L2, ADR 045 §5): map layers ("map.layerCount") and "z" on every tile.
 ## - v9 -> v10 (F5a, ADR 064): a stockpile zone may carry "groups" and "priority".
 ## - v10 -> v11 (F6a, ADR 067): forest zones and the "saplings" growth records.
+## - v11 -> v12 (F5b, ADR 065): every colonist gains the "heal" labour and skill.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -55,6 +56,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v9_to_v10(state)
 		10:
 			return _v10_to_v11(state)
+		11:
+			return _v11_to_v12(state)
 		_:
 			return {
 				"ok": false,
@@ -211,6 +214,40 @@ static func _v10_to_v11(state: Dictionary) -> Dictionary:
 	migrated["saplings"] = []
 	migrated["schemaVersion"] = 11
 	return {"ok": true, "state": migrated}
+
+## v11 -> v12 (F5b, ADR 065): the heal labour. Every colonist entity's labourTable gains "heal" at
+## the content labour_default (3) and its skills, when it has them (they are optional), gain "heal"
+## at level 0 with 0 XP, both kept in the sorted key order the codec writes. Other kinds have no
+## worker component and gain nothing.
+static func _v11_to_v12(state: Dictionary) -> Dictionary:
+	if not (state.get("entities") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v11 save has no entities array"}
+	var migrated := state.duplicate(true)
+	for entity: Variant in migrated["entities"]:
+		if not (entity is Dictionary) or (entity as Dictionary).get("kind") != "colonist":
+			continue
+		var labour_table: Variant = (entity as Dictionary).get("labourTable")
+		var skills: Variant = (entity as Dictionary).get("skills")
+		if not (labour_table is Dictionary) or not (skills == null or skills is Dictionary):
+			return {"ok": false, "code": "schema_error", "message": "v11 colonist has no labourTable or a malformed skills"}
+		if (labour_table as Dictionary).has("heal") or (skills is Dictionary and (skills as Dictionary).has("heal")):
+			return {"ok": false, "code": "schema_error", "message": "v11 save already has the heal labour"}
+		(labour_table as Dictionary)["heal"] = 3
+		entity["labourTable"] = _sorted(labour_table as Dictionary)
+		if skills is Dictionary:
+			(skills as Dictionary)["heal"] = {"level": 0, "xp": 0}
+			entity["skills"] = _sorted(skills as Dictionary)
+	migrated["schemaVersion"] = 12
+	return {"ok": true, "state": migrated}
+
+## The same dictionary with its keys in sorted order (_v11_to_v12()).
+static func _sorted(value: Dictionary) -> Dictionary:
+	var keys := value.keys()
+	keys.sort()
+	var sorted: Dictionary = {}
+	for key: Variant in keys:
+		sorted[key] = value[key]
+	return sorted
 
 # --- content-version renames ---------------------------------------------
 

@@ -253,7 +253,7 @@ func toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> voi
 	elif String(job["kind"]) in JobQueueType.FETCH_KINDS:
 		# Fails (dropping cargo, releasing the item); its giver submits a replacement.
 		terminate_haul_job_by_id(job_id, "blocked_target_unreachable", "restore_target_access")
-	elif String(job["kind"]) in ["site_work", "craft_work"]:
+	elif String(job["kind"]) in ["site_work", "craft_work", "cook_work"]:
 		# No cargo; ConstructionGiver/CraftGiver submit a replacement later.
 		_finish_job.call(job_id, "cancel_job")
 	elif is_first or String(job["kind"]) != "haul":
@@ -414,8 +414,8 @@ func _toil_on_work_complete(job_id: String) -> void:
 			# Progress is the site's shared counter (every builder adds to it), so N builders
 			# sum; ConstructionSystem finalizes the site once it meets build_ticks.
 			_construction.add_site_work(target, job_id)
-		"craft_work":
-			# F2 (ADR 061): spends the bill's held inputs and leaves the outputs by the bench.
+		"craft_work", "cook_work":
+			# F2 (ADR 061; cook_work F5b, ADR 065): spends the bill's held inputs and leaves the outputs by the bench.
 			_crafting.complete_craft(target)
 		"sleep":
 			var colonist: Dictionary = _find_job_colonist.call(job_id)

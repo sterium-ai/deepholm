@@ -5,12 +5,14 @@ extends RefCounted
 ## craft_giver phase. Stocks crafted tools lying in a stockpile, lets CraftingSystem update its
 ## bills (bench gone, bill abandoned, next bill chosen), then per bench with a bill: one
 ## craft_fetch at a time while its inputs are short (labour haul; site_fetch's toils, activation
-## and reservations through JobQueue.FETCH_KINDS) and one craft_work once all are held (labour
-## craft, at the bench origin). Persists nothing: what is in flight is read back from the job
+## and reservations through JobQueue.FETCH_KINDS) and one work job once all are held (the
+## recipe's RecipeBook.work_kind_of: craft_work, labour craft, or F5b's cook_work, labour cook;
+## at the bench origin). Persists nothing: what is in flight is read back from the job
 ## queue every tick.
 
 const JobQueueType = preload("res://scripts/core/jobs/job_queue.gd")
 const CraftingSystemType = preload("res://scripts/core/crafting/crafting_system.gd")
+const RecipeBookType = preload("res://scripts/core/crafting/recipe_book.gd")
 
 var _crafting: CraftingSystemType
 ## The read-only JobQueue.view_jobs_of_kinds() (A5, never mutated).
@@ -33,7 +35,7 @@ func advance(tick: int) -> void:
 	var committed: Dictionary = {}
 	var fetching: Dictionary = {}
 	var working: Dictionary = {}
-	var kinds: Array = JobQueueType.FETCH_KINDS + ["craft_work"]
+	var kinds: Array = JobQueueType.FETCH_KINDS + RecipeBookType.WORK_KINDS
 	for job: Dictionary in (_view_jobs_of_kinds.call(kinds) as Array):
 		if not (job["status"] in ["queued", "active"]):
 			continue
@@ -44,7 +46,7 @@ func advance(tick: int) -> void:
 		if kind == "craft_fetch" and site is Vector3i:
 			var bench_tile: Vector3i = site
 			fetching[CraftingSystemType.bench_key(bench_tile)] = true
-		elif kind == "craft_work":
+		elif kind in RecipeBookType.WORK_KINDS:
 			var target: Vector3i = job["target"]
 			working[CraftingSystemType.bench_key(target)] = true
 	_crafting.update_bills(committed, fetching)
@@ -55,7 +57,8 @@ func advance(tick: int) -> void:
 			continue
 		var origin: Vector3i = record["origin"]
 		if _crafting.bill_met(bill):
-			_submit.call(origin, JobQueueType.Priority.NORMAL, tick, "craft_work", "")
+			var recipe_id: String = bill["recipe"]
+			_submit.call(origin, JobQueueType.Priority.NORMAL, tick, _crafting.recipes.work_kind_of(recipe_id), "")
 			continue
 		_submit_fetch(origin, bill, committed, tick)
 

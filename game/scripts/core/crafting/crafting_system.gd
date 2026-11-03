@@ -448,7 +448,7 @@ func complete_craft(origin: Vector3i) -> void:
 
 ## Ends every live craft job of the bench at origin (a carried load is dropped first).
 func cancel_bench_jobs(origin: Vector3i) -> void:
-	for job: Dictionary in _scheduler.queue.view_jobs_of_kinds(["craft_fetch", "craft_work"]):
+	for job: Dictionary in _scheduler.queue.view_jobs_of_kinds(["craft_fetch"] + RecipeBookType.WORK_KINDS):
 		var job_id: String = job["id"]
 		var is_fetch: bool = job["kind"] == "craft_fetch"
 		var bench_tile: Variant = job.get("site") if is_fetch else job["target"]

@@ -109,7 +109,8 @@ dictionary; there is no nested `worker` key (see
 
 Each colonist has a table `labour kind → 0 (off) | 1 | 2 | 3 | 4`, editable
 by the player (default all 3). Labour kinds for the slice: `mine`, `chop`, `farm`, `haul`,
-`build`, `craft`, `cook`. The `mine` job kind (rock outcrops mined for stone) joins
+`build`, `craft`, `cook`, `heal` (`heal` has no job kind yet; `cook` runs `cook_work` at a
+kitchen, ADR 065). The `mine` job kind (rock outcrops mined for stone) joins
 `dig` under the existing `mine` labour kind rather than adding a new one, so the labour-table UI
 needs no change (ADR 025). The global scheduler (ADR 004) keeps its aging queue, but a
 colonist only examines jobs whose kind is enabled for it, and the job's effective priority is
@@ -538,12 +539,15 @@ the design left room:
   per-need integer accumulator (`ActorNeeds.apply_tick()`) so the exact tick
   a need loses its next point is reproducible and float-free regardless of
   `day_length_ticks`.
-- **Sources**: a ground-berries tile for `food`, any `water` tile for
+- **Sources**: a ground-berries tile or an unreserved edible ground item (one with a
+  `satiety` in `items.json`: raw `food` 40, `meal` 100) for `food`, any `water` tile for
   `water`, a placed `bed` object for `rest` — exactly the three examples 3.1
   names. A need job is `eat_food`, `drink_water`, or `sleep`; `sleep` reuses
   the generic `work(ticks)` toil like `dig`/`chop`, while `eat_food`/
   `drink_water` use a new one-tick `consume` toil instead of `work`
-  (`content/jobs.json`).
+  (`content/jobs.json`). For `food`, `NeedGiver` ranks each colonist's reachable, unclaimed
+  sources by restore (`NeedsSystem.need_source_ranks()`) and the nearest of the best rank wins,
+  so a meal goes before raw food; eating takes what ranked the tile (ADR 065).
 - **Reason vocabulary actually exposed**: `need_unmet:<kind>`,
   `blocked_source_reserved`, `blocked_source_unreachable`
   (`WorldState.get_colonist_need_reason()`). Section 3.8's larger new-reason

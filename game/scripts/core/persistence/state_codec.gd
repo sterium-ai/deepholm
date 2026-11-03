@@ -21,8 +21,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v9 gives every tile a layer: "z" beside every x/y and map.layerCount (L2, ADR 045 §5).
 ## v10 lets a stockpile carry its item-group filter and priority (F5a, ADR 064).
 ## v11 adds forest zones and sapling growth (F6a, ADR 067).
+## v12 adds the heal labour to every colonist's labour table and skills (F5b, ADR 065).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 11
+const SCHEMA_VERSION := 12
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.

@@ -438,7 +438,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 11 },
+    "schemaVersion": { "type": "integer", "const": 12 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -671,7 +671,7 @@
           "labourTable": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],
+            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"],
             "properties": {
               "mine": { "type": "integer", "minimum": 0, "maximum": 4 },
               "chop": { "type": "integer", "minimum": 0, "maximum": 4 },
@@ -679,14 +679,15 @@
               "haul": { "type": "integer", "minimum": 0, "maximum": 4 },
               "build": { "type": "integer", "minimum": 0, "maximum": 4 },
               "craft": { "type": "integer", "minimum": 0, "maximum": 4 },
-              "cook": { "type": "integer", "minimum": 0, "maximum": 4 }
+              "cook": { "type": "integer", "minimum": 0, "maximum": 4 },
+              "heal": { "type": "integer", "minimum": 0, "maximum": 4 }
             }
           },
           "skills": {
             "description": "F3 (ADR 062, schema v8): skill level and XP per labour, on every colonist the game spawns, seeds or migrates (optional like heldTool: a worker without it works untracked). level is 0..len(skills.json xp_to_next); xp is the progress inside that level, below xp_to_next[level] (0 at the top level).",
             "type": "object",
             "additionalProperties": false,
-            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook"],
+            "required": ["mine", "chop", "farm", "haul", "build", "craft", "cook", "heal"],
             "properties": {
               "mine": { "$ref": "#/$defs/skillRecord" },
               "chop": { "$ref": "#/$defs/skillRecord" },
@@ -694,7 +695,8 @@
               "haul": { "$ref": "#/$defs/skillRecord" },
               "build": { "$ref": "#/$defs/skillRecord" },
               "craft": { "$ref": "#/$defs/skillRecord" },
-              "cook": { "$ref": "#/$defs/skillRecord" }
+              "cook": { "$ref": "#/$defs/skillRecord" },
+              "heal": { "$ref": "#/$defs/skillRecord" }
             }
           },
           "route": {
@@ -768,7 +770,7 @@
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
           "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
           "priority": { "type": "integer", "enum": [0, 1, 2] },
           "target": { "$ref": "#/$defs/tile" },

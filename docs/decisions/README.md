@@ -73,6 +73,7 @@ all with one size rule.
 | [062](062-skills-and-xp-per-labour.md) | Skills and XP per labour |
 | [063](063-map-layers-l2-implementation.md) | Map layers, step L2: key formats, surface shorthands, layer cap |
 | [064](064-stockpile-filters-and-priorities.md) | Stockpile filters (item groups) and priorities |
+| [065](065-cook-and-heal-labours-and-cooking.md) | The cook and heal labours, the kitchen and meals |
 | [067](067-forest-zones-and-saplings.md) | Forest zones, saplings and replanting |
 
 ## Renumbered records (redirects)

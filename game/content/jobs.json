@@ -27,6 +27,7 @@
     {"kind": "site_work", "labour": "build", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 1},
     {"kind": "craft_fetch", "labour": "haul", "toils": ["reserve", "go_to", "pick_up", "go_to", "deposit", "release_all"]},
     {"kind": "craft_work", "labour": "craft", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 60},
+    {"kind": "cook_work", "labour": "cook", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 60},
     {"kind": "eat_food", "labour": "", "toils": ["reserve", "go_to", "consume", "release_all"]},
     {"kind": "drink_water", "labour": "", "toils": ["reserve", "go_to", "consume", "release_all"]},
     {"kind": "sleep", "labour": "", "toils": ["reserve", "go_to", "work", "release_all"], "work_ticks": 60},

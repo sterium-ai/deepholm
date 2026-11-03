@@ -34,7 +34,7 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 func _default_table() -> Dictionary:
-	return {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}
+	return {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3, "heal": 3}
 
 func _set_labour_command(world: WorldStateType, command_id: String, colonist: String, kind: String, level) -> Dictionary:
 	return world.apply({
