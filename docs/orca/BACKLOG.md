@@ -1431,6 +1431,12 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** crop damage, soil fertility, disease hook (F6b-2); hunting, combat, predators
   attacking colonists (F6b-3); pasture (F6c); animals below the surface.
 - **Budget:** ≤ 300 turns; split further (registry+spawn / tick behaviours) if needed.
+- **Review rounds 1–3 (owner's interface, 2026-11-03):** separate animal roster rejected
+  (shared actor table as designed); mapgen ships initial counts; content errors are fatal;
+  exact 64-bit RNG restore. **Manifest: no exception** — species.json is referenced from
+  game/content/manifest.json like every other content file (extend the manifest schema if a
+  new entry kind is needed). Animal-only fields are rejected on other actor kinds; the
+  world_pack placeholder for animals comes from its generator script.
 
 ### F6b-2 — Imbalance effects: crop damage, soil fertility, disease hook · `todo` · after F6b-1 · (F6b, package 2 of 3)
 
