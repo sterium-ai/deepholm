@@ -1,9 +1,12 @@
 extends RefCounted
 
 ## The one layer the viewer draws (ADR 045 §7, ADR 069). WorldState's (x, y) getters answer for
-## the surface only, so a deeper layer is read from get_tiles() (z-outermost, flat index
-## z * width * height + y * width + x) and get_objects() (entries carry z), once per read().
-## On the surface tile()/object() keep calling get_tile()/get_object(), as before L4.
+## the surface only, so the layer's tiles are read from get_tiles() (z-outermost, flat index
+## z * width * height + y * width + x) once per read(), on every layer: a full redraw asks for
+## each cell and its eight neighbours, which per-cell get_tile() calls made too slow for one
+## frame. A deeper layer's objects come from get_objects() (entries carry z); on the surface
+## object() keeps calling get_object(), as before L4. The copy is re-read by the map view when
+## one of the layer's cells is dirty.
 ## Viewer state only: nothing here is saved or sent to the core.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -40,19 +43,21 @@ func read(world_ref: WorldStateType, layer: int) -> void:
 		var flags := (LINK_UP if bool(entry.get("link_up", false)) else 0) | (LINK_DOWN if bool(entry.get("link_down", false)) else 0)
 		if flags != 0:
 			_link_kinds[String(entry.get("kind", ""))] = flags
-	if z == 0:
-		return
 	_offset = z * world.get_map_width() * world.get_map_height()
 	_tiles = world.get_tiles()
+	if z == 0:
+		return
 	for entry in world.get_objects():
 		if int(entry.get("z", 0)) == z:
 			_objects[Vector2i(int(entry["x"]), int(entry["y"]))] = String(entry["kind"])
 
 ## Tile kind at (x, y) on this layer.
 func tile(x: int, y: int) -> String:
-	if z == 0:
-		return world.get_tile(x, y)
 	return _tiles[_offset + y * world.get_map_width() + x]
+
+## The flat get_tiles() copy this slice reads from (every layer; this one starts at z * width * height).
+func tiles() -> Array[String]:
+	return _tiles
 
 ## Object kind at (x, y) on this layer, "" for none.
 func object(x: int, y: int) -> String:

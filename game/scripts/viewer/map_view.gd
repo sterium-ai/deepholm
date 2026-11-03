@@ -331,7 +331,8 @@ func set_active_layer(z: int) -> void:
 	_actor_sprites.set_active_layer(layer)
 	_designation_overlay.set_active_layer(layer)
 	_refresh_tile_map(true)
-	refresh()
+	# A switch changes nothing in the world: redraw the sprites from the snapshot already taken.
+	refresh(_snapshot if _snapshot_world == world else {})
 	layer_changed.emit(layer)
 
 ## One layer deeper (delta > 0) or shallower (delta < 0).
@@ -702,6 +703,20 @@ func _commit_build(tile: Vector2i) -> void:
 ## cleared and rebuilt every tick.
 var last_tile_map_cells_touched: int = 0
 
+## The active layer's water/rock cells as a 1/0 byte mask padded by one cell on every side
+## ((width + 2) x (height + 2)), so a soil cell's 8 neighbour checks are byte reads and an
+## out-of-map neighbour reads 0. A layer switch redraws every cell (ADR 069 §3), and per-call
+## neighbour checks made that rebuild cost several frames. Rebuilt by every full rebuild,
+## patched per dirty cell.
+var _shore_mask := PackedByteArray()
+var _shore_stride := 0
+## Grass variant index per surface cell for _grass_variant_coords(), -1 until computed; the
+## key is the seed and size it was computed for.
+var _variant_cache := PackedInt32Array()
+var _variant_cache_key := Vector3i(-1, -1, -1)
+## True while a full rebuild draws onto just-cleared layers: erase_cell() is then a no-op, skipped.
+var _cleared := false
+
 ## Populates the TileMapLayer from world state via TILE_ATLAS_MAP. A no-op
 ## while art is disabled, so toggling to colour mode leaves the layer's last
 ## contents untouched (it is hidden, not drawn) instead of doing wasted work
@@ -713,22 +728,26 @@ var last_tile_map_cells_touched: int = 0
 func _refresh_tile_map(force_full: bool) -> void:
 	if not _art_enabled or world == null:
 		return
+	_prepare_variant_cache()
 	if force_full:
 		_tile_map_layer.clear()
 		_grass_overlay_layer.clear()
 		_object_tile_map_layer.clear()
 		_layer.read(world, active_layer)
-		var tiles: Array[String] = world.get_tiles()
+		var tiles: Array[String] = _layer.tiles()
 		var width: int = world.get_map_width()
 		var height: int = world.get_map_height()
 		var layer_offset := active_layer * width * height
+		_rebuild_shore_mask(tiles, layer_offset, width, height)
 		var touched := 0
+		_cleared = true
 		for y in height:
 			for x in width:
 				var kind: String = tiles[layer_offset + y * width + x]
 				_set_tile_map_cell(x, y, kind)
 				_set_decor_or_object_cell(x, y, kind, "")
 				touched += 1
+		_cleared = false
 		for object_entry in _layer.objects():
 			var ox: int = int(object_entry["x"])
 			var oy: int = int(object_entry["y"])
@@ -742,12 +761,14 @@ func _refresh_tile_map(force_full: bool) -> void:
 		_refresh_tile_map(true)
 		return
 	var touched := 0
-	# A deep layer's slice is a copy: re-read it once when one of its cells changed.
-	if active_layer != TileGrid.SURFACE:
-		for dirty_cell: Vector3i in dirty["cells"]:
-			if dirty_cell.z == active_layer:
+	# The slice's tiles are a copy: re-read it once when one of its cells changed.
+	var reread := false
+	for dirty_cell: Vector3i in dirty["cells"]:
+		if dirty_cell.z == active_layer:
+			if not reread:
 				_layer.read(world, active_layer)
-				break
+				reread = true
+			_shore_mask[(dirty_cell.y + 1) * _shore_stride + dirty_cell.x + 1] = 1 if _is_foreign(_layer.tile(dirty_cell.x, dirty_cell.y)) else 0
 	for dirty_cell: Vector3i in dirty["cells"]:
 		if dirty_cell.z != active_layer: # consumed, not drawn (ADR 045 §7)
 			continue
@@ -787,11 +808,12 @@ func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 		return
 	var coords_pos := Vector2i(x, y)
 	var atlas = TileAtlasMapType.TILE_ATLAS_MAP.get(kind)
-	if atlas == null:
-		_tile_map_layer.erase_cell(coords_pos)
-	else:
+	if atlas != null:
 		_tile_map_layer.set_cell(coords_pos, int(atlas["source_id"]), atlas["coords"])
-	_grass_overlay_layer.erase_cell(coords_pos)
+	elif not _cleared:
+		_tile_map_layer.erase_cell(coords_pos)
+	if not _cleared:
+		_grass_overlay_layer.erase_cell(coords_pos)
 
 ## A TILE_SOIL cell's neighbour-driven layered composition.
 ## tile_atlas_map.gd's grass_shore_selection() resolves this
@@ -810,15 +832,20 @@ func _set_tile_map_cell(x: int, y: int, kind: String) -> void:
 ## selection, so it keeps a plain hash-selected grass fill with no overlay.
 func _set_soil_cell(x: int, y: int) -> void:
 	var coords_pos := Vector2i(x, y)
-	var selection := TileAtlasMapType.grass_shore_selection(
-		_is_shore_neighbor(x, y - 1), _is_shore_neighbor(x, y + 1),
-		_is_shore_neighbor(x + 1, y), _is_shore_neighbor(x - 1, y),
-		_is_shore_neighbor(x + 1, y - 1), _is_shore_neighbor(x - 1, y - 1),
-		_is_shore_neighbor(x + 1, y + 1), _is_shore_neighbor(x - 1, y + 1))
+	var mask := _shore_mask
+	var row := _shore_stride
+	var at := (y + 1) * row + x + 1
+	var selection := {}
+	# Most soil is interior (no foreign neighbour, so no selection): skip the lookup for it.
+	if mask[at - row - 1] | mask[at - row] | mask[at - row + 1] | mask[at - 1] | mask[at + 1] 			| mask[at + row - 1] | mask[at + row] | mask[at + row + 1] != 0:
+		selection = TileAtlasMapType.grass_shore_selection(
+			mask[at - row] == 1, mask[at + row] == 1, mask[at + 1] == 1, mask[at - 1] == 1,
+			mask[at - row + 1] == 1, mask[at - row - 1] == 1, mask[at + row + 1] == 1, mask[at + row - 1] == 1)
 	if selection.is_empty():
 		var atlas = TileAtlasMapType.TILE_ATLAS_MAP[WorldStateType.TILE_SOIL]
 		_tile_map_layer.set_cell(coords_pos, int(atlas["source_id"]), _grass_variant_coords(x, y))
-		_grass_overlay_layer.erase_cell(coords_pos)
+		if not _cleared:
+			_grass_overlay_layer.erase_cell(coords_pos)
 		return
 	var backing_kind := _grass_backing_kind(x, y, selection)
 	var backing_atlas = TileAtlasMapType.TILE_ATLAS_MAP[backing_kind]
@@ -844,26 +871,50 @@ func _grass_backing_kind(x: int, y: int, selection: Dictionary) -> String:
 			return kind
 	return WorldStateType.TILE_WATER
 
-## True when (x,y) is inside the map and TILE_WATER or TILE_ROCK -- the
-## "foreign neighbour" predicate for the grass overlay above. Out-of-bounds
-## is never foreign: a prairie tile at the map edge with no water/rock
+## TILE_WATER or TILE_ROCK -- the "foreign neighbour" predicate for the grass
+## overlay above, stored in _shore_mask. Out-of-bounds is never foreign (the
+## mask's padding is 0): a prairie tile at the map edge with no water/rock
 ## neighbour is plain interior, not an invented edge against nothing.
-func _is_shore_neighbor(x: int, y: int) -> bool:
-	if not _inside(Vector2i(x, y)):
-		return false
-	var kind := _layer.tile(x, y)
+static func _is_foreign(kind: String) -> bool:
 	return kind == WorldStateType.TILE_WATER or kind == WorldStateType.TILE_ROCK
+
+func _rebuild_shore_mask(tiles: Array[String], offset: int, width: int, height: int) -> void:
+	_shore_stride = width + 2
+	_shore_mask.resize(_shore_stride * (height + 2))
+	_shore_mask.fill(0)
+	var index := offset
+	for y in height:
+		var at := (y + 1) * _shore_stride + 1
+		for x in width:
+			if _is_foreign(tiles[index]):
+				_shore_mask[at + x] = 1
+			index += 1
 
 ## Discrete prairie variant, chosen by hash(seed, x, y), never by frame --
 ## a pure function of the
 ## world's seed and the cell's own coordinates, so it is stable across pan,
 ## zoom, save and load, and never changes on its own between redraws.
+## Cached per cell (the string hash is the slow part of a full rebuild); the cache is keyed by
+## (seed, width, height), checked once per _refresh_tile_map() in _prepare_variant_cache().
 func _grass_variant_coords(x: int, y: int) -> Vector2i:
 	var variants := TileAtlasMapType.TILE_SOIL_VARIANTS
-	var seed_value: int = world.get_seed() if world != null else 0
-	var key := "%d:%d:%d" % [seed_value, x, y]
-	var index: int = key.hash() % variants.size()
+	var cell := y * _variant_cache_key.y + x
+	var index: int = _variant_cache[cell]
+	if index < 0:
+		var key := "%d:%d:%d" % [_variant_cache_key.x, x, y]
+		index = key.hash() % variants.size()
+		_variant_cache[cell] = index
 	return variants[index]
+
+func _prepare_variant_cache() -> void:
+	var seed_value: int = world.get_seed() if world != null else 0
+	var width: int = world.get_map_width() if world != null else WorldStateType.MAP_WIDTH
+	var height: int = world.get_map_height() if world != null else WorldStateType.MAP_HEIGHT
+	var cache_key := Vector3i(seed_value, width, height)
+	if cache_key != _variant_cache_key:
+		_variant_cache_key = cache_key
+		_variant_cache.resize(width * height)
+		_variant_cache.fill(-1)
 
 ## Object/decor layer cell: an actual placed object (`object_kind`, from
 ## world.get_objects()/get_object()) takes priority when present; otherwise
@@ -883,7 +934,8 @@ func _set_decor_or_object_cell(x: int, y: int, tile_kind: String, object_kind: S
 	if decor != null:
 		_object_tile_map_layer.set_cell(coords, int(decor["source_id"]), _decor_variant_coords(x, y, decor))
 		return
-	_object_tile_map_layer.erase_cell(coords)
+	if not _cleared:
+		_object_tile_map_layer.erase_cell(coords)
 
 ## The tree decor shows one of its source's tiles per map tile (the pack's
 ## three sizes), chosen by hash(seed, x, y) like the grass variants, never by

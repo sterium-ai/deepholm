@@ -303,10 +303,14 @@ section).
   and object `TileMapLayer`s hold one layer: a switch rebuilds them in full from that layer
   (one O(width × height) pass per switch). A switch is a player action, so v1 rebuilds rather
   than caching each layer; reusing a cached layer is a later optimisation, not part of v1.
+  Measured on A9's 128×128 world with 1,000 actors (`bench_viewer_layer_switch.gd`, headless):
+  about 25–31 ms to a rock layer and 44 ms back to the surface, over the 16.7 ms frame; the
+  per-cell GDScript of the full tile pass is most of it (see the L4 handoff).
 - **Dirty cells.** `get_dirty_cells_since()` carries `Vector3i`. The viewer consumes the whole
   tail on every `refresh()`, applies cells of the active layer and drops the others; a layer
   is rebuilt in full when it becomes active, so it never shows stale tiles. A deep layer is
-  read from a copy of its slice, re-read when one of its cells is dirty.
+  read from a copy of its tiles (every layer, the surface too), re-read when one of its cells
+  is dirty.
 - **Coordinates.** `screen_to_tile()` and `tiles_in_rectangle()` stay planar and the viewer
   attaches the active layer: every command it builds carries `payload.z = active_layer`
   (commands aimed at an existing site, workbench or stockpile keep that thing's own `z`). A

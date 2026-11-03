@@ -31,9 +31,9 @@ had no layer for actors.
 2. **Input.** PageUp goes up one layer (z - 1), PageDown down one (z + 1). The control bar has
    ▲ and ▼ buttons around a "z N" label. Glyphs and notation, not words, so no text-table keys.
 3. **Layer slice.** `viewer/layer_slice.gd` reads one layer from `get_tiles()` and
-   `get_objects()`. On the surface it keeps calling `get_tile()`/`get_object()`, so layer 0
-   draws exactly as before L4. A deep layer's slice is a copy, re-read when one of its cells is
-   dirty. A switch rebuilds the tile and object layers in full; there is no per-layer cache in v1
+   `get_objects()`. Its tiles are a copy on every layer (the surface too: one `get_tiles()`
+   read is cheaper than a `get_tile()` call per cell), re-read when one of its cells is dirty;
+   surface objects still come from `get_object()`, so layer 0 draws as before L4. A switch rebuilds the tile and object layers in full; there is no per-layer cache in v1
    (owner amendment, `15211a7`); cached reuse is a later optimisation.
 4. **Filtering.** Tiles, objects, colonists, other actors, designations, ground items,
    stockpile zones and construction sites are drawn only when their `z` is the active layer.
@@ -59,7 +59,11 @@ had no layer for actors.
 
 ## Consequences
 
-- A deep layer redraws from a copy when its cells change: O(width × height) per dirtying tick
-  on that layer, only while it is active.
+- The active layer redraws from a copy when its cells change: O(width × height) per dirtying
+  tick on that layer.
+- A switch costs a full tile and object pass. At A9's scale (128×128, 1,000 actors, headless)
+  it measured about 25–31 ms to a rock layer and 44 ms to the surface
+  (`bench_viewer_layer_switch.gd`), over the 16.7 ms frame; meeting the frame needs the
+  per-layer cache or a cheaper tile pass (owner decision, L4 handoff).
 - The owner checks the look after merge; final art for the layer markers is a later step.
 - Words for the controls (if wanted instead of glyphs) need text-table keys in `en.json`.
