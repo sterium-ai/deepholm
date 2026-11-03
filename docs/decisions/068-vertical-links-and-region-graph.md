@@ -52,8 +52,9 @@ kept regions and rooms on the surface until this step.
    f/h/latest-pushed tie-break is unchanged; without links, or with z = 0 everywhere, the
    search is the A8 search, byte for byte.
 7. **Rescues.** Work progress already keys a rescue as `"<job_id>:<coord_key>"`, and
-   `coord_key()` carries `z` off the surface, so two rescues on different layers keep their own
-   progress; L3 pins that in a test.
+   `coord_key()` carries `z` off the surface, so a rescue's progress is per job and per layer.
+   L3 pins it in a test: two rescues on one layer-1 target keep their own progress, and
+   `key_parts()` round-trips the layer.
 8. **Rooms stay on the surface.** Rooms keep their planar layer-0 build; underground rooms
    need their own rules (roofs, temperature) and are a later step.
 
