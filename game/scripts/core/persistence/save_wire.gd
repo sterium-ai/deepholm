@@ -18,7 +18,7 @@ extends RefCounted
 ##   never leaves its start's layer (L2, ADR 045), so the box, bits and indices are planar and
 ##   every unpacked tile takes the start's "z"; a pre-v9 start has no "z" (legacy {x, y} tiles),
 ##   and neither do the tiles unpacked from it, which SaveMigrations then gives "z": 0.
-## - "entities", "jobs", "crops" (F1, v6) and "scheduling.waiting" (lists of same-shaped records)
+## - "entities", "jobs", "crops" (F1, v6), "saplings" (F6a, v10) and "scheduling.waiting" (lists of same-shaped records)
 ##   become a table:
 ##   a first element {"$keys": [sorted keys]}, then one row [values in key order] per record. A
 ##   record with other keys stays a plain object in place, and so does a list of fewer than
@@ -33,7 +33,7 @@ extends RefCounted
 const PACKED_ROUTE_FIELDS: Array[String] = ["box", "visitedBits", "cameFromDirs", "frontierTiles"]
 ## The header element of a record table; never a field of a real record.
 const TABLE_KEYS := "$keys"
-const RECORD_LISTS: Array[String] = ["entities", "jobs", "crops"]
+const RECORD_LISTS: Array[String] = ["entities", "jobs", "crops", "saplings"]
 const PLAIN_ROUTE_FIELDS: Array[String] = ["visited", "cameFrom", "cost", "frontier"]
 ## Parent minus child, indexed by the 2-bit code; RouteSearch.NEIGHBOR_OFFSETS' order.
 const DIRECTIONS: Array[Vector3i] = [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]

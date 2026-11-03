@@ -1,7 +1,8 @@
 class_name ZoneHandler
 extends RefCounted
 
-## Zone commands: zone_add (a stockpile, or with {"kind": "farm", "crop"} a farm zone, F1), zone_remove,
+## Zone commands: zone_add (a stockpile, with {"kind": "farm", "crop"} a farm zone, F1, or with
+## {"kind": "forest"} a forest zone, F6a), zone_remove,
 ## zone_set_stockpile (a stockpile's accepted item groups and priority, F5a).
 ## Invariant: removing a zone fails every active haul job whose reserved cell
 ## lay inside it, with a typed reason and no leaked reservation.
@@ -26,14 +27,16 @@ func _init(event_log: EventLogType, scheduler: AssignmentType, zone_table: ZoneT
 	_check = check
 	_terminate_haul_job_by_id = terminate_haul_job_by_id
 
-## Draws a rectangular stockpile or farm zone.
+## Draws a rectangular stockpile, farm or forest zone.
 func apply_zone_add_command(command: Dictionary) -> Dictionary:
 	var check: Dictionary = _check.call(CommandChecks.check_zone_add_command, command)
 	if not check.is_empty():
 		return _event_log.rejection(command["command_id"], command["actor"], check["reason"], check["params"])
 	var payload: Dictionary = command["payload"]
 	var crop: String = payload.get("crop", "")
-	var zone_id := _zone_table.add(TileGrid.tile_of(payload), int(payload["width"]), int(payload["height"]), crop)
+	var kind: String = payload.get("kind", "")
+	var zone_id := _zone_table.add(TileGrid.tile_of(payload), int(payload["width"]), int(payload["height"]), crop,
+		kind == ZoneTableType.FOREST_KIND)
 	var applied := _event_log.applied(command)
 	applied["zone_id"] = zone_id
 	return applied

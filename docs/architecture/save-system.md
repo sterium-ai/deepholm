@@ -136,6 +136,8 @@ v9 gives every tile a layer (see "Layers" below and
 [ADR 045](../decisions/045-map-layers.md) §5).
 v10 lets a stockpile carry its item-group filter and priority (see "Stockpile zones" below and
 [ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
+v11 adds forest zones and the sapling growth records (see "Saplings" below and
+[ADR 067](../decisions/067-forest-zones-and-saplings.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -177,6 +179,12 @@ carries neither. `crops` lists `FarmSystem`'s growth record of every sown tile,
 `[{target, crop, growth}]` in tile-key order, both validated against the session's crop ids.
 `FarmSystem.decode()` reconciles the records with the decoded tiles, so a sown tile always
 has one and nothing else does.
+
+**Saplings (v11).** A zone with `"kind": "forest"` carries no `crop`. `saplings` lists
+`TreeGrowth`'s growth record of every sapling tile, `[{target, forest, growth}]` in tile-key
+order, `forest` validated against the session's `forests.json` ids and `growth` between 0 and
+the forest's ripe growth. `FarmSystem.decode()` reconciles them with the decoded tiles, as for
+crops.
 
 **Content packs.** `contentPacks` is the saving world's `ContentRegistry.packs()` in load
 order, `[{id, version}]`, empty on the base bundle. `SaveIO.read()` and `write_atomic()` take
@@ -259,6 +267,10 @@ returns a new dictionary and never mutates its input. Steps today:
   already carries `groups` or `priority` is refused. `save_schema_v9_fixture.json` migrates
   exactly to `save_schema_v10_fixture.json` (the same session, written packed by
   `docs/orca/handoffs/F5a-write-save.gd`).
+- **v10 → v11** (F6a, ADR 067): adds `saplings: []`; a v10 world had no forest zone and no
+  sapling tile, so nothing else changes, and a v10 state that already has the field is refused.
+  The v1 to v10 fixtures all migrate exactly to `save_schema_v11_fixture.json` (the same
+  session, written packed by `docs/orca/handoffs/F6a-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version

@@ -20,8 +20,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v8 saves every colonist's skills (F3, ADR 062).
 ## v9 gives every tile a layer: "z" beside every x/y and map.layerCount (L2, ADR 045 §5).
 ## v10 lets a stockpile carry its item-group filter and priority (F5a, ADR 064).
+## v11 adds forest zones and sapling growth (F6a, ADR 067).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 10
+const SCHEMA_VERSION := 11
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -69,6 +70,8 @@ static func encode(world: WorldState) -> Dictionary:
 		"nextZoneId": zone_table["nextZoneId"],
 		# F1 (ADR 059): growth of every sown tile, in tile-key order.
 		"crops": world._farm.encode()["crops"],
+		# F6a (ADR 067): growth of every planted sapling, in tile-key order.
+		"saplings": world._farm.encode()["saplings"],
 		"groundBerries": item_table["groundBerries"],
 		"workProgress": work_progress["workProgress"],
 		# The exact owning job_id per key, so decode() never guesses ownership from job targets.
@@ -337,6 +340,7 @@ static func _decode_tool_location(location: Dictionary) -> Dictionary:
 ## Sorted by zone id; the next-id counter travels as the top-level "nextZoneId". A farm zone
 ## (F1) also carries "kind": "farm" and its "crop"; a stockpile carries neither. A stockpile
 ## carries "groups" and "priority" (F5a, v8) only when set away from the default.
+## A forest zone (F6a, ADR 067, v11) carries "kind": "forest" and no crop.
 static func _encode_zones(zones: Dictionary) -> Array:
 	var keys := zones.keys()
 	keys.sort()
@@ -349,6 +353,7 @@ static func _encode_zones(zones: Dictionary) -> Array:
 		}
 		if zone.has("kind"):
 			entry["kind"] = zone["kind"]
+		if zone.has("crop"):
 			entry["crop"] = zone["crop"]
 		# A copy: the save snapshot must never alias the live filter.
 		if zone.has("groups"):
@@ -369,8 +374,9 @@ static func _decode_zones(list: Array) -> Dictionary:
 		var farm: Dictionary = entry
 		if farm.has("kind"):
 			var kind: String = farm["kind"]
-			var crop: String = farm["crop"]
 			zones[id]["kind"] = kind
+		if farm.has("crop"):
+			var crop: String = farm["crop"]
 			zones[id]["crop"] = crop
 		if farm.has("groups"):
 			var saved_groups: Array = farm["groups"]

@@ -36,6 +36,9 @@ const TILE_COLORS := {
 	"planted": Color(0.30, 0.42, 0.18),
 	"crop_grown": Color(0.26, 0.50, 0.16),
 	"crop_ripe": Color(0.80, 0.48, 0.14),
+	"sapling_1": Color(0.24, 0.46, 0.20),
+	"sapling_2": Color(0.20, 0.44, 0.18),
+	"sapling_3": Color(0.18, 0.40, 0.16),
 }
 const UNKNOWN_TILE_COLOR := Color.MAGENTA
 const COLONIST_COLOR := Color(1.0, 0.95, 0.15)
@@ -334,7 +337,7 @@ func set_zone_tool_enabled(enabled: bool) -> void:
 	_zone_tool_enabled = enabled
 
 ## Extra zone_add payload fields for the next drags ({"kind": "farm", "crop"} for the farm
-## zone tool, F1; {} for a stockpile).
+## zone tool, F1; {"kind": "forest"} for the forest zone tool, F6a; {} for a stockpile).
 func set_zone_payload(extra: Dictionary) -> void:
 	_zone_payload = extra.duplicate()
 

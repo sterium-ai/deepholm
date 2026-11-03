@@ -191,13 +191,15 @@ static func check_zone_add_command(world: WorldState, command: Dictionary) -> Di
 			or typeof(payload.get("width")) != TYPE_INT or typeof(payload.get("height")) != TYPE_INT
 			or typeof(payload.get("kind", "stockpile")) != TYPE_STRING or typeof(payload.get("crop", "")) != TYPE_STRING):
 		return {"reason": "invalid_payload", "params": {"detail": "zone_add_payload"}}
-	# F1: a farm zone names a crops.json id; a stockpile names none.
+	# F1: a farm zone names a crops.json id; a stockpile or (F6a) a forest zone names none.
 	var zone_kind: String = payload.get("kind", "stockpile")
 	var crop: String = payload.get("crop", "")
-	if zone_kind not in ["stockpile", "farm"] or (zone_kind == "farm") == crop.is_empty():
+	if zone_kind not in ["stockpile", "farm", "forest"] or (zone_kind == "farm") == crop.is_empty():
 		return {"reason": "invalid_payload", "params": {"detail": "zone_add_payload"}}
 	if zone_kind == "farm" and world._content.get_entry("crops", crop).is_empty():
 		return {"reason": "invalid_payload", "params": {"detail": "unknown_crop", "crop": crop}}
+	if zone_kind == "forest" and world._content.list("forests").is_empty():
+		return {"reason": "invalid_payload", "params": {"detail": "zone_add_payload"}}
 	var x: int = payload["x"]
 	var y: int = payload["y"]
 	var width: int = payload["width"]

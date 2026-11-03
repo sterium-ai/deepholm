@@ -22,11 +22,16 @@ extends RefCounted
 ##   always change the same tiles in the same order.
 ## - Hashed and persisted: crops (hash_into() adds the key only when non-empty, so a world
 ##   without crops keeps its pre-F1 state_hash()). Derived: the dirty cursor, the rule tables.
+## - F6a (ADR 067): composes TreeGrowth (saplings, reconciled from the same dirty cells and
+##   grown in the same phase) and ForestGiver (planting in forest zones, after FarmGiver);
+##   "saplings" is hashed and saved beside "crops" on the same rule.
 
 const CalendarServiceType = preload("res://scripts/core/calendar/calendar_service.gd")
 const ContentRegistryType = preload("res://scripts/core/content/content_registry.gd")
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 const FarmGiverType = preload("res://scripts/core/jobs/givers/farm_giver.gd")
+const TreeGrowthType = preload("res://scripts/core/farming/tree_growth.gd")
+const ForestGiverType = preload("res://scripts/core/zones/forest_giver.gd")
 
 ## One crops.json entry, resolved against the calendar once at construction.
 class CropRule:
@@ -42,7 +47,10 @@ class CropRule:
 
 var crops: Dictionary = {}
 var giver: FarmGiverType
-## Every job kind FarmGiver submits or counts as a claim: till, then each crop's sow and harvest.
+var trees: TreeGrowthType
+var forest_giver: ForestGiverType
+## Every job kind the givers submit or count as a claim: till, each crop's sow and harvest, then
+## each forest's plant job.
 var job_kinds: Array[String] = [FarmGiverType.TILL_JOB]
 
 var _calendar: CalendarServiceType
@@ -57,9 +65,12 @@ var _sow_seeds: Dictionary = {}
 var _dirty_cursor: int = 0
 
 ## get_farm_zones/get_items/submit/passability feed FarmGiver (see its _init); view_jobs_of_kinds
-## is JobQueue.view_jobs_of_kinds, bound here to job_kinds.
+## is JobQueue.view_jobs_of_kinds, bound here to job_kinds. get_forest_zones (ZoneTable's) and
+## is_actor_at (WorldState's actor-only query) feed ForestGiver and TreeGrowth; empty, nothing
+## is planted and a grown sapling never waits for an actor.
 func _init(content: ContentRegistryType, calendar: CalendarServiceType, clock: SeededClock, tile_grid: TileGridType,
-		get_farm_zones: Callable, get_items: Callable, view_jobs_of_kinds: Callable, submit: Callable, passability: Callable) -> void:
+		get_farm_zones: Callable, get_items: Callable, view_jobs_of_kinds: Callable, submit: Callable, passability: Callable,
+		get_forest_zones := Callable(), is_actor_at := Callable()) -> void:
 	_calendar = calendar
 	_clock = clock
 	_tile_grid = tile_grid
@@ -92,9 +103,17 @@ func _init(content: ContentRegistryType, calendar: CalendarServiceType, clock: S
 		for kind: String in [rule.sow_job, rule.harvest_job]:
 			if kind not in job_kinds:
 				job_kinds.append(kind)
+	trees = TreeGrowthType.new(content, calendar.day_length_ticks(), tile_grid, is_actor_at)
+	for kind: String in trees.plant_jobs():
+		if kind not in job_kinds:
+			job_kinds.append(kind)
 	_dirty_cursor = tile_grid.get_dirty_cells_since(0)["next"]
 	giver = FarmGiverType.new(get_farm_zones, get_items, view_jobs_of_kinds.bind(job_kinds), submit, passability,
 		tile_grid.tile_at, ripe_harvests, sow_open, sow_job_of, _sow_seeds)
+	# A forest zone stores no forest id: it plants the first (v1: only) forests.json entry.
+	var plant_job := trees.plant_job_of(trees.forest_ids[0]) if not trees.forest_ids.is_empty() else ""
+	forest_giver = ForestGiverType.new(get_forest_zones, view_jobs_of_kinds.bind(job_kinds), submit, passability,
+		tile_grid.tile_at, plant_job)
 
 ## The "farming" tick phase.
 func advance() -> void:
@@ -105,16 +124,23 @@ func advance() -> void:
 	else:
 		for cell: Vector3i in stream["cells"]:
 			_reconcile(cell)
+			trees.reconcile(cell)
 	_grow(_clock.tick)
+	trees.grow()
 	giver.advance(_clock.tick)
+	forest_giver.advance(_clock.tick)
 
 ## Rebuilds the records from the whole map: after decode() and when the dirty stream lost cells.
 func reconcile_all() -> void:
 	for key: String in crops.keys():
 		_reconcile(_tile_of(key))
+	for key: String in trees.keys():
+		trees.reconcile(_tile_of(key))
 	for index in _tile_grid.tiles.size():
 		if _stage_of_tile.has(_tile_grid.tiles[index]):
 			_reconcile(_tile_grid.coord_of(index))
+		elif trees.is_stage_tile(_tile_grid.tiles[index]):
+			trees.reconcile(_tile_grid.coord_of(index))
 	_dirty_cursor = _tile_grid.get_dirty_cells_since(0)["next"]
 
 ## One cell: a stage tile gets a record (growth at its stage's threshold) unless it already
@@ -212,7 +238,8 @@ func crop_at(tile: Vector3i) -> Dictionary:
 	record["ripe_growth"] = rule.ripe
 	return record
 
-## The save field this module owns: "crops", [{target, crop, growth}] in key order.
+## The save fields this module owns: "crops", [{target, crop, growth}] in key order, and
+## "saplings" (TreeGrowth.encode()).
 func encode() -> Dictionary:
 	var keys := crops.keys()
 	keys.sort()
@@ -221,7 +248,7 @@ func encode() -> Dictionary:
 		var cell := _tile_of(key)
 		var record: Dictionary = crops[key]
 		list.append({"target": {"x": cell.x, "y": cell.y, "z": cell.z}, "crop": record["crop"], "growth": record["growth"]})
-	return {"crops": list}
+	return {"crops": list, "saplings": trees.encode()}
 
 ## Restores the records, then reconciles them with the decoded tiles (a migrated v4 save's
 ## sown tiles start from their stage's threshold).
@@ -233,11 +260,15 @@ func decode(state: Dictionary) -> void:
 		var crop_id: String = entry["crop"]
 		var growth: int = entry["growth"]
 		crops[_key(TileGrid.tile_of(target))] = {"crop": crop_id, "growth": growth}
+	var saplings: Array = state.get("saplings", [])
+	trees.decode(saplings)
 	reconcile_all()
 
 func hash_into(snapshot: Dictionary) -> void:
 	if not crops.is_empty():
 		snapshot["crops"] = crops
+	if not trees.saplings.is_empty():
+		snapshot["saplings"] = trees.saplings
 
 ## The crops key, TileGrid's "x,y[,z]" format (ADR 045 §2: TileGrid owns every tile key format).
 func _key(cell: Vector3i) -> String:

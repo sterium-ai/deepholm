@@ -1,0 +1,5 @@
+{
+  "forests": [
+    {"id": "tree", "label": "forest.tree", "plant_job": "plant_sapling", "grow_days": 8, "stages": ["sapling_1", "sapling_2", "sapling_3"], "grown_tile": "tree"}
+  ]
+}

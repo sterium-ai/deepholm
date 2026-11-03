@@ -1256,7 +1256,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 
 ### F6 — Forest zone, wild fauna ecosystem, pasture · split 2026-10-30 into F6a / F6b / F6c
 
-### F6a — Forest zone: plant and grow · `todo` · after F1 · Design: closed 2026-10-30
+### F6a — Forest zone: plant and grow · `review` (branch `antonelmejor50-hub/f6a-forest-zone-plant-and`) · after F1 · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** a **`forest` zone** (same zone machinery as F1's farm zone).
   Colonists with the `farm` labour **plant saplings** on empty soil tiles inside the zone (job

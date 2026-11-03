@@ -16,7 +16,7 @@ const WorldGeneratorType = preload("res://scripts/core/worldgen/world_generator.
 const SaveWireType = preload("res://scripts/core/persistence/save_wire.gd")
 const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 ## Always written by StateCodec.encode().
-const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
+const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "saplings", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
 const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting"]
@@ -251,6 +251,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 	var layers := int(state["map"]["layerCount"])
 	var crop_ids: Array[String] = rules["crops"]
 	var item_groups: Array[String] = rules["itemGroups"]
+	var forest_ids: Array[String] = rules["forests"]
 	var checks: Array[Callable] = [
 		func() -> Dictionary: return ItemValidator._valid_items(state.get("items"), w, h, layers),
 		func() -> Dictionary: return ObjectValidator._valid_objects(state["objects"], w, h, layers),
@@ -260,6 +261,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return ObjectValidator._valid_zones(state.get("zones"), w, h, layers, crop_ids, item_groups),
 		func() -> Dictionary: return {"ok": true} if _is_int_min(state.get("nextZoneId"), 1) else _fail("invalid nextZoneId"),
 		func() -> Dictionary: return FarmValidator._valid_crops(state.get("crops"), w, h, layers, crop_ids),
+		func() -> Dictionary: return FarmValidator._valid_saplings(state.get("saplings"), w, h, layers, forest_ids),
 		func() -> Dictionary: return ItemValidator._valid_ground_berries(state.get("groundBerries"), w, h, layers),
 		func() -> Dictionary: return WorkProgressValidator._valid_work_progress(state.get("workProgress"), w, h, layers),
 		func() -> Dictionary: return _optional(state, "workProgressOwners", func(v: Variant) -> Dictionary: return WorkProgressValidator._valid_work_progress_owners(v, w, h, layers)),
@@ -296,6 +298,7 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		"jobKinds": _ids(registry, "jobs"),
 		"needs": _ids(registry, "needs"),
 		"crops": _ids(registry, "crops"),
+		"forests": _ids(registry, "forests"),
 		# F3 (ADR 062): skill levels and the carry bonus in a saved colonist's hands.
 		"skills": registry.document("skills").duplicate(true),
 		# F5a: the groups a stockpile filter may name are the items' kinds (ZoneTable.item_groups).
