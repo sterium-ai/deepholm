@@ -164,6 +164,7 @@ var _craft_giver: CraftGiver
 ## Trader offers; never persisted or hashed.
 var _trade: TradeSystemType
 var _farm: FarmSystemType # crop growth + FarmGiver (F1, ADR 059)
+var _fauna: FaunaSystem # wild animals, their worldgen and "fauna" tick phase (F6b-1, ADR 070)
 
 ## The start a world was built with (ADR 057); its calendar and incident list are saved ("scenarioStart").
 var _setup: WorldSetupType
@@ -256,7 +257,7 @@ func _build_systems() -> void:
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	_farm = FarmSystemType.new(_content, _calendar, _clock, _tile_grid, _zone_table.get_farm_zones, _item_table.get_items,
-		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability, _zone_table.get_forest_zones, _colonist_at)
+		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability, _zone_table.get_forest_zones, _colonist_at); _fauna = FaunaSystem.new(_content, _calendar.day_length_ticks(), func() -> int: return _clock.tick, _tile_grid, _passability.passable_for_faction, _seed, _mapgen, _spawn_clearing)
 	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), _construction.get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:
@@ -347,7 +348,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_combat_system, _combat_giver, _construction, _scheduler, _passability, _tile_grid, _toils, func() -> CalendarServiceType: return _calendar, _rescue_giver,
 		_trench, _incidents, _approach_giver, _item_table, _event_log, _calendar_alert_giver, _progress_table, _reroutes,
 		_toil_hooks, func() -> Array[Dictionary]: return _colonists, func() -> Dictionary: return _calendar_alerts_fired,
-		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index, _farm.advance,
+		_resolve_refused_reservations, _route, PRIORITY_TICK, _actor_index, _farm.advance, _fauna.advance,
 		_craft_giver)
 
 var command_observer: Callable # optional (command, result) listener after each apply() from outside the core (area-order expansion bypasses it); never mutates (A11)
@@ -396,7 +397,7 @@ func state_hash(include_incidents: bool = true) -> int:
 	_item_table.hash_into(snapshot)
 	_progress_table.hash_into(snapshot)
 	_construction.hash_into(snapshot)
-	_farm.hash_into(snapshot)
+	_farm.hash_into(snapshot); _fauna.hash_into(snapshot)
 	_crafting.hash_into(snapshot); _needs_system.hash_into(snapshot)
 	if include_incidents: snapshot["incidents"] = {"cooldown_until_day": _incidents._cooldown_until_day, "last_processed_day": _incidents._last_processed_day, "rng_seed": _incidents._random.seed, "rng_state": _incidents._random.state}
 	return hash(JSON.stringify(snapshot))
@@ -522,7 +523,7 @@ func get_view_snapshot(detail_ids: Array = []) -> Dictionary:
 		"need_status": _needs_system.need_status, "get_job": get_job, "need_job_id": get_active_need_job_id,
 		"rescue_reason": get_colonist_rescue_reason, "calendar": _calendar}, {"assignments": get_assignments(), "queued_job_summary":
 		get_queued_job_summary(), "tool_items": get_tool_items(), "items": get_items(), "construction_sites":
-		get_construction_sites(), "zones": get_zones(), "pending_trade_offers": get_pending_trade_offers()}, detail_ids)
+		get_construction_sites(), "zones": get_zones(), "pending_trade_offers": get_pending_trade_offers(), "animals": _fauna.get_animals().duplicate(true)}, detail_ids)
 
 ## The tool-handover overlay only mutates detached duplicates; a non-empty `kinds` keeps only those kinds, costing
 ## only the jobs returned (B1). Retained terminal jobs (A5) are listed unless `retired` is false (state_hash()).
@@ -703,7 +704,6 @@ func _work_target_for(job: Dictionary) -> Vector3i: return _toil_bindings.work_t
 func _drop_carried_haul_item(job_id: String) -> void: _toil_bindings.drop_carried_haul_item(job_id)
 func _terminate_haul_job_by_id(job_id: String, reason: String, remedy: String) -> void: _toil_bindings.terminate_haul_job_by_id(job_id, reason, remedy)
 func _resolve_giver_association(job_id: String, kind: String) -> void: _toil_bindings.resolve_giver_association(job_id, kind)
-
 
 ## Backfills a missing "held_tool" with "" by plain append (never a rebuild), so
 ## state_hash()'s key order matches a decoded colonist's; workers only (F2).

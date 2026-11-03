@@ -19,7 +19,7 @@ const SCHEMA_VERSION := StateCodecType.SCHEMA_VERSION
 const TOP_LEVEL_FIELDS := ["schemaVersion", "contentVersion", "contentPacks", "seed", "tick", "epoch", "map", "entities", "inventory", "jobs", "scheduling", "rng", "items", "objects", "zones", "nextZoneId", "crops", "saplings", "groundBerries", "workProgress", "pausedJobs", "toolItems", "toolReservations", "needJobAssignments", "calendarAlerts", "toolFetchExcluded", "incidentScheduler", "scenarioStart"]
 ## Also always written by encode(), but optional on the wire: absent means the empty
 ## value decode() starts from (no sites, no owners, a fresh dig-find stream, ...).
-const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting", "pendingColonyDeaths"]
+const OPTIONAL_TOP_LEVEL_FIELDS := ["combatBlockedTargets", "digFindRng", "rescueVictimAssignments", "workProgressOwners", "suspendedWorkProgress", "approachJobTargets", "constructionSites", "areaOrders", "crafting", "pendingColonyDeaths", "fauna"]
 
 ## Every entry point takes the session's ContentRegistry (A13b, ADR 010 amendment 2): its
 ## version, packs and tile/job/need ids are what a save is checked against. null builds the
@@ -271,6 +271,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return _optional(state, "rescueVictimAssignments", func(v: Variant) -> Dictionary: return GiverValidator._valid_rescue_victim_assignments(v)),
 		func() -> Dictionary: return _optional(state, "combatBlockedTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_combat_blocked_targets(v, w, h, layers)),
 		func() -> Dictionary: return _optional(state, "approachJobTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_approach_job_targets(v, w, h, layers)),
+		func() -> Dictionary: return _optional(state, "fauna", func(v: Variant) -> Dictionary: return FaunaValidator._valid_fauna(v, w, h, layers)),
 		func() -> Dictionary: return CalendarValidator._valid_calendar_alerts(state.get("calendarAlerts")),
 		func() -> Dictionary: return ToolValidator._valid_tool_fetch_excluded(state.get("toolFetchExcluded"), state.get("toolItems")),
 		func() -> Dictionary: return ToolValidator._valid_tool_items(state.get("toolItems"), w, h, layers),

@@ -17,6 +17,7 @@ extends RefCounted
 ## - v11 -> v12 (F5b, ADR 065): every colonist gains the "heal" labour and skill.
 ## - v12 -> v13 (F5c, ADR 066): a colonist's optional "thoughts".
 ## - v13 -> v14 (F5a-b, ADR 064): the "haul_tool" job kind.
+## - v14 -> v15 (F6b-1, ADR 070): the optional "fauna" field and animal entities.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -64,6 +65,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v12_to_v13(state)
 		13:
 			return _v13_to_v14(state)
+		14:
+			return _v14_to_v15(state)
 		_:
 			return {
 				"ok": false,
@@ -265,6 +268,14 @@ static func _v13_to_v14(state: Dictionary) -> Dictionary:
 			return {"ok": false, "code": "schema_error", "message": "v13 save already has a haul_tool job"}
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 14
+	return {"ok": true, "state": migrated}
+
+## v14 -> v15 (F6b-1, ADR 070): the optional top-level "fauna" (animal id counter and stream).
+## Animals are entities of kind "animal"; a v14 world had none, and an absent field means no
+## animal was ever spawned, so only the version moves.
+static func _v14_to_v15(state: Dictionary) -> Dictionary:
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 15
 	return {"ok": true, "state": migrated}
 
 ## The same dictionary with its keys in sorted order (_v11_to_v12()).

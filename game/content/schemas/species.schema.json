@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Wild species (F6b-1, ADR 070). Cross-references (prey ids, tile ids) are checked by FaunaSpecies on world build.",
+  "type": "object",
+  "required": ["grass_tiles", "crop_tiles", "species"],
+  "properties": {
+    "grass_tiles": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "tiles.json ids a grazer eating \"grass\" feeds on."},
+    "crop_tiles": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "tiles.json ids a grazer eating \"crops\" feeds on. Eating never damages the crop in F6b-1 (F6b-2 adds it)."},
+    "species": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "diet", "steps_per_day", "hungry_after_days", "starve_days", "adult_days", "reproduction", "cap", "sight", "health", "attack"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "diet": {
+            "type": "object",
+            "required": ["kind"],
+            "properties": {
+              "kind": {"type": "string", "enum": ["grazer", "predator"]},
+              "eats": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": ["grass", "crops"]}, "description": "A grazer's foods: it eats when hungry while standing on one."},
+              "prey": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}, "description": "A predator's prey species ids: a hungry predator kills one in reach and is fed."}
+            },
+            "additionalProperties": false
+          },
+          "steps_per_day": {"type": "integer", "minimum": 1, "description": "Behaviour steps (one tile move each) per calendar day."},
+          "hungry_after_days": {"type": "number", "exclusiveMinimum": 0, "description": "Days after a meal at which the animal eats again."},
+          "starve_days": {"type": "number", "exclusiveMinimum": 0, "description": "Days without a meal after which the animal dies."},
+          "adult_days": {"type": "number", "minimum": 0, "description": "Age in days at which an animal may reproduce."},
+          "reproduction": {
+            "type": "object",
+            "required": ["interval_days", "radius"],
+            "properties": {
+              "interval_days": {"type": "number", "exclusiveMinimum": 0, "description": "Days between birth attempts of a fed adult."},
+              "radius": {"type": "integer", "minimum": 1, "description": "Chebyshev radius in which another adult of the species must stand."}
+            },
+            "additionalProperties": false
+          },
+          "cap": {"type": "integer", "minimum": 1, "description": "Population cap per map; births thin out as the count nears it."},
+          "sight": {"type": "integer", "minimum": 0, "description": "Chebyshev radius in which a hungry predator sees prey."},
+          "health": {"type": "integer", "minimum": 1, "description": "Placeholder until F6b-3's combat."},
+          "attack": {"type": "integer", "minimum": 0, "description": "Placeholder until F6b-3's combat."}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

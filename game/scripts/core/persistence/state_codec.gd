@@ -24,8 +24,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v12 adds the heal labour to every colonist's labour table and skills (F5b, ADR 065).
 ## v13 saves a colonist's active thoughts (F5c, ADR 066).
 ## v14 adds the haul_tool job kind and a ground tool's optional setDown (F5a-b, ADR 064).
+## v15 adds the optional "fauna" field: wild animals and their stream (F6b-1, ADR 070).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 14
+const SCHEMA_VERSION := 15
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -104,6 +105,7 @@ static func encode(world: WorldState) -> Dictionary:
 	# ADR 066: a colony death still waiting for the next decay tick; absent means none.
 	if needs_fields.has("pendingColonyDeaths"):
 		state["pendingColonyDeaths"] = needs_fields["pendingColonyDeaths"]
+	state.merge(world._fauna.encode())
 	return state
 
 ## Reconstructs a WorldState that ticks identically to the one that produced state,
@@ -140,6 +142,7 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	world._zone_table.decode(state)
 	# After the tiles: reconciles the records with the decoded stage tiles (FarmSystem.decode()).
 	world._farm.decode(state)
+	world._fauna.decode(state)
 	# Owners are applied by restore_owners() below, once jobs exist.
 	var work_progress_owners := world._progress_table.decode(state)
 	world._needs_system.decode(state)

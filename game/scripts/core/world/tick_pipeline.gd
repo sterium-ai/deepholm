@@ -19,6 +19,7 @@ extends RefCounted
 ##   whatever order colonists completed in (ADR 026).
 ## - farming runs after advance_colonists, so a sow or harvest completed this tick has its
 ##   crop record before tick() returns (a save never sees a sown tile without one, ADR 059).
+## - fauna runs after farming: wild animals read the tiles as this tick left them (ADR 070).
 ## - refused_reservations drains after advance_colonists: a need resolving
 ##   there can trigger a further refusal, which must drain before tick() returns.
 ## - Rebuilt by WorldState._build_dimension_services() together with the
@@ -29,7 +30,7 @@ const AssignmentType = preload("res://scripts/core/scheduling/global_assignment.
 const PHASES: Array[String] = ["caches_begin", "area_orders", "clock", "needs_decay", "need_giver", "haul_giver",
 	"construction_giver", "craft_giver", "combat", "scheduler", "site_fetch_resolve", "rescue_giver",
 	"incidents_activate", "escapes_activate", "advance_colonists", "approach_giver", "dig_finds",
-	"farming", "refused_reservations", "collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event", "caches_end"]
+	"farming", "fauna", "refused_reservations", "collect_queue_events", "calendar_alerts", "incidents_advance", "tick_event", "caches_end"]
 
 var _clock: SeededClock
 var _area_orders: AreaOrders
@@ -63,6 +64,7 @@ var _resolve_refused_reservations: Callable # () -> void
 var _route: Callable # (colonist) -> the mover component's route or null
 var _tick_priority: int
 var _farming: Callable # () -> void, FarmSystem.advance (growth, then FarmGiver)
+var _fauna: Callable # () -> void, FaunaSystem.advance (wild animals, F6b-1)
 ## A4's per-tick lookup caches: trusted only between caches_begin and caches_end.
 var _actor_index: ActorIndex
 ## Same order as PHASES.
@@ -79,7 +81,7 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 		calendar_alert_giver: CalendarAlertGiver, progress_table: WorkProgress, reroutes: Dictionary,
 		toil_hooks: Dictionary, colonists: Callable, calendar_alerts_fired: Callable,
 		resolve_refused_reservations: Callable, route: Callable, tick_priority: int, actor_index: ActorIndex,
-		farming: Callable, craft_giver: CraftGiver) -> void:
+		farming: Callable, fauna: Callable, craft_giver: CraftGiver) -> void:
 	_clock = clock
 	_area_orders = area_orders
 	_needs_system = needs_system
@@ -112,10 +114,11 @@ func _init(clock: SeededClock, area_orders: AreaOrders, needs_system: NeedsSyste
 	_tick_priority = tick_priority
 	_actor_index = actor_index
 	_farming = farming
+	_fauna = fauna
 	_phases = [_phase_caches_begin, _area_orders.advance, _phase_clock, _needs_system.decay_needs, _phase_need_giver,
 		_phase_haul_giver, _phase_construction_giver, _phase_craft_giver, _phase_combat, _phase_scheduler, _phase_site_fetch_resolve,
 		_phase_rescue_giver, _incidents.activate_pending, _trench.activate_pending_escapes, _advance_colonists,
-		_phase_approach_giver, _item_table.resolve_dig_finds, _farming, _resolve_refused_reservations,
+		_phase_approach_giver, _item_table.resolve_dig_finds, _farming, _fauna, _resolve_refused_reservations,
 		_event_log.collect_queue_events, _phase_calendar_alerts, _phase_incidents_advance, _phase_tick_event, _phase_caches_end]
 	assert(_phases.size() == PHASES.size(), "TickPipeline: one Callable per PHASES entry")
 

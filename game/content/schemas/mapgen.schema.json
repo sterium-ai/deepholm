@@ -53,7 +53,8 @@
     "spawn_search_attempts": {"type": "integer", "minimum": 1},
     "spawn_water_step_limit": {"type": "integer", "minimum": 0},
     "spawn_food_step_limit": {"type": "integer", "minimum": 0},
-    "spawn_tree_step_limit": {"type": "integer", "minimum": 0}
+    "spawn_tree_step_limit": {"type": "integer", "minimum": 0},
+    "animal_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}, "description": "F6b-1: wild animals worldgen places per species id (species.json); ids and integer counts are checked by FaunaSpecies."}
   },
   "additionalProperties": false
 }

@@ -98,6 +98,13 @@ static func _spawn_generic_actor(def_id: String, tile: Vector3i, id: String, com
 		actor["visitor"] = true
 	return actor
 
+## A wild animal (F6b-1, ADR 070): kind "animal" plus its species.json id; no labours, needs or
+## route. `record` is FaunaSpecies' compiled species; it starts fed with its breeding interval running.
+static func spawn_animal(species_id: String, record: Dictionary, tile: Vector3i, id: String, born_tick: int) -> Dictionary:
+	return {"id": id, "kind": "animal", "species": species_id, "x": tile.x, "y": tile.y, "z": tile.z,
+		"factionId": "wildlife", "bornTick": born_tick, "lastMealTick": born_tick,
+		"nextBirthTick": born_tick + (record["adult_ticks"] as int), "health": (record["health"] as int)}
+
 ## True when the actor's definition (by "kind") declares component `name`.
 static func has_component(actor: Dictionary, name: String, registry) -> bool:
 	var def_id := String(actor.get("kind", ""))
