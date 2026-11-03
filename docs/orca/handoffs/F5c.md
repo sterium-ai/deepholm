@@ -4,7 +4,7 @@
 
 - Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, rebased on `origin/main`
   `f55e9b0` (the owner's F5c scope approval), which sits on L3 `bb3ff32` (#55, no schema bump)
-  and F5b `5399153` (#54). Two commits (the feature, then the review round-1 fixes), not pushed.
+  and F5b `5399153` (#54). Three commits (the feature, the review round-1 fixes, the handoff figures after the rebase), not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
   if F5a-b (v13) landed first. It has not landed (`origin/main` is still at v12 after L3), so
   **no renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
@@ -152,13 +152,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
 Results at the branch head:
-- Suite: `run_tests: all 137 test(s) PASS  [952s]`
+- Suite (after the rebase on `f55e9b0`): `run_tests: all 138 test(s) PASS  [1.037s]` (1037 s; the dot is the locale thousands separator)
 - `test_thoughts.gd`: PASS.
 - `check_core_budgets.py`: `OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
 - `lint_content_literals.ps1`: `PASS (no tile-id/work-ticks/move-ticks literal found outside the
   registry)`.
-- `measure_core.ps1`: `core total: 23170 lines in 113 files`. Touched files (lines, code lines,
+- `measure_core.ps1`: `core total: 23449 lines in 114 files` (L3 included). Touched files (lines, code lines,
   functions, largest function and its length):
 
 | file | lines | code | funcs | largest function |
@@ -172,8 +172,8 @@ Results at the branch head:
   `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd`,
   `entity_validator.gd` 320, `save_migrations.gd` 286) are far below 800 lines.
 - Tests compared with `main`:
-  - `test_*.gd` files: 136 on main, 137 on the branch (`+test_thoughts.gd`);
-  - `_check_` sites: 2130 on main, 2160 on the branch;
+  - `test_*.gd` files: 137 on main (`f55e9b0`), 138 on the branch (`+test_thoughts.gd`);
+  - `_check_` sites: 2156 on main, 2186 on the branch;
   - no test was deleted, skipped or loosened.
 
 `test_thoughts.gd` drives everything through real ticks, commands and jobs, never through
