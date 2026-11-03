@@ -1220,6 +1220,25 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   **F5a-b — haul rejected tools out of a stockpile** (`todo`, after F5a; owned: haul_giver,
   tool_item_store, tool_*_toil, tests). The limitation is documented in the F5a handoff.
 
+### F5a-b — Haul rejected tools out of a stockpile · `todo` · after F5a · Design: closed 2026-11-03
+
+- **Goal:** complete F5a's rule for tools: a tool item (identity-bearing, `ToolItemStore`) that
+  sits in a stockpile whose filter no longer accepts tools is hauled to the nearest valid
+  stockpile of the highest priority (or left on the ground outside the zone if none accepts
+  tools), like any other rejected item. Today (F5a limitation, approved 2026-11-03) it stays
+  until a colonist takes it.
+- **Owned paths:** `game/scripts/core/jobs/givers/haul_giver.gd`, `core/items/tool_item_store.gd`,
+  `core/jobs/tool_*_toil.gd` (reuse the existing tool fetch/drop toils for the move; no new
+  item ids, ADR 061 identities preserved), tests `test_stockpile_filters.gd` (extend),
+  `docs/orca/handoffs/F5a-b.md`. No schema bump expected; if one is needed, the next free
+  number (say so in the handoff).
+- **Acceptance:** headless, through commands and ticks: stockpile A holds a pick; A's filter is
+  set to materials only; B (all groups) exists → the pick (same id) is in B within a day and
+  A's cell is free; with no B, the pick is dropped on a free tile adjacent to A; `state_hash()`
+  deterministic; replay identical; suite green.
+- **Non-goals:** per-item filters, hauling priorities, anything in the viewer.
+- **Budget:** ≤ 200 turns.
+
 ### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
 
 - **Design (owner, 2026-10-30):** two new labours in the table, **`cook`** and **`heal`**
