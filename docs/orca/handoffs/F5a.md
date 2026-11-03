@@ -119,13 +119,21 @@ file(s))". That commit is B6 7a9ff1e (`viewer/colonist_sprites.gd`, `test_coloni
 and rebased: no conflict (`BACKLOG.md` merged cleanly, different rows). On the rebased head: warnings gate OK (2801, baseline 2803), budgets OK,
 full suite below.
 
+## Review round 3 (Codex: APPROVE)
+
+No blocking finding. Non-blocking, handled: the core-total comparison is corrected (main
+22,169 lines in 109 files with `boot.gd`, branch 22,417, +248; see the `measure_core` section).
+Noted, no change needed: the reviewer could not rerun the suite (read-only sandbox) and checked
+the quoted line; the full suite was rerun on this head (line below). Owner confirmation of the
+panel (native playtest) stays a post-merge check.
+
 ## Branch and commit
 
 - Branch `antonelmejor50-hub/f5a-stockpile-filters-and-priorities` on `origin/main` 7a9ff1e
   (3e7ba13 + B7 2126574 + the owner's backlog note 203129a + B6 7a9ff1e; none touches the core),
-  five commits: 49f30b9 (the feature, squashed and rebased onto L2), b228427 (review round 1
-  fixes), c721d3a (review round 2 tests), 0bf839a (owner approvals recorded) and the commit that
-  carries this report (`git log origin/main..HEAD`). Not pushed.
+  six commits: 49f30b9 (the feature, squashed and rebased onto L2), b228427 (review round 1
+  fixes), c721d3a (review round 2 tests), 0bf839a (owner approvals recorded), 146d107 (rebase onto
+  B6) and the round-3 commit that carries this report (`git log origin/main..HEAD`). Not pushed.
 - Earlier history: written on 73d0fa6 as v7 -> v8 (`all 132 test(s) PASS [745s]`), rebased onto
   F3 (32bfb81) as v8 -> v9 (`all 133 test(s) PASS [823s]`), now on L2 as v9 -> v10.
 - **Owner coordination note:** ADRs up to 063 are taken (this is **064**); `world_state.gd` must
@@ -134,7 +142,7 @@ full suite below.
 ## Final suite line (branch head, rebased onto 7a9ff1e)
 
 ```
-run_tests: all 134 test(s) PASS  [784s]
+run_tests: all 134 test(s) PASS  [868s]
 ```
 
 `origin/main` (7a9ff1e) has 133 `test_*.gd`; this branch has 134 (+`test_stockpile_filters.gd`).
@@ -213,7 +221,7 @@ Not touched: `tool_drop_toil.gd`, `job_queue.gd`, `content_registry.gd`, content
 
 ```powershell
 godot --headless --path game --import
-tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [784s]
+tools\run_tests.ps1                                  # run_tests: all 134 test(s) PASS  [868s]
 tools\run_tests.ps1 -Filter stockpile_filters        # test_stockpile_filters: PASS
 tools\run_tests.ps1 -Filter save_migration           # test_save_migration: PASS
 tools\check_core_warnings.ps1                        # OK, 2801 warning(s), none above baseline (2803)
@@ -271,8 +279,12 @@ or loosened.
 
 ## `tools\measure_core.ps1 -All` (branch head; `origin/main` 3e7ba13 in brackets, unchanged at 7a9ff1e: B7 and B6 touched no core file)
 
-Core total: **22,417 lines** [21,818 lines]. The script counted 109 files in this worktree and
-108 in a `git archive` copy of `origin/main`; the branch adds no core file (both track 108).
+Core total (the script's total: every `game/scripts/core` file plus `game/scripts/boot.gd`):
+**22,417 lines in 109 files** [22,169 lines in 109 files, measured on a full `git archive` of
+`origin/main` 7a9ff1e], so the branch adds 248 lines and no file. (An earlier version of this
+report quoted 21,818 / 108 for main: that copy held only `game/scripts/core`, without
+`boot.gd`, 351 lines on both sides. The per-file brackets below came from that same copy and
+are unaffected.)
 
 | File | Total | Code |
 | --- | --- | --- |
