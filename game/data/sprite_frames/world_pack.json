@@ -1,6 +1,6 @@
 {
  "source": "Pixel Crawler by Anokolisa; local pack, never committed (tools/sync_pack_assets.ps1)",
- "measured_by": "docs/orca/handoffs/B3-measure_pack_world.py",
+ "measured_by": "docs/orca/handoffs/B7-measure_pack_world.py",
  "layout": "each source's texture is composed at runtime by pack_assets.gd: a grid of cell_size cells at the placeholder's coords, each rect bottom-centred in its cell; texture_origin.y = (cell height - grounded_on) / 2 when grounded_on is set",
  "sources": [
   {
@@ -787,6 +787,161 @@
       32,
       7
      ]
+    },
+    {
+     "coords": [
+      3,
+      0
+     ],
+     "label": "seed (carrot seed packet)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      0,
+      2,
+      16,
+      12
+     ]
+    },
+    {
+     "coords": [
+      4,
+      0
+     ],
+     "label": "food (harvested carrot)",
+     "sheet": "Environment/Props/Static/Farm.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      128,
+      16,
+      16,
+      16
+     ]
+    },
+    {
+     "coords": [
+      5,
+      0
+     ],
+     "label": "coal (black lump)",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      48,
+      17,
+      16,
+      13
+     ]
+    },
+    {
+     "coords": [
+      6,
+      0
+     ],
+     "label": "gold_coin",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      101,
+      19,
+      6,
+      9
+     ]
+    },
+    {
+     "coords": [
+      7,
+      0
+     ],
+     "label": "flint (dark chipped shard)",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      70,
+      53,
+      3,
+      5
+     ]
+    },
+    {
+     "coords": [
+      8,
+      0
+     ],
+     "label": "planks (short plank)",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      68,
+      69,
+      8,
+      4
+     ]
+    },
+    {
+     "coords": [
+      9,
+      0
+     ],
+     "label": "stone_blocks (cut slate block)",
+     "sheet": "Environment/Props/Static/Resources.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      68,
+      20,
+      7,
+      9
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 7,
+   "name": "door",
+   "cell_size": [
+    14,
+    20
+   ],
+   "grounded_on": 16,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "door (arched wooden door)",
+     "sheet": "Environment/Props/Static/Dungeon_Props.png",
+     "sheet_size": [
+      400,
+      400
+     ],
+     "rect": [
+      113,
+      2,
+      14,
+      20
+     ]
     }
    ]
   },
@@ -815,6 +970,35 @@
       84,
       32,
       28
+     ]
+    }
+   ]
+  },
+  {
+   "source_id": 13,
+   "name": "workbench_vertical",
+   "cell_size": [
+    12,
+    42
+   ],
+   "grounded_on": 32,
+   "tiles": [
+    {
+     "coords": [
+      0,
+      0
+     ],
+     "label": "workbench (vertical): anvil quench trough",
+     "sheet": "Environment/Structures/Stations/Anvil/Anvil.png",
+     "sheet_size": [
+      272,
+      160
+     ],
+     "rect": [
+      176,
+      54,
+      12,
+      42
      ]
     }
    ]
@@ -1136,21 +1320,12 @@
  "side_faces": "right",
  "placeholder": {
   "objects": {
-   "bed": "every pack bed is about 2 tiles tall (Interior_Props_01, Furniture); owner rule: props <= 1 tile",
-   "door": "the pack's doors are about 18x38 px (Structures/Buildings/Props); owner rule: props <= 1 tile",
-   "workbench_vertical": "the pack has no vertical workbench; rotating art is not allowed",
+   "bed": "every pack bed is about 30 px wide, two tiles (Props/Static/Furniture.png, Interior_Props_01.png); owner rule: footprint <= 1 tile, art may overhang only up",
    "test_multi_source_crate": "test-only content kind, never placed by the game; no art at all",
    "test_footprint_crate": "test-only content kind, never placed by the game; no art at all"
   },
   "items": {
-   "seed": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "sand": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "gold_coin": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "flint": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "coal": "no ground icon today (not in ITEM_ATLAS_MAP)",
-   "food": "no ground icon today (not in ITEM_ATLAS_MAP); F1 harvest yield",
-   "planks": "no ground icon today (not in ITEM_ATLAS_MAP); crafted at the workbench (F2)",
-   "stone_blocks": "no ground icon today (not in ITEM_ATLAS_MAP); crafted at the workbench (F2)"
+   "sand": "the pack has no sand pile (Rocks.png and Resources.png hold rocks, pebbles and ore); a tan pebble would read as stone"
   }
  }
 }

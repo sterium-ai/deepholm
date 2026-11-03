@@ -317,7 +317,7 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
-### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `todo` · *parallel-safe (viewer + sprite-frame data only; no core)*
+### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `review (antonelmejor50-hub/b7-everything-still-drawn-as)` · *parallel-safe (viewer + sprite-frame data only; no core)*
 
 - **Owner (2026-11-02 playtest):** objects and items on the map still show placeholder art.
   `game/data/sprite_frames/world_pack.json` already records the known gaps under

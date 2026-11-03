@@ -168,7 +168,8 @@ what it showed before (idle, or `build_*` for `site_work`).
 ### World (`world_pack.json`)
 
 B3 moves everything else on the map to the pack with the same mechanism.
-`world_pack.json` is written by `docs/orca/handoffs/B3-measure_pack_world.py`:
+`world_pack.json` is written by `docs/orca/handoffs/B7-measure_pack_world.py`
+(B3's script extended by B7):
 the script holds the *choice* (which sheet window stands for which kind) and
 measures every number (sheet size, the sprite's alpha bounding box inside its
 window, actor frame boxes and feet rows); `--check` verifies the committed
@@ -191,9 +192,19 @@ on the side its name says, props inside the owner's ceilings.
   rows 0-4, columns 0-4, checked from alpha), so the 12 shoreline cells map
   coordinate for coordinate.
 - **Prop ceilings (owner, 2026-10-25: "props ≤ 1 casilla salvo árboles").**
-  A 1x1 prop is at most 16x24, the 2x1 workbench at most 32x28. Trees are the
-  exception: at most **32x64** with the pack (the measured large tree is
-  32x62), grounded on their trunk tile.
+  A 1x1 prop is at most 16x24, the 2x1 workbench at most 32x28, the 1x2
+  vertical workbench at most 16x44. Trees are the exception: at most
+  **32x64** with the pack (the measured large tree is 32x62), grounded on
+  their trunk tile.
+- **Footprint first, overhang only up (owner, B7).** A prop keeps its
+  footprint (the bed and the door one tile); art no wider than the footprint
+  may be taller and overhang upwards, never sideways. The vertical workbench
+  is a *different* pack prop that fits 1x2, never the horizontal one rotated.
+- **Pack-only item icons (B7).** Items with no placeholder icon (seed, food,
+  coal, gold coin, flint, planks, stone blocks) get extra cells in the
+  resources source, listed in `tile_atlas_map.gd`'s `PACK_ITEM_MAP`. Only the
+  pack TileSet has those cells, so without the pack these items stay undrawn
+  on the ground, exactly as before; carried cargo badges are unchanged.
 - **Three tree sizes.** The tree source holds small, medium and large;
   `map_view.gd` picks one per tree tile by `hash(Vector3i(seed, x, y))`
   (stable across pan, zoom, save and load). The placeholder tree source has
@@ -219,16 +230,19 @@ on the side its name says, props inside the owner's ceilings.
 | Tree (small, medium, large) | `Trees/Model_03/Size_02.png` (9x25, 16x32), `Trees/Model_01/Size_02.png` (32x62) |
 | Hazard decor, stone, wood | `Rocks.png` crystal (12x25), `Rocks.png` stone (16x14), `Resources.png` log (32x7) |
 | Workbench (horizontal) | `Workbench.png` (32x28) |
+| Workbench (vertical) | `Stations/Anvil/Anvil.png` quench trough with tongs (12x42) |
+| Door | `Dungeon_Props.png` arched wooden door (14x20) |
+| Seed, food | `Farm.png` carrot seed packet (16x12), harvested carrot (16x16) |
+| Coal, gold coin, flint, planks, stone blocks | `Resources.png` black lump (16x13), coin (6x9), dark shard (3x5), short plank (8x4), slate block (7x9) |
 | Pick, axe | `Weapons/Wood/Wood.png` (16x28, 16x31) |
 | Wolf / raider / trader | `Mobs/Wolf` side / `Orc Crew/Orc` / `Citizen_F/Peasant_A` idle + walk |
 
 Kept on the placeholder on purpose (the JSON's `placeholder` section gives
 the reason for each, and `test_world_pack.gd` fails on any content kind that
-is neither mapped nor listed): **bed** and **door** (every pack bed and door
-is about two tiles tall, over the one-tile rule), the **vertical workbench**
-(the pack has none, and rotating art is not allowed), the two test-only
-crates, and the items that have no icon today (seed, sand, gold coin, flint,
-coal).
+is neither mapped nor listed): the **bed** (every pack bed is about 30 px
+wide, two tiles, and art may overhang only upwards), **sand** (the pack has
+no sand pile; a tan pebble would read as stone) and the two test-only
+crates.
 
 ## Palette
 
