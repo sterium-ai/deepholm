@@ -13,8 +13,8 @@ extends RefCounted
 
 const DEFAULT_ROOT := "res://assets/pack/"
 const COLONIST_FRAMES_JSON := "res://data/sprite_frames/colonist_pack.json"
-## Terrain, props, trees, walls, ground items and the non-colonist actors (B3),
-## written by docs/orca/handoffs/B3-measure_pack_world.py.
+## Terrain, props, trees, walls, ground items and the non-colonist actors (B3,
+## extended by B7), written by docs/orca/handoffs/B7-measure_pack_world.py.
 const WORLD_JSON := "res://data/sprite_frames/world_pack.json"
 
 ## The sheet's texture, or null if `root` does not hold it. An imported
@@ -168,7 +168,8 @@ static func _vector2i(pair: Array) -> Vector2i:
 ## Ground/cargo/tool icons from a world_tile_set() result: kind ->
 ## {"texture", "rect"}, the rect being the sprite's own pixels in the composed
 ## texture (not the padded cell), for every `item_map` kind (tile_atlas_map.gd's
-## ITEM_ATLAS_MAP) whose source/coords the mapping covers. {} for null.
+## ITEM_ATLAS_MAP or PACK_ITEM_MAP) whose source/coords the mapping covers.
+## {} for null.
 static func item_icons(tile_set: TileSet, item_map: Dictionary, json_path: String = WORLD_JSON) -> Dictionary:
 	var icons := {}
 	if tile_set == null:

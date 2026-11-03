@@ -60,6 +60,15 @@ const CARRIED_ITEM_COLOR := Color(0.55, 0.35, 0.10)
 const GROUND_ITEM_COLORS := {
 	"wood": CARRIED_ITEM_COLOR,
 	"stone": Color("526568"),
+	# Pack-only ground icons (tile_atlas_map.gd's PACK_ITEM_MAP), shown as
+	# these squares only when the pack is present and art mode is off.
+	"seed": Color("c8742c"),
+	"food": Color("e08a2a"),
+	"coal": Color("2a2a30"),
+	"gold_coin": Color("e8c040"),
+	"flint": Color("4a5060"),
+	"planks": Color("b08050"),
+	"stone_blocks": Color("6a7480"),
 }
 const STOCKPILE_COUNT_TEXT_COLOR := Color.WHITE
 const STOCKPILE_COUNT_FONT_SIZE := 10
@@ -166,6 +175,10 @@ var _item_atlas_textures: Dictionary = {}
 ## With the pack (B3): item kind -> {texture, rect} from the pack TileSet
 ## (pack_assets.gd's item_icons()); empty with the placeholder art.
 var _pack_item_icons: Dictionary = {}
+## With the pack (B7): the same for tile_atlas_map.gd's PACK_ITEM_MAP kinds,
+## which get a ground/stockpile icon only then. Kept apart from
+## _pack_item_icons so carried cargo keeps its current icons.
+var _pack_only_item_icons: Dictionary = {}
 
 ## `pack_root` is where the synced Pixel Crawler sheets live (tests pass a
 ## fixture or a missing root). With every sheet world_pack.json names present,
@@ -188,6 +201,7 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	if not world_pack.is_empty():
 		tile_set_resource = world_pack["tile_set"]
 		_pack_item_icons = PackAssetsType.item_icons(tile_set_resource, TileAtlasMapType.ITEM_ATLAS_MAP)
+		_pack_only_item_icons = PackAssetsType.item_icons(tile_set_resource, TileAtlasMapType.PACK_ITEM_MAP)
 	_tile_map_layer = TileMapLayer.new()
 	_tile_map_layer.tile_set = tile_set_resource
 	_tile_map_layer.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -949,7 +963,7 @@ func _ground_item_counts() -> Dictionary:
 	var counts := {}
 	for item: Dictionary in _snapshot["items"]:
 		var kind := String(item["kind"])
-		if not TileAtlasMapType.ITEM_ATLAS_MAP.has(kind):
+		if not _has_ground_icon(kind):
 			continue
 		var cell := Vector2i(int(item["x"]), int(item["y"]))
 		if not counts.has(cell):
@@ -960,13 +974,17 @@ func _ground_item_counts() -> Dictionary:
 		if location["type"] != "ground":
 			continue
 		var kind := String(item["kind"])
-		if not TileAtlasMapType.ITEM_ATLAS_MAP.has(kind):
+		if not _has_ground_icon(kind):
 			continue
 		var cell := Vector2i(int(location["x"]), int(location["y"]))
 		if not counts.has(cell):
 			counts[cell] = {}
 		counts[cell][kind] = int(counts[cell].get(kind, 0)) + 1
 	return counts
+
+## Every ITEM_ATLAS_MAP kind, and a PACK_ITEM_MAP kind only with the pack.
+func _has_ground_icon(kind: String) -> bool:
+	return TileAtlasMapType.ITEM_ATLAS_MAP.has(kind) or _pack_only_item_icons.has(kind)
 
 ## Wood retains its original icon, dimensions, origin and count baseline in
 ## both modes. Additional kinds occupy subsequent rows only on mixed cells.
@@ -980,19 +998,18 @@ func _draw_stockpile_counts() -> void:
 	for cell in _zoned_cells_in_draw_order(counts):
 		var cell_counts: Dictionary = counts[cell]
 		var row := 0
-		for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
+		for kind in TileAtlasMapType.ITEM_ATLAS_MAP.keys() + _pack_only_item_icons.keys():
 			var count := int(cell_counts.get(kind, 0))
 			if count <= 0:
 				continue
-			var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
 			var origin := Vector2(cell.x * TILE_SIZE, cell.y * TILE_SIZE + row * TILE_SIZE)
 			var icon_rect := Rect2(origin, Vector2(icon_size, icon_size))
-			var pack_icon: Dictionary = _pack_item_icons.get(kind, {})
+			var pack_icon: Dictionary = _pack_item_icons.get(kind, _pack_only_item_icons.get(kind, {}))
 			if not pack_icon.is_empty() and (_art_enabled or kind == "wood"):
 				# Pack icons keep their own proportions inside the icon square.
 				draw_texture_rect_region(pack_icon["texture"], fit_rect(icon_rect, pack_icon["rect"].size), pack_icon["rect"])
-			elif _art_enabled or kind == "wood":
-				draw_texture_rect_region(_item_atlas_textures[kind], icon_rect, atlas["rect"])
+			elif _item_atlas_textures.has(kind) and (_art_enabled or kind == "wood"):
+				draw_texture_rect_region(_item_atlas_textures[kind], icon_rect, TileAtlasMapType.ITEM_ATLAS_MAP[kind]["rect"])
 			else:
 				draw_rect(icon_rect, GROUND_ITEM_COLORS.get(kind, Color.MAGENTA), true)
 			draw_string(font, origin + Vector2(icon_size + 1.0, TILE_SIZE - 2.0), str(count),

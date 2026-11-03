@@ -254,6 +254,9 @@ const OBJECT_ATLAS_MAP: Dictionary = {
 ## Native pixel ceilings for presentation props.
 const PROP_MAX_SIZE_1X1 := Vector2i(16, 24)
 const PROP_MAX_SIZE_2X1 := Vector2i(32, 28)
+## The vertical workbench's 1x2 footprint: its width stays inside the one
+## tile and its art may overhang up, like the 2x1 one (B7).
+const PROP_MAX_SIZE_1X2 := Vector2i(16, 44)
 const GROUND_ITEM_ICON_MIN_SIZE := 8.0
 const GROUND_ITEM_ICON_MAX_SIZE := 10.0
 
@@ -290,6 +293,20 @@ const ITEM_ATLAS_MAP: Dictionary = {
 		"texture_path": ART_DIR + "tools.png",
 		"rect": Rect2(16, 0, 16, 16),
 	},
+}
+
+## Item kinds that have a ground/stockpile icon only with the pack (B7): extra
+## cells on the resources source that world_pack.json adds and the generated
+## placeholder lacks, so they carry no texture_path/rect. Without the pack these
+## kinds keep today's behaviour (no ground icon). Never drawn as carried cargo.
+const PACK_ITEM_MAP: Dictionary = {
+	"seed": {"source_id": SOURCE_HAZARD, "coords": Vector2i(3, 0)},
+	"food": {"source_id": SOURCE_HAZARD, "coords": Vector2i(4, 0)},
+	"coal": {"source_id": SOURCE_HAZARD, "coords": Vector2i(5, 0)},
+	"gold_coin": {"source_id": SOURCE_HAZARD, "coords": Vector2i(6, 0)},
+	"flint": {"source_id": SOURCE_HAZARD, "coords": Vector2i(7, 0)},
+	"planks": {"source_id": SOURCE_HAZARD, "coords": Vector2i(8, 0)},
+	"stone_blocks": {"source_id": SOURCE_HAZARD, "coords": Vector2i(9, 0)},
 }
 
 ## Actor kinds (content/actors.json), deliberately reusing the hazard/door

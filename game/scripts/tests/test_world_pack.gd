@@ -106,7 +106,9 @@ func _check_content_coverage() -> void:
 	for kind: String in object_kinds:
 		_check_one("object", kind, TileAtlasMapType.OBJECT_ATLAS_MAP.get(kind, {}), placeholder.get("objects", {}))
 	for kind: String in _content("items", "items", "id"):
-		_check_one("item", kind, TileAtlasMapType.ITEM_ATLAS_MAP.get(kind, {}), placeholder.get("items", {}))
+		# B7: kinds with no placeholder icon get a pack-only cell (PACK_ITEM_MAP).
+		var item_atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP.get(kind, TileAtlasMapType.PACK_ITEM_MAP.get(kind, {}))
+		_check_one("item", kind, item_atlas, placeholder.get("items", {}))
 	var colonist_pack := PackAssetsType.read_mapping(PackAssetsType.COLONIST_FRAMES_JSON)
 	var actors: Dictionary = _mapping.get("actors", {})
 	for kind: String in _content("actors", "actors", "id"):
@@ -135,15 +137,21 @@ func _check_mapping_shape() -> void:
 		for tile: Dictionary in source["tiles"]:
 			var coords := Vector2i(int(tile["coords"][0]), int(tile["coords"][1]))
 			# The only cells the placeholder lacks are the extra tree sizes,
-			# which map_view.gd picks by hash next to the placeholder's (0, 0).
+			# which map_view.gd picks by hash next to the placeholder's (0, 0),
+			# and the pack-only item icons (B7), never drawn as map cells.
 			var tree_size: bool = source_id == TileAtlasMapType.SOURCE_TREE and coords.y == 0
-			_expect(placeholder_source != null and (placeholder_source.has_tile(coords) or tree_size),
+			var pack_item := _is_pack_item_cell(source_id, coords)
+			_expect(placeholder_source != null and (placeholder_source.has_tile(coords) or tree_size or pack_item),
 				"%s: coords %s are a placeholder cell" % [tile["label"], coords])
 			_expect(listed.has(tile["sheet"]), "%s: sheet not in pack_manifest.json" % tile["label"])
 			_expect(int(tile["rect"][2]) <= cell.x and int(tile["rect"][3]) <= cell.y, "%s fits its cell" % tile["label"])
 		var grounded_on = source.get("grounded_on")
 		if grounded_on != null and source_id != TileAtlasMapType.SOURCE_TREE:
-			var ceiling := TileAtlasMapType.PROP_MAX_SIZE_2X1 if source_id == TileAtlasMapType.SOURCE_WORKBENCH else TileAtlasMapType.PROP_MAX_SIZE_1X1
+			var ceiling := TileAtlasMapType.PROP_MAX_SIZE_1X1
+			if source_id == TileAtlasMapType.SOURCE_WORKBENCH:
+				ceiling = TileAtlasMapType.PROP_MAX_SIZE_2X1
+			elif source_id == TileAtlasMapType.SOURCE_WORKBENCH_VERTICAL:
+				ceiling = TileAtlasMapType.PROP_MAX_SIZE_1X2
 			_expect(cell.x <= ceiling.x and cell.y <= ceiling.y, "%s: %s within the prop ceiling %s" % [source["name"], cell, ceiling])
 	for key: String in _mapping.get("actors", {}):
 		for animation: String in ["idle", "walk"]:
@@ -152,12 +160,21 @@ func _check_mapping_shape() -> void:
 			_expect(int(entry.get("frames", 0)) * int(entry["sheet_size"][1]) == int(entry["sheet_size"][0]),
 				"%s %s: frames * height == width" % [key, animation])
 
+func _is_pack_item_cell(source_id: int, coords: Vector2i) -> bool:
+	for kind: String in TileAtlasMapType.PACK_ITEM_MAP:
+		var atlas: Dictionary = TileAtlasMapType.PACK_ITEM_MAP[kind]
+		if int(atlas["source_id"]) == source_id and atlas["coords"] == coords:
+			return true
+	return false
+
 func _check_missing_pack_falls_back() -> void:
 	_expect(PackAssetsType.world_tile_set(_placeholder, MISSING_ROOT) == null, "no pack -> no pack TileSet")
 	_expect(PackAssetsType.actor_frames(MISSING_ROOT).is_empty(), "no pack -> no actor frames")
 	var map_view = MapViewType.new(MISSING_ROOT)
 	_expect(map_view._tile_map_layer.tile_set == _placeholder, "no pack -> the placeholder TileSet, unchanged")
 	_expect(not map_view.is_pack_art(), "no pack -> placeholder item icons")
+	_expect(not map_view._has_ground_icon("coal") and map_view._has_ground_icon("wood"),
+		"no pack -> pack-only items (coal) stay undrawn, as before B7")
 	map_view.free()
 	_expect(PackAssetsType.world_pack(_placeholder, MISSING_ROOT).is_empty(), "no pack -> no world pack")
 	_expect(not _map_view_has_actor_art(MISSING_ROOT), "no pack -> map_view draws no actor sprites")
@@ -212,6 +229,9 @@ func _check_fixture_tile_set() -> void:
 	var icons := PackAssetsType.item_icons(tile_set, TileAtlasMapType.ITEM_ATLAS_MAP)
 	for kind: String in ["wood", "stone", "pick", "axe"]:
 		_expect(icons.has(kind), "pack icon for " + kind)
+	var pack_only := PackAssetsType.item_icons(tile_set, TileAtlasMapType.PACK_ITEM_MAP)
+	for kind: String in TileAtlasMapType.PACK_ITEM_MAP:
+		_expect(pack_only.has(kind), "pack-only icon for " + kind)
 	var resources: Dictionary = _source_entry(TileAtlasMapType.SOURCE_HAZARD)
 	var log_rect: Array = resources["tiles"][2]["rect"]
 	var cell := Vector2i(int(resources["cell_size"][0]), int(resources["cell_size"][1]))
@@ -232,6 +252,10 @@ func _check_map_view_uses_pack() -> void:
 	_expect(map_view._actor_sprites.has_pack_art(), "pack present -> map_view draws the actors")
 	_expect(map_view._tile_map_layer.tile_set != _placeholder, "pack present -> the pack TileSet")
 	_expect(map_view._colonist_sprites._pack_icons.has("axe"), "colonist badges use the pack icons")
+	_expect(not map_view._colonist_sprites._pack_icons.has("coal"), "carried cargo icons are unchanged by B7")
+	_expect(map_view._has_ground_icon("coal") and map_view._has_ground_icon("seed"),
+		"pack present -> pack-only items get a ground icon")
+	_expect(not map_view._has_ground_icon("sand"), "sand stays undrawn: the pack lacks it")
 	var decor: Dictionary = TileAtlasMapType.TILE_DECOR_MAP[WorldStateType.TILE_TREE]
 	var seen := {}
 	for x in 12:
