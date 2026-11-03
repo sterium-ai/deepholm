@@ -5,6 +5,8 @@ extends RefCounted
 ## its stockpile destination; execution is the toil executor's ("one work engine").
 
 var _priority: int
+## Per-pass memo of _stockpile_rejects(); rebuilt every _haul_rejected_tools() call, never persisted.
+var _rejecting: Dictionary = {}
 var _get_jobs: Callable
 var _get_items: Callable
 var _accepts_item_at: Callable
@@ -96,9 +98,12 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## and reserves it, so a haul colonist carries it there through ToolFetchToil and ToolDropToil,
 ## keeping its id; a job that cannot continue (interrupt, target lost or unreachable, reservation
 ## gone) sets the tool down on the carrier's tile and fails (c769a48), and it is re-planned from
-## there. A reserved tool (being fetched or already hauled), one a queued or active
-## haul_tool job names, and one outside every stockpile (its zone was removed: not stock, F2) are
-## skipped. A queued or active haul_tool job's target is not offered twice. A candidate cell in
+## there: while some stockpile rejects its kind (the eviction is under way), a ground tool outside
+## every stockpile (such a set-down one, or any other) gets a haul_tool job only to a free cell of
+## a reachable tool-accepting stockpile, never to more ground, so it stays where it lies while none
+## takes it; with no stockpile rejecting its kind a ground tool is left alone, as before F5a-b. A reserved tool (being fetched or already
+## hauled), one a queued or active haul_tool job names, and a stocked one outside every stockpile
+## (its zone was removed: not stock, F2) are skipped. A queued or active haul_tool job's target is not offered twice. A candidate cell in
 ## another passability region than the tool (walled off) is skipped and the search goes on, so a
 ## reachable alternative wins; with none reachable the tool waits, never offered and failed per tick.
 func _haul_rejected_tools(tick: int) -> void:
@@ -106,6 +111,7 @@ func _haul_rejected_tools(tick: int) -> void:
 		return
 	var busy: Dictionary = {}
 	var claimed: Dictionary = {}
+	_rejecting = {}
 	for job in (_get_tool_jobs.call() as Array):
 		if String(job["kind"]) == "haul_tool" and job["status"] in ["queued", "active"]:
 			busy[job["target"]] = true
@@ -113,13 +119,19 @@ func _haul_rejected_tools(tick: int) -> void:
 	for tool: Dictionary in (_tool_store.get_items() as Array):
 		var location: Dictionary = tool["location"]
 		var tool_id: String = tool["id"]
-		if String(location["type"]) != "stockpile" or _tool_store.is_reserved(tool_id) or claimed.has(tool_id):
+		var type := String(location["type"])
+		if not type in ["stockpile", "ground"] or _tool_store.is_reserved(tool_id) or claimed.has(tool_id):
 			continue
 		var tile := TileGrid.tile_of(location)
-		if bool(_accepts_item_at.call(tile, String(tool["kind"]))) or _home_stockpile(tile).is_empty():
+		if bool(_accepts_item_at.call(tile, String(tool["kind"]))):
+			continue
+		var in_stockpile := not _home_stockpile(tile).is_empty()
+		if type == "stockpile" and not in_stockpile:
+			continue
+		if not in_stockpile and not _stockpile_rejects(String(tool["kind"])):
 			continue
 		var cell: Variant = _free_tool_stockpile_cell(String(tool["kind"]), tile, busy)
-		if cell == null:
+		if cell == null and in_stockpile:
 			cell = _free_ground_cell_beside(tile, busy)
 		if cell == null:
 			continue
@@ -128,6 +140,14 @@ func _haul_rejected_tools(tick: int) -> void:
 			_attach_item.call(String(result["job_id"]), tool_id)
 			_tool_store.reserve(tool_id, String(result["job_id"]))
 			busy[cell] = true
+
+## Whether some stockpile rejects tools of kind (a tool eviction is under way, F5a-b); memoised in
+## _rejecting for the current _haul_rejected_tools() pass only.
+func _stockpile_rejects(kind: String) -> bool:
+	if not _rejecting.has(kind):
+		_rejecting[kind] = (_get_zones.call() as Array).any(func(zone: Dictionary) -> bool:
+			return not zone.has("kind") and not bool(_accepts_item_at.call(Vector3i(int(zone["x"]), int(zone["y"]), int(zone["z"])), kind)))
+	return _rejecting[kind]
 
 func _free_tool_stockpile_cell(kind: String, from: Vector3i, busy: Dictionary) -> Variant:
 	for zone: Dictionary in (_stockpiles_for_item.call(kind, from) as Array):

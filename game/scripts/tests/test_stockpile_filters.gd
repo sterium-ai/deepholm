@@ -76,6 +76,7 @@ func _init() -> void:
 	_check_walled_off_preferred_stockpile_yields_to_a_reachable_one()
 	_check_destination_walled_off_mid_carry_sets_the_tool_down()
 	_check_destination_rejects_tools_after_an_interrupt_leaves_the_tool_outside()
+	_check_interrupt_outside_a_is_replanned_from_the_ground_into_b()
 	_check_haul_tool_failure_matrix()
 	if _failed:
 		quit(1)
@@ -880,6 +881,54 @@ func _check_destination_rejects_tools_after_an_interrupt_leaves_the_tool_outside
 	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
 		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
 
+## F5a-b review round 12, the owner's rule (c769a48): the carry is interrupted after the carrier
+## has left A, on a tile in neither A nor B. A need cannot interrupt a walk (NeedGiver waits for a
+## toil boundary, and the carry is one walk from A to B), so the interruption is B walled off
+## mid-route: the haul_tool job fails through the engine and the pick is set down on the ground
+## there. B is then reopened and still takes tools, so HaulGiver re-plans the pick from the ground:
+## a new haul_tool job carries the same pick into B.
+func _check_interrupt_outside_a_is_replanned_from_the_ground_into_b() -> void:
+	var world := _stocked_pick_world(64060, true)
+	var pick_id := String(world.get_tool_items()[0]["id"])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var job_id := ""
+	for _i in _day_ticks:
+		world.tick()
+		var location := _pick_location(world)
+		if String(location["type"]) != "held":
+			continue
+		for colonist in TestAccess.colonists(world):
+			var cell := Vector2i(int(colonist["x"]), int(colonist["y"]))
+			if String(colonist["id"]) == String(location["colonist_id"]) and cell.distance_to(Vector2i(A.position)) >= 6.0 					and not A.has_point(cell) and not B.has_point(cell):
+				job_id = String(world.get_assignments().get(String(colonist["id"]), {}).get("job_id", ""))
+		if not job_id.is_empty():
+			break
+	_expect(not job_id.is_empty(), "a colonist must carry the pick out of A for a haul_tool job")
+	if job_id.is_empty():
+		return
+	_wall_around(world, B, true)
+	var job_of := func() -> Dictionary: return world.get_job(job_id)
+	var ended := func() -> bool: return not (job_of.call().get("status", "") in ["queued", "active"])
+	_expect(_tick_until(world, 200, ended) <= 200 and String(job_of.call().get("status", "")) == "failed"
+			and String(job_of.call().get("reason", "")) in ["invalid_target", "blocked_target_unreachable"],
+		"the interrupted haul_tool job must fail through the engine: %s" % [job_of.call()])
+	var dropped := _pick_location(world)
+	var dropped_cell := Vector2i(int(dropped.get("x", -1)), int(dropped.get("y", -1)))
+	_expect(String(dropped["type"]) == "ground" and not A.has_point(dropped_cell) and not B.has_point(dropped_cell),
+		"the interrupted carrier must set the pick down on the ground outside A and B: %s" % [dropped])
+	_wall_around(world, B, false)
+	var in_b := func() -> bool:
+		_expect_holder_busy(world, "re-planned from the ground")
+		return _haul_tool_closed(world) and _tool_rests_validly(world, true)
+	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks,
+		"the set-down pick must be re-planned from the ground and stocked in B: %s, jobs %s"
+			% [_pick_location(world), world.get_jobs(["haul_tool"])])
+	var replans := world.get_jobs(["haul_tool"]).filter(func(job: Dictionary) -> bool:
+		return String(job["id"]) != job_id and String(job.get("item_id", "")) == pick_id and String(job["status"]) == "completed")
+	_expect(replans.size() == 1, "one new haul_tool job must carry the pick from the ground into B: %s" % [world.get_jobs(["haul_tool"])])
+	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
+		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
+
 ## A critical food need on one colonist, so NeedsSystem interrupts its job on the next need tick.
 func _starve(world: WorldStateType, colonist_id: String) -> void:
 	for colonist in TestAccess.colonists(world):
@@ -893,17 +942,17 @@ func _haul_tool_closed(world: WorldStateType) -> bool:
 			return false
 	return true
 
-## The pick rests where the owner's rule (c769a48) allows: not in a hand; stocked only in B and only
-## while B takes tools (b_takes_tools); otherwise on the ground outside every stockpile; and reserved
-## by no job that is no longer open.
+## The pick rests where the owner's rule (c769a48) allows: not in a hand; stocked in B while B takes
+## tools (b_takes_tools: HaulGiver re-plans a set-down pick from the ground into B, review round 12),
+## otherwise on the ground outside every stockpile; and reserved by no job that is no longer open.
 func _tool_rests_validly(world: WorldStateType, b_takes_tools: bool) -> bool:
 	var location := _pick_location(world)
 	var type := String(location["type"])
 	if type == "held":
 		return false
 	var cell := Vector2i(int(location["x"]), int(location["y"]))
-	var rests := (type == "ground" and not A.has_point(cell) and not B.has_point(cell)) \
-		or (type == "stockpile" and b_takes_tools and B.has_point(cell))
+	var rests := (type == "stockpile" and B.has_point(cell)) if b_takes_tools \
+		else (type == "ground" and not A.has_point(cell) and not B.has_point(cell))
 	var holder := String(world.get_tool_item_reservation(String(world.get_tool_items()[0]["id"])))
 	return rests and (holder.is_empty() or String(world.get_job(holder).get("status", "")) in ["queued", "active"])
 

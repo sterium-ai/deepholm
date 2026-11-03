@@ -215,7 +215,7 @@
        idle colonist holds the pick); restored, `test_stockpile_filters` passes;
      - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
        game/scripts/core/world_state.gd` giving `2 2`.
-  14. Round 11, the commit that changes this file to the present text
+  14. Round 11, `2598977`
      (`git log -1 -- docs/orca/handoffs/F5a-b.md`). Owner notes: F5c (`47a3e58`) is on main and
      took schema v13; then L4 (`a5cb853`, no schema bump) landed too. The branch was rebased
      onto `origin/main` twice, first onto F5c and then onto `a5cb853`. The second rebase had no
@@ -248,6 +248,56 @@
      - gates on the rebased HEAD: `world_state.gd` is 767 lines and numstat `2 2`;
        `check_core_budgets` OK; `measure_core` 23783 lines in 114 files (the growth is F5c's
        and L4's).
+  15. Round 12, the commit that changes this file to the present text. It answers review
+     round 12 (`.orca-review.md`):
+     - (blocking 1) a tool set down on the ground was never re-planned: `_haul_rejected_tools`
+       only looked at stocked tools, so "the giver re-plans from the ground" (rounds 9 and 10)
+       was not true for a tool on the ground outside every zone. Now a ground tool that lies in
+       no tool-accepting stockpile is re-planned too, but only while some stockpile rejects its
+       kind (an eviction is under way), and only into a free cell of a reachable tool-accepting
+       stockpile, never onto more ground. A stocked tool whose tile lies in no zone is still
+       skipped (F2). The check is memoised per `_haul_rejected_tools` pass (`_rejecting`, never
+       persisted) and uses only the giver's existing `_get_zones` and `_accepts_item_at`
+       callables: no new wiring, ids, reasons or saved fields. `haul_giver.gd` now 203 lines;
+     - why the narrowing: a first version re-planned every ground tool, and the full suite then
+       failed in four tests (`test_farming_content`, `test_haul_need_interrupt`,
+       `test_movement_scheduling_load`, `test_tool_items_handover`). They start with ordinary
+       tools on the ground, which were then hauled away from the colonists who needed them.
+       There is no persisted marker for "set down by a failed `haul_tool` job" (job history is
+       not saved), so the rule is bounded by the zone filters instead. With no stockpile
+       rejecting a kind, ground tools of that kind are left alone, as before F5a-b;
+     - new tick-driven check `_check_interrupt_outside_a_is_replanned_from_the_ground_into_b`
+       (seed 64060): the carrier has left A and stands on a tile in neither A nor B; B is
+       walled off, the job fails through the engine (`invalid_target` or
+       `blocked_target_unreachable`) and the pick is set down on the ground there; B is
+       reopened, and a second, new `haul_tool` job carries the same pick id from the ground
+       into B. The interruption after leaving A is a destination fault, not a need: NeedGiver
+       only interrupts at a toil boundary (`need_giver.gd`, `_evaluate` returns while the
+       colonist has a route), and the carry from A to B is one walk, so a need can interrupt
+       only at the pickup in A (covered by the matrix's "before" rows and seed 64024);
+     - `_tool_rests_validly(world, true)` is tightened: while B takes tools the pick must end
+       stocked in B (before, the ground outside A and B also passed). The failure matrix's
+       "unreachable" and "walled" rows therefore now prove the re-plan from the ground into B;
+     - (blocking 2) `needs_system.gd`: **approved by the owner** in `docs/orca/BACKLOG.md` on
+       main, commit `a7cbb0e` ("Review round 10 (owner's interface, 2026-11-03): scope"). The
+       same entry asks for the blocking 1 fix above ("a dropped tool outside a stockpile is a
+       haul candidate again"). `a7cbb0e` touches only `BACKLOG.md` and is the only commit on
+       `origin/main` past this branch's base `a5cb853`, so the branch was not rebased for it;
+     - (non-blocking) `docs/architecture/save-system.md` now says `schemaVersion: 14`, as
+       `state_codec.gd` does;
+     - (non-blocking) the suite line is still author-reported (see below); the log path is
+       given so it can be checked;
+     - gates on the round 12 tree: `world_state.gd` is 767 lines and numstat `2 2` against
+       `origin/main`; `check_core_budgets` OK; `measure_core` 23803 lines in 114 files.
+- Pending owner approval (round 12, does not block): while some stockpile rejects a tool kind,
+  every ground tool of that kind outside a tool-accepting stockpile becomes a `haul_tool`
+  candidate. That includes tools that were never stocked, not just the one a failed job set
+  down. Once no stockpile rejects the kind, ground tools are left alone again. Tracking only
+  set-down tools would need a new persisted field. Please confirm this scope, or ask for the
+  field.
+- Owner decision followed (round 12, `a7cbb0e`): `needs_system.gd` is F5a-b scope; a tool
+  dropped outside a stockpile is a haul candidate again, with its test; `save-system.md` says
+  schema 14; full suite, commit.
 - Owner decision followed (round 11): rebase onto `origin/main` after F5c and renumber the bump
   to v14, keeping F5c's v13 (migration `_v13_to_v14` plus a v14 fixture); then rebase again
   after L4.
@@ -266,7 +316,25 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 11)
+## Final suite line (author-reported, round 12)
+
+```
+run_tests: all 139 test(s) PASS  [1.071s]
+```
+
+Quoted verbatim. `1.071s` is how the runner prints about 1071 seconds in this locale, where `.`
+is the thousands separator. The tree is round 12: the round 11 tree plus the ground re-plan in
+`haul_giver.gd`, the new and tightened checks in `test_stockpile_filters.gd`, and the schema line
+in `save-system.md`. Before this run the author refreshed the class cache with `--import`. Then
+on Windows, with Godot 4.7.2 headless, the author ran
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 -SkipImport > full12b.log 2>&1`.
+The log is at
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\full12b.log`.
+It is local to the author's machine and not committed. Its FAIL and push_error lines come from
+the suite's expected-failure checks. The reviewer has not reproduced the full suite. Earlier
+rounds are kept below as history.
+
+### Round 11 (history)
 
 ```
 run_tests: all 139 test(s) PASS  [1.013s]
@@ -329,6 +397,11 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
   - it is reserved, or
   - its tile still accepts its group, or
   - its tile lies in no stockpile (its zone was removed, so F2 says it is not stock).
+
+  Since round 12 it also looks at each tool on the ground (location type `ground`) that is not
+  reserved and lies in no stockpile accepting its group, such as a tool a failed `haul_tool`
+  job set down. Such a tool only gets step 1 below (a free cell of a reachable tool-accepting
+  stockpile); it is never moved from one ground tile to another.
 
   For every other tool, it picks a target:
   1. the first free cell of the tool-accepting stockpiles, in `stockpiles_for_item()` order
@@ -511,6 +584,8 @@ and are still pending:
 5. `game/scripts/core/actors/needs_system.gd` (round 10; 532/800 after F5c's growth): a need or rescue interrupt
    of a `haul_tool` job calls the new optional `abandon_haul_tool` callable (fail and set the
    tool down, per `c769a48`) instead of suspending the job. Other kinds are unchanged.
+   **Approved since round 12**: the owner approved it in `docs/orca/BACKLOG.md` on main,
+   commit `a7cbb0e`. It is listed here only so the scope stays traceable.
 
 ## Contract impact
 
