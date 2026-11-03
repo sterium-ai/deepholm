@@ -1183,6 +1183,11 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   switch **rebuilds** the drawn layer (no cached per-layer reuse in v1) — a switch is a player
   action, so the rebuild cost is acceptable as long as it stays under one frame budget at the
   A9 viewer scale; cached reuse is a later optimisation (note it in the contract as such).
+- **Review round 2 (owner's interface, 2026-11-03): budget amended.** Measured 25–31 ms to a
+  deeper layer and 44 ms back to the surface at A9 scale. A switch is a one-off player action,
+  so a 2–3 frame hitch is acceptable in v1: the budget is **≤ 50 ms per switch at A9 scale**,
+  recorded in the handoff with the reproducible bench; the one-frame target moves to the
+  cached-reuse optimisation task (L4b, 	odo).
 
 ### F4 — Underground layers: generation, discovery, tunnel, drill and ores · `todo` · after L1–L4 · Design: closed 2026-10-30
 
@@ -1261,6 +1266,15 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   game-state schema job-kind enum and `game/data/text/en.json` — approved as F5a-b's scope, as
   declared in the handoff. The delivery recheck (destination stops accepting tools during
   travel) is fixed as Codex asks, through the shared job engine.
+- **Review round 9 (owner's interface, 2026-11-03): uniform failure rule.** Nine rounds of
+  one-more-edge-case (interrupt × target lost × unreachable × reservation state) are a sign
+  of a missing rule, not of missing patches. Rule: **whenever a haul_tool job cannot
+  continue for any reason** (interrupted and not resumable, target invalid or unreachable,
+  reservation missing), the carrier **sets the tool down on its current tile, the job fails
+  through the shared engine, and the giver re-plans from the ground** next time. One
+  tick-driven table test covers the matrix (interrupt before/after pickup × target rejects/
+  unreachable/walled × with/without reservation) and asserts the tool is on the ground or in a
+  valid stockpile, never held by an idle colonist.
 
 ### F5b — Labours: cook and heal; cooking · `review (antonelmejor50-hub/f5b-labours-cook-and-heal)` · after F2 · Design: closed 2026-10-30
 
