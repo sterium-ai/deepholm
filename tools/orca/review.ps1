@@ -24,7 +24,7 @@ $branch = git rev-parse --abbrev-ref HEAD
 $taskId = ((($branch -split "/")[-1]) -split "-")[0].ToUpperInvariant()   # Orca may prefix the branch with the GitHub user
 # Sub-tasks carry a one-letter suffix (F5a-b): prefer the longest handoff name the branch starts with.
 $parts = (($branch -split "/")[-1]) -split "-"
-if ($parts.Count -ge 2 -and $parts[1] -match '^[a-z]$' -and (Test-Path (Join-Path $PSScriptRoot "..\..\docs\orca\handoffs\$($parts[0].ToUpperInvariant())-$($parts[1]).md"))) {
+if ($parts.Count -ge 2 -and $parts[1] -match '^[a-z]$' -and (Test-Path (Join-Path $root "docs\orca\handoffs\$($parts[0].ToUpperInvariant())-$($parts[1]).md"))) {
     $taskId = "$($parts[0].ToUpperInvariant())-$($parts[1])"
 }
 
@@ -44,7 +44,7 @@ if (-not $SkipPreflight) {
         # audit 2026-10-30). Only code commits count.
         $mergeBase = (git merge-base $Base HEAD).Trim()
         $codeFiles = @(git diff --name-only "$mergeBase" "$Base" | Where-Object {
-            $_ -notmatch '\.md$' -and $_ -notmatch '^docs/(orca|decisions|design|art)/' })
+            $_ -notmatch '\.md$' -and $_ -notmatch '^docs/(orca|decisions|design|art)/' -and $_ -notmatch '^(tools/orca|\.claude)/' })
         if ($codeFiles.Count -gt 0) {
             $behind = (git rev-list --count "HEAD..$Base")
             $problems += "the branch is $behind commit(s) behind ${Base} with code changes ($($codeFiles.Count) file(s)): fetch + rebase, rerun the warnings gate and the full suite on the rebased head"
