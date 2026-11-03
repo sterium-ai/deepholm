@@ -67,7 +67,8 @@ func set_stockpile(item_id: String, tile: Vector3i) -> bool:
 func lies_at(cell: Vector3i) -> bool:
 	for item: Dictionary in items.values():
 		var location: Dictionary = item["location"]
-		if String(location["type"]) in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell:
+		var location_type: String = location["type"]
+		if location_type in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell:
 			return true
 	return false
 

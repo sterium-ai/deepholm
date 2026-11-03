@@ -15,7 +15,7 @@ var _item_lookup: Callable
 var _is_cell_free: Callable
 var _passability: Callable
 var _is_cell_occupied: Callable
-var _tool_store
+var _tool_store: ToolItemStore
 var _get_zones: Callable
 var _get_tool_jobs: Callable
 var _region_reachable: Callable
@@ -29,7 +29,7 @@ var _region_reachable: Callable
 func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_at: Callable,
 		submit_job: Callable, attach_item: Callable, stockpiles_for_item: Callable, item_lookup: Callable,
 		is_cell_free: Callable, passability: Callable, is_cell_occupied: Callable,
-		tool_store = null, get_zones: Callable = Callable(), get_tool_jobs: Callable = Callable(),
+		tool_store: ToolItemStore = null, get_zones: Callable = Callable(), get_tool_jobs: Callable = Callable(),
 		region_reachable: Callable = Callable()) -> void:
 	_priority = priority
 	_get_jobs = get_jobs
@@ -76,7 +76,8 @@ func find_free_haul_cell(item_id: String) -> Variant:
 	var item: Dictionary = _item_lookup.call(item_id)
 	if item.is_empty():
 		return null
-	var zones: Array[Dictionary] = _stockpiles_for_item.call(String(item["kind"]), TileGrid.tile_of(item))
+	var kind: String = item["kind"]
+	var zones: Array[Dictionary] = _stockpiles_for_item.call(kind, TileGrid.tile_of(item))
 	for zone: Dictionary in zones:
 		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
 			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
@@ -86,8 +87,10 @@ func find_free_haul_cell(item_id: String) -> Variant:
 	return null
 
 func _cell_takes_item(cell: Vector3i) -> bool:
-	return bool(_is_cell_free.call(cell)) and bool((_passability.call(cell) as Dictionary)["passable"]) \
-		and not bool(_is_cell_occupied.call(cell, ""))
+	var free: bool = _is_cell_free.call(cell)
+	var passable: bool = (_passability.call(cell) as Dictionary)["passable"]
+	var occupied: bool = _is_cell_occupied.call(cell, "")
+	return free and passable and not occupied
 
 ## F5a-b (ADR 064): a stocked tool (ToolItemStore, ADR 061) in a stockpile that no longer accepts
 ## its group gets, in id order, one haul_tool job targeting the first free cell find_free_haul_cell()'s
@@ -112,40 +115,51 @@ func _haul_rejected_tools(tick: int) -> void:
 		return
 	var busy: Dictionary = {}
 	var claimed: Dictionary = {}
-	for job in (_get_tool_jobs.call() as Array):
-		if String(job["kind"]) == "haul_tool" and job["status"] in ["queued", "active"]:
+	for job: Dictionary in (_get_tool_jobs.call() as Array):
+		var job_kind: String = job["kind"]
+		if job_kind == "haul_tool" and job["status"] in ["queued", "active"]:
 			busy[job["target"]] = true
-			claimed[String(job.get("item_id", ""))] = true
-	for tool: Dictionary in (_tool_store.get_items() as Array):
+			var job_item: String = job.get("item_id", "")
+			claimed[job_item] = true
+	for tool: Dictionary in _tool_store.get_items():
 		var location: Dictionary = tool["location"]
 		var tool_id: String = tool["id"]
-		var type := String(location["type"])
+		var tool_kind: String = tool["kind"]
+		var type: String = location["type"]
 		if not type in ["stockpile", "ground"] or _tool_store.is_reserved(tool_id) or claimed.has(tool_id):
 			continue
 		var tile := TileGrid.tile_of(location)
-		if bool(_accepts_item_at.call(tile, String(tool["kind"]))):
+		var accepted: bool = _accepts_item_at.call(tile, tool_kind)
+		if accepted:
 			continue
 		var in_stockpile := not _home_stockpile(tile).is_empty()
 		if type == "stockpile" and not in_stockpile:
 			continue
-		if not in_stockpile and not bool(tool.get("set_down", false)):
+		var set_down: bool = tool.get("set_down", false)
+		if not in_stockpile and not set_down:
 			continue
-		var cell: Variant = _free_tool_stockpile_cell(String(tool["kind"]), tile, busy)
+		var cell: Variant = _free_tool_stockpile_cell(tool_kind, tile, busy)
 		if cell == null and in_stockpile:
 			cell = _free_ground_cell_beside(tile, busy)
 		if cell == null:
 			continue
 		var result: Dictionary = _submit_job.call(cell, _priority, tick, "haul_tool")
 		if result.get("ok", false):
-			_attach_item.call(String(result["job_id"]), tool_id)
-			_tool_store.reserve(tool_id, String(result["job_id"]))
+			var job_id: String = result["job_id"]
+			_attach_item.call(job_id, tool_id)
+			_tool_store.reserve(tool_id, job_id)
 			busy[cell] = true
 
 func _free_tool_stockpile_cell(kind: String, from: Vector3i, busy: Dictionary) -> Variant:
 	for zone: Dictionary in (_stockpiles_for_item.call(kind, from) as Array):
-		for y in range(int(zone["y"]), int(zone["y"]) + int(zone["height"])):
-			for x in range(int(zone["x"]), int(zone["x"]) + int(zone["width"])):
-				var cell := Vector3i(x, y, int(zone["z"]))
+		var zx: int = zone["x"]
+		var zy: int = zone["y"]
+		var zz: int = zone["z"]
+		var zw: int = zone["width"]
+		var zh: int = zone["height"]
+		for y in range(zy, zy + zh):
+			for x in range(zx, zx + zw):
+				var cell := Vector3i(x, y, zz)
 				if _cell_takes_item(cell) and not _tool_store.lies_at(cell) and not busy.has(cell) and _reaches(from, cell):
 					return cell
 	return null
@@ -153,7 +167,10 @@ func _free_tool_stockpile_cell(kind: String, from: Vector3i, busy: Dictionary) -
 ## Whether a colonist can walk from the tool's tile to cell (same passability region); true
 ## when no region check is wired.
 func _reaches(from: Vector3i, cell: Vector3i) -> bool:
-	return not _region_reachable.is_valid() or bool(_region_reachable.call(from, cell))
+	if not _region_reachable.is_valid():
+		return true
+	var reachable: bool = _region_reachable.call(from, cell)
+	return reachable
 
 ## The free tile outside every zone sharing an edge with the stockpile holding tile, nearest to
 ## tile (Manhattan), ties by y then x; null when there is none.
@@ -166,11 +183,13 @@ func _free_ground_cell_beside(tile: Vector3i, busy: Dictionary) -> Variant:
 	var best_distance := 0
 	var zx: int = home["x"]
 	var zy: int = home["y"]
-	for y in range(zy - 1, zy + int(home["height"]) + 1):
-		for x in range(zx - 1, zx + int(home["width"]) + 1):
+	var zw: int = home["width"]
+	var zh: int = home["height"]
+	for y in range(zy - 1, zy + zh + 1):
+		for x in range(zx - 1, zx + zw + 1):
 			var cell := Vector3i(x, y, tile.z)
-			var beside_x := x >= zx and x < zx + int(home["width"])
-			var beside_y := y >= zy and y < zy + int(home["height"])
+			var beside_x := x >= zx and x < zx + zw
+			var beside_y := y >= zy and y < zy + zh
 			if beside_x == beside_y: # inside the zone, or a diagonal corner
 				continue
 			if zones.any(func(zone: Dictionary) -> bool: return _zone_has(zone, cell)):
@@ -191,5 +210,9 @@ func _home_stockpile(tile: Vector3i) -> Dictionary:
 	return {}
 
 static func _zone_has(zone: Dictionary, cell: Vector3i) -> bool:
-	return int(zone["z"]) == cell.z and cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) \
-		and cell.y >= int(zone["y"]) and cell.y < int(zone["y"]) + int(zone["height"])
+	var zx: int = zone["x"]
+	var zy: int = zone["y"]
+	var zz: int = zone["z"]
+	var zw: int = zone["width"]
+	var zh: int = zone["height"]
+	return zz == cell.z and cell.x >= zx and cell.x < zx + zw and cell.y >= zy and cell.y < zy + zh

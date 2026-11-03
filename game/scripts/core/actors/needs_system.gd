@@ -288,7 +288,8 @@ func interrupt_current_job(colonist: Dictionary) -> void:
 		return
 	var job_id: String = String(paused_jobs[colonist_id])
 	var job := _scheduler.queue.get_job(job_id)
-	if String(job.get("kind", "")) == "haul_tool" and abandon_haul_tool.is_valid():
+	var abandoned_kind: String = job.get("kind", "")
+	if abandoned_kind == "haul_tool" and abandon_haul_tool.is_valid():
 		paused_jobs.erase(colonist_id)
 		abandon_haul_tool.call(colonist, job_id, job)
 		return

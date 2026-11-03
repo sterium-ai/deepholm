@@ -354,7 +354,7 @@
      - gates on the round 14 tree: `world_state.gd` is 767 lines and numstat `2 2` against
        `origin/main`; `check_core_budgets` OK; `measure_core` 23836 lines in 114 files;
        `tool_drop_toil.gd` 365 lines, `toil_bindings.gd` 512, `toil_executor.gd` 657.
-  18. Round 15, the commit that changes this file to the present text. It answers review
+  18. `1e411c5`: round 15. It answers review
      round 15 (`.orca-review.md`):
      - (blocking) `order_handler.gd:71`: `complete_job` on an active `haul_tool` that has not
        delivered released the reservation but left the pick in the carrier's hand. It now goes
@@ -382,6 +382,27 @@
      - gates on the round 15 tree: `world_state.gd` is 767 lines and numstat `2 2` against
        `origin/main`; `check_core_budgets` OK; `measure_core` 23837 lines in 114 files;
        `git diff --check` clean.
+  19. Round 16, the commit that changes this file to the present text. Review round 16
+     (`.orca-review.md`) is APPROVE with three non-blocking findings, all handled here:
+     - typing fixes so `tools/check_core_warnings.ps1` passes on the branch, with no behaviour
+       change: typed locals instead of `String()`/`bool()`/`int()` casts on Variants, typed
+       `for` variables and `as Dictionary` casts, in `haul_giver.gd` (also `_tool_store:
+       ToolItemStore`), `tool_drop_toil.gd`, `tool_fetch_toil.gd`, `tool_item_store.gd`,
+       `toil_bindings.gd`, `needs_system.gd`, `save_migrations.gd`, `state_codec.gd` and
+       `tool_validator.gd`. `docs/architecture/warnings-baseline.txt` is lowered with
+       `-Update` (counts only go down): total 2795 to 2784, `untyped_declaration` 507 to 506,
+       `unsafe_call_argument` 2035 to 2025; per file `haul_giver.gd` 16 to 13,
+       `tool_drop_toil.gd` 59 to 55, `tool_fetch_toil.gd` 42 to 38;
+     - (non-blocking) the size table under "Validation" is refreshed to the round 16 tree
+       (`toil_executor.gd` 657 and the others);
+     - (non-blocking) the pending-approval entries are reconciled with the backlog: the round 8,
+       10 and 14 additions to `toil_executor.gd` and `toil_bindings.gd` are inside the round 2
+       scope approval (`afeeade`), and the persisted `setDown` field stays inside the v14 bump
+       the backlog permits ("if one is needed, the next free number (say so in the handoff)");
+     - (non-blocking) the suite line is still author-reported (see below), with the log path;
+     - gates on the round 16 tree: `world_state.gd` is 767 lines and numstat `2 2` against
+       `origin/main`; `check_core_warnings` OK (2784); `check_core_budgets` OK;
+       `measure_core` 23870 lines in 114 files; `git diff --check` clean.
 - Owner approval (round 15 scope amendment): approved. The owner approved
   `game/scripts/core/commands/handlers/order_handler.gd` and
   `game/scripts/core/actors/trench_system.gd` as F5a-b's scope in `docs/orca/BACKLOG.md` on
@@ -390,13 +411,16 @@
   uniform rule requires". This covers the job command condition at lines 70-75, including the
   round 15 `complete_job` routing on a `haul_tool` job, and `trench_system.gd:227`. The
   reviewer's condition (amendment recorded before merge) is met.
-- Pending owner approval (round 14, does not block): the round 14 additions to
-  `toil_bindings.gd` (the `haul_tool` branch in `drop_carried_haul_item()`) and
-  `toil_executor.gd` (the `set_down_hauled_tool()` forwarder) go beyond the round 2 approval.
-  The one-line edits to `order_handler.gd:73` and `trench_system.gd:227` from the same round
+- Covered by the round 2 scope approval (round 14, reconciled in round 16): the round 14
+  additions to `toil_bindings.gd` (the `haul_tool` branch in `drop_carried_haul_item()`) and
+  `toil_executor.gd` (the `set_down_hauled_tool()` forwarder). The backlog's round 2 entry
+  (`afeeade`) approves `toil_executor.gd` and `toil_bindings.gd` "as F5a-b's scope, as declared
+  in the handoff", for the `haul_tool` kind. The one-line edits to `order_handler.gd:73` and `trench_system.gd:227` from the same round
   are approved (`78dc216`, above).
-- Pending owner approval (round 13, does not block): the persisted optional `setDown` field on
-  `toolItems` entries (the schema, `state_codec.gd`, `tool_validator.gd`, `save-system.md`). It
+- Permitted by the backlog (round 13, reconciled in round 16): the persisted optional `setDown`
+  field on `toolItems` entries (the schema, `state_codec.gd`, `tool_validator.gd`,
+  `save-system.md`). The F5a-b entry says "No schema bump expected; if one is needed, the next
+  free number (say so in the handoff)": v14 is that number, declared here. It
   is what the reviewer's round 13 fix needs ("preserve recovery eligibility independently of
   current filters"), and round 12 named it as the alternative. It stays inside the v14 bump: no
   new version, id or reason. It replaces the round 12 question, which is withdrawn.
@@ -421,7 +445,22 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 15)
+## Final suite line (author-reported, round 16)
+
+```
+run_tests: all 139 test(s) PASS  [905s]
+```
+
+Quoted verbatim. The tree is round 16 (the typing fixes in item 19). On Windows, with Godot
+4.7.2 headless, the author ran
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 -SkipImport > full16.log 2>&1`.
+`-SkipImport` is safe here because round 16 adds no `class_name`. The log is at
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\full16.log`.
+It is local to the author's machine and not committed. Its FAIL and push_error lines come from
+the suite's expected-failure checks. The reviewer has independently verified the other checks
+but has not reproduced the full suite.
+
+### Round 15 (history)
 
 ```
 run_tests: all 139 test(s) PASS  [1.028s]
@@ -705,23 +744,27 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
 Approved by the owner in round 2 (`docs/orca/BACKLOG.md` on main, commit `afeeade`):
 - `game/content/jobs.json`: the `haul_tool` kind;
 - `game/scripts/core/jobs/toil_executor.gd`: the forwarder, the 2-line en-route recheck and the
-  constructor parameter (654/800; round 8 adds a second one-line forwarder,
-  `fail_hauled_tool()`, and round 10 points it, the recheck and `ToolFetchToil.fail_carry` at
-  `fail_haul_tool()`; the owner has not seen these yet);
-- `game/scripts/core/jobs/toil_bindings.gd`: the work-completion arm (507/800; round 8 adds the
-  `toil_on_unreachable` arm and round 10 the `abandon_haul_tool` wiring for need interrupts;
-  the owner has not seen these yet);
+  constructor parameter (657/800; round 8 adds a second one-line forwarder,
+  `fail_hauled_tool()`, round 10 points it, the recheck and `ToolFetchToil.fail_carry` at
+  `fail_haul_tool()`, and round 14 adds `set_down_hauled_tool()`; all for `haul_tool`, so
+  covered by this approval);
+- `game/scripts/core/jobs/toil_bindings.gd`: the work-completion arm (513/800; round 8 adds the
+  `toil_on_unreachable` arm, round 10 the `abandon_haul_tool` wiring for need interrupts and
+  round 14 the `haul_tool` branch in `drop_carried_haul_item()`; all for `haul_tool`, so
+  covered by this approval);
 - the `"haul_tool"` value of the schema's job kind enum;
 - `game/data/text/en.json`: one status text.
 
 The owned paths are `haul_giver.gd`, `tool_item_store.gd`, `tool_*_toil.gd`,
-`test_stockpile_filters.gd` and this file. These changes are outside them and that approval,
-and are still pending:
+`test_stockpile_filters.gd` and this file. The changes below are outside them and the round 2
+list. Items 3, 5 and 6 are approved by later backlog entries. Item 1 is permitted by the F5a-b
+entry's "if one is needed, the next free number (say so in the handoff)" line, which this list
+does. Items 2 and 4 still need an explicit confirmation from the owner (reconciled in round 16):
 
 1. Schema v14 (round 2, needed by review finding (c); v14 since round 11, after F5c took v13):
    - `docs/architecture/contracts/game-state.schema.json`: const 14 (the enum value is
      approved);
-   - `game/scripts/core/persistence/state_codec.gd`: `SCHEMA_VERSION` 14 (603/800);
+   - `game/scripts/core/persistence/state_codec.gd`: `SCHEMA_VERSION` 14 and the optional `setDown` field (610/800);
    - `game/scripts/core/persistence/save_migrations.gd`: the `13:` arm and `_v13_to_v14`;
    - `docs/architecture/save-system.md`: the v14 notes;
    - `game/scripts/tests/test_save_migration.gd`: the v13-to-v14 and v14 checks;
@@ -732,11 +775,11 @@ and are still pending:
    list (22 to 23, after F5b's `cook_work`).
 3. `game/scripts/core/world_state.gd`: the edits to two existing lines described above (the
    `ToilExecutor` constructor's last line and the `HaulGiver` constructor's second line). It
-   stays at 767 lines, within the round 1 decision (`07cd384`). Round 3 wrongly reported two
+   stays at 767 lines, within the round 1 decision (`07cd384`), which approves it. Round 3 wrongly reported two
    lines while three were edited; round 4 brings it to two.
 4. `docs/decisions/064-…md` and `docs/orca/BACKLOG.md` (status `review`, unchanged in this
    round).
-5. `game/scripts/core/actors/needs_system.gd` (round 10; 532/800 after F5c's growth): a need or rescue interrupt
+5. `game/scripts/core/actors/needs_system.gd` (round 10; 533/800 after F5c's growth): a need or rescue interrupt
    of a `haul_tool` job calls the new optional `abandon_haul_tool` callable (fail and set the
    tool down, per `c769a48`) instead of suspending the job. Other kinds are unchanged.
    **Approved since round 12**: the owner approved it in `docs/orca/BACKLOG.md` on main,
@@ -837,24 +880,24 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23837 lines in 114 files` (round 15; 23836 in round 14;
+- `tools/measure_core.ps1`: `core total: 23870 lines in 114 files` (round 16; 23837 in round 15; 23836 in round 14;
   23822 in round 13;
   23803 in round 12;
   23783 in round 11, after the F5c
-  and L4 rebases; the table below is round 10's, except that `needs_system.gd` is now 532,
-  `toil_bindings.gd` 512 and `state_codec.gd` 608). Earlier: 23456 lines in 113 files (round 10; 23459 in round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
+  and L4 rebases; the table below is round 16's line counts, and the code/comment breakdowns
+  and longest functions are round 10's). Earlier: 23456 lines in 113 files (round 10; 23459 in round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
   23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
 
   | File | Lines | Longest function |
   |---|---|---|
   | `world_state.gd` | 767 (593 code, 114 comment) | `state_hash`, 30 |
-  | `toil_executor.gd` | 654 (480 code, 126 comment) | `_start_current_toil`, 50 |
-  | `toil_bindings.gd` | 507 (381 code, 89 comment) | `_init`, 51 |
-  | `needs_system.gd` | 460 (360 code, 69 comment) | `ensure_needs`, 45 |
-  | `tool_drop_toil.gd` | 356 (258 code, 72 comment) | `_init`, 30 |
-  | `tool_fetch_toil.gd` | 279 | — |
-  | `haul_giver.gd` | 183 | — |
-  | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
+  | `toil_executor.gd` | 657 | `_start_current_toil`, 50 |
+  | `toil_bindings.gd` | 513 | `_init`, 51 |
+  | `needs_system.gd` | 533 | `ensure_needs`, 45 |
+  | `tool_drop_toil.gd` | 369 | `_init`, 30 |
+  | `tool_fetch_toil.gd` | 280 | — |
+  | `haul_giver.gd` | 218 | — |
+  | `state_codec.gd` | 610 | `decode`, 70 |
 
 ## Known limitations
 
@@ -885,12 +928,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 
 ## Next action
 
-- The owner approves or rejects the files still listed under "Pending owner approval": the
-  schema v14 files beyond the enum, the test pins, the `world_state.gd` line edits, the
-  `needs_system.gd` wiring, the round 8 and round 10 additions to `toil_executor.gd` and
-  `toil_bindings.gd`, the round 13 `setDown` field (schema, codec, validator, save-system), and
-  the round 14 additions to `toil_bindings.gd` and `toil_executor.gd`. The scope amendment for
-  `order_handler.gd` (including the round 15 `complete_job` routing) and `trench_system.gd` is
-  approved (`78dc216`).
+- The owner confirms the files under "Pending owner approval" that no backlog entry names
+  explicitly: the schema v14 files beyond the enum (permitted by the backlog's "next free
+  number" line, `setDown` included), the test pins, and the ADR 064 / `BACKLOG.md` status.
+  Already approved: the round 2 scope with its later `haul_tool` additions to
+  `toil_executor.gd` and `toil_bindings.gd` (`afeeade`), the `world_state.gd` hook
+  (`07cd384`), `needs_system.gd` (`a7cbb0e`), and `order_handler.gd` / `trench_system.gd`
+  (`78dc216`).
 - The reviewer reproduces the full suite line.
 - Then review with `tools/orca/review.ps1`, which now resolves `F5a-b` to this file.

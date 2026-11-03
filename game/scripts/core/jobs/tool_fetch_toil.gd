@@ -61,8 +61,8 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 		var cargo := _cargo_id(job, job_id)
 		if cargo.is_empty():
 			return false
-		return not (String(colonist.get("held_tool", "")) == cargo and String(_tool_reservation_of.call(cargo)) == job_id)
-	var held_id := String(colonist.get("held_tool", ""))
+		return not (colonist.get("held_tool", "") == cargo and _tool_reservation_of.call(cargo) == job_id)
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return true
 	var owner := String(_tool_reservation_of.call(held_id))
@@ -73,9 +73,9 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	var kind := _tool_kind_for(job)
 	if kind.is_empty():
-		var toils: Array = _job_kinds.get(String(job["kind"]), {}).get("toils", [])
+		var toils: Array = (_job_kinds.get(job["kind"], {}) as Dictionary).get("toils", [])
 		return not (TOIL_FETCH_TOOL in toils) or _carry_done(colonist, job, job_id)
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return false
 	var owner := String(_tool_reservation_of.call(held_id))
@@ -93,17 +93,18 @@ func _carry_done(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	var cargo := _cargo_id(job, job_id)
 	if cargo.is_empty():
 		return true
-	return String(colonist.get("held_tool", "")) == cargo and String(_tool_reservation_of.call(cargo)) == job_id
+	return colonist.get("held_tool", "") == cargo and _tool_reservation_of.call(cargo) == job_id
 
 ## The tool a carrying job (haul_tool) moves: its item_id, else the tool it reserves, else "".
 func _cargo_id(job: Dictionary, job_id: String) -> String:
-	var item_id := String(job.get("item_id", ""))
+	var item_id: String = job.get("item_id", "")
 	if not item_id.is_empty():
 		return item_id
-	return String(_reserved_tool_for(job_id).get("id", ""))
+	var reserved_id: String = _reserved_tool_for(job_id).get("id", "")
+	return reserved_id
 
 func _held_tool_kind(colonist: Dictionary) -> String:
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty():
 		return ""
 	return String(_get_tool_item.call(held_id).get("kind", ""))
@@ -196,7 +197,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	if carrying: # a carried tool (_carry_done()): its giver named and reserved it, never search
 		if reserved.is_empty():
 			return # ToolDropToil.haul_cannot_continue() fails the job first
-		kind = String(reserved["kind"])
+		kind = reserved["kind"]
 	var freshly_reserved := reserved.is_empty()
 	if freshly_reserved:
 		var from := TileGrid.tile_of(colonist)
@@ -263,7 +264,7 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 		_release_tool.call(item_id, job_id)
 		_report_no_tool_found(job_id, String(colonist["id"]), kind, hooks)
 		return
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if not held_id.is_empty() and held_id != item_id:
 		_drop_tool_ground.call(held_id, TileGrid.tile_of(colonist))
 	if not bool(_pick_up_tool.call(item_id, String(colonist["id"]))):

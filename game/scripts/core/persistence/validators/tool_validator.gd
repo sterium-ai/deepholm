@@ -35,7 +35,7 @@ static func _valid_tool_item(value, map_width: int, map_height: int, layer_count
 	# v14 (F5a-b): "setDown" is allowed but optional, so it is not one of the required fields.
 	if not _keys_allowed(item, ["id", "kind", "location", "setDown"]):
 		return _fail("unexpected toolItems entry field")
-	for key in ["id", "kind", "location"]:
+	for key: String in ["id", "kind", "location"]:
 		if not item.has(key):
 			return _fail_missing("missing toolItems entry field '%s'" % key)
 	if not _matches_id_pattern(item["id"]):

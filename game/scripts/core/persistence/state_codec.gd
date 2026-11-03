@@ -320,7 +320,8 @@ static func _encode_tool_items(tool_items: Dictionary, next_id: int) -> Dictiona
 			"id": item["id"], "kind": item["kind"],
 			"location": _encode_tool_location(item["location"]),
 		}
-		if bool(item.get("set_down", false)):
+		var set_down: bool = item.get("set_down", false)
+		if set_down:
 			entry["setDown"] = true
 		list.append(entry)
 	return {"nextId": next_id, "list": list}
@@ -333,7 +334,8 @@ static func _decode_tool_items(field: Dictionary) -> Dictionary:
 			"id": id, "kind": String(entry["kind"]),
 			"location": _decode_tool_location(entry["location"]),
 		}
-		if bool(entry.get("setDown", false)):
+		var set_down: bool = (entry as Dictionary).get("setDown", false)
+		if set_down:
 			items[id]["set_down"] = true
 	return {"items": items, "next_id": int(field["nextId"])}
 

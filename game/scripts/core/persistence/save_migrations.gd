@@ -261,7 +261,7 @@ static func _v13_to_v14(state: Dictionary) -> Dictionary:
 	if not (state.get("jobs") is Array):
 		return {"ok": false, "code": "schema_error", "message": "v13 save has no jobs array"}
 	for job: Variant in state["jobs"]:
-		if job is Dictionary and String((job as Dictionary).get("kind", "")) == "haul_tool":
+		if job is Dictionary and (job as Dictionary).get("kind", "") == "haul_tool":
 			return {"ok": false, "code": "schema_error", "message": "v13 save already has a haul_tool job"}
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 14
