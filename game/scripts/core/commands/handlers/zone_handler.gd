@@ -1,7 +1,8 @@
 class_name ZoneHandler
 extends RefCounted
 
-## Zone commands: zone_add (a stockpile, or with {"kind": "farm", "crop"} a farm zone, F1), zone_remove.
+## Zone commands: zone_add (a stockpile, or with {"kind": "farm", "crop"} a farm zone, F1), zone_remove,
+## zone_set_stockpile (a stockpile's accepted item groups and priority, F5a).
 ## Invariant: removing a zone fails every active haul job whose reserved cell
 ## lay inside it, with a typed reason and no leaked reservation.
 
@@ -36,6 +37,23 @@ func apply_zone_add_command(command: Dictionary) -> Dictionary:
 	var applied := _event_log.applied(command)
 	applied["zone_id"] = zone_id
 	return applied
+
+## Sets a stockpile's filter and priority. Items it no longer accepts are hauled out by HaulGiver;
+## a haul already carrying one there still lands, and is then hauled out (ADR 064).
+func apply_zone_set_stockpile_command(command: Dictionary) -> Dictionary:
+	var check: Dictionary = _check.call(CommandChecks.check_zone_set_stockpile_command, command)
+	if not check.is_empty():
+		var command_id: String = command["command_id"]
+		var actor: String = command["actor"]
+		var reason: String = check["reason"]
+		var params: Dictionary = check["params"]
+		return _event_log.rejection(command_id, actor, reason, params)
+	var payload: Dictionary = command["payload"]
+	var zone_id: String = payload["id"]
+	var groups_text: String = payload["groups"]
+	var priority: int = payload["priority"]
+	_zone_table.set_stockpile(zone_id, ZoneTableType.parse_groups(groups_text), priority)
+	return _event_log.applied(command)
 
 ## Removes a stockpile zone by id.
 func apply_zone_remove_command(command: Dictionary) -> Dictionary:

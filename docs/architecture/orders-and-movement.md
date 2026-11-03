@@ -574,7 +574,7 @@ reads `RescueGiver`'s own `_job_victim` record directly, not this
 `ReservationTable`, since a queued or suspended rescue job holds no
 `trapped:` key at all under this scheme — only an active one does.
 
-### Zone commands: `zone_add`, `zone_remove`
+### Zone commands: `zone_add`, `zone_remove`, `zone_set_stockpile`
 
 Stockpile and farm zones are player-drawn axis-aligned rectangles, applied
 immediately with no job queue involved (mirroring `place_object`/
@@ -596,12 +596,19 @@ immediately with no job queue involved (mirroring `place_object`/
   `blocked_destination_gone` (`resubmit remedy: choose_reachable_destination`)
   with no leaked `cell:` reservation, rather than leaving the colonist
   walking toward a cell that no longer belongs to any zone.
+- `zone_set_stockpile` — `{id: string, groups: string, priority: int}` (F5a,
+  [ADR 064](../decisions/064-stockpile-filters-and-priorities.md)): the item groups the
+  stockpile accepts (comma-separated `items.json` kinds, `""` for none) and its priority 1-3.
+  Rejections are listed in `game/scripts/core/commands/README.md`. A new stockpile accepts
+  every group at priority 2.
 
 `WorldState.get_zones()`/`get_zone(id)` return detached, id-sorted copies of
-every zone; `HaulGiver.find_free_haul_cell()` scans every *stockpile* zone's
-cells (`ZoneTable.get_stockpile_zones()`) in zone-id then row-major order for
-haul destination selection, so cell assignment is deterministic for a given
-zone/reservation state. A farm zone stores nothing: an item on a farm tile is
+every zone; `HaulGiver.find_free_haul_cell()` scans the stockpiles that accept
+the item's group (`ZoneTable.stockpiles_for_item()`: highest priority first, then
+nearest to the item, then zone id) and, inside each, its cells in row-major order
+for haul destination selection, so cell assignment is deterministic for a given
+zone/reservation state. An item in a stockpile that does not accept it is hauled
+out (ADR 064). A farm zone stores nothing: an item on a farm tile is
 loose (hauled away), and the zone only drives `FarmGiver`'s till/sow jobs
 (colonist-ai.md, "Crops and farm zones").
 

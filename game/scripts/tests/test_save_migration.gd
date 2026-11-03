@@ -5,7 +5,8 @@ extends SceneTree
 ## content packs; A16b, ADR 057: the scenario calendar and incident list are saved;
 ## A7, ADR 058: compact file encoding and saved route costs; F1, ADR 059: farm zones
 ## and crop growth; F2, ADR 061: workbench targets, orders and bills; F3, ADR 062: colonist
-## skills; L2, ADR 045 §5: map layers and "z" on every tile).
+## skills; L2, ADR 045 §5: map layers and "z" on every tile; F5a, ADR 064: stockpile filters
+## and priorities).
 ## Proves a save written before the reset is rejected with a clear message, the
 ## committed v1 to v6 fixtures migrate to exactly the migrated v7 fixture, a v1 save
 ## holding terminal jobs loads without them and with the original state_hash, the
@@ -13,7 +14,9 @@ extends SceneTree
 ## crops list and nothing else, the v6 -> v7 step adds an empty "crafting" and nothing
 ## else, the v7 -> v8 step adds zero skills and nothing else, the v8 -> v9 step adds
 ## layerCount 1 and "z": 0 and nothing else (turning the v8 fixture into exactly the v9 one, the
-## migrated world keeping its state_hash through save/load), a malformed scenarioStart is
+## migrated world keeping its state_hash through save/load), the v9 fixture migrates to
+## exactly the v10 fixture (the v9 -> v10 step changes only the version), a stockpile's filter
+## and priority round-trip and malformed ones are rejected, a malformed scenarioStart is
 ## rejected, the committed v9 fixture loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
@@ -47,19 +50,23 @@ const V6_FIXTURE := "res://scripts/tests/fixtures/save_schema_v6_fixture.json"
 ## The same session written by docs/orca/handoffs/F2-write-save.gd: schemaVersion 7, in the
 ## SaveWire encoding.
 const V7_FIXTURE := "res://scripts/tests/fixtures/save_schema_v7_fixture.json"
-## The same session written by this build (docs/orca/handoffs/F3-write-save.gd): schemaVersion 8.
+## The same session written by docs/orca/handoffs/F3-write-save.gd: schemaVersion 8.
 ## Its colonists carry seeded skills (ADR 062), so they worked at other speeds than in the
 ## older fixtures' session: the older fixtures migrate to zero skills, not to this file.
-## The same session written by this build (docs/orca/handoffs/L2-write-save.gd): schemaVersion 9,
+const V8_FIXTURE := "res://scripts/tests/fixtures/save_schema_v8_fixture.json"
+## The same session written by docs/orca/handoffs/L2-write-save.gd: schemaVersion 9,
 ## in the SaveWire encoding: the v8 fixture plus map.layerCount 1 and "z": 0 (ADR 045 §5).
 const V9_FIXTURE := "res://scripts/tests/fixtures/save_schema_v9_fixture.json"
-const V8_FIXTURE := "res://scripts/tests/fixtures/save_schema_v8_fixture.json"
+## The v9 fixture's session written by this build (docs/orca/handoffs/F5a-write-save.gd):
+## schemaVersion 10. The v9 fixture migrates to it exactly.
+const V10_FIXTURE := "res://scripts/tests/fixtures/save_schema_v10_fixture.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
 const FRESH_SAVE_PATH := "user://test-save-migration-fresh.json"
-const V9_RESAVE_PATH := "user://test-save-migration-v9-resave.json"
+const V10_RESAVE_PATH := "user://test-save-migration-v10-resave.json"
 const V8_MIGRATED_PATH := "user://test-save-migration-v8-migrated.json"
+const BAD_STOCKPILE_DIR := "user://test-save-migration-bad-stockpile"
 const MALFORMED_FIXTURE_DIR := "user://test-save-migration-malformed-fixture"
 ## Proves SaveIO.read() rejects a save whose contentVersion has no
 ## registered rename with the new typed content_version_mismatch code, never
@@ -88,8 +95,10 @@ func _init() -> void:
 	_check_v6_to_v7_adds_only_empty_crafting()
 	_check_v7_to_v8_adds_only_zero_skills()
 	_check_v8_to_v9_adds_only_the_surface_layer()
+	_check_v9_fixture_migrates_to_v10_changing_only_the_version()
+	_check_stockpile_filter_round_trips_and_bad_ones_are_rejected()
 	_check_malformed_scenario_start_rejected_through_save_io()
-	_check_v9_fixture_loads_and_reencodes_unchanged()
+	_check_v10_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -139,22 +148,22 @@ func _check_pre_release_save_is_rejected() -> void:
 		"load_best() must report the pre-release slot as skipped with unsupported_pre_release_save: %s" % [skipped])
 	_cleanup_dir(PRE_RELEASE_SLOT_DIR)
 
-## Acceptance (A5, A13b, A16b, A7, F1, F2, F3, L2): the committed v1 to v6 fixtures load through
-## SaveIO.read() migrated to v9 and equal the v7 fixture (the same session written at v7)
-## migrated to v9 exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the
+## Acceptance (A5, A13b, A16b, A7, F1, F2, F3, L2, F5a): the committed v1 to v6 fixtures load through
+## SaveIO.read() migrated to v10 and equal the v7 fixture (the same session written at v7)
+## migrated to v10 exactly; the v1 -> v2 step alone still turns the v1 fixture into exactly the
 ## v2 fixture.
 func _check_older_fixtures_migrate_to_the_migrated_v7_fixture() -> void:
 	var v7 := SaveIOType.read(V7_FIXTURE)
 	_expect(v7["ok"], "the v7 fixture must load through SaveIO.read(): %s" % v7)
 	if not v7["ok"]:
 		return
-	_expect(int(v7["state"]["schemaVersion"]) == 9, "the v7 fixture must load as schemaVersion 9")
+	_expect(int(v7["state"]["schemaVersion"]) == 10, "the v7 fixture must load as schemaVersion 10")
 	for fixture: String in [V1_FIXTURE, V2_FIXTURE, V3_FIXTURE, V4_FIXTURE, V5_FIXTURE, V6_FIXTURE]:
 		var result := SaveIOType.read(fixture)
 		_expect(result["ok"], "%s must load through SaveIO.read(): %s" % [fixture, result])
 		if not result["ok"]:
 			continue
-		_expect(int(result["state"]["schemaVersion"]) == 9, "%s must load as schemaVersion 9" % fixture)
+		_expect(int(result["state"]["schemaVersion"]) == 10, "%s must load as schemaVersion 10" % fixture)
 		_expect(int(result["state"]["map"]["layerCount"]) == 1, "%s must load as one layer" % fixture)
 		_expect(result["state"]["contentPacks"] == [], "%s must load with no content packs" % fixture)
 		_expect(JSON.stringify(result["state"]["scenarioStart"]) == JSON.stringify({"calendar": null, "enabledIncidents": []}),
@@ -357,6 +366,72 @@ func _without_layers(value: Variant) -> Variant:
 		return items
 	return value
 
+## Acceptance (F5a, ADR 064): the v9 -> v10 step keeps every zone as it is (a v9 stockpile is a
+## v10 one at its default: every group, priority 2) and changes only schemaVersion. The v9 fixture
+## loads through SaveIO.read() as exactly the v10 fixture (the same session), the step alone
+## turns one into the other, and a v9 zone already carrying groups or priority is refused.
+func _check_v9_fixture_migrates_to_v10_changing_only_the_version() -> void:
+	var v9 := SaveIOType.read(V9_FIXTURE)
+	var v10 := SaveIOType.read(V10_FIXTURE)
+	_expect(v9["ok"] and v10["ok"], "the v9 and v10 fixtures must load: %s / %s" % [v9, v10])
+	if v9["ok"] and v10["ok"]:
+		_expect(int(v9["state"]["schemaVersion"]) == 10, "the v9 fixture must load as schemaVersion 10")
+		_expect(JSON.stringify(v9["state"]) == JSON.stringify(v10["state"]), "the migrated v9 fixture must equal the v10 fixture exactly")
+	var raw := _unpacked_fixture_state(V9_FIXTURE)
+	var v10_raw := _unpacked_fixture_state(V10_FIXTURE)
+	_expect(not (raw["zones"] as Array).is_empty(), "the v9 fixture must hold a stockpile for this to prove anything")
+	var migrated := SaveMigrationsType.migrate(raw, 9, 10)
+	_expect(migrated["ok"], "v9 -> v10 must migrate: %s" % migrated)
+	if not migrated["ok"]:
+		return
+	var state: Dictionary = migrated["state"]
+	_expect(int(state["schemaVersion"]) == 10, "v9 -> v10 must set schemaVersion 10")
+	_expect(JSON.stringify(state["zones"]) == JSON.stringify(raw["zones"]), "v9 -> v10 must keep the zones as they are")
+	_expect(JSON.stringify(state) == JSON.stringify(v10_raw),
+		"the v9 -> v10 step alone must turn the v9 fixture into exactly the v10 fixture")
+	_expect(int(raw["schemaVersion"]) == 9, "the migration must not mutate its argument")
+	for key: String in ["groups", "priority"]:
+		var twice := raw.duplicate(true)
+		(twice["zones"][0] as Dictionary)[key] = ["food"] if key == "groups" else 3
+		_expect(not SaveMigrationsType.migrate(twice, 9, 10)["ok"], "a v9 zone already holding %s must be refused" % key)
+
+## F5a: a stockpile's groups and priority survive a real file write/read (SaveIO validates them),
+## and a farm zone with a filter, an unknown or unsorted group, or a priority outside 1-3 is a
+## schema_error.
+func _check_stockpile_filter_round_trips_and_bad_ones_are_rejected() -> void:
+	var v10 := SaveIOType.read(V10_FIXTURE)
+	_expect(v10["ok"], "the v10 fixture must load: %s" % v10)
+	if not v10["ok"]:
+		return
+	var filtered: Dictionary = (v10["state"] as Dictionary).duplicate(true)
+	(filtered["zones"][0] as Dictionary).merge({"groups": ["food", "seed"], "priority": 3})
+	var path := _write_state_fixture(BAD_STOCKPILE_DIR, filtered)
+	var result := SaveIOType.read(path)
+	_cleanup_dir(BAD_STOCKPILE_DIR)
+	_expect(result["ok"], "a stockpile with groups and priority must load: %s" % result)
+	if result["ok"]:
+		var world := StateCodecType.decode(result["state"])
+		_expect(JSON.stringify(world.get_zone("zone_1")) == JSON.stringify({"id": "zone_1", "x": 10, "y": 10, "z": 0, "width": 2, "height": 2,
+			"groups": ["food", "seed"], "priority": 3}), "the stockpile must decode with its filter: %s" % [world.get_zone("zone_1")])
+		_expect(JSON.stringify(StateCodecType.encode(world)["zones"]) == JSON.stringify(filtered["zones"]),
+			"and re-encode it unchanged")
+	var cases := [
+		[{"groups": ["gems"]}, "an unknown group"],
+		[{"groups": ["seed", "food"]}, "unsorted groups"],
+		[{"groups": ["food", "food"]}, "a group listed twice"],
+		[{"groups": "food"}, "groups that are not a list"],
+		[{"priority": 0}, "priority 0"],
+		[{"priority": 4}, "priority 4"],
+		[{"kind": "farm", "crop": "carrot", "priority": 3}, "a farm zone with a priority"],
+	]
+	for entry: Array in cases:
+		var state: Dictionary = (v10["state"] as Dictionary).duplicate(true)
+		(state["zones"][0] as Dictionary).merge(entry[0], true)
+		var bad_path := _write_state_fixture(BAD_STOCKPILE_DIR, state)
+		var bad := SaveIOType.read(bad_path)
+		_cleanup_dir(BAD_STOCKPILE_DIR)
+		_expect(not bad["ok"] and String(bad.get("code", "")) == "schema_error", "%s must fail as schema_error, got %s" % [entry[1], bad])
+
 ## A fixture's state as SaveIO.read() sees it before migrating: ints coerced, SaveWire unpacked.
 func _unpacked_fixture_state(path: String) -> Dictionary:
 	var state: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))["state"]
@@ -446,33 +521,33 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 		loaded.tick()
 	_expect(loaded.state_hash() == world.state_hash(), "the migrated world must keep ticking in step with the original")
 
-## The committed v9 fixture loads through SaveIO.read(), decodes, and re-encodes to
+## The committed v10 fixture loads through SaveIO.read(), decodes, and re-encodes to
 ## exactly the state it was read from (the unpacked shape is the codec's shape), and
 ## the decoded world keeps its state_hash through a second write/read.
-func _check_v9_fixture_loads_and_reencodes_unchanged() -> void:
-	var result := SaveIOType.read(V9_FIXTURE)
-	_expect(result["ok"], "the v9 fixture must load through SaveIO.read(): %s" % result)
+func _check_v10_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V10_FIXTURE)
+	_expect(result["ok"], "the v10 fixture must load through SaveIO.read(): %s" % result)
 	if not result["ok"]:
 		return
 	var state: Dictionary = result["state"]
-	_expect(int(state["schemaVersion"]) == 9 and StateCodecType.SCHEMA_VERSION == 9,
-		"the v9 fixture and this build must both be schemaVersion 9")
-	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V9_FIXTURE))["state"]["map"]
+	_expect(int(state["schemaVersion"]) == 10 and StateCodecType.SCHEMA_VERSION == 10,
+		"the v10 fixture and this build must both be schemaVersion 10")
+	var raw_map: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V10_FIXTURE))["state"]["map"]
 	_expect(raw_map.has("palette") and raw_map.has("tileRuns") and not raw_map.has("tiles"),
-		"the v9 fixture must hold its tiles as a palette plus runs (SaveWire)")
+		"the v10 fixture must hold its tiles as a palette plus runs (SaveWire)")
 	var world := StateCodecType.decode(state)
 	var reencoded := StateCodecType.encode(world)
 	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
-		"decode() -> encode() of the v9 fixture must reproduce its state exactly")
-	_remove(V9_RESAVE_PATH)
-	var write_result := SaveIOType.write_atomic(V9_RESAVE_PATH, reencoded)
-	_expect(write_result["ok"], "the re-encoded v9 fixture must save: %s" % write_result)
-	var reread := SaveIOType.read(V9_RESAVE_PATH)
-	_expect(reread["ok"], "the re-saved v9 fixture must load: %s" % reread)
+		"decode() -> encode() of the v10 fixture must reproduce its state exactly")
+	_remove(V10_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V10_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v10 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V10_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v10 fixture must load: %s" % reread)
 	if reread["ok"]:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
-			"a second write/read of the v9 fixture must keep the decoded state_hash")
-	_remove(V9_RESAVE_PATH)
+			"a second write/read of the v10 fixture must keep the decoded state_hash")
+	_remove(V10_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.
