@@ -1271,6 +1271,16 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   sapling within 2 days; after ~8 days the tiles are trees; chopping one tree → it is replanted
   within a day; deterministic `state_hash()`; save/load and replay identical; suite green.
 - **Non-goals:** automatic felling, wood yield changes, seasons, pasture, animals.
+- **Approved amendments (owner's interface, 2026-11-03, review round 1):** (1) **scope**: the
+  edits declared in the F6a handoff ("Edits outside the listed owned paths") are approved as
+  F6a's scope — content (`game/content/**`), the zone command/handler, `world_state.gd` (one
+  line, no growth), persistence integration beyond the migration, `game/data/text/en.json`,
+  viewer map rendering of saplings — each being the minimum needed to wire the zone; (2)
+  **growth and occupancy**: a sapling only advances to the impassable `tree` stage while **no
+  actor** stands on its tile (a tree must never trap a colonist); **ground items never block
+  growth** (wood left by chopping must not stop the replanted sapling: occupancy query is
+  actor-only). Acceptance keeps "all 9 tiles are trees after ~8 days" for tiles no colonist
+  stands on, and adds a chop → replant → regrow cycle with the wood still on the tile.
 
 ### F6b — Wild fauna ecosystem and hunting · `todo` · after F6a and F5a · Design: closed 2026-10-30
 
