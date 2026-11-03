@@ -49,12 +49,15 @@ const SPRITE_POSITION_OFFSET := Vector2(
 	TILE_SIZE / 2.0 - FRAME_SOURCE_SIZE * DISPLAY_SCALE / 2.0,
 	TILE_SIZE - FRAME_FEET_Y * DISPLAY_SCALE)
 
-## Top of the character's silhouette in its frame: the smallest y of every
+## The character's head in its frame: its top is the smallest y of every
 ## idle/walk/carry alpha bbox measured in colonist_pack.json (work strips reach
-## higher only with the swung tool). In tile pixels that is HEAD_TOP_Y above
-## the tile's own raw pixel origin.
-const FRAME_HEAD_TOP_Y := 18.0
-const HEAD_TOP_Y := FRAME_HEAD_TOP_Y * DISPLAY_SCALE + SPRITE_POSITION_OFFSET.y
+## higher only with the swung tool); the box spans the head's widest rows down
+## to the neck, idle bob included (pack Idle_Down frames: x 26..37, y 18..32).
+## HEAD_BOX is the same box in pixels from the tile's own raw pixel origin.
+const FRAME_HEAD_BOX := Rect2(26.0, 18.0, 12.0, 15.0)
+const HEAD_BOX := Rect2(FRAME_HEAD_BOX.position * DISPLAY_SCALE + SPRITE_POSITION_OFFSET,
+	FRAME_HEAD_BOX.size * DISPLAY_SCALE)
+const HEAD_TOP_Y := HEAD_BOX.position.y
 
 ## Badge offsets are from the colonist's interpolated tile origin (tile *
 ## TILE_SIZE, like the health bar), not from the 64x64 frame's top-left: the
@@ -72,9 +75,10 @@ const TOOL_MARKER_OFFSET := Vector2(-TOOL_MARKER_SIZE.x, HEAD_TOP_Y)
 ## is a deliberately legible warning without introducing a second actor-art
 ## path or any simulation state. The tint distinguishes it from cargo/tool
 ## badges while keeping the source pixels nearest-neighbour. It sits centred
-## right above the head, clear of the health bar (which crosses the face).
+## directly above the health bar, touching but not overlapping it (B6 amendment).
 const TRAPPED_MARKER_SIZE := Vector2(TILE_SIZE * 0.8, TILE_SIZE * 0.5)
-const TRAPPED_MARKER_OFFSET := Vector2((TILE_SIZE - TRAPPED_MARKER_SIZE.x) / 2.0, HEAD_TOP_Y - TRAPPED_MARKER_SIZE.y)
+const TRAPPED_MARKER_OFFSET := Vector2((TILE_SIZE - TRAPPED_MARKER_SIZE.x) / 2.0,
+	HEALTH_BAR_OFFSET.y - TRAPPED_MARKER_SIZE.y)
 const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 
 ## Health bar: a thin two-rect bar (grey background, coloured
@@ -82,7 +86,9 @@ const TRAPPED_MARKER_COLOR := Color("ff5b5b")
 ## are pure static functions -- callable on this script's own preload without
 ## instantiating a Node2D -- so a headless test can assert bar values without
 ## a live SceneTree.
-const HEALTH_BAR_OFFSET := Vector2(0, -TILE_SIZE * 0.3)
+## Tile-anchored one tile above the tile's origin, so with the 64 px frame it
+## sits just above the head (HEAD_TOP_Y) instead of across the face (B6).
+const HEALTH_BAR_OFFSET := Vector2(0, -TILE_SIZE)
 const HEALTH_BAR_SIZE := Vector2(TILE_SIZE, 3.0)
 const HEALTH_BAR_BACKGROUND := Color(0.15, 0.15, 0.15, 0.9)
 
