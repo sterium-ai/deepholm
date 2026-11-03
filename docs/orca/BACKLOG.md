@@ -1254,6 +1254,12 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   and target "keep 2 meals" → meals appear and a hungry colonist eats a meal before raw food;
   deterministic; save/load/replay identical; suite green.
 - **Non-goals:** spoilage, meal quality, cooking skill effects beyond F3's speed.
+- **Approved amendment (owner's interface, 2026-11-03, review round 1): scope.** The files
+  listed in the F5b handoff under "Files outside the owned paths" are approved as F5b's scope:
+  `jobs.json`, `toil_bindings.gd`, `craft_giver.gd` (`cook_work` job kind under `cook`),
+  `world_state.gd` (two lines, no growth), `jobs/givers/need_giver.gd` (per-colonist ranking of
+  food sources), the content schemas (`items`, `recipes`, `skills`, `scenarios`), migration,
+  validator, game-state schema, fixture and docs — each the minimum needed to wire the design.
 
 ### F5c — Happiness from a thought table · `todo` · after F5b · Design: closed 2026-10-30
 
