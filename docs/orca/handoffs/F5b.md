@@ -3,9 +3,9 @@
 ## Branch and commit
 
 - Branch: `antonelmejor50-hub/f5b-labours-cook-and-heal`, rebased (on the owner's note) onto
-  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it). Three commits,
-  not pushed: `a84211f` (F5b), `33589e0` (review round 1, the head Codex reviewed in round 2)
-  and the round-2 fix commit on top of it.
+  `origin/main` `5724053` (F6a, #53: schema v11, ADR 067; F5a's v10 is under it). Four commits,
+  not pushed: `a84211f` (F5b), `33589e0` (review round 1), `a1ae5c3` (review round 2, the head
+  Codex approved in round 3) and a report-only commit for round 3 on top of it.
 - **Schema number.** Save schema **v12**, the owner's allocation: F5b's step is
   `_v11_to_v12()`, after F5a's v9 -> v10 and F6a's v10 -> v11, which are kept unchanged.
 - ADR: **065** (owner's allocation), `docs/decisions/065-cook-and-heal-labours-and-cooking.md`.
@@ -164,7 +164,7 @@ Hash projection (from `game/`, `$G` = the Godot 4.7.2 console binary), expected 
 
 Results on the branch head:
 
-- Full suite, final line: `run_tests: all 136 test(s) PASS  [963s]` (rerun on the round-2 fixes)
+- Full suite, final line: `run_tests: all 136 test(s) PASS  [934s]` (rerun on `a1ae5c3` after round 3; `[963s]` on round 2)
 - `check_core_budgets`: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s)). No cap raised.
 - `check_core_warnings`: OK, 2798. Below the old baseline 2801 (typed locals in the new code
@@ -219,6 +219,14 @@ Non-blocking:
   equally filling item is eaten before a berry on the same tile).
 - Full suite rerun on the round-2 fixes: `run_tests: all 136 test(s) PASS  [963s]`; gates unchanged (budgets OK, warnings 2798, `core total: 22910 lines in 112 files`).
 
+## Review round 3 (Codex, APPROVE on `a1ae5c3`, 2026-11-03)
+
+Blocking: none. Non-blocking: the reviewer could not rerun the full suite in its read-only
+sandbox (the migration tests write saves); it reran cooking, architecture, content lint, budgets,
+warnings and both hash projections, which passed. No code change follows from it: the author
+reran the full suite on `a1ae5c3`, `run_tests: all 136 test(s) PASS  [934s]`, and the gates are
+unchanged (budgets OK, warnings 2798, `core total: 22910 lines in 112 files`).
+
 ## Known limitations
 
 - `kitchen` and `meal` draw the placeholder art (entries in `world_pack.json`); choosing pack
@@ -234,4 +242,4 @@ Non-blocking:
 
 ## Next action
 
-Codex review round 3 of the head.
+Approved by Codex (round 3). Owner: merge the branch (not pushed).
