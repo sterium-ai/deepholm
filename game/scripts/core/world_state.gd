@@ -308,7 +308,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.accepts_item_at, _scheduler.submit,
-		_scheduler.queue.attach_item, _zone_table.stockpiles_for_item, _item_table.item_lookup, _cell_free, _passability.passability, _is_cell_occupied, _tool_store, _zone_table.get_zones, _scheduler.queue.view_jobs_of_kinds.bind(["haul_tool"]))
+		_scheduler.queue.attach_item, _zone_table.stockpiles_for_item, _item_table.item_lookup, _cell_free, _passability.passability, _is_cell_occupied, _tool_store, _zone_table.get_zones, _scheduler.queue.view_jobs_of_kinds.bind(["haul_tool"]), _passability.region_reachable)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,

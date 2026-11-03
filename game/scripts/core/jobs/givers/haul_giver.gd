@@ -18,16 +18,19 @@ var _is_cell_occupied: Callable
 var _tool_store
 var _get_zones: Callable
 var _get_tool_jobs: Callable
+var _region_reachable: Callable
 
 ## priority comes from jobs.json; get_jobs is the read-only JobQueue.view_jobs_of_kinds(["haul"])
 ## (A5, never mutated); accepts_item_at and stockpiles_for_item are ZoneTable's (F5a filters and
 ## priorities); item_lookup is ItemTable's; the rest are WorldState/scheduler entry points.
 ## tool_store (ToolItemStore), get_zones (ZoneTable.get_zones) and get_tool_jobs (the read-only
-## view_jobs_of_kinds(["haul_tool"])) haul rejected stocked tools out (F5a-b).
+## view_jobs_of_kinds(["haul_tool"])) haul rejected stocked tools out (F5a-b); region_reachable
+## (Passability.region_reachable) keeps one from being offered a target it cannot be carried to.
 func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_at: Callable,
 		submit_job: Callable, attach_item: Callable, stockpiles_for_item: Callable, item_lookup: Callable,
 		is_cell_free: Callable, passability: Callable, is_cell_occupied: Callable,
-		tool_store = null, get_zones: Callable = Callable(), get_tool_jobs: Callable = Callable()) -> void:
+		tool_store = null, get_zones: Callable = Callable(), get_tool_jobs: Callable = Callable(),
+		region_reachable: Callable = Callable()) -> void:
 	_priority = priority
 	_get_jobs = get_jobs
 	_get_items = get_items
@@ -42,6 +45,7 @@ func _init(priority: int, get_jobs: Callable, get_items: Callable, accepts_item_
 	_tool_store = tool_store
 	_get_zones = get_zones
 	_get_tool_jobs = get_tool_jobs
+	_region_reachable = region_reachable
 
 ## Runs once per tick (TickPipeline, before the scheduler). "Unreserved" is derived from the
 ## job list, so a terminated job frees its item next tick. An item already in a stockpile that
@@ -82,7 +86,8 @@ func find_free_haul_cell(item_id: String) -> Variant:
 	return null
 
 func _cell_takes_item(cell: Vector3i) -> bool:
-	return bool(_is_cell_free.call(cell)) and bool((_passability.call(cell) as Dictionary)["passable"]) 		and not bool(_is_cell_occupied.call(cell, ""))
+	return bool(_is_cell_free.call(cell)) and bool((_passability.call(cell) as Dictionary)["passable"]) \
+		and not bool(_is_cell_occupied.call(cell, ""))
 
 ## F5a-b (ADR 064): a stocked tool (ToolItemStore, ADR 061) in a stockpile that no longer accepts
 ## its group gets, in id order, one haul_tool job targeting the first free cell find_free_haul_cell()'s
@@ -92,7 +97,9 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## keeping its id; an interrupt that releases the reservation leaves item_id, which ToolFetchToil
 ## re-reserves on resume. A reserved tool (being fetched or already hauled), one a queued or active
 ## haul_tool job names, and one outside every stockpile (its zone was removed: not stock, F2) are
-## skipped. A queued or active haul_tool job's target is not offered twice.
+## skipped. A queued or active haul_tool job's target is not offered twice. A tool whose target is
+## in another passability region (walled off) waits: the queue's own reachability block then
+## stands for the colonist side, so an unreachable tool is never offered and failed every tick.
 func _haul_rejected_tools(tick: int) -> void:
 	if _tool_store == null or not _get_tool_jobs.is_valid():
 		return
@@ -113,7 +120,7 @@ func _haul_rejected_tools(tick: int) -> void:
 		var cell: Variant = _free_tool_stockpile_cell(String(tool["kind"]), tile, busy)
 		if cell == null:
 			cell = _free_ground_cell_beside(tile, busy)
-		if cell == null:
+		if cell == null or (_region_reachable.is_valid() and not bool(_region_reachable.call(tile, cell))):
 			continue
 		var result: Dictionary = _submit_job.call(cell, _priority, tick, "haul_tool")
 		if result.get("ok", false):
@@ -166,4 +173,5 @@ func _home_stockpile(tile: Vector3i) -> Dictionary:
 	return {}
 
 static func _zone_has(zone: Dictionary, cell: Vector3i) -> bool:
-	return int(zone["z"]) == cell.z and cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) 		and cell.y >= int(zone["y"]) and cell.y < int(zone["y"]) + int(zone["height"])
+	return int(zone["z"]) == cell.z and cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) \
+		and cell.y >= int(zone["y"]) and cell.y < int(zone["y"]) + int(zone["height"])

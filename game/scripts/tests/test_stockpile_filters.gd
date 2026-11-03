@@ -23,7 +23,9 @@ extends SceneTree
 ##   tile beside A, outside every zone; both runs are deterministic and replay; when B stops
 ##   accepting tools while the pick is carried there, it is not stocked in B (deterministic too);
 ##   a need that interrupts the carrier mid-carry does not end the job with the pick in hand: on
-##   resuming, the job reserves the pick again and stocks it in B.
+##   resuming, the job reserves the pick again and stocks it in B; a pick walled off while its
+##   haul_tool job goes to fetch it fails that job once (blocked_target_unreachable), stays stocked
+##   in A, is not offered again while walled off, and is carried to B once the wall is gone.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -63,6 +65,7 @@ func _init() -> void:
 	_check_rejected_stocked_tool_is_deterministic_and_replays()
 	_check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools()
 	_check_need_interrupt_mid_carry_still_stocks_the_tool_in_b()
+	_check_walled_off_rejected_tool_fails_once_without_a_retry_loop()
 	if _failed:
 		quit(1)
 		return
@@ -375,7 +378,8 @@ func _axes_in(world: WorldStateType, rect: Rect2i) -> Dictionary:
 	var stocked := 0
 	for tool_item in world.get_tool_items():
 		var location: Dictionary = tool_item["location"]
-		if String(tool_item["kind"]) == "axe" and String(location["type"]) == "stockpile" 				and rect.has_point(Vector2i(int(location["x"]), int(location["y"]))):
+		if String(tool_item["kind"]) == "axe" and String(location["type"]) == "stockpile" \
+				and rect.has_point(Vector2i(int(location["x"]), int(location["y"]))):
 			stocked += 1
 	return {"loose": loose, "stocked": stocked}
 
@@ -556,7 +560,8 @@ func _check_rejected_stocked_tool_without_b_is_dropped_beside_a() -> void:
 	_expect(_tick_until(world, _day_ticks, on_ground) <= _day_ticks, "within a day the pick must be dropped: %s" % [_pick_location(world)])
 	var dropped := _pick_location(world)
 	var cell := Vector2i(int(dropped["x"]), int(dropped["y"]))
-	var beside := not A.has_point(cell) and A.grow(1).has_point(cell) 		and ((cell.x >= A.position.x and cell.x < A.end.x) != (cell.y >= A.position.y and cell.y < A.end.y))
+	var beside := not A.has_point(cell) and A.grow(1).has_point(cell) \
+		and ((cell.x >= A.position.x and cell.x < A.end.x) != (cell.y >= A.position.y and cell.y < A.end.y))
 	_expect(beside and int(dropped["z"]) == TileGrid.SURFACE, "the pick must lie on a tile sharing an edge with A: %s" % [dropped])
 	# The nearest such tile to A's first cell (30, 2): (29, 2), then (30, 1) by y.
 	_expect(cell == Vector2i(30, 1), "nearest tile beside A, ties by y then x: %s" % [cell])
@@ -700,3 +705,68 @@ func _check_need_interrupt_mid_carry_still_stocks_the_tool_in_b() -> void:
 		"after the resumed job completes the pick must be stocked in B, not held: %s" % [final])
 	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
 		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
+
+## Rock on every tile sharing an edge or a corner with A (rock = true), or floor again (false).
+## Raw tile writes, so the passability cache and the region and room maps are rebuilt on query.
+func _wall_a(world: WorldStateType, rock: bool) -> void:
+	var ring := A.grow(1)
+	for x in range(ring.position.x, ring.end.x):
+		for y in range(ring.position.y, ring.end.y):
+			if not A.has_point(Vector2i(x, y)):
+				TestAccess.set_tile(world, x, y, WorldStateType.TILE_ROCK if rock else WorldStateType.TILE_FLOOR)
+	TestAccess.tile_grid(world).reset_cells()
+	TestAccess.tile_grid(world).regions = null
+	TestAccess.tile_grid(world).rooms = null
+
+## F5a-b review round 6: A is walled off while a colonist walks to fetch the pick for its haul_tool
+## job. The fetch finds the pick unreachable and fails the job through the engine
+## (blocked_target_unreachable) instead of re-reserving it every tick; the pick stays stocked in A
+## (never teleported, never left reserved), HaulGiver offers no new job while the wall stands, and
+## once the wall is gone the pick is carried to B by a colonist.
+func _check_walled_off_rejected_tool_fails_once_without_a_retry_loop() -> void:
+	var world := _stocked_pick_world(64021, true)
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var job_id := ""
+	for _i in _day_ticks:
+		world.tick()
+		for job in world.get_jobs(["haul_tool"]):
+			if String(job["status"]) == "active":
+				job_id = String(job["id"])
+		if not job_id.is_empty():
+			break
+	_expect(not job_id.is_empty() and String(_pick_location(world)["type"]) == "stockpile",
+		"a haul_tool job must go active while the pick is still in A: %s" % [world.get_jobs(["haul_tool"])])
+	if job_id.is_empty():
+		return
+	_wall_a(world, true)
+	var failed := false
+	for _i in 200:
+		world.tick()
+		for job in world.get_jobs(["haul_tool"]):
+			if String(job["id"]) == job_id and String(job["status"]) == "failed":
+				_expect(String(job["reason"]) == "blocked_target_unreachable", "the job must fail as unreachable: %s" % [job])
+				failed = true
+		if failed:
+			break
+	_expect(failed, "the haul_tool job must fail once the pick is walled off: %s" % [world.get_jobs(["haul_tool"])])
+	var jobs_after_fail := world.get_jobs(["haul_tool"]).size()
+	for _i in _day_ticks:
+		world.tick()
+		var location := _pick_location(world)
+		if String(location["type"]) != "stockpile" or not A.has_point(Vector2i(int(location["x"]), int(location["y"]))):
+			_fail("a walled-off pick must stay stocked in A: %s" % [location])
+			break
+	_expect(world.get_jobs(["haul_tool"]).size() == jobs_after_fail,
+		"no haul_tool job may be offered again while the pick is walled off: %s" % [world.get_jobs(["haul_tool"])])
+	_expect(world.get_jobs(["haul_tool"]).filter(func(job: Dictionary) -> bool: return job["status"] in ["queued", "active"]).is_empty(),
+		"no haul_tool job may stay open on the walled-off pick: %s" % [world.get_jobs(["haul_tool"])])
+	_expect(world.get_tool_item_reservation(String(world.get_tool_items()[0]["id"])).is_empty(),
+		"the walled-off pick must not stay reserved")
+	_wall_a(world, false)
+	var seen: Dictionary = {}
+	var in_b := func() -> bool:
+		_observe_haul(world, seen)
+		var location := _pick_location(world)
+		return String(location["type"]) == "stockpile" and B.has_point(Vector2i(int(location["x"]), int(location["y"])))
+	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks, "with the wall gone the pick must reach B: %s" % [_pick_location(world)])
+	_expect_carried(seen, "after the wall")

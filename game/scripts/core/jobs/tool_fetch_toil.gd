@@ -196,10 +196,13 @@ func _reserved_tool_for(job_id: String) -> Dictionary:
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var kind := _tool_kind_for(job)
 	var reserved := _reserved_tool_for(job_id)
-	if kind.is_empty(): # a carried tool (_carry_done()): its giver named it, never search
+	var carrying := kind.is_empty()
+	if carrying: # a carried tool (_carry_done()): its giver named it, never search
 		if reserved.is_empty():
 			var cargo := _cargo_id(job, job_id)
-			if cargo.is_empty() or _get_tool_item.call(cargo).is_empty() 					or not String(_tool_reservation_of.call(cargo)).is_empty() 					or not bool(_reserve_tool.call(cargo, job_id)):
+			if cargo.is_empty() or _get_tool_item.call(cargo).is_empty() \
+					or not String(_tool_reservation_of.call(cargo)).is_empty() \
+					or not bool(_reserve_tool.call(cargo, job_id)):
 				return
 			reserved = _get_tool_item.call(cargo)
 		kind = String(reserved["kind"])
@@ -226,7 +229,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		return
 	var target: Variant = ToolMatchingType.item_target(reserved, _colonist_position_map())
 	if target == null:
-		_exclude_candidate(job_id, item_id)
+		_exclude_candidate(colonist, job_id, item_id, carrying, hooks)
 		return
 	# A freshly (re)acquired reservation makes any earlier route stale (the holder may have
 	# moved the item), so discard it and search fresh. Only then: an already-held
@@ -238,13 +241,22 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	var passable: Callable = (hooks["go_to_passable"] as Callable).call(job, true, target)
 	var on_arrive := func(c: Dictionary, jid: String) -> void: _arrive(c, jid, kind, item_id, hooks)
 	if _advance_go_to.call(colonist, job_id, target, passable, TOIL_FETCH_TOOL, on_arrive) == "unreachable":
-		_exclude_candidate(job_id, item_id)
+		_exclude_candidate(colonist, job_id, item_id, carrying, hooks)
 
 ## Releases item_id and records it as unreachable. Does not try the next candidate this tick:
-## each go_to search spends the colonist's route budget (ADR 004's per-tick bound).
-func _exclude_candidate(job_id: String, item_id: String) -> void:
+## each go_to search spends the colonist's route budget (ADR 004's per-tick bound). A carried
+## tool (haul_tool) has no next candidate: re-reserving it would retry forever and grow the
+## exclusion list (review round 6), so the job fails through the shared engine (on_toil_fail,
+## blocked_target_unreachable) and HaulGiver offers the tool again only once it is reachable.
+func _exclude_candidate(colonist: Dictionary, job_id: String, item_id: String, carrying: bool, hooks: Dictionary) -> void:
 	_release_tool.call(item_id, job_id)
-	_exclude(job_id, item_id)
+	if not carrying:
+		_exclude(job_id, item_id)
+		return
+	_clear_excluded(job_id)
+	colonist["route"] = null
+	(hooks["on_toil_fail"] as Callable).call(job_id, "blocked_target_unreachable")
+	_record.call(TOIL_FETCH_TOOL, "failed:blocked_target_unreachable")
 
 ## Clears this job's fetch attempt and reports blocked_no_tool.
 func _report_no_tool_found(job_id: String, colonist_id: String, kind: String, hooks: Dictionary) -> void:
