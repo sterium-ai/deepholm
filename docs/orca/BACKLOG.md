@@ -1178,6 +1178,11 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   right tiles and actors; switching does not touch the world (`state_hash()` unchanged);
   owner visual check after merge; suite green.
 - **Non-goals:** gameplay objects.
+- **Review round 1 (owner's interface, 2026-11-03):** `docs/architecture/map-experience.md`
+  is updated by L4 as the canonical contract (Layers section). **Amendment accepted:** a layer
+  switch **rebuilds** the drawn layer (no cached per-layer reuse in v1) — a switch is a player
+  action, so the rebuild cost is acceptable as long as it stays under one frame budget at the
+  A9 viewer scale; cached reuse is a later optimisation (note it in the contract as such).
 
 ### F4 — Underground layers: generation, discovery, tunnel, drill and ores · `todo` · after L1–L4 · Design: closed 2026-10-30
 
