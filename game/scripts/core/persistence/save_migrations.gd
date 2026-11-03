@@ -216,8 +216,9 @@ static func _v10_to_v11(state: Dictionary) -> Dictionary:
 	return {"ok": true, "state": migrated}
 
 ## v11 -> v12 (F5b, ADR 065): the heal labour. Every colonist entity's labourTable gains "heal" at
-## the content labour_default (3) and its skills gain "heal" at level 0 with 0 XP, both kept in
-## the sorted key order the codec writes. Other kinds have no worker component and gain nothing.
+## the content labour_default (3) and its skills, when it has them (they are optional), gain "heal"
+## at level 0 with 0 XP, both kept in the sorted key order the codec writes. Other kinds have no
+## worker component and gain nothing.
 static func _v11_to_v12(state: Dictionary) -> Dictionary:
 	if not (state.get("entities") is Array):
 		return {"ok": false, "code": "schema_error", "message": "v11 save has no entities array"}
@@ -227,14 +228,15 @@ static func _v11_to_v12(state: Dictionary) -> Dictionary:
 			continue
 		var labour_table: Variant = (entity as Dictionary).get("labourTable")
 		var skills: Variant = (entity as Dictionary).get("skills")
-		if not (labour_table is Dictionary) or not (skills is Dictionary):
-			return {"ok": false, "code": "schema_error", "message": "v11 colonist has no labourTable or skills"}
-		if (labour_table as Dictionary).has("heal") or (skills as Dictionary).has("heal"):
+		if not (labour_table is Dictionary) or not (skills == null or skills is Dictionary):
+			return {"ok": false, "code": "schema_error", "message": "v11 colonist has no labourTable or a malformed skills"}
+		if (labour_table as Dictionary).has("heal") or (skills is Dictionary and (skills as Dictionary).has("heal")):
 			return {"ok": false, "code": "schema_error", "message": "v11 save already has the heal labour"}
 		(labour_table as Dictionary)["heal"] = 3
-		(skills as Dictionary)["heal"] = {"level": 0, "xp": 0}
 		entity["labourTable"] = _sorted(labour_table as Dictionary)
-		entity["skills"] = _sorted(skills as Dictionary)
+		if skills is Dictionary:
+			(skills as Dictionary)["heal"] = {"level": 0, "xp": 0}
+			entity["skills"] = _sorted(skills as Dictionary)
 	migrated["schemaVersion"] = 12
 	return {"ok": true, "state": migrated}
 

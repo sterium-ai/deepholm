@@ -69,13 +69,16 @@ func _zone(world: WorldStateType, id: String, rect: Rect2i, extra: Dictionary = 
 	payload.merge(extra)
 	return Scenarios.command(world, id, "zone_add", payload)
 
-## A berry patch at (0, 0), away from the farm and the stockpile, with enough berries for the
-## whole run: harvested food is edible since F5b (ADR 065), and a berry (restore 100) goes before
-## it, so the checks below count the food the farm makes. Bootstrap state, so a replay has it.
+## One berry patch per colonist at (0, 0..COLONISTS-1), away from the farm and the stockpile,
+## with enough berries for the whole run: harvested food is edible since F5b (ADR 065), a berry
+## (restore 100) goes before it, and a patch claimed by one eater is not free for another, so with
+## a patch each no colonist falls back to stockpiled food and the checks below count the food the
+## farm makes. Bootstrap state, so a replay has it.
 func _feed(world: WorldStateType) -> void:
-	var key := TileGrid.coord_key(Vector3i(0, 0, 0))
-	TestAccess.item_table(world).ground_berries[key] = 1000
-	TestAccess.item_table(world).ground_berries_factions[key] = "colony"
+	for y in COLONISTS:
+		var key := TileGrid.coord_key(Vector3i(0, y, 0))
+		TestAccess.item_table(world).ground_berries[key] = 1000
+		TestAccess.item_table(world).ground_berries_factions[key] = "colony"
 
 ## Units of `kind` on the ground inside `rect`.
 func _units_in(world: WorldStateType, kind: String, rect: Rect2i) -> int:

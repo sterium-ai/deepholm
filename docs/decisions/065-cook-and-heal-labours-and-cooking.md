@@ -57,10 +57,14 @@ only `heal` is new. `world_state.gd` is at its 800-line cap and must not grow. Z
   stockpile like any F2 output.
 - **Eat preference** (`NeedsSystem`). The food need's sources are berry bushes (restore =
   `needs.json`'s food restore, 100) and, new, tiles holding an unreserved edible ground item
-  (restore = its best item's `satiety`). After the reachability filter, only the candidates of
-  the highest satiety tier are kept; the nearest of those wins as before. Eating a tile takes
-  one unit of its most filling unreserved item, else one berry. A meal therefore goes before
-  nearer raw food, and raw food is eaten when nothing better is reachable. `consume`'s
+  (restore = its best item's `satiety`). `NeedsSystem.need_source_ranks()` gives each source
+  tile its best restore, and `NeedGiver` ranks per colonist: after that colonist's own
+  reachability filter and with claimed or reserved tiles dropped, the best rank wins and the
+  nearest within it, as before. Eating a tile takes whatever ranked it: a berry when the tile
+  has one and no item beats it, else one unit of its most filling unreserved item. A meal
+  therefore goes before nearer raw food, and raw food is eaten when no better source is
+  reachable and free for that colonist (a meal in another region or held by another job does
+  not keep them from it). `consume`'s
   validity check is "the target still has satiety > 0", so a meal taken by someone else fails
   typed (`source_gone`) as a berry bush did.
 - Items reserved by a haul or fetch (`JobQueue.ITEM_KEY_PREFIX`) are never eaten.
@@ -68,8 +72,10 @@ only `heal` is new. `world_state.gd` is at its 800-line cap and must not grow. Z
 ### Persistence: schema v12
 
 v12 (the v11 -> v12 step, after F5a's v10 and F6a's v11) adds `heal` to each colonist's
-`labourTable` (level 3, the spawn default) and `skills` (`{level: 0, xp: 0}`), keys sorted. The
-step refuses a state whose colonist already has `heal` or lacks either map. Nothing else
+`labourTable` (level 3, the spawn default) and, when the colonist has one, `skills`
+(`{level: 0, xp: 0}`), keys sorted. `skills` is optional in a save (seeded on load), so a
+colonist without it stays valid. The step refuses a state whose colonist already has `heal`,
+lacks `labourTable`, or has a `skills` that is not a map. Nothing else
 changes: kitchens, meal bills and meal items are ordinary F2 bench and item state.
 
 ## Consequences
@@ -84,7 +90,8 @@ changes: kitchens, meal bills and meal items are ordinary F2 bench and item stat
   (`world_seeding.gd` draws per labour in table order), so a given seed now gives different
   starting levels for the other labours than before F5b. Saves are unaffected: migrated colonists
   keep their levels and get `heal` at zero.
-- Tests: `test_cooking.gd` (acceptance, eat preference, save/load mid-fetch and mid-cook,
-  replay), `test_save_migration.gd` (the v11 -> v12 step and the committed
-  `save_schema_v12_fixture.json`, written by `docs/orca/handoffs/F5b-write-save.gd`), `test_architecture_rules.gd` (the kitchen
+- Tests: `test_cooking.gd` (acceptance, eat preference, unreachable or reserved meal, mixed
+  berry and raw food tile, save/load mid-fetch and mid-cook, replay), `test_save_migration.gd` (the v11 -> v12 step and the committed
+  `save_schema_v12_fixture.json`, written by `docs/orca/handoffs/F5b-write-save.gd`, and the
+  skill-less `save_schema_v11_noskills_fixture.json`, by `F5b-write-noskills-save.gd`), `test_architecture_rules.gd` (the kitchen
   execution trace).

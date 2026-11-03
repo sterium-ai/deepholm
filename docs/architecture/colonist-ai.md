@@ -545,8 +545,9 @@ the design left room:
   names. A need job is `eat_food`, `drink_water`, or `sleep`; `sleep` reuses
   the generic `work(ticks)` toil like `dig`/`chop`, while `eat_food`/
   `drink_water` use a new one-tick `consume` toil instead of `work`
-  (`content/jobs.json`). For `food`, only the reachable sources of the highest satiety are
-  kept and the nearest of those wins, so a meal goes before raw food (ADR 065).
+  (`content/jobs.json`). For `food`, `NeedGiver` ranks each colonist's reachable, unclaimed
+  sources by restore (`NeedsSystem.need_source_ranks()`) and the nearest of the best rank wins,
+  so a meal goes before raw food; eating takes what ranked the tile (ADR 065).
 - **Reason vocabulary actually exposed**: `need_unmet:<kind>`,
   `blocked_source_reserved`, `blocked_source_unreachable`
   (`WorldState.get_colonist_need_reason()`). Section 3.8's larger new-reason

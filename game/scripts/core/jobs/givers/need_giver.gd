@@ -32,6 +32,12 @@ var _source_candidates: Callable
 ## kind -> source_candidates(kind), cached for one advance(): nothing in a pass changes a
 ## need source, a region or a colonist's tile.
 var _candidates_this_pass: Dictionary = {}
+## source_ranks(kind) -> {tile: rank}: a colonist searches its higher-ranked sources first and
+## takes the nearest of the best rank it can route to (F5b, ADR 065: a meal before raw food).
+## A tile missing from the map ranks 0; an invalid callable ranks every source equally.
+var _source_ranks: Callable
+## kind -> source_ranks(kind), cached like _candidates_this_pass.
+var _ranks_this_pass: Dictionary = {}
 var _tile_key: Callable
 var _routable_to: Callable
 ## Handed to every RouteSearch: a target in another region is refused before it expands.
@@ -63,7 +69,8 @@ func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, 
 		priority: int, bounds_max: Vector3i, reservation_table, claimed_targets: Callable,
 		source_candidates: Callable, tile_key: Callable, routable_to: Callable, submit_job: Callable,
 		set_reason: Callable, emit_need_unmet: Callable, interrupt_current_job: Callable,
-		resume_interrupted_job: Callable, content_registry, region_reachable: Callable = Callable()) -> void:
+		resume_interrupted_job: Callable, content_registry, region_reachable: Callable = Callable(),
+		source_ranks: Callable = Callable()) -> void:
 	_need_definitions = need_definitions
 	_content = content_registry
 	_need_full = need_full
@@ -77,6 +84,7 @@ func _init(need_definitions: Dictionary, need_full: int, retry_base_ticks: int, 
 	_tile_key = tile_key
 	_routable_to = routable_to
 	_region_reachable = region_reachable
+	_source_ranks = source_ranks
 	_submit_job = submit_job
 	_set_reason = set_reason
 	_emit_need_unmet = emit_need_unmet
@@ -107,6 +115,7 @@ func get_pending_job(colonist_id: String) -> String:
 ## Runs once per tick, before the fair scheduler's tick() (colonist-ai.md 3.1).
 func advance(colonists: Array[Dictionary], tick: int) -> void:
 	_candidates_this_pass.clear()
+	_ranks_this_pass.clear()
 	for colonist in colonists:
 		if not _may_be_ordered(colonist):
 			continue
@@ -201,8 +210,9 @@ func _is_backed_off(colonist_id: String, kind: String, tick: int) -> bool:
 	var backoff: Dictionary = _backoff.get(_key(colonist_id, kind), {})
 	return backoff.has("retry_at") and tick < int(backoff["retry_at"])
 
-## "Nearest" is the shortest real route, not Manhattan distance. The Manhattan pre-sort (ties
-## row-major) only orders the search and lets it stop once no candidate can beat the best route.
+## "Nearest" is the shortest real route, not Manhattan distance, within the best source rank this
+## colonist can route to. The pre-sort (rank descending, then Manhattan, ties row-major) only orders
+## the search and lets it stop once no candidate can beat the best route at that rank.
 ## Reserved/claimed candidates are dropped here and rechecked at commit (searches span ticks).
 func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var colonist_id: String = colonist["id"]
@@ -211,12 +221,18 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var candidates: Array[Vector3i] = []
 	if not _candidates_this_pass.has(kind):
 		_candidates_this_pass[kind] = _source_candidates.call(kind)
+		_ranks_this_pass[kind] = _source_ranks.call(kind) if _source_ranks.is_valid() else {}
+	var ranks: Dictionary = _ranks_this_pass[kind]
 	for tile in (_candidates_this_pass[kind] as Array):
 		if claimed.has(tile):
 			continue
 		if not _reservation_table.is_reserved(String(_tile_key.call(tile))):
 			candidates.append(tile)
 	candidates.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		var ra: int = ranks.get(a, 0)
+		var rb: int = ranks.get(b, 0)
+		if ra != rb:
+			return ra > rb
 		var da := TileGrid.manhattan(a, start)
 		var db := TileGrid.manhattan(b, start)
 		if da != db:
@@ -228,9 +244,12 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 		_onset_failed(colonist_id, kind, tick)
 		return
 	var distances: Array[int] = []
+	var candidate_ranks: Array[int] = []
 	for candidate in candidates:
 		distances.append(TileGrid.manhattan(candidate, start))
-	_searching[colonist_id] = {"kind": kind, "candidates": candidates, "distances": distances,
+		var rank: int = ranks.get(candidate, 0)
+		candidate_ranks.append(rank)
+	_searching[colonist_id] = {"kind": kind, "candidates": candidates, "distances": distances, "ranks": candidate_ranks,
 		"cursor": 0, "search": null, "found": []}
 	_set_reason.call(colonist_id, "")
 	_advance_search(colonist, tick)
@@ -246,8 +265,9 @@ func _advance_search(colonist: Dictionary, tick: int) -> void:
 		var candidates: Array = state["candidates"]
 		var distances: Array = state["distances"]
 		var found: Array = state["found"]
+		var ranks: Array = state["ranks"]
 		var cursor: int = int(state["cursor"])
-		if cursor < candidates.size() and not _search_can_stop(distances, cursor, found):
+		if cursor < candidates.size() and not _search_can_stop(distances, ranks, cursor, found):
 			_advance_candidate_search(colonist, state, cursor)
 			return
 		state["ranked"] = _rank_found(found)
@@ -269,13 +289,19 @@ func _advance_candidate_search(colonist: Dictionary, state: Dictionary, cursor: 
 	if not search.is_terminal():
 		return
 	if search.get_status() == RerouteType.STATUS_FOUND:
-		found.append({"target": target, "length": search.get_path().size() - 1, "order": cursor})
+		found.append({"target": target, "length": search.get_path().size() - 1, "order": cursor, "rank": state["ranks"][cursor]})
 	state["cursor"] = cursor + 1
 	state["search"] = null
 
-func _search_can_stop(distances: Array, cursor: int, found: Array) -> bool:
+## Candidates come rank first, so every found route has the first found one's rank: a lower-ranked
+## candidate can never beat it.
+func _search_can_stop(distances: Array, ranks: Array, cursor: int, found: Array) -> bool:
 	if found.is_empty():
 		return false
+	var rank: int = ranks[cursor]
+	var best_rank: int = found[0]["rank"]
+	if rank < best_rank:
+		return true
 	var best_length: int = _shortest_found_length(found)
 	return int(distances[cursor]) > best_length
 

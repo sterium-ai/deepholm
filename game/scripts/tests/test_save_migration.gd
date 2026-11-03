@@ -65,6 +65,7 @@ const V10_FIXTURE := "res://scripts/tests/fixtures/save_schema_v10_fixture.json"
 ## The same session written by F6a's build (docs/orca/handoffs/F6a-write-save.gd): schemaVersion
 ## 11, in the SaveWire encoding: the v10 fixture plus an empty "saplings" list (ADR 067).
 const V11_FIXTURE := "res://scripts/tests/fixtures/save_schema_v11_fixture.json"
+const V11_NOSKILLS_FIXTURE := "res://scripts/tests/fixtures/save_schema_v11_noskills_fixture.json"
 ## The same session written by this build (docs/orca/handoffs/F5b-write-save.gd): schemaVersion 12,
 ## "heal" in every colonist's labourTable and skills (ADR 065). Its colonists were seeded with
 ## heal among their labours, which shifts the seeded levels of the others, so (like F3's v8 file)
@@ -350,7 +351,8 @@ func _check_v8_to_v9_adds_only_the_surface_layer() -> void:
 
 ## Acceptance (F5b, ADR 065): the v11 -> v12 step gives every colonist's labourTable "heal" at
 ## the labour default 3 and its skills "heal" at {level 0, xp 0}, both in sorted key order, and
-## changes nothing else; a v11 colonist already holding heal is refused; the argument is not mutated; the migrated world's
+## changes nothing else; a v11 colonist without the optional skills gains heal in its labourTable
+## only; a v11 colonist already holding heal is refused; the argument is not mutated; the migrated world's
 ## state_hash() survives a save/load round trip.
 func _check_v11_to_v12_adds_only_the_heal_labour() -> void:
 	var raw := _unpacked_fixture_state(V11_FIXTURE)
@@ -381,6 +383,7 @@ func _check_v11_to_v12_adds_only_the_heal_labour() -> void:
 	_expect(JSON.stringify(rest) == before, "v11 -> v12 must change nothing but heal and schemaVersion")
 	var twice: Dictionary = JSON.parse_string(JSON.stringify(migrated["state"]))
 	_expect(not SaveMigrationsType.migrate(twice, 11, 12)["ok"], "a v11 colonist already holding heal must be refused")
+	_check_v11_without_skills_migrates()
 	var loaded := SaveIOType.read(V11_FIXTURE)
 	_expect(loaded["ok"], "the v11 fixture must load through SaveIO.read(): %s" % loaded)
 	if not loaded["ok"]:
@@ -395,6 +398,28 @@ func _check_v11_to_v12_adds_only_the_heal_labour() -> void:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
 			"the migrated v11 world must keep its state_hash() through save/load")
 	_remove(V11_MIGRATED_PATH)
+
+## The committed skill-less v11 fixture (docs/orca/handoffs/F5b-write-noskills-save.gd) is the
+## v11 fixture with every colonist's optional "skills" dropped; v11 -> v12 gives those colonists
+## heal in their labourTable only, and the file loads through SaveIO.read() (skills seeded on decode).
+func _check_v11_without_skills_migrates() -> void:
+	var skill_less := _unpacked_fixture_state(V11_NOSKILLS_FIXTURE)
+	var expected := _unpacked_fixture_state(V11_FIXTURE)
+	var stripped := 0
+	for entity: Dictionary in expected["entities"]:
+		if entity["kind"] == "colonist" and entity.erase("skills"):
+			stripped += 1
+	_expect(stripped > 0 and JSON.stringify(skill_less) == JSON.stringify(expected),
+		"the skill-less v11 fixture must be the v11 fixture without colonist skills")
+	var migrated := SaveMigrationsType.migrate(skill_less, 11, 12)
+	_expect(migrated["ok"], "a v11 colonist without skills must migrate: %s" % migrated)
+	if migrated["ok"]:
+		for entity: Dictionary in migrated["state"]["entities"]:
+			if entity["kind"] == "colonist":
+				_expect(int((entity["labourTable"] as Dictionary).get("heal", -1)) == 3 and not entity.has("skills"),
+					"a skill-less v11 colonist must gain heal in its labourTable only")
+	var loaded := SaveIOType.read(V11_NOSKILLS_FIXTURE)
+	_expect(loaded["ok"], "the skill-less v11 fixture must load through SaveIO.read(): %s" % loaded)
 
 ## Objects holding an int x/y pair without "z", at any depth.
 func _count_xy_without_z(value: Variant) -> int:

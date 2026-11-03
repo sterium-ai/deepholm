@@ -25,6 +25,8 @@ var _next_command := 0
 func _init() -> void:
 	_check_acceptance_two_meals_from_raw_food()
 	_check_hungry_colonist_eats_a_meal_before_raw_food()
+	_check_unreachable_or_reserved_meal_falls_back_to_raw_food()
+	_check_mixed_berry_and_raw_food_tile_eats_the_berry()
 	_check_save_load_mid_fetch_and_mid_cook_continue_identically()
 	_check_recorded_session_replays()
 	if _failed:
@@ -176,6 +178,48 @@ func _check_hungry_colonist_eats_a_meal_before_raw_food() -> void:
 	_expect(_total(raw, "food") == 2, "with no meal, the hungry colonist must eat one raw food, %d left" % _total(raw, "food"))
 	var need := _food_need(raw)
 	_expect(need >= 35 and need <= 40, "raw food restores satiety 40, food need is %d" % need)
+
+## Review regression (F5b): the satiety rank is per colonist, after its own reachability and the
+## reservations. A meal walled off in another region, or a meal whose tile another job holds, must
+## not keep the hungry colonist from the raw food beside them.
+func _check_unreachable_or_reserved_meal_falls_back_to_raw_food() -> void:
+	var walled := _hungry_world(650005, 12)
+	for x in range(11, 14):
+		for y in range(2, 5):
+			if x != 12 or y != 3:
+				TestAccess.set_tile(walled, x, y, WorldStateType.TILE_ROCK)
+	TestAccess.tile_grid(walled).reset_cells()
+	_expect_raw_food_eaten(walled, "a meal in another region")
+	var held := _hungry_world(650006, 12)
+	_expect(TestAccess.scheduler(held).queue.get_reservation_table().acquire(TestAccess.tile_key(held, 12, 3), "test_hold"),
+		"the test must be able to hold the meal's tile")
+	_expect_raw_food_eaten(held, "a meal whose tile another job holds")
+
+## Runs `world` until the hungry colonist eats; it must eat one raw food and leave the meal.
+func _expect_raw_food_eaten(world: WorldStateType, context: String) -> void:
+	for _i in 600:
+		world.tick()
+		if _total(world, "food") < 3:
+			break
+	_expect(_total(world, "food") == 2 and _total(world, "meal") == 1,
+		"%s: the hungry colonist must eat one raw food and leave the meal, food %d meal %d" % [context, _total(world, "food"), _total(world, "meal")])
+	var need := _food_need(world)
+	_expect(need >= 35 and need <= 40, "%s: raw food restores satiety 40, food need is %d" % [context, need])
+
+## Review regression (F5b): a tile holding a berry (restore 100) and raw food (satiety 40) is
+## ranked by the berry, so eating it takes the berry and restores 100; the raw food stays.
+func _check_mixed_berry_and_raw_food_tile_eats_the_berry() -> void:
+	var world := _hungry_world(650007, -1)
+	var key := TileGrid.coord_key(Vector3i(6, 3, 0))
+	TestAccess.item_table(world).ground_berries[key] = 1
+	TestAccess.item_table(world).ground_berries_factions[key] = "colony"
+	for _i in 600:
+		world.tick()
+		if int(TestAccess.item_table(world).ground_berries.get(key, 0)) == 0:
+			break
+	_expect(int(TestAccess.item_table(world).ground_berries.get(key, 0)) == 0, "the hungry colonist must eat the berry")
+	_expect(_total(world, "food") == 3, "the raw food on the berry's tile must stay, %d left" % _total(world, "food"))
+	_expect(_food_need(world) >= 95, "a berry restores 100, food need is %d" % _food_need(world))
 
 ## Acceptance (F5b): save/load mid-cook continues identically -- once while a craft_fetch carries
 ## raw food to the kitchen, once while cook_work is under way.

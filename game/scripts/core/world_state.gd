@@ -326,7 +326,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 	_need_giver = NeedGiverType.new(_need_definitions, _need_full, int(need_config["retry_base_ticks"]), int(need_config["retry_cap_ticks"]),
 		int(need_config["job_priority"]), bounds_max, _scheduler.queue.get_reservation_table(), _needs_system.need_job_targets,
 		_needs_system.need_source_candidates, _tile_key, _routable_to, _scheduler.submit, _needs_system.set_need_reason,
-		_needs_system.emit_need_unmet_event, _needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _content, _passability.region_reachable)
+		_needs_system.emit_need_unmet_event, _needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _content, _passability.region_reachable, _needs_system.need_source_ranks)
 	_rescue_giver = RescueGiverType.new(RESCUE_JOB_PRIORITY, bounds_max, _scheduler.queue.get_reservation_table(),
 		_tile_key, _routable_to, _trench.rescue_target_candidates, _scheduler.submit, _trench.set_rescue_reason,
 		_needs_system.interrupt_current_job, _needs_system.resume_interrupted_job, _trench.is_trench_tile, _route_budget, _get_job, _trench.retire_rescue_job, _passability.region_reachable)

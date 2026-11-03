@@ -274,12 +274,15 @@ returns a new dictionary and never mutates its input. Steps today:
   The v1 to v10 fixtures all migrate exactly to `save_schema_v11_fixture.json` (the same
   session, written packed by `docs/orca/handoffs/F6a-write-save.gd`).
 - **v11 → v12** (F5b, ADR 065): adds `heal` to every colonist's `labourTable` (level 3, the
-  spawn default) and `skills` (`{level: 0, xp: 0}`). A colonist that already has `heal`, or
-  lacks either map, is refused. Kitchens, meal bills and meals are ordinary workbench and item
+  spawn default) and, when present, `skills` (`{level: 0, xp: 0}`; `skills` is optional and a
+  colonist without it stays valid). A colonist that already has `heal`, lacks `labourTable`, or
+  has a non-map `skills`, is refused. Kitchens, meal bills and meals are ordinary workbench and item
   state, so nothing else changes. `save_schema_v12_fixture.json` is the same session written by
   this build (`docs/orca/handoffs/F5b-write-save.gd`); its colonists were seeded with `heal` among
   their labours, which shifts the other seeded levels, so (as with v8) older fixtures migrate to
-  `heal` at zero rather than to that file.
+  `heal` at zero rather than to that file. `save_schema_v11_noskills_fixture.json` is the v11
+  fixture with every colonist's `skills` dropped (`docs/orca/handoffs/F5b-write-noskills-save.gd`):
+  it migrates with `heal` in the labour table only.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version

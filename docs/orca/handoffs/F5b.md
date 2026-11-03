@@ -35,15 +35,23 @@ Simulation:
 - `toil_bindings.gd`: `cook_work`'s `work` completion goes to the same bill completion as
   `craft_work`.
 - `needs_system.gd`: food sources are berry bushes (restore 100) and tiles holding an
-  unreserved edible ground item (restore = best `satiety` on the tile). After the
-  reachability filter only the highest satiety tier is kept; the nearest wins. `consume`
-  takes one unit of the best unreserved edible item, else one berry; a gone target fails
-  typed (`source_gone`). Items reserved by a haul/fetch are never eaten.
+  unreserved edible ground item (restore = best `satiety` on the tile).
+  `need_source_ranks(kind)` gives each source tile its best restore in one pass over the
+  items. `consume` eats what ranked the tile: a berry when the tile has one and no item beats
+  it, else one unit of the most filling unreserved item; a gone target fails typed
+  (`source_gone`). Items reserved by a haul/fetch are never eaten.
+- `need_giver.gd`: an optional `source_ranks` callable. Each colonist's candidates (after its
+  own reachability filter, claimed and reserved tiles dropped) sort by rank, then distance;
+  the search stops at the first lower-ranked candidate once a route is found. So the best
+  source that colonist can reach and use wins, the nearest within it. Without the callable
+  every source ranks equally (other needs: unchanged).
 
 Persistence (schema v12):
 - `save_migrations.gd`: `_v11_to_v12()` adds `heal` to every colonist's `labourTable`
-  (level 3) and `skills` (`{level: 0, xp: 0}`), keys sorted; it refuses a colonist that
-  already has `heal` or lacks either map. Arm `11:`.
+  (level 3) and, when present, `skills` (`{level: 0, xp: 0}`), keys sorted. `skills` is
+  optional in a save (seeded on load), so a colonist without it migrates unchanged there. It
+  refuses a colonist that already has `heal`, lacks `labourTable`, or has a non-map `skills`.
+  Arm `11:`.
 - `state_codec.gd`: `SCHEMA_VERSION` 12. `entity_validator.gd`: `heal` added to its two labour
   key lists. `game-state.schema.json`: `const 12`, `heal` in both maps, `cook_work` in the
   job kind enum.
@@ -53,44 +61,57 @@ Persistence (schema v12):
 Docs: ADR 065, `decisions/README.md` row, `save-system.md` (v11 -> v12 step),
 `colonist-ai.md` (food sources and satiety tier), BACKLOG F5b status row.
 
-## Files outside the owned paths (owner approval pending)
+## Files outside the owned paths (approved)
 
 The owned paths are the labour table content, `objects.json`, `recipes.json`, `items.json`,
 `needs_system.gd`, `core/crafting/`, tests and this report. The design needs these other
-files; each change is the minimum for it. Per the standing instruction, I did not block on
-approval: **the owner confirms or rejects them at review.**
+files; each change is the minimum for it. **Approved** by the owner as F5b's scope (review
+round 1): BACKLOG F5b "Approved amendment (owner's interface, 2026-11-03, review round 1):
+scope", main commit `1198125` (docs only).
 
 | File | Why |
 |---|---|
 | `jobs.json`, `toil_bindings.gd`, `craft_giver.gd` | `cook_work` must exist as a job kind under labour `cook`, be submitted by the bench giver and complete the bill (design: "only colonists with cook enabled cook"). |
-| `world_state.gd` (1 line) | `LABOUR_KINDS` is the code-side labour table; `heal` appended. |
+| `world_state.gd` (2 lines, still 767) | `LABOUR_KINDS` is the code-side labour table; `heal` appended. The `NeedGiver` construction passes `_needs_system.need_source_ranks` (an argument on an existing line). |
+| `jobs/givers/need_giver.gd` | Per-colonist ranking of food sources (review blocking item 1): the rank must apply after each colonist's reachability filter and claims, which live in the giver. |
 | `items.schema.json`, `recipes.schema.json`, `skills.schema.json`, `scenarios.schema.json` | New fields/values must validate (REVIEW: new content has a schema entry). |
 | `save_migrations.gd`, `state_codec.gd`, `entity_validator.gd`, `game-state.schema.json`, `save-system.md` | `heal` in persisted labour tables and skills is a save format change: bump, migration, fixture (REVIEW "Save format"). |
 | `en.json` | Work-table label for `heal` and the status text for `cook_work`. |
 | `colonist-ai.md`, `decisions/README.md`, ADR 065 | Docs of the changed behaviour; ADR 065 is the owner's allocation. |
 | `docs/orca/handoffs/F5b-write-save.gd` | Fixture writer, same pattern as `F3-write-save.gd`. |
+| `docs/orca/handoffs/F5b-write-noskills-save.gd` | Writer of the skill-less v11 fixture (review blocking item 3). |
 | `docs/orca/handoffs/F5b-hash_projection.gd` | Evidence for the dig/chop hash literal move, same pattern as `L2-hash_projection.gd`. |
 | `docs/orca/handoffs/F5b-baseline_projection.gd` | Evidence for the determinism baseline literal move. |
 | `game/data/sprite_frames/world_pack.json` | `test_world_pack` requires every object kind and item to have pack art or a placeholder entry: `kitchen` and `meal` get placeholder entries with a reason (no art chosen yet). |
 
-Zones, `ZoneTable` and `world_state.gd` beyond the one constant line are untouched.
+The branch changes BACKLOG F5b only in its status line; the scope approval is main's amendment
+(`1198125`), which the branch does not duplicate. Zones, `ZoneTable` and `world_state.gd` beyond those two
+lines are untouched.
 
 ## Tests
 
-- New `test_cooking.gd` (4 checks, all through commands and ticks):
+- New `test_cooking.gd` (6 checks, all through commands and ticks):
   - acceptance: a built kitchen, 6 raw food, cook enabled on one colonist only, "keep 2
     meals" -> 2 meals in the stockpile, exactly 2 raw food left, only the cook ran
     `cook_work`, no `craft_work`, no bill left, a twin world with the same seed matches
     `state_hash()` every 100 ticks and at the end;
   - a hungry colonist eats a meal 7 tiles away before raw food 1 tile away (need >= 95), and
     with no meal eats one raw food (need 35..40);
+  - a meal the colonist cannot reach (walled off by rock) or whose tile another job holds
+    does not stop it eating raw food (food 3 -> 2, meal kept, need 35..40);
+  - a tile with a berry and raw food: the berry is eaten (need >= 95), the food stays;
   - save/load mid-`craft_fetch` (carrying) and mid-`cook_work` continue identically for 300
     ticks;
   - a session recorded through the viewer's `CommandRecorder` replays every checkpoint.
 - Changed tests (no assertion removed or loosened; `_check_|_expect(|_fail(` counts vs
   `main`):
-  - `test_save_migration.gd` 235 -> 249: the v11 -> v12 step (F6a's v11 fixture migrates and
-    gains only `heal`), its refusals, the v12 fixture loads and re-encodes unchanged; older
+  - `test_save_migration.gd` 235 -> 255: the v11 -> v12 step (F6a's v11 fixture migrates and
+    gains only `heal`), the committed `save_schema_v11_noskills_fixture.json` (the v11
+    fixture with colonist `skills` dropped, written by
+    `docs/orca/handoffs/F5b-write-noskills-save.gd` through `SaveIO.commit_body()`, whose
+    read-back migrates and validates it) migrates with `heal` in the labour table only and loads
+    through `SaveIO.read()`, its
+    refusals, the v12 fixture loads and re-encodes unchanged; older
     fixtures now migrate through v12. F5a's v9 -> v10 check expects the current version instead
     of a literal 11.
   - `test_architecture_rules.gd` 75 -> 76: execution trace for the kitchen.
@@ -113,9 +134,11 @@ Zones, `ZoneTable` and `world_state.gd` beyond the one constant line are untouch
   - `test_save_bounds_validation.gd` 24 -> 24: its hand-built current-schema colonist has
     `heal` in its labour table.
   - `test_farm_zone.gd` 61 -> 61: harvested `food` is now edible, so hungry colonists ate it
-    and the stockpile counts fell short. `_feed()` puts a 1000-berry patch at (0, 0) as
-    bootstrap state (so the replay check has it too); berries (restore 100) go before raw food
-    (40), and the checks count what the farm makes, unchanged.
+    and the stockpile counts fell short. `_feed()` puts one 1000-berry patch per colonist at
+    (0, 0..5) as bootstrap state (so the replay check has it too); berries (restore 100) go before
+    raw food (40), and the checks count what the farm makes, unchanged. One patch per colonist
+    since round 1: the food ranking is now per colonist after claims, so with a single patch the
+    five colonists not holding it ate stockpiled food (29 < 32), as ADR 065 now says they should.
 - Test files: 135 `test_*.gd` on `main`, 136 on the branch.
 
 ## Validation
@@ -140,11 +163,13 @@ Hash projection (from `game/`, `$G` = the Godot 4.7.2 console binary), expected 
 
 Results on the branch head:
 
-- Full suite, final line: `run_tests: all 136 test(s) PASS  [909s]`
+- Full suite, final line: `run_tests: all 136 test(s) PASS  [869s]`
 - `check_core_budgets`: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s)). No cap raised.
-- `check_core_warnings`: OK, 2801 (= baseline).
-- `measure_core`: `core total: 22864 lines in 112 files`. Touched core files:
+- `check_core_warnings`: OK, 2798. Below the old baseline 2801 (typed locals in the new code
+  also cleared three old `unsafe_call_argument` sites), so `docs/architecture/warnings-baseline.txt`
+  is lowered to 2798 with `-Update`, as the gate asks.
+- `measure_core`: `core total: 22910 lines in 112 files`. Touched core files:
 
   | File | Total | Code | Longest function | Its lines |
   |---|---|---|---|---|
@@ -152,8 +177,28 @@ Results on the branch head:
   | `crafting/crafting_system.gd` | 573 | 456 | `apply_command` | 34 |
   | `persistence/state_codec.gd` | 596 | 436 | `decode` | 70 |
   | `jobs/toil_bindings.gd` | 499 | 375 | `_init` | 49 |
-  | `actors/needs_system.gd` | 433 | 344 | `ensure_needs` | 45 |
+  | `actors/needs_system.gd` | 451 | 354 | `ensure_needs` | 45 |
+  | `jobs/givers/need_giver.gd` | 371 | 283 | `_start_search` | 39 |
+  | `persistence/save_migrations.gd` | 275 | 188 | `_migrate_step` | 30 |
   | `persistence/validators/entity_validator.gd` | 299 | 265 | `_valid_entity` | 65 |
+
+## Review fixes (Codex, REQUEST_CHANGES, 2026-11-03)
+
+Blocking:
+1. *Global satiety tier before reachability and claims.* Removed. `NeedGiver` ranks per
+   colonist after its own filter (see `need_giver.gd` above). Test: unreachable meal and held
+   meal both fall back to raw food.
+2. *Mixed berry + raw food tile ranked 100 but ate the raw item.* `apply_need_effect` now eats
+   what ranked the tile (berry unless an item's satiety beats it). Test: mixed tile.
+3. *Migration refused v11 colonists without `skills`.* `skills` is optional; the step adds
+   `heal` only to the maps present. Committed fixture `save_schema_v11_noskills_fixture.json`
+   and `_check_v11_without_skills_migrates` in `test_save_migration.gd`.
+4. *Files outside the owned paths.* **Approved** by the owner as listed (BACKLOG F5b approved
+   amendment, main commit `1198125`).
+
+Non-blocking:
+- Quadratic item scan: `need_source_ranks` builds the tile ranks in one pass.
+- Suite not rerun by the reviewer: rerun on the new head (the full-suite line under "Results on the branch head").
 
 ## Known limitations
 
@@ -170,4 +215,4 @@ Results on the branch head:
 
 ## Next action
 
-Codex review of the rebased branch.
+Codex review round 2 of the head.
