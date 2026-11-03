@@ -240,6 +240,11 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 	for field in ENTITY_COMPONENT_FIELDS[entity["kind"]]:
 		if not entity.has(field):
 			return _fail_missing("missing entity field '%s'" % field)
+	# Review round 3: the animal fields belong to kind "animal" only (the schema's else branch).
+	if entity["kind"] != "animal":
+		for field: String in ENTITY_COMPONENT_FIELDS["animal"]:
+			if entity.has(field):
+				return _fail("unexpected entity field '%s' on kind %s" % [field, entity["kind"]])
 	if (not _is_int_min(entity["x"], 0) or not _is_int_min(entity["y"], 0)
 			or int(entity["x"]) >= map_width or int(entity["y"]) >= map_height or not _valid_layer(entity["z"], layer_count)):
 		return _fail("invalid entity position")

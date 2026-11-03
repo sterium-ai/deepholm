@@ -29,6 +29,7 @@ const WILD_TICKS_VALID_FIXTURE_DIR := "user://test-content-registry-fixture-wild
 const WILD_TICKS_INVALID_FIXTURE_DIR := "user://test-content-registry-fixture-wild-ticks-invalid"
 const BUILD_COST_DANGLING_FIXTURE_DIR := "user://test-content-registry-fixture-build-cost-dangling"
 const MISSING_BUILD_COST_FIXTURE_DIR := "user://test-content-registry-fixture-missing-build-cost"
+const MANIFEST_CONTENT_FIXTURE_DIR := "user://test-content-registry-fixture-manifest-content"
 
 ## ADR 026/027: tunables.wild.trench_climb_ticks must reject a
 ## non-integer, zero, and a negative value the same way combat's cooldown
@@ -74,6 +75,8 @@ func _init() -> void:
 	_check_fixture_with_build_cost_dangling_reference_fails_construction()
 	_check_fixture_with_missing_build_cost_fails_construction()
 	_check_fixture_with_crop_dangling_tile_fails_construction()
+	_check_shipped_manifest_lists_every_content_file()
+	_check_fixture_manifest_content_entries_are_checked()
 
 	if _failed:
 		quit(1)
@@ -864,3 +867,43 @@ func _cleanup_dir(dir_path: String) -> void:
 		entry = dir.get_next()
 	dir.list_dir_end()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(dir_path))
+
+## F6b-1 review round 3 (owner decision, BACKLOG e9292ad): the shipped manifest.json lists every
+## content file, species.json included, and nothing else.
+func _check_shipped_manifest_lists_every_content_file() -> void:
+	var manifest: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://content/manifest.json"))
+	var listed: Array = manifest.get("content", [])
+	_expect(listed.has("species.json"), "manifest.json must reference species.json, got %s" % [listed])
+	var on_disk: Array = []
+	for file_name in DirAccess.get_files_at("res://content"):
+		if file_name.ends_with(".json") and file_name != "manifest.json":
+			on_disk.append(file_name)
+	var sorted_listed := listed.duplicate()
+	sorted_listed.sort()
+	on_disk.sort()
+	_expect(sorted_listed == on_disk, "manifest.json content must list exactly the content files: %s vs %s" % [listed, on_disk])
+
+## A manifest entry naming a file the bundle lacks, the manifest itself, or a file twice fails
+## construction with a typed missing_file error naming manifest.json; a correct list constructs.
+func _check_fixture_manifest_content_entries_are_checked() -> void:
+	var cases := {
+		"dragons.json": ["items.json", "dragons.json"],
+		"manifest.json": ["manifest.json"],
+		"listed twice": ["items.json", "items.json"],
+	}
+	for needle: String in cases:
+		_write_wild_ticks_fixture_bundle(MANIFEST_CONTENT_FIXTURE_DIR, 99)
+		_write_json(MANIFEST_CONTENT_FIXTURE_DIR + "/manifest.json", {"version": "0.0.1-fixture", "content": cases[needle]})
+		var registry := ContentRegistryType.new(MANIFEST_CONTENT_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
+		_cleanup_dir(MANIFEST_CONTENT_FIXTURE_DIR)
+		_expect(not registry.is_valid(), "manifest content %s must fail construction" % [cases[needle]])
+		var error := registry.get_error()
+		_expect(error.get("code") == ContentRegistryType.ERROR_MISSING_FILE, "manifest content %s must be typed missing_file, got %s" % [cases[needle], error])
+		_expect(String(error.get("file", "")).ends_with("manifest.json"), "the error must name manifest.json, got %s" % error)
+		_expect(String(error.get("message", "")).contains("manifest.json content") and String(error.get("message", "")).contains(needle),
+			"the error must name the bad entry '%s', got %s" % [needle, error])
+	_write_wild_ticks_fixture_bundle(MANIFEST_CONTENT_FIXTURE_DIR, 99)
+	_write_json(MANIFEST_CONTENT_FIXTURE_DIR + "/manifest.json", {"version": "0.0.1-fixture", "content": ["items.json", "jobs.json"]})
+	var valid := ContentRegistryType.new(MANIFEST_CONTENT_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
+	_cleanup_dir(MANIFEST_CONTENT_FIXTURE_DIR)
+	_expect(valid.is_valid(), "a manifest listing existing content files must construct, got %s" % valid.get_error())

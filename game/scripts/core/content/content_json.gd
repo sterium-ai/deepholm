@@ -261,3 +261,17 @@ static func _json_parse_null(c: _JsonCursor):
 		return null
 	c.fail("invalid literal")
 	return null
+
+## F6b-1 review round 3 (owner decision, BACKLOG e9292ad): manifest.json's optional "content" lists
+## the bundle's content files. "" when every entry names a loaded, schema-checked kind once
+## (raw_by_kind: kind -> validated document); otherwise the message of the first bad entry.
+static func manifest_reference_error(raw_by_kind: Dictionary) -> String:
+	var listed: Array = (raw_by_kind.get("manifest", {}) as Dictionary).get("content", [])
+	for index in listed.size():
+		var file_name: String = listed[index]
+		var kind := file_name.trim_suffix(".json")
+		if kind == file_name or kind == "manifest" or not raw_by_kind.has(kind):
+			return "manifest.json content[%d]: '%s' is not a content file of this bundle" % [index, file_name]
+		if listed.find(file_name) != index:
+			return "manifest.json content[%d]: '%s' is listed twice" % [index, file_name]
+	return ""

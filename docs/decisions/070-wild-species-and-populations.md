@@ -15,7 +15,8 @@
 - **Status:** proposed (design closed with the owner in BACKLOG F6b, package 1 of 3 = F6b-1)
 - **Date:** 2026-11-03
 - **Scope:**
-  - content: `species.json` and its schema, plus `mapgen.animal_counts`;
+  - content: `species.json` and its schema, plus `mapgen.animal_counts`, and the manifest's
+    `content` list;
   - simulation: `FaunaSpecies`, `FaunaSystem`, `ActorTable.spawn_animal()`, the TickPipeline
     `"fauna"` phase;
   - persistence: schema v14, the `"animal"` entity kind (`EntityCodec`, `EntityValidator`) and
@@ -60,6 +61,13 @@ The owner note adds four constraints:
      to `_fail_startup()` together with the table errors. The world never starts animal-free on
      bad content (review fix; `test_fauna_startup.gd` runs the real startup in a child process).
    - `health` and `attack` are stored but not yet used; they are for F6b-3.
+   - **Manifest** (owner decision, review round 3, BACKLOG commit e9292ad): `species.json` is
+     referenced in `content/manifest.json` like any other content file. The manifest schema gains
+     an optional `content` array of file names, and the shipped manifest lists every content
+     file. `ContentJson.manifest_reference_error()` refuses an entry that names a file the bundle
+     lacks, the manifest itself, or a file twice, with a typed `missing_file` error naming
+     `manifest.json`. The field stays optional, so a bundle without it (the test fixtures) loads
+     as before.
 2. **Actors.** An animal is a flat record with these fields: `id` (`animal_<n>`),
    `kind: "animal"`, `species`, `x`, `y`, `z`, `factionId: "wildlife"`, `bornTick`,
    `lastMealTick`, `nextBirthTick` and `health`.
@@ -101,8 +109,9 @@ The owner note adds four constraints:
    - Animals are saved in `entities` with kind `"animal"` and the extra fields `species`,
      `bornTick`, `lastMealTick` and `nextBirthTick`. `EntityValidator` checks that `species` is a
      species.json id of the session (`SaveIO.content_rules()["species"]`), the whole id matches
-     `^animal_[0-9]+$`, `z` is `TileGrid.SURFACE` and the ticks are ints. A save holding an
-     unknown species, a malformed id or an underground animal is refused on read and on write.
+     `^animal_[0-9]+$`, `z` is `TileGrid.SURFACE` and the ticks are ints. Any other kind that
+     carries one of those four fields is refused (review round 3). A save holding an unknown
+     species, a malformed id or an underground animal is refused on read and on write.
    - Schema v14 also adds an optional top-level `fauna` field, `{nextAnimalId, rng: {seed,
      state}}`, checked by `FaunaValidator`. It carries no roster. The field is optional only
      while there are no animal entities. A save with animals must carry it, and `nextAnimalId`
@@ -165,7 +174,11 @@ The owner note adds four constraints:
 - `test_fauna_persistence.gd`: the hash is deterministic, save/load continues identically, and
   a replay is ok. A real save file keeps a `fauna.rng.state` above 2^53 bit-exact, and a save
   with an unknown species is refused. So are animals without `fauna`, a `nextAnimalId` that is
-  not past every animal id, an id off `^animal_[0-9]+$`, and an animal off the surface.
+  not past every animal id, an id off `^animal_[0-9]+$`, an animal off the surface, and a
+  colonist carrying an animal field.
+- `test_content_registry.gd`: the shipped manifest lists exactly the content files, species.json
+  included; a manifest entry naming a missing file, the manifest itself or a file twice fails
+  construction with `missing_file`.
 - `test_fauna_startup.gd`: bad prey or bad counts abort the real startup with the typed error;
   the shipped mapgen counts seed exactly those animals through `WorldState.new()`, as rows of the
   shared actor table, deterministically, outside the clearing, in `state_hash()` and in the view.

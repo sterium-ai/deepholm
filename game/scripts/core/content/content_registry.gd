@@ -182,6 +182,8 @@ func _load_base_root(content_dir: String, schema_dir: String, schemas_by_kind: D
 				return raw_by_kind
 		raw_by_kind[kind] = content_result["value"]
 		schemas_by_kind[kind] = schema_result["value"]
+	var manifest_error := ContentJsonType.manifest_reference_error(raw_by_kind)
+	if not manifest_error.is_empty(): _fail(ERROR_MISSING_FILE, manifest_error, _join_path(content_dir, "manifest.json"))
 	return raw_by_kind
 
 ## Applies one pack root (A13, ADR 010): pack.json {id, version} plus collection files

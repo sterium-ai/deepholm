@@ -1,3 +1,8 @@
 {
-  "version": "1.1.0"
+  "version": "1.1.0",
+  "content": [
+    "actors.json", "calendar.json", "crops.json", "factions.json", "forests.json",
+    "incidents.json", "items.json", "jobs.json", "mapgen.json", "needs.json", "objects.json",
+    "recipes.json", "scenarios.json", "skills.json", "species.json", "thoughts.json", "tiles.json"
+  ]
 }

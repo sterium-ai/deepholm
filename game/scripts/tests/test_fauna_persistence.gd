@@ -20,6 +20,7 @@ func _init() -> void:
 	_check_real_file_round_trip()
 	_check_unknown_species_rejected()
 	_check_malformed_animal_saves_rejected()
+	_check_animal_fields_on_other_kinds_rejected()
 	_check_recorded_session_replays()
 	if _failed:
 		quit(1)
@@ -164,6 +165,27 @@ func _check_malformed_animal_saves_rejected() -> void:
 	no_animals["entities"] = (no_animals["entities"] as Array).filter(func(e: Dictionary) -> bool: return e.get("kind") != "animal")
 	no_animals.erase("fauna")
 	_expect(SaveIOType._validate_state(no_animals)["ok"], "a save with neither animals nor fauna must still validate")
+
+## Review round 3: "species" or an animal clock on a colonist used to validate and then crash the
+## decoder (EntityCodec reads every clock once "species" is present). Refused by validation and by
+## the writer, one field at a time.
+func _check_animal_fields_on_other_kinds_rejected() -> void:
+	var saved: Dictionary = _wild_world(880007).to_save_state()
+	var extras := {"species": "rabbit", "bornTick": 0, "lastMealTick": 0, "nextBirthTick": 0}
+	for field: String in extras.keys():
+		var tampered: Dictionary = saved.duplicate(true)
+		var found := false
+		for entity: Dictionary in tampered["entities"]:
+			if entity.get("kind") == "colonist":
+				entity[field] = extras[field]
+				found = true
+				break
+		_expect(found, "the fixture must carry a colonist")
+		_expect_rejected(tampered, "unexpected entity field '%s'" % field, "a colonist with '%s'" % field)
+		var written := SaveIOType.write_atomic(SAVE_PATH, tampered)
+		_expect(not written.get("ok", false), "the writer must refuse a colonist with '%s': %s" % [field, written])
+		if FileAccess.file_exists(SAVE_PATH):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 
 func _with_first_animal(saved: Dictionary, field: String, value: Variant) -> Dictionary:
 	var tampered: Dictionary = saved.duplicate(true)
