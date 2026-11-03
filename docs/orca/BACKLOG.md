@@ -1251,6 +1251,11 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   headless coverage through commands and ticks. Scope: a change in `world_state.gd` is
   approved only as a wiring hook of ≤ 2 lines with no growth (767 stays 767), declared in the
   handoff; anything larger goes into the owned files.
+- **Review round 2 (owner's interface, 2026-11-03): scope.** The new `haul_tool` job kind needs
+  `game/content/jobs.json`, `core/jobs/toil_executor.gd`, `core/jobs/toil_bindings.gd`, the
+  game-state schema job-kind enum and `game/data/text/en.json` — approved as F5a-b's scope, as
+  declared in the handoff. The delivery recheck (destination stops accepting tools during
+  travel) is fixed as Codex asks, through the shared job engine.
 
 ### F5b — Labours: cook and heal; cooking · `todo` · after F2 · Design: closed 2026-10-30
 
