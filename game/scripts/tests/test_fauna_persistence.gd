@@ -21,6 +21,7 @@ func _init() -> void:
 	_check_unknown_species_rejected()
 	_check_malformed_animal_saves_rejected()
 	_check_animal_fields_on_other_kinds_rejected()
+	_check_non_array_entities_rejected()
 	_check_recorded_session_replays()
 	if _failed:
 		quit(1)
@@ -184,6 +185,23 @@ func _check_animal_fields_on_other_kinds_rejected() -> void:
 		_expect_rejected(tampered, "unexpected entity field '%s'" % field, "a colonist with '%s'" % field)
 		var written := SaveIOType.write_atomic(SAVE_PATH, tampered)
 		_expect(not written.get("ok", false), "the writer must refuse a colonist with '%s': %s" % [field, written])
+		if FileAccess.file_exists(SAVE_PATH):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+
+## Review round 4: "entities" was cast to Array before EntityValidator saw it, so a non-array value
+## raised an invalid-cast error and returned {} instead of schema_error. Every non-array value is
+## refused with a typed schema_error, by validation and by the writer.
+func _check_non_array_entities_rejected() -> void:
+	var saved: Dictionary = _wild_world(880008).to_save_state()
+	for bad: Variant in [{}, "entities", 7, null]:
+		var tampered: Dictionary = saved.duplicate(true)
+		tampered["entities"] = bad
+		var check := SaveIOType._validate_state(tampered)
+		_expect(check.has("ok") and not check["ok"], "entities %s must be rejected: %s" % [type_string(typeof(bad)), check])
+		_expect(check.get("code") == "schema_error", "entities %s must fail as schema_error: %s" % [type_string(typeof(bad)), check])
+		_expect(str(check.get("message", "")).contains("entities"), "the rejection must name entities: %s" % check)
+		var written := SaveIOType.write_atomic(SAVE_PATH, tampered)
+		_expect(not written.get("ok", false) and written.get("code") == "schema_error", "the writer must refuse entities %s: %s" % [type_string(typeof(bad)), written])
 		if FileAccess.file_exists(SAVE_PATH):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
 

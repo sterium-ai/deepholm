@@ -25,9 +25,12 @@ static func _valid_fauna(value: Variant) -> Dictionary:
 
 ## Review round 2: a save with animal entities must carry "fauna", and its nextAnimalId must be past
 ## every saved animal_N, or the next birth would reuse a live id. Runs after both are validated.
-static func _valid_fauna_for_animals(fauna: Variant, entities: Array) -> Dictionary:
+## Takes the raw value: a non-Array "entities" is EntityValidator's error, never a cast here.
+static func _valid_fauna_for_animals(fauna: Variant, entities: Variant) -> Dictionary:
+	if not (entities is Array):
+		return {"ok": true}
 	var highest := -1
-	for entity: Variant in entities:
+	for entity: Variant in entities as Array:
 		if entity is Dictionary and (entity as Dictionary).get("kind") == "animal":
 			highest = maxi(highest, _animal_id_number((entity as Dictionary)["id"]))
 	if highest < 0:

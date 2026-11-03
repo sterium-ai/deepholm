@@ -1,8 +1,8 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2794
-untyped_declaration 507
+total 2793
+untyped_declaration 506
 unsafe_property_access 0
 unsafe_method_access 226
 unsafe_call_argument 2034
@@ -74,7 +74,7 @@ file game/scripts/core/persistence/scheduling_codec.gd 90
 file game/scripts/core/persistence/state_codec.gd 161
 file game/scripts/core/persistence/validators/calendar_validator.gd 10
 file game/scripts/core/persistence/validators/crafting_validator.gd 1
-file game/scripts/core/persistence/validators/entity_validator.gd 65
+file game/scripts/core/persistence/validators/entity_validator.gd 64
 file game/scripts/core/persistence/validators/giver_validator.gd 32
 file game/scripts/core/persistence/validators/item_validator.gd 29
 file game/scripts/core/persistence/validators/map_validator.gd 13

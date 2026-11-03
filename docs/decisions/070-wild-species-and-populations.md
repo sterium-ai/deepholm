@@ -175,7 +175,7 @@ The owner note adds four constraints:
   a replay is ok. A real save file keeps a `fauna.rng.state` above 2^53 bit-exact, and a save
   with an unknown species is refused. So are animals without `fauna`, a `nextAnimalId` that is
   not past every animal id, an id off `^animal_[0-9]+$`, an animal off the surface, and a
-  colonist carrying an animal field.
+  colonist carrying an animal field; a non-array `entities` is refused with `schema_error`.
 - `test_content_registry.gd`: the shipped manifest lists exactly the content files, species.json
   included; a manifest entry naming a missing file, the manifest itself or a file twice fails
   construction with `missing_file`.

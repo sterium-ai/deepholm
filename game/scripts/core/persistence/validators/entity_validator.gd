@@ -197,7 +197,7 @@ static func _valid_entity_hands(value, capacity: int) -> Dictionary:
 
 ## need_kinds: needs.json's kinds, skill_rules: skills.json, species_ids: species.json's ids, all
 ## from the session registry (SaveIO.content_rules()).
-static func _valid_entities(value, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
+static func _valid_entities(value: Variant, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
 		skill_rules: Dictionary = {}, species_ids: Array[String] = []) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entities type")
