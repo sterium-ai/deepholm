@@ -256,7 +256,7 @@ func _build_systems() -> void:
 	_trade = TradeSystemType.new(_clock, _content, _item_table, _scheduler, _event_log, PRIORITY_TICK, is_tool_kind,
 		_find_colonist, _find_job_colonist, _finish_job, _remove_colonist_by_id)
 	_farm = FarmSystemType.new(_content, _calendar, _clock, _tile_grid, _zone_table.get_farm_zones, _item_table.get_items,
-		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability)
+		_scheduler.queue.view_jobs_of_kinds, _scheduler.submit, _passability.passability, _zone_table.get_forest_zones, _is_cell_occupied)
 	_area_orders = AreaOrders.new(func(command: Dictionary) -> Dictionary: return _commands.apply(command), _construction.get_construction_site, _scheduler.queue.get_index, _scheduler.queue.get_next_id, _construction.site_table.get_next_id, _event_log, _clock)
 
 func _build_commands() -> void:

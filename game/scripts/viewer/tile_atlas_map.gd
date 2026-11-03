@@ -56,6 +56,10 @@ const TILE_ATLAS_MAP: Dictionary = {
 	# F1 crop stages (crops.json "stages"): the planted ground under each stage's decor.
 	"crop_grown": {"source_id": SOURCE_FLOORS, "coords": Vector2i(1, 6)},
 	"crop_ripe": {"source_id": SOURCE_FLOORS, "coords": Vector2i(1, 6)},
+	# F6a sapling stages (forests.json "stages"): the planted ground under each stage's sprout.
+	"sapling_1": {"source_id": SOURCE_FLOORS, "coords": Vector2i(1, 6)},
+	"sapling_2": {"source_id": SOURCE_FLOORS, "coords": Vector2i(1, 6)},
+	"sapling_3": {"source_id": SOURCE_FLOORS, "coords": Vector2i(1, 6)},
 	WorldStateType.TILE_TRENCH: {"source_id": SOURCE_FLOORS, "coords": Vector2i(3, 5)},
 }
 
@@ -77,6 +81,9 @@ const TILE_DECOR_MAP: Dictionary = {
 	WorldStateType.TILE_PLANTED: {"source_id": SOURCE_SPROUT, "coords": Vector2i(0, 0)},
 	"crop_grown": {"source_id": SOURCE_SPROUT, "coords": Vector2i(1, 0)},
 	"crop_ripe": {"source_id": SOURCE_SPROUT, "coords": Vector2i(2, 0)},
+	"sapling_1": {"source_id": SOURCE_SPROUT, "coords": Vector2i(0, 0)},
+	"sapling_2": {"source_id": SOURCE_SPROUT, "coords": Vector2i(1, 0)},
+	"sapling_3": {"source_id": SOURCE_SPROUT, "coords": Vector2i(2, 0)},
 }
 
 ## Grass blob edges, keyed by the side the foreign (water/rock) neighbour is

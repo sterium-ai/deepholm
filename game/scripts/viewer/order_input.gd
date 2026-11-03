@@ -14,7 +14,7 @@ extends RefCounted
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const MapViewType = preload("res://scripts/viewer/map_view.gd")
 
-enum Tool { DIG, CHOP, FORAGE, CANCEL, WALL, REMOVE_OBJECT, ZONE, TILL, SOW, MINE, FARM_ZONE, BUILD_DOOR, BUILD_BED, BUILD_WORKBENCH }
+enum Tool { DIG, CHOP, FORAGE, CANCEL, WALL, REMOVE_OBJECT, ZONE, TILL, SOW, MINE, FARM_ZONE, FOREST_ZONE, BUILD_DOOR, BUILD_BED, BUILD_WORKBENCH }
 
 var selected_tool: int = -1
 var wall_kind := "wooden_wall"
@@ -38,7 +38,7 @@ func preview_validity(world: WorldStateType, preview: Callable, map_view: MapVie
 			skipped[Vector2i(entry["x"], entry["y"])] = true
 		for tile in tiles:
 			result.append(bool(outcome.get("ok", false)) and not skipped.has(tile))
-	elif selected_tool == Tool.ZONE or selected_tool == Tool.FARM_ZONE:
+	elif selected_tool in [Tool.ZONE, Tool.FARM_ZONE, Tool.FOREST_ZONE]:
 		var first := tiles[0]
 		var last := tiles[-1]
 		var payload := {"x": first.x, "y": first.y, "z": TileGrid.SURFACE, "width": last.x - first.x + 1, "height": last.y - first.y + 1}
@@ -71,9 +71,11 @@ func preview_validity(world: WorldStateType, preview: Callable, map_view: MapVie
 static func previews_per_tile(tool: int) -> bool:
 	return tool in [Tool.DIG, Tool.CHOP, Tool.FORAGE, Tool.CANCEL, Tool.REMOVE_OBJECT, Tool.TILL, Tool.SOW, Tool.MINE]
 
-## The zone_add payload fields a zone tool adds: a farm zone (F1) of the first crops.json crop
-## (one crop in v1); {} for a stockpile.
+## The zone_add payload fields a zone tool adds: a forest zone (F6a); a farm zone (F1) of the
+## first crops.json crop (one crop in v1); {} for a stockpile.
 static func zone_payload(world: WorldStateType, tool: int) -> Dictionary:
+	if tool == Tool.FOREST_ZONE:
+		return {"kind": "forest"}
 	if tool != Tool.FARM_ZONE or world == null or world.get_content_list("crops").is_empty():
 		return {}
 	return {"kind": "farm", "crop": String(world.get_content_list("crops")[0]["id"])}
@@ -285,7 +287,7 @@ func select_tool(world: WorldStateType, map_view: MapViewType, tool: int) -> voi
 	if map_view != null:
 		map_view.set_tool_enabled(tool >= 0)
 		map_view.set_preview_per_tile(previews_per_tile(tool))
-		map_view.set_zone_tool_enabled(tool == Tool.ZONE or tool == Tool.FARM_ZONE)
+		map_view.set_zone_tool_enabled(tool in [Tool.ZONE, Tool.FARM_ZONE, Tool.FOREST_ZONE])
 		map_view.set_zone_payload(zone_payload(world, tool))
 		var build_kind := build_kind_for_tool(tool)
 		map_view.set_build_tool_enabled(not build_kind.is_empty())

@@ -16,8 +16,8 @@ const DEFAULT_SCHEMA_DIR := "res://content/schemas/"
 const COLLECTION_KINDS: Array[String] = ["jobs", "needs", "objects", "items", "tiles", "actors", "factions", "incidents"]
 const DOCUMENT_KINDS: Array[String] = ["calendar", "manifest", "mapgen"]
 ## A16 (ADR 054): collection kinds a bundle may omit; otherwise handled like COLLECTION_KINDS.
-const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios", "crops", "recipes"]
-const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id", "crops": "id", "recipes": "id"}
+const OPTIONAL_COLLECTION_KINDS: Array[String] = ["scenarios", "crops", "recipes", "forests"]
+const ID_FIELD_BY_KIND := {"jobs": "kind", "needs": "kind", "objects": "kind", "items": "id", "tiles": "id", "actors": "id", "factions": "id", "incidents": "id", "scenarios": "id", "crops": "id", "recipes": "id", "forests": "id"}
 ## The fields each scenario setup step (world/scenario_builder.gd) reads besides step/when.
 const SCENARIO_STEP_FIELDS := {
 	"needed_tools": [], "per_colonist_objects": ["kind"], "object_rows": ["seed_offset", "rows"],
@@ -51,6 +51,7 @@ const PACK_OVERRIDES_FIELD := "overrides"
 
 const ContentJsonType = preload("res://scripts/core/content/content_json.gd")
 const CropContentType = preload("res://scripts/core/farming/crop_content.gd")
+const ForestContentType = preload("res://scripts/core/farming/forest_content.gd")
 const RecipeBookType = preload("res://scripts/core/crafting/recipe_book.gd")
 
 ## For the static is_known_toil() check only; never drives a ToilExecutor.
@@ -125,6 +126,11 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 	var crop_error := CropContentType.check(raw_by_kind)
 	if not crop_error.is_empty():
 		_fail(ERROR_DANGLING_REFERENCE, crop_error, "crops.json")
+		return
+	# F6a: forests.json's tile/job ids and its plant job's effects.
+	var forest_error := ForestContentType.check(raw_by_kind)
+	if not forest_error.is_empty():
+		_fail(ERROR_DANGLING_REFERENCE, forest_error, "forests.json")
 		return
 
 	for kind: String in raw_by_kind.keys():

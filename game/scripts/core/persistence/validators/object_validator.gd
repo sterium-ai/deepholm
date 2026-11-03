@@ -122,14 +122,16 @@ static func _valid_zones(value, map_width: int, map_height: int, layer_count: in
 
 ## A stockpile is {id, x, y, z, width, height} plus optional "groups" (ascending distinct
 ## item_groups names) and "priority" (1-3) (F5a); a farm zone adds "kind": "farm" and a known
-## "crop" and never a filter.
+## "crop", a forest zone (F6a) "kind": "forest" alone; neither zone ever carries a filter.
 static func _valid_zone(value, map_width: int, map_height: int, layer_count: int, crop_ids: Array[String] = [],
 		item_groups: Array[String] = []) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid zone type")
 	var zone: Dictionary = value
 	var required := ["id", "x", "y", "z", "width", "height"]
-	if zone.has("kind") or zone.has("crop"):
+	if zone.get("kind") == "forest" and not zone.has("crop"):
+		required.append("kind")
+	elif zone.has("kind") or zone.has("crop"):
 		required.append_array(["kind", "crop"])
 		if not zone.has("kind") or zone["kind"] != "farm" or not zone.has("crop") or not crop_ids.has(zone["crop"]):
 			return _fail("invalid farm zone kind or crop")

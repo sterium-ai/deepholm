@@ -165,7 +165,16 @@ func _check_real_bundle_loads_and_resolves() -> void:
 	_expect(not wildlife_wander.is_empty() and String((wildlife_wander.get("spawn", {}) as Dictionary).get("actor_def", "")) == "wolf",
 		"incidents collection must declare 'wildlife_wander' spawning a declared 'wolf' actor")
 
-	_expect(registry.list("tiles").size() == 11, "tiles collection must contain exactly the 11 tile kinds (9 + F1's crop_grown/crop_ripe)")
+	_expect(registry.list("tiles").size() == 14, "tiles collection must contain exactly the 14 tile kinds (9 + F1's crop_grown/crop_ripe + F6a's sapling_1..3)")
+	# F6a (ADR 067): every forest's stages and grown_tile are declared tiles, and its plant_job a declared job.
+	_expect(registry.list("forests").size() == 1, "forests collection must contain the one v1 forest")
+	for forest in registry.list("forests"):
+		for tile_id in (forest.get("stages", []) as Array) + [forest.get("grown_tile", "")]:
+			_expect(not registry.get_entry("tiles", String(tile_id)).is_empty(),
+				"forest '%s' tile '%s' must resolve to a declared tile" % [forest.get("id"), tile_id])
+		_expect(not registry.get_entry("jobs", String(forest.get("plant_job", ""))).is_empty(),
+			"forest '%s' plant_job must resolve to a declared job" % forest.get("id"))
+
 	# F1 (ADR 059): the optional crops kind loads, and every crop's stages are declared tiles.
 	_expect(registry.list("crops").size() == 1, "crops collection must contain the one v1 crop")
 	for crop in registry.list("crops"):

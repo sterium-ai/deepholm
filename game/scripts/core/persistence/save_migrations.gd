@@ -13,6 +13,7 @@ extends RefCounted
 ## - v7 -> v8 (F3, ADR 062): every colonist saves its skills.
 ## - v8 -> v9 (L2, ADR 045 §5): map layers ("map.layerCount") and "z" on every tile.
 ## - v9 -> v10 (F5a, ADR 064): a stockpile zone may carry "groups" and "priority".
+## - v10 -> v11 (F6a, ADR 067): forest zones and the "saplings" growth records.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -52,6 +53,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v8_to_v9(state)
 		9:
 			return _v9_to_v10(state)
+		10:
+			return _v10_to_v11(state)
 		_:
 			return {
 				"ok": false,
@@ -197,6 +200,16 @@ static func _v9_to_v10(state: Dictionary) -> Dictionary:
 			return {"ok": false, "code": "schema_error", "message": "v9 zone already has groups or priority"}
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 10
+	return {"ok": true, "state": migrated}
+
+## v10 -> v11 (F6a, ADR 067): adds an empty "saplings" list. A v10 world had no forest zone and
+## no sapling tile, so every v10 zone is already a v11 zone and nothing has grown.
+static func _v10_to_v11(state: Dictionary) -> Dictionary:
+	if state.has("saplings"):
+		return {"ok": false, "code": "schema_error", "message": "v10 save already has saplings"}
+	var migrated := state.duplicate(true)
+	migrated["saplings"] = []
+	migrated["schemaVersion"] = 11
 	return {"ok": true, "state": migrated}
 
 # --- content-version renames ---------------------------------------------

@@ -204,7 +204,7 @@ func _run_and_verify(kind: String, seed_value: int, setup: Callable) -> void:
 	_verify_trace_against_toils(kind, toils, result["world"], result["statuses"], result["completed"])
 
 func _check_execution_trace() -> void:
-	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "haul", "site_fetch", "site_work", "craft_fetch", "craft_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
+	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "plant_sapling", "haul", "site_fetch", "site_work", "craft_fetch", "craft_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
 	for kind in expected_kinds:
 		_expect(_jobs_content.has(kind), "content/jobs.json must declare a \"%s\" job kind" % kind)
 	_expect(_jobs_content.size() == expected_kinds.size(),
@@ -249,6 +249,12 @@ func _check_execution_trace() -> void:
 	_run_and_verify("harvest", 209501, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, "crop_ripe")
 		TestAccess.tile_grid(world).mark_dirty(Vector3i(5, 0, 0)))
+	# F6a (ADR 067): no command orders a planting; ForestGiver submits plant_sapling on a forest
+	# zone's empty soil tile.
+	_run_and_verify("plant_sapling", 209701, func(world: WorldStateType) -> void:
+		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
+		_expect(_command(world, "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1, "kind": "forest"})["ok"],
+			"forest zone placement must be accepted"))
 	# F5: stages a wolf through IncidentScheduler.propose() (the
 	# real staging path, with a chosen target) rather than the day-gated draw
 	# -- this test proves only that the "incident" kind itself runs through

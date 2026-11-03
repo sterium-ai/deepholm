@@ -468,6 +468,22 @@ till and crop jobs, the player's per-tile orders included, claim their tile, so 
 two. Per-tile `till`/`sow` orders are unchanged (`sow` is the carrot's sow job). Job toils come
 from the session `ContentRegistry`, so a content pack's crop jobs run like base ones.
 
+#### Forest zones and saplings (F6a, ADR 067)
+
+A forest is content (`content/forests.json`, cross-checked by `core/farming/forest_content.gd`):
+its plant job kind, its `grow_days`, its stage tiles from planted to oldest and the tile it grows
+into (v1: `tree`, job `plant_sapling`, `sapling_1` → `sapling_2` → `sapling_3` over 8 days,
+`tree`). `plant_sapling` is a plain `jobs.json` kind (labour `farm`, no seed or other input): it
+requires `soil` and sets the first stage. `TreeGrowth` (`core/farming/tree_growth.gd`, composed
+by `FarmSystem`) keeps one growth record per sapling tile; every tick, with no season, a record
+grows by one tick and the tile shows the stage reached at even fractions of `grow_days`. At
+`grow_days` the tile becomes the tree, unless a colonist stands on it: the tree is impassable,
+so a ripe sapling waits until its tile is free. `ForestGiver` (`core/zones/forest_giver.gd`),
+run from `FarmSystem.advance()` after `FarmGiver` in the `farming` phase, submits the forest's
+plant job on each forest zone's (`zone_add` with `kind: "forest"`) passable soil not claimed by
+a live farm job. Felling stays the manual `chop` order; the soil it leaves inside a forest zone
+is replanted on the next tick. There is no auto-felling and no wood change.
+
 ### 3.8 Explainability (unchanged policy, extended vocabulary)
 
 Every colonist exposes `activity`, `job_id`, `toil`, `reason`, `remedy`. New reasons:

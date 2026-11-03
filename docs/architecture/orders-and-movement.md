@@ -576,15 +576,16 @@ reads `RescueGiver`'s own `_job_victim` record directly, not this
 
 ### Zone commands: `zone_add`, `zone_remove`, `zone_set_stockpile`
 
-Stockpile and farm zones are player-drawn axis-aligned rectangles, applied
+Stockpile, farm and forest zones are player-drawn axis-aligned rectangles, applied
 immediately with no job queue involved (mirroring `place_object`/
 `remove_object`'s "no job queue" framing above):
 
 - `zone_add` — `{x: int, y: int, width: int, height: int}`, plus
   `kind: "farm"` and `crop: <crops.json id>` for a farm zone (F1, ADR 059;
+  `kind: "forest"` for a forest zone (F6a, ADR 067; names no crop);
   `kind` defaults to `"stockpile"`, which names no crop). Rejected
   `invalid_payload` for a non-integer field, an unknown `kind`, a farm zone
-  without a crop or a stockpile with one, and `invalid_payload`
+  without a crop or a stockpile or forest zone with one, and `invalid_payload`
   (`unknown_crop`) for a crop the content does not declare; rejected `invalid_target` for a
   degenerate (zero width/height) rectangle, one extending past the map
   edge, or one overlapping an existing zone (touching an edge with no
@@ -610,7 +611,8 @@ for haul destination selection, so cell assignment is deterministic for a given
 zone/reservation state. An item in a stockpile that does not accept it is hauled
 out (ADR 064). A farm zone stores nothing: an item on a farm tile is
 loose (hauled away), and the zone only drives `FarmGiver`'s till/sow jobs
-(colonist-ai.md, "Crops and farm zones").
+(colonist-ai.md, "Crops and farm zones"). A forest zone stores nothing either; it only
+drives `ForestGiver`'s planting jobs (colonist-ai.md, "Forest zones and saplings").
 
 ### Haul backoff
 

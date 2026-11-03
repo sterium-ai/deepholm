@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["forests"],
+  "properties": {
+    "forests": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "plant_job", "grow_days", "stages", "grown_tile"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "label": {"type": "string", "minLength": 1, "description": "A data/text key (for example \"forest.tree\"), never player text: the viewer resolves it through TextTable (ADR 052)."},
+          "plant_job": {"type": "string", "minLength": 1, "description": "The jobs.json kind that plants a sapling: its effects require soil, set the first stage and consume nothing (checked on load). A forest zone submits it on its empty soil."},
+          "grow_days": {"type": "integer", "minimum": 1, "description": "Days from planted to grown (no season: saplings grow every day)."},
+          "stages": {
+            "type": "array",
+            "minItems": 2,
+            "description": "Passable tiles.json ids from planted to the last sapling stage, reached at even fractions of grow_days; the first is the tile plant_job sets.",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "grown_tile": {"type": "string", "minLength": 1, "description": "The tiles.json id the sapling becomes after grow_days (the chop job's target)."}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

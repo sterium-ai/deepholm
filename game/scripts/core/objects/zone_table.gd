@@ -2,7 +2,8 @@ class_name ZoneTable
 extends RefCounted
 
 ## Zones: id -> {id, x, y, z, width, height} rectangles on layer z and the id counter. A stockpile zone has
-## no "kind" key; a farm zone (F1) adds {"kind": "farm", "crop": <crops.json id>}.
+## no "kind" key; a farm zone (F1) adds {"kind": "farm", "crop": <crops.json id>}, a forest zone
+## (F6a, ADR 067) {"kind": "forest"}.
 ## A stockpile (F5a, ADR 064) may add "groups" (sorted item groups it accepts) and "priority"
 ## (1-3); each key is absent at its default (every group, priority 2), so an unconfigured
 ## stockpile is the pre-F5a record and hashes as before.
@@ -11,14 +12,15 @@ extends RefCounted
 ##   overlap (zone_add checks overlaps() first).
 ## - Zones are rectangle bookkeeping only: adding or removing one never
 ##   acquires or releases a reservation.
-## - Only stockpile zones store items: is_in_any_zone() and get_stockpile_zones() skip farm
-##   zones, so an item lying on a farm tile is hauled like any loose item.
+## - Only stockpile zones store items: is_in_any_zone() and get_stockpile_zones() skip farm and
+##   forest zones, so an item lying on one of their tiles is hauled like any loose item.
 ## - state_hash() covers zones and next_zone_id (hash_into()); both are persisted.
 ## - An item's group is its items.json "kind"; item_groups lists every group some item has.
 
 const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 
 const FARM_KIND := "farm"
+const FOREST_KIND := "forest"
 const MIN_PRIORITY := 1
 const DEFAULT_PRIORITY := 2
 const MAX_PRIORITY := 3
@@ -89,8 +91,12 @@ func get_stockpile_zones_for_group(group: String) -> Array[Dictionary]:
 func get_farm_zones() -> Array[Dictionary]:
 	return get_zones().filter(func(zone: Dictionary) -> bool: return zone.get("kind", "") == FARM_KIND)
 
-## zone_add's mutation: returns the new zone's id. crop is set for a farm zone only.
-func add(origin: Vector3i, width: int, height: int, crop: String = "") -> String:
+func get_forest_zones() -> Array[Dictionary]:
+	return get_zones().filter(func(zone: Dictionary) -> bool: return zone.get("kind", "") == FOREST_KIND)
+
+## zone_add's mutation: returns the new zone's id. crop is set for a farm zone only; forest
+## marks a forest zone (which names no crop).
+func add(origin: Vector3i, width: int, height: int, crop: String = "", forest: bool = false) -> String:
 	var zone_id := "zone_%d" % next_zone_id
 	next_zone_id += 1
 	zones[zone_id] = {"id": zone_id, "x": origin.x, "y": origin.y, "z": origin.z,
@@ -98,6 +104,8 @@ func add(origin: Vector3i, width: int, height: int, crop: String = "") -> String
 	if not crop.is_empty():
 		zones[zone_id]["kind"] = FARM_KIND
 		zones[zone_id]["crop"] = crop
+	elif forest:
+		zones[zone_id]["kind"] = FOREST_KIND
 	return zone_id
 
 ## zone_remove's mutation: returns the removed rectangle.
