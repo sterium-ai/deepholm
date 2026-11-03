@@ -61,6 +61,14 @@ func _init() -> void:
 	_check_slice(map_view, world, 0)
 	_expect(world.state_hash() == hash_before, "switching back must not change state_hash()")
 	_expect(_emitted == [1, 0], "layer_changed must fire once per actual switch, got %s" % [_emitted])
+	# The sprite layers learn the switch through their own setter, which drops the old
+	# layer's records in one go (review round 4).
+	var colonist_sprites := map_view.get("_colonist_sprites") as Node
+	_expect(int(colonist_sprites.get("active_layer")) == 0, "the colonist sprites must follow the active layer")
+	_expect(not _drawn_colonists(map_view).is_empty(), "surface colonists must be drawn before the clear check")
+	colonist_sprites.call("set_active_layer", 1)
+	_expect(_drawn_colonists(map_view).is_empty(), "a sprite-layer switch must drop the old layer's records at once")
+	colonist_sprites.call("set_active_layer", 0)
 
 	map_view.set_active_layer(1)
 	map_view.set_world(_two_layer_world())

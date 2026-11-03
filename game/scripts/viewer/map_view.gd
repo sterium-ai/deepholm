@@ -326,7 +326,6 @@ func set_active_layer(z: int) -> void:
 	cancel_selection()
 	active_layer = layer
 	_layer.read(world, layer)
-	_share_active_layer()
 	_colonist_sprites.set_active_layer(layer)
 	_actor_sprites.set_active_layer(layer)
 	_designation_overlay.set_active_layer(layer)
