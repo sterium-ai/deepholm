@@ -1390,6 +1390,58 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** domestic animals/pasture (F6c), real disease effects (F8), weapons/armour
   items, ranged combat, squads and raids (F7), animal taming, seasons/migration.
 
+### F6b-1 — Wild species, animal actors and population dynamics · `todo` · after F6a · Design: closed 2026-10-30 (F6b, package 1 of 3)
+
+- **Goal:** the ecosystem core of F6b without crop damage or combat: a content **species
+  registry** (`game/content/species.json` + schema) with, per species: diet (`grass`, `crops`,
+  or a list of prey species), reproduction rule (interval in days when fed, needs ≥ 2 adults
+  within a radius), starvation window (days without food → dies), population cap per map,
+  movement speed, and placeholder combat stats (health, attack; unused until F6b-3). Initial
+  roster: grasshopper, bird, fox (chain A); rabbit, deer, wolf (chain B). **Wild animals are
+  actors** in the actor table (own `kind`, no labours, no needs table) spawned by world
+  generation from the seed (counts in mapgen content) and driven by a **fauna tick phase**:
+  wander (deterministic RNG, surface layer only), eat (grass tile / prey actor within reach:
+  prey dies, eater is fed), reproduce, starve. Predators eat prey; no prey → predators starve.
+  Everything persisted (bump + migration + fixture) and in `state_hash()`.
+- **Owned paths:** new `game/scripts/core/fauna/**` (species registry, fauna tick, animal
+  behaviour), `game/content/species.json` + schema, mapgen content for initial counts,
+  actor table extension (kind, species id, fed/age counters) in its owner, tick pipeline
+  phase registration, persistence (bump + migration + fixture), viewer: animals drawn with
+  their pack art (B3 mapped wolf; others placeholder until the pack is checked), tests
+  `test_fauna_*.gd`, ADR, `docs/orca/handoffs/F6b-1.md`.
+- **Acceptance:** headless, through ticks: (1) 20 grasshoppers on grass, no predators → the
+  population reaches the cap and stays there; (2) 20 grasshoppers + 2 birds → stays below the
+  cap and birds survive; (3) a wolf with no prey dies within its starvation window; (4) 200
+  animals + 1000 colonists keep the A14 tick budget; deterministic `state_hash()`; save/load
+  and replay identical; suite green.
+- **Non-goals:** crop damage, soil fertility, disease hook (F6b-2); hunting, combat, predators
+  attacking colonists (F6b-3); pasture (F6c); animals below the surface.
+- **Budget:** ≤ 300 turns; split further (registry+spawn / tick behaviours) if needed.
+
+### F6b-2 — Imbalance effects: crop damage, soil fertility, disease hook · `todo` · after F6b-1 · (F6b, package 2 of 3)
+
+- **Goal:** grasshoppers near a farm eat growing crops (F1 stages regress/destroy); tiles with
+  overpopulation lose a new **fertility** value (slower crop growth, slow recovery); a plague
+  level raises a **disease chance hook** on colonists (recorded on the colonist, no effect
+  until F8). Content values, persisted, hashed, tested through ticks.
+- **Owned paths:** `core/fauna/**`, `core/farming/**` (growth reads fertility), tile fertility
+  in the tile layer owner, persistence, viewer overlay for fertility (optional), tests, ADR
+  amendment, `docs/orca/handoffs/F6b-2.md`.
+- **Non-goals:** combat, real disease.
+
+### F6b-3 — Minimal combat and the `hunt` labour · `todo` · after F6b-1 · (F6b, package 3 of 3)
+
+- **Goal:** colonists and animals get `health`/`attack` (species/content values); a `hunt`
+  order on an animal creates a job under a new **`hunt` labour** (skill slot, F3 pattern):
+  the most skilled free colonist walks to the animal and both deal `attack` damage per tick
+  until one reaches 0; a dead animal drops a **meat** item (`food` group, amount per species);
+  a colonist at 0 health dies (removed; burial F8). Species flag `attacks_colonists` makes
+  predators attack colonists within reach. F7 reuses this core.
+- **Owned paths:** new `core/combat/**` (resolution), `core/fauna/**` hooks, labour table,
+  jobs/toils for `hunt`, items content (meat), persistence, viewer `hunt` order, tests, ADR,
+  `docs/orca/handoffs/F6b-3.md`.
+- **Non-goals:** weapons/armour, ranged, squads/raids (F7), taming.
+
 ### F6c — Pasture and domestic animals · `todo` · after F6b · Design: *pending*
 
 - Deferred by the owner (2026-10-30): pasture zone and domestic produce (eggs, milk) come after
