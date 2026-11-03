@@ -134,7 +134,7 @@ orden estricto, de una en una, porque cada una toca `world_state.gd`. Las tareas
 
 Salen de medir la primera semana con Orca (33 PR, 49 h de reloj, ~10.750 turnos de agente):
 
-- **Como mucho 4 agentes a la vez, y nunca 4 suites de Godot simultáneas.** Con 31 GB de RAM,
+- **Como mucho 3 agentes a la vez (propietario, 04-11-2026) y una sola suite completa de Godot**: 	ools/run_tests.ps1 toma un mutex global y las demás esperan. Revisiones de Codex: como mucho 2 en paralelo. Con 31 GB de RAM,
   cuatro suites a la vez tiraron Orca (28-10, 00:30). Antes de abrir la cuarta tarea, mira que
   al menos una de las tres no esté en la suite; si hay duda, tres.
 - **Revisar la entrada del backlog antes de abrir la tarea (10 minutos).** A2, A4, A5, A13 y
