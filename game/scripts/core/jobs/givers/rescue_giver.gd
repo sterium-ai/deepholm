@@ -147,8 +147,8 @@ func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int)
 		_onset_failed(victim_id)
 		return
 	pool.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var da: int = TileGrid.manhattan(a["pos"], victim_tile)
-		var db: int = TileGrid.manhattan(b["pos"], victim_tile)
+		var da: int = _distance(a["pos"], victim_tile)
+		var db: int = _distance(b["pos"], victim_tile)
 		if da != db:
 			return da < db
 		return String(a["id"]) < String(b["id"]))
@@ -156,6 +156,10 @@ func _start_search(victim: Dictionary, candidates: Array[Dictionary], tick: int)
 		"cursor": 0, "target_cursor": 0, "search": null, "found": [], "stale_retries": 0}
 	_set_reason.call(victim_id, "")
 	_advance_search(victim_id, candidates, tick)
+
+## Manhattan on one layer; a rescuer on another layer (F4, ADR 071) is OTHER_LAYER_DISTANCE away.
+static func _distance(tile: Vector3i, victim_tile: Vector3i) -> int:
+	return TileGrid.manhattan(tile, victim_tile) if tile.z == victim_tile.z else ZoneTable.OTHER_LAYER_DISTANCE
 
 ## Candidates in ranked order; each sweeps every target from a fixed position, then commits to
 ## the shortest safe route. The live position is rechecked only after a full sweep: if it moved,

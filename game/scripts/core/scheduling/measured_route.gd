@@ -8,7 +8,7 @@ var resume_calls: int = 0
 ## one-layer map). An invalid provider keeps the search on its own layer. Call before restore().
 func use_links(links_of: Callable) -> void:
 	if links_of.is_valid():
-		set_vertical_links(links_of.call())
+		set_vertical_links(links_of.call() as VerticalLinksType)
 
 func resume() -> String:
 	resume_calls += 1

@@ -64,7 +64,8 @@ static func _pick_hostile_occupant(occupants: Array, relations, own_faction: Str
 			best = occupant
 	return best
 
-## The nearest living hostile actor anywhere (Manhattan, ties by id); {} when none.
+## The nearest living hostile actor anywhere on the actor's layer (Manhattan, ties by id); {} when
+## none. A hostile on another layer (F4, ADR 071) is no flee threat.
 static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -> Dictionary:
 	var own_faction := actor_faction(actor)
 	var own_tile := TileGrid.tile_of(actor)
@@ -74,6 +75,8 @@ static func nearest_hostile_actor(actor: Dictionary, actors: Array, relations) -
 		if other == actor or _is_dead(other) or not other.has("health"):
 			continue
 		if not _is_hostile(relations, own_faction, actor_faction(other)):
+			continue
+		if TileGrid.tile_of(other).z != own_tile.z:
 			continue
 		var distance := TileGrid.manhattan(TileGrid.tile_of(other), own_tile)
 		if best.is_empty() or distance < best_distance or (distance == best_distance and String(other["id"]) < String(best["id"])):

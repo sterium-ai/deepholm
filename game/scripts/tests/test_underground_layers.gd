@@ -6,18 +6,23 @@ extends SceneTree
 ## the seed alone (same at tick 100 and tick 10000); a colonist walks down and mines a copper vein
 ## and the ore reaches a stockpile; three tunnels reach L3 and its veins and a fourth finds
 ## nothing; the A11 replay of that run reproduces every checkpoint; save/load between two
-## discoveries continues identically; one tunnel per layer and a blocked landing are rejected, a
-## landing keeps non-vein objects; three discovered layers add little to the tick.
+## discoveries hashes like the original on every tick until both find L2; one tunnel per layer and
+## a blocked landing are rejected, a landing keeps non-vein objects; three discovered layers add
+## little to the tick. Review round 2: a hungry colonist on L1 climbs the stairs to eat surface
+## berries, and a hostile on another layer is no flee threat while the raider seeks its target
+## across the stairs (cross-layer distances, no TileGrid same-layer assert).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const ReplayLogType = preload("res://scripts/core/world/replay_log.gd")
 const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
+const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 
 const SEED := 42
 ## Ticks a tunnel order may take, hauls down the stairs included.
 const BUILD_TICKS := 2000
 const MINE_TICKS := 2000
+const FLEE_TICKS := 60
 const CHECKPOINT_INTERVAL := 50
 const TIMING_ROUNDS := 5
 const TIMING_TICKS := 100
@@ -41,6 +46,8 @@ func _init() -> void:
 	_check_save_load_between_discoveries_continues_identically()
 	_check_one_tunnel_per_layer()
 	_check_landing_blocked_and_landing_keeps_objects()
+	_check_colonist_on_l1_eats_surface_berries_through_the_stairs()
+	_check_hostile_on_another_layer_is_no_flee_threat()
 	if _failed:
 		quit(1)
 		return
@@ -301,12 +308,18 @@ func _check_save_load_between_discoveries_continues_identically() -> void:
 		return
 	_expect(loaded.state_hash() == world.state_hash(), "the loaded state must hash like the saved one")
 	_expect(TestAccess.tile_grid(loaded).layer_count == 2, "the loaded world must keep L1")
-	var found_world := _tick_until_layers(world, 3, BUILD_TICKS)
-	var found_loaded := _tick_until_layers(loaded, 3, BUILD_TICKS)
+	var ticks := 0
+	while ticks < BUILD_TICKS and (TestAccess.tile_grid(world).layer_count < 3 or TestAccess.tile_grid(loaded).layer_count < 3):
+		world.tick()
+		loaded.tick()
+		ticks += 1
+		if loaded.state_hash() != world.state_hash():
+			_fail("the loaded world must hash like the original on every tick (first mismatch at tick %d)" % world.get_tick())
+			return
+	var found_world := TestAccess.tile_grid(world).layer_count >= 3
+	var found_loaded := TestAccess.tile_grid(loaded).layer_count >= 3
 	_expect(found_world and found_loaded, "both worlds must find L2 (original %s, loaded %s)" % [found_world, found_loaded])
-	_expect(loaded.get_tick() == world.get_tick(), "the loaded world must find L2 on the same tick (%d vs %d)" % [loaded.get_tick(), world.get_tick()])
 	_expect(_layer_tiles(loaded, 2) == _layer_tiles(world, 2), "a layer discovered after load must match")
-	_expect(loaded.state_hash() == world.state_hash(), "discovery after load must hash identically")
 
 func _skipped(result: Dictionary) -> Array:
 	if result.has("skipped"):
@@ -332,6 +345,60 @@ func _check_one_tunnel_per_layer() -> void:
 	var skipped := _skipped(line)
 	_expect(bool(line.get("ok", false)) and skipped.size() == 1 and int((skipped[0] as Dictionary)["x"]) == 14,
 		"a build_line of two tunnels on one layer must keep the first and skip the second: %s" % line)
+
+## L1 found by a real tunnel; a second, hungry colonist stands on the landing (fixture) and the
+## only food is ground berries on the surface: the need giver finds them across the stairs (region
+## components, not planar regions) and the colonist climbs up, eats and is full.
+func _check_colonist_on_l1_eats_surface_berries_through_the_stairs() -> void:
+	var world := _l1_world(SEED, 1)
+	Scenarios.isolate_need(world, "food")
+	var diver := Scenarios.idle_colonist("colonist_1", TUNNEL.x + 1, TUNNEL.y + 1)
+	diver["z"] = 1
+	diver["needs"] = Scenarios.full_needs({"food": 20})
+	TestAccess.colonists(world).append(diver)
+	TestAccess.item_table(world).ground_berries["3_3"] = 1
+	var surfaced := false
+	for _i in MINE_TICKS:
+		world.tick()
+		var colonist := Scenarios.colonist_by_id(world, "colonist_1")
+		surfaced = surfaced or int(colonist.get("z", 1)) == 0
+		for job in Scenarios.jobs_of_kind(world, "eat_food"):
+			if job["status"] == "completed":
+				_expect(surfaced, "the colonist must have climbed the stairs to eat")
+				_expect(int(colonist["needs"]["food"]) == 100, "eating must restore food (got %s)" % colonist["needs"]["food"])
+				return
+	_fail("a colonist on L1 did not eat the surface berries within %d ticks (colonist %s)"
+		% [MINE_TICKS, Scenarios.colonist_by_id(world, "colonist_1")])
+
+## L1 found; a wounded colonist stands on the landing and a raider on the surface. While they are
+## on different layers the colonist is given no flee job (the hostile is no threat there), and the
+## raider's approach and the colony's need/rescue scoring run across layers without an assert.
+func _check_hostile_on_another_layer_is_no_flee_threat() -> void:
+	var world := _l1_world(SEED, 1)
+	var raider := ActorTableType.spawn("colonist", Vector3i(2, 2, 0), TestAccess.content(world), "raider")
+	raider.erase("carrying")
+	raider["hands"] = []
+	raider["factionId"] = "raiders"
+	TestAccess.append_colonist(world, raider)
+	var miner := TestAccess.find_colonist(world, "colonist_0")
+	miner["x"] = TUNNEL.x + 1
+	miner["y"] = TUNNEL.y + 1
+	miner["z"] = 1
+	miner["route"] = null
+	miner["work"] = null
+	world.tick()
+	TestAccess.find_colonist(world, "colonist_0")["health"]["hp"] = 25
+	for _i in FLEE_TICKS:
+		world.tick()
+		var colonist := TestAccess.find_colonist(world, "colonist_0")
+		var hostile := TestAccess.find_colonist(world, "raider")
+		if hostile.is_empty() or int(hostile.get("z", 0)) == int(colonist.get("z", 0)):
+			return
+		for job in world.get_jobs():
+			_expect(String(job.get("kind", "")) != "flee",
+				"a hostile on another layer must not make the colonist flee (tick %d)" % world.get_tick())
+			if String(job.get("kind", "")) == "flee":
+				return
 
 ## L1 found, then its surface tunnel removed (fixture: there is no deconstruct order yet). A tunnel
 ## whose stairs tile below holds a non-vein object is rejected; one whose landing holds one is

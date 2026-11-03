@@ -235,8 +235,8 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 		var rb: int = ranks.get(b, 0)
 		if ra != rb:
 			return ra > rb
-		var da := TileGrid.manhattan(a, start)
-		var db := TileGrid.manhattan(b, start)
+		var da := _distance(a, start)
+		var db := _distance(b, start)
 		if da != db:
 			return da < db
 		if a.y != b.y:
@@ -248,13 +248,18 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var distances: Array[int] = []
 	var candidate_ranks: Array[int] = []
 	for candidate in candidates:
-		distances.append(TileGrid.manhattan(candidate, start))
+		distances.append(_distance(candidate, start))
 		var rank: int = ranks.get(candidate, 0)
 		candidate_ranks.append(rank)
 	_searching[colonist_id] = {"kind": kind, "candidates": candidates, "distances": distances, "ranks": candidate_ranks,
 		"cursor": 0, "search": null, "found": []}
 	_set_reason.call(colonist_id, "")
 	_advance_search(colonist, tick)
+
+## Manhattan on one layer; a source on another layer (F4, ADR 071) is OTHER_LAYER_DISTANCE away, so
+## it ranks last and is searched only while no route on the colonist's layer was found.
+static func _distance(tile: Vector3i, start: Vector3i) -> int:
+	return TileGrid.manhattan(tile, start) if tile.z == start.z else ZoneTable.OTHER_LAYER_DISTANCE
 
 ## One step per tick. Search phase: one bounded resume() per candidate, collecting every found
 ## route; ranking (length, then pre-sort order) happens on its own tick. Commit phase: recheck

@@ -74,6 +74,9 @@ work goes into new modules.
      routes call `RouteSearch.set_vertical_links()`. Distance scoring on other layers uses
      `ZoneTable.OTHER_LAYER_DISTANCE` (as `tool_matching` already did); reach tests are false
      across layers.
+   - Need sources and beds are filtered by region-graph component (`RegionMap.component_of`),
+     so a colonist underground finds food and beds across the stairs. Flee ignores hostiles on
+     another layer.
 5. **Tunnel and drill.**
    - The `drill` is a `material` item from the workbench recipe `drill` (wood ×2 and stone ×3).
    - The `tunnel` is a buildable 1×1 passable object costing drill ×1 and wood ×2, with 160 build
