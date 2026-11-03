@@ -1212,6 +1212,16 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   identically; replay reproduces; suite green; `measure_core` and A1 benches within budgets
   (one discovered layer must not slow the tick measurably when empty).
 - **Non-goals:** cave-ins/supports (F4b), smelting, deep-only metal, fog of war.
+- **Review round 1 (owner's interface, 2026-11-03):** (1) **scope** — `world_state.gd` (wiring
+  only, no growth), `construction_system.gd`, `toil_bindings.gd`, `tool_matching.gd`,
+  `tile_grid.gd` and `docs/architecture/warnings-baseline.txt` (lowered only) are approved as
+  F4's scope, as declared in the handoff; (2) **routing wiring** — F4 wires
+  `RouteSearch.set_vertical_links()` at runtime (L3 left no caller): colonists must reach a
+  discovered layer through the stair pair, tested through commands and ticks; (3) "one tunnel
+  per layer" is the design: enforce it counting pending sites, and a landing never deletes
+  existing objects (pick a free landing or refuse the site); (4) tests go through construction
+  (build the tunnel with a drill), not `_discover()`, and replay = recorded commands replayed,
+  not two identical setups. Content literals: use the registry constants.
 
 ### F5a — Stockpile filters and priorities · `review (antonelmejor50-hub/f5a-stockpile-filters-and-priorities; rebased on 7a9ff1e, save schema v10)` · after F2 (item groups) · Design: closed 2026-10-30
 
