@@ -116,7 +116,7 @@ func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callab
 		set_active_drop_item: Callable = Callable(), get_active_drop_item: Callable = Callable(),
 		find_colonist: Callable = Callable(), get_assignments: Callable = Callable(),
 		work_target_for: Callable = Callable(), site_exists: Callable = Callable(),
-		site_deposit: Callable = Callable()) -> void:
+		site_deposit: Callable = Callable(), get_all_stockpiles: Callable = Callable()) -> void:
 	_move_ticks_per_tile = move_ticks_per_tile
 	_work_ticks = work_ticks
 	_passability = passability
@@ -145,7 +145,7 @@ func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callab
 		tool_reservation_of, get_tool_item, tool_reservation_table, release_all_tool_reservations,
 		drop_tool_ground, drop_tool_stockpile, work_progress_clear, reroutes, advance_go_to,
 		_record, get_colonists, get_tool_items, set_active_drop_item, get_active_drop_item,
-		find_colonist, get_assignments)
+		find_colonist, get_assignments, get_all_stockpiles)
 
 ## The colonist's "mover" route via ActorTable (ADR 012): the live object, so field writes
 ## mutate the colonist; a wholesale replacement must still assign colonist["route"].
@@ -429,6 +429,8 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, assignment_p
 	if TOIL_FETCH_TOOL in toils and _tool_drop.active_tool_missing(job_id):
 		_tool_drop.fail_for_destroyed_tool(colonist, job_id, job, hooks)
 		return
+	if TOIL_FETCH_TOOL in toils and _tool_drop.haul_target_lost(job): # F5a-b: destination changed en route
+		_tool_drop.fail_for_invalid_target(colonist, job_id, job, hooks); return
 	if _tool_drop.is_dropping(colonist, job_id, job, hooks) \
 			or (_route(colonist) == null and colonist.get("work") == null and _tool_drop.needs_drop(colonist, job_id)):
 		_tool_drop.advance(colonist, job_id, job, hooks)

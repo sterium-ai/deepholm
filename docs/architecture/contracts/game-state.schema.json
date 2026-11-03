@@ -438,7 +438,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 13 },
+    "schemaVersion": { "type": "integer", "const": 14 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",

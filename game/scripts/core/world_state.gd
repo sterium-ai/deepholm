@@ -280,7 +280,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		set_tool_item_held, _tool_store.set_ground, _worker_view, _route_budget,
 		_zone_table.get_stockpile_zones_for_group.bind("tool"), _cell_free, _tool_store.set_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
-		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into)
+		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into, _zone_table.get_stockpile_zones)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
 	# Built after _toils; CombatGiver and ToilExecutor above reach it through lambdas.
 	_needs_system = NeedsSystemType.new(_content, _need_definitions, _need_full, PRIORITY_TICK, _clock, _calendar, _scheduler,

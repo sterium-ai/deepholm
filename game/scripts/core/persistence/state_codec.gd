@@ -23,8 +23,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v11 adds forest zones and sapling growth (F6a, ADR 067).
 ## v12 adds the heal labour to every colonist's labour table and skills (F5b, ADR 065).
 ## v13 saves a colonist's active thoughts (F5c, ADR 066).
+## v14 adds the haul_tool job kind (F5a-b, ADR 064).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 13
+const SCHEMA_VERSION := 14
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.

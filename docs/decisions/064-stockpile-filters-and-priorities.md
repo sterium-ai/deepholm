@@ -129,9 +129,15 @@ button applies `zone_set_stockpile`; nothing else mutates. Texts under `stockpil
   release_all) and reserves the tool for it. Its target is the first free tool-accepting
   stockpile cell in `stockpiles_for_item()` order, else the nearest free tile sharing an edge
   with its stockpile and outside every zone. A haul colonist picks the tool up through
-  `ToolFetchToil` and sets it down there through `ToolDropToil`; it keeps its id (ADR 061). The
-  job kind enum gains `haul_tool` (additive), with no schema version bump
-  (`docs/orca/handoffs/F5a-b.md`).
+  `ToolFetchToil` and sets it down there through `ToolDropToil`; it keeps its id (ADR 061).
+  While the tool is fetched or carried, `ToolExecutor.advance()` rechecks the target every
+  tick: once it is no longer free for a tool, or lies in a stockpile that rejects tools, the job
+  fails through the shared engine (`on_toil_fail`, `invalid_target`). The tool is set down at the
+  colonist's tile, stocked there when that tile is in any stockpile (so the giver hauls it out
+  again) and on the ground otherwise; it is never left loose inside a stockpile. Delivery
+  rechecks the same rule for a change on the completing tick. The job kind enum gains `haul_tool`, which
+  is schema v14 (`SaveMigrations._v13_to_v14`, version only; `save_schema_v14_fixture.json`;
+  `docs/orca/handoffs/F5a-b.md`).
 - `L2` (`Vector3i`, ADR 063): every ZoneTable/HaulGiver tile is a `Vector3i` and zones carry
   `z`; the distance uses `TileGrid.manhattan()` on one layer, and the rectangle clamp is the one
   planar step, inside the zone's own layer.

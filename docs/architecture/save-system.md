@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 10` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 13` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -140,6 +140,10 @@ v11 adds forest zones and the sapling growth records (see "Saplings" below and
 [ADR 067](../decisions/067-forest-zones-and-saplings.md)).
 v12 adds the `heal` labour to every colonist's labour table and skills
 ([ADR 065](../decisions/065-cook-and-heal-labours-and-cooking.md)).
+v13 adds a colonist's optional `thoughts`
+([ADR 066](../decisions/066-happiness-from-thoughts.md)).
+v14 adds the `haul_tool` job kind, which carries a stocked tool out of a stockpile that no longer
+accepts tools ([ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -283,6 +287,11 @@ returns a new dictionary and never mutates its input. Steps today:
   `heal` at zero rather than to that file. `save_schema_v11_noskills_fixture.json` is the v11
   fixture with every colonist's `skills` dropped (`docs/orca/handoffs/F5b-write-noskills-save.gd`):
   it migrates with `heal` in the labour table only.
+- **v13 → v14** (F5a-b, ADR 064): the job kind enum gains `haul_tool`; the unpacked shape is
+  unchanged. A v13 world queued no `haul_tool` job, so the step changes only the version, and a
+  v13 state that already lists one is refused. `save_schema_v13_fixture.json` (F5c's) migrates
+  exactly to `save_schema_v14_fixture.json` (the same session, written packed by
+  `docs/orca/handoffs/F5a-b-write-save.gd`).
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version

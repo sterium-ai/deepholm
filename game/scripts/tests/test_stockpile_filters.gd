@@ -20,7 +20,8 @@ extends SceneTree
 ## - on a two-layer map, a stockpile on another layer ranks after one on the item's layer;
 ## - F5a-b: a stocked pick in A, switched to materials only, keeps its id and is carried by a
 ##   colonist's haul_tool job to B (every group) within a day; with no B it is carried to a free
-##   tile beside A, outside every zone; both runs are deterministic and replay.
+##   tile beside A, outside every zone; both runs are deterministic and replay; when B stops
+##   accepting tools while the pick is carried there, it is not stocked in B (deterministic too).
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -58,6 +59,7 @@ func _init() -> void:
 	_check_rejected_stocked_tool_moves_to_b_with_its_id()
 	_check_rejected_stocked_tool_without_b_is_dropped_beside_a()
 	_check_rejected_stocked_tool_is_deterministic_and_replays()
+	_check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools()
 	if _failed:
 		quit(1)
 		return
@@ -585,3 +587,54 @@ func _check_rejected_stocked_tool_is_deterministic_and_replays() -> void:
 		_expect_carried(seen, "with_b %s" % with_b)
 		var result := recorder.stop().replay()
 		_expect(bool(result.get("ok", false)), "with_b %s: the session must replay every checkpoint: %s" % [with_b, result])
+
+## F5a-b review round 2: B (zone_2) stops accepting tools while a colonist carries the pick
+## there. ToilExecutor rechecks the target every tick and fails the haul_tool job through the
+## engine (invalid_target); the pick is set down, never left loose inside a stockpile and never
+## stocked in B, and ends on the ground outside every stockpile (neither A nor B takes tools).
+## Two worlds from one seed keep equal state_hash() every tick, and the recorded session replays.
+func _check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools() -> void:
+	var first := _stocked_pick_world(64019, true)
+	var second := _stocked_pick_world(64019, true)
+	var recorder := CommandRecorderType.new()
+	recorder.start(first, 100, false)
+	for world: WorldStateType in [first, second]:
+		_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var seen: Dictionary = {}
+	var switched := false
+	var failed := false
+	var settled := false
+	for _step in _day_ticks * 2:
+		first.tick()
+		recorder.observe_tick(first)
+		_observe_haul(first, seen)
+		second.tick()
+		if first.state_hash() != second.state_hash():
+			_fail("the same seed must give the same state_hash() at tick %d" % first.get_tick())
+			break
+		var location := _pick_location(first)
+		var type := String(location["type"])
+		if not switched:
+			if type == "held":
+				for world: WorldStateType in [first, second]:
+					_command_ok(world, "zone_set_stockpile", {"id": "zone_2", "groups": "material", "priority": 1})
+				switched = true
+			continue
+		for job in first.get_jobs(["haul_tool"]):
+			if String(job["status"]) == "failed" and String(job["reason"]) == "invalid_target":
+				failed = true
+		if type == "held":
+			continue
+		var cell := Vector2i(int(location["x"]), int(location["y"]))
+		var in_zone := A.has_point(cell) or B.has_point(cell)
+		_expect(not (type == "ground" and in_zone), "the pick must never lie loose inside a stockpile: %s" % [location])
+		_expect(not (type == "stockpile" and B.has_point(cell)), "the pick must never be stocked in B: %s" % [location])
+		if type == "ground" and not in_zone:
+			settled = true
+			break
+	_expect(switched, "a colonist must pick the pick up: %s" % [seen])
+	_expect(String(seen.get("carrier", "")).begins_with("colonist_"), "a colonist must carry the pick: %s" % [seen])
+	_expect(failed, "the haul_tool job must fail with invalid_target: %s" % [first.get_jobs(["haul_tool"])])
+	_expect(settled, "the pick must end on the ground outside every stockpile: %s" % [_pick_location(first)])
+	var result := recorder.stop().replay()
+	_expect(bool(result.get("ok", false)), "the session must replay every checkpoint: %s" % [result])
