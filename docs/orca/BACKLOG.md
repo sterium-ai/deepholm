@@ -317,6 +317,36 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
+### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `todo` · *parallel-safe (viewer + sprite-frame data only; no core)*
+
+- **Owner (2026-11-02 playtest):** objects and items on the map still show placeholder art.
+  `game/data/sprite_frames/world_pack.json` already records the known gaps under
+  `placeholder`: items `seed, sand, gold_coin, flint, coal, food, planks, stone_blocks` (no
+  ground icon), objects `bed`, `door`, `workbench_vertical`. Check crops (`carrot` stages,
+  F1), construction sites and farm/forest zone overlays too.
+- **Owner decisions (2026-11-03):** (1) **tall art overhangs**: bed and door keep their 1-tile
+  footprint and the pack's ~2-tile-tall sprite is drawn overhanging upward, like trees (the
+  "props ≤ 1 tile" rule is replaced by "footprint ≤ 1 tile, art may overhang up"); (2) the
+  **vertical workbench uses a different pack prop** that fits 1×2 (e.g. anvil + small table);
+  art is never rotated.
+- **Work:** (a) inventory first: a table in the handoff of every content kind (items.json,
+  objects.json, crops.json stages) → pack sheet + cell, or "pack lacks it"; (b) map every kind
+  the pack covers in `world_pack.json` / `ITEM_ATLAS_MAP` with the existing measuring scripts
+  (`docs/orca/handoffs/B3-measure_pack_world.py`), hard silhouettes, nearest-neighbour; (c)
+  what the pack lacks stays placeholder and is listed in the handoff for the owner (PixelLab
+  later). Pack PNGs stay in the git-ignored `game/assets/pack/` (synced from
+  `C:\dev\assets\pixel-crawler`); never commit them.
+- **Owned paths:** `game/scripts/viewer/` (pack_assets, item/object sprites, zone overlays),
+  `game/data/sprite_frames/`, `docs/art/style.md` (the overhang rule), tests
+  `test_pack_assets.gd` / `test_world_pack*.gd`, `docs/orca/handoffs/B7.md`.
+- **Acceptance:** the `placeholder` list in `world_pack.json` only holds kinds the pack lacks
+  (each with the reason); a test that every item kind in `items.json` and every non-test
+  object kind in `objects.json` either has pack art or is in that list; before/after
+  screenshots of a scene with all mapped kinds on the ground, a bed, a door, both workbench
+  orientations and a growing carrot; suite green; owner confirms.
+- **Non-goals:** core, new animations, terrain, PixelLab, colonist art (B2), badges (B6).
+- **Budget:** ≤ 300 turns; inventory in the first 40.
+
 ### B6 — Held-tool / cargo / trapped badges float at the colonist's top-left · `todo` · *parallel-safe (viewer only; do not touch core)*
 
 - **Owner (2026-11-02, main `32bfb81`, native build):** when a colonist is assigned a job, a
