@@ -33,7 +33,8 @@ had no layer for actors.
 3. **Layer slice.** `viewer/layer_slice.gd` reads one layer from `get_tiles()` and
    `get_objects()`. On the surface it keeps calling `get_tile()`/`get_object()`, so layer 0
    draws exactly as before L4. A deep layer's slice is a copy, re-read when one of its cells is
-   dirty. A switch rebuilds the tile and object layers in full; there is no per-layer cache.
+   dirty. A switch rebuilds the tile and object layers in full; there is no per-layer cache in v1
+   (owner amendment, `15211a7`); cached reuse is a later optimisation.
 4. **Filtering.** Tiles, objects, colonists, other actors, designations, ground items,
    stockpile zones and construction sites are drawn only when their `z` is the active layer.
    The view snapshot gains a `z` column beside `x` and `y` (ADR 045 §7's per-layer slice);

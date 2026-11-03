@@ -301,7 +301,8 @@ section).
 - **What is drawn.** Tiles, objects, construction sites, designations, ground items,
   stockpile zones, colonists and other actors are drawn for the active layer only. The tile
   and object `TileMapLayer`s hold one layer: a switch rebuilds them in full from that layer
-  (no per-layer cache; one O(width × height) pass per switch).
+  (one O(width × height) pass per switch). A switch is a player action, so v1 rebuilds rather
+  than caching each layer; reusing a cached layer is a later optimisation, not part of v1.
 - **Dirty cells.** `get_dirty_cells_since()` carries `Vector3i`. The viewer consumes the whole
   tail on every `refresh()`, applies cells of the active layer and drops the others; a layer
   is rebuilt in full when it becomes active, so it never shows stale tiles. A deep layer is
