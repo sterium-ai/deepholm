@@ -175,6 +175,10 @@ media, 18.500 turnos). El coste crece con turnos × contexto, no con la dificult
   (`*.md`, `docs/orca|decisions|design|art/`): no obligan a rebasar.
 - **Supervisión cada 45 min** mientras los agentes están a mitad de tarea; cada 20 min sólo
   con un PR en CI o una revisión en curso.
+- **Los ADR entran como `proposed`.** La firma de un ADR es del propietario y se hace fuera
+  del pipeline; un ADR `proposed` con "owner sign-off pending" no bloquea la revisión ni el
+  merge (precedentes: ADR 063, 068). El revisor comprueba que el ADR existe, está enlazado en
+  `docs/decisions/README.md` y describe lo que hace la rama.
 
 ## Cuando algo va mal
 

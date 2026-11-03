@@ -1160,6 +1160,13 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   impassable dig target with its only reachable neighbour on its own layer; two rescues on
   one target keeping separate progress); single-layer dumps unchanged; suite green.
 - **Non-goals:** layer generation, tunnel building, viewer.
+- **Review round 1 (owner's interface, 2026-11-03):** (1) **scope** — `passability.gd`,
+  `tile_grid.gd` and `docs/architecture/warnings-baseline.txt` (lowered) are approved as L3's
+  scope, as declared in the handoff; (2) **ADR 068** merges as `proposed` with "owner sign-off
+  pending", the same way ADR 063 (L2) did — ADR sign-off is the owner's and is not a merge
+  gate in this pipeline (`docs/orca/README.md` rule); (3) the link-direction bug (flags
+  reversed against ADR 045: z grows downward) and the mid-search restore test are to be fixed
+  as Codex asks — no amendment.
 
 ### L4 — Viewer: one active layer · `todo` · after L3 · viewer only
 
