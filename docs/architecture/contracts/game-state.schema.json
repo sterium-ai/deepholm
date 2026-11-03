@@ -784,7 +784,7 @@
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "craft", "chop", "haul", "haul_tool", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
           "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
           "priority": { "type": "integer", "enum": [0, 1, 2] },
           "target": { "$ref": "#/$defs/tile" },

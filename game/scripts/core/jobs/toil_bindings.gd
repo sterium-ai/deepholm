@@ -422,6 +422,8 @@ func _toil_on_work_complete(job_id: String) -> void:
 			var colonist: Dictionary = _find_job_colonist.call(job_id)
 			if not colonist.is_empty():
 				_needs_system.apply_need_effect(colonist, job)
+		"haul_tool": # F5a-b (ADR 064): the carried tool lands at its destination
+			_toils.place_hauled_tool(_find_job_colonist.call(job_id), job_id, target)
 		"escape_trench":
 			_trench.complete_escape(job_id, target)
 		"rescue":

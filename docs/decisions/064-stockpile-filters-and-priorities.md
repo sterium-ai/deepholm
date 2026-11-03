@@ -124,11 +124,14 @@ button applies `zone_set_stockpile`; nothing else mutates. Texts under `stockpil
   crafting stock, rooms) still treat any stockpile tile as "in a stockpile", filter or not.
 - A stocked tool (ADR 061: a `ToolItemStore` item, not a ground item) has no haul path. F5a left
   a tool stocked in a stockpile that later stops accepting tools where it was (owner-approved
-  limitation, commit 203129a). F5a-b closes it: `HaulGiver.advance()` first moves each such
-  unreserved tool, same id, to the first free tool-accepting stockpile cell in
-  `stockpiles_for_item()` order, else onto the nearest free tile sharing an edge with its
-  stockpile and outside every zone. It is a `ToolItemStore` write, not a carried haul job, so
-  no schema bump (`docs/orca/handoffs/F5a-b.md`).
+  limitation, commit 203129a). F5a-b closes it: `HaulGiver.advance()` submits, for each such
+  unreserved tool, a `haul_tool` job (labour `haul`; toils fetch_tool, reserve, go_to, work,
+  release_all) and reserves the tool for it. Its target is the first free tool-accepting
+  stockpile cell in `stockpiles_for_item()` order, else the nearest free tile sharing an edge
+  with its stockpile and outside every zone. A haul colonist picks the tool up through
+  `ToolFetchToil` and sets it down there through `ToolDropToil`; it keeps its id (ADR 061). The
+  job kind enum gains `haul_tool` (additive), with no schema version bump
+  (`docs/orca/handoffs/F5a-b.md`).
 - `L2` (`Vector3i`, ADR 063): every ZoneTable/HaulGiver tile is a `Vector3i` and zones carry
   `z`; the distance uses `TileGrid.manhattan()` on one layer, and the rectangle clamp is the one
   planar step, inside the zone's own layer.

@@ -92,6 +92,7 @@
   "status.toil_label": "Toil: %s",
 
   "status.job.haul": "Hauling",
+  "status.job.haul_tool": "Hauling a tool",
   "status.toil.go_to": "Traveling",
   "status.toil.work": "Working",
   "status.toil.pick_up": "Picking up",

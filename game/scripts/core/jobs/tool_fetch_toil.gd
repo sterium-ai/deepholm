@@ -55,7 +55,7 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 		return false
 	var kind := String(def.get("needs_tool", ""))
 	if kind.is_empty():
-		return false
+		return not _carry_done(colonist, job_id)
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return true
@@ -67,7 +67,8 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	var kind := _tool_kind_for(job)
 	if kind.is_empty():
-		return true
+		var toils: Array = _job_kinds.get(String(job["kind"]), {}).get("toils", [])
+		return not (TOIL_FETCH_TOOL in toils) or _carry_done(colonist, job_id)
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return false
@@ -77,6 +78,12 @@ func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	if not owner.is_empty():
 		return false
 	return bool(_reserve_tool.call(held_id, job_id))
+
+## F5a-b (ADR 064): a fetch_tool kind with no needs_tool (haul_tool) carries the tool its giver
+## reserved for it; done once that tool is in the hand, or when there is none left to carry.
+func _carry_done(colonist: Dictionary, job_id: String) -> bool:
+	var reserved := _reserved_tool_for(job_id)
+	return reserved.is_empty() or String(colonist.get("held_tool", "")) == String(reserved["id"])
 
 func _held_tool_kind(colonist: Dictionary) -> String:
 	var held_id := String(colonist.get("held_tool", ""))
@@ -168,6 +175,10 @@ func _reserved_tool_for(job_id: String) -> Dictionary:
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var kind := _tool_kind_for(job)
 	var reserved := _reserved_tool_for(job_id)
+	if kind.is_empty(): # a carried tool (_carry_done()): its giver reserved it, never search
+		if reserved.is_empty():
+			return
+		kind = String(reserved["kind"])
 	var freshly_reserved := reserved.is_empty()
 	if freshly_reserved:
 		var from := TileGrid.tile_of(colonist)

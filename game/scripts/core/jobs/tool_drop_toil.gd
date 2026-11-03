@@ -279,3 +279,15 @@ func _find_drop_cell(from: Vector3i) -> Variant:
 				if best == null or distance < best_distance or (distance == best_distance and (x < best.x or (x == best.x and y < best.y))):
 					best = cell; best_distance = distance
 	return best
+
+## F5a-b (ADR 064): haul_tool's work completion sets the tool it carried down at the job's
+## target: stocked inside a zone, else on the ground. No-op unless that tool is this job's.
+func place_hauled_tool(colonist: Dictionary, job_id: String, target: Vector3i) -> void:
+	var held_id := String(colonist.get("held_tool", ""))
+	if held_id.is_empty() or String(_tool_reservation_of.call(held_id)) != job_id:
+		return
+	if _in_any_zone(target):
+		_drop_tool_stockpile.call(held_id, target)
+	else:
+		_drop_tool_ground.call(held_id, target)
+	_record.call(TOIL_DROP_TOOL, "complete")

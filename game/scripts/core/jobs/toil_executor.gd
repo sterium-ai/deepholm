@@ -621,6 +621,9 @@ func leads_into_work(kind: String, is_first: bool) -> bool:
 func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 	return _tool_drop.waiting_for_handover(colonist_id, job_id)
 
+## F5a-b: haul_tool's completion effect (ToolDropToil.place_hauled_tool()).
+func place_hauled_tool(c: Dictionary, job_id: String, target: Vector3i) -> void: _tool_drop.place_hauled_tool(c, job_id, target)
+
 ## Persistence passthrough: true while the in-flight route is a drop_tool leg, so a restored
 ## search uses the drop toil's plain passability.
 func is_dropping_leg(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> bool:

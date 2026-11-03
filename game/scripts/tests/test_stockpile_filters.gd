@@ -18,9 +18,9 @@ extends SceneTree
 ## - the save snapshot never aliases a stockpile's live groups;
 ## - drop_tool (ToolDropToil) skips a nearer stockpile that rejects tools;
 ## - on a two-layer map, a stockpile on another layer ranks after one on the item's layer;
-## - F5a-b: a stocked pick in A, switched to materials only, keeps its id and moves to B (every
-##   group) within a day; with no B it is dropped on a free tile beside A, outside every zone;
-##   both runs are deterministic and replay.
+## - F5a-b: a stocked pick in A, switched to materials only, keeps its id and is carried by a
+##   colonist's haul_tool job to B (every group) within a day; with no B it is carried to a free
+##   tile beside A, outside every zone; both runs are deterministic and replay.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -508,6 +508,20 @@ func _pick_location(world: WorldStateType) -> Dictionary:
 	var location: Dictionary = (world.get_tool_items()[0] as Dictionary)["location"]
 	return location
 
+## Records into seen whether a colonist has held the pick ("carrier") and whether a haul_tool job
+## completed ("completed"): the pick must be carried there by a haul job, not moved by a write.
+func _observe_haul(world: WorldStateType, seen: Dictionary) -> void:
+	var location := _pick_location(world)
+	if String(location["type"]) == "held":
+		seen["carrier"] = String(location["colonist_id"])
+	for job in world.get_jobs(["haul_tool"]):
+		if String(job["status"]) == "completed":
+			seen["completed"] = true
+
+func _expect_carried(seen: Dictionary, label: String) -> void:
+	_expect(String(seen.get("carrier", "")).begins_with("colonist_"), "%s: a colonist must carry the pick: %s" % [label, seen])
+	_expect(bool(seen.get("completed", false)), "%s: a haul_tool job must complete: %s" % [label, seen])
+
 func _check_rejected_stocked_tool_moves_to_b_with_its_id() -> void:
 	var world := _stocked_pick_world(64016, true)
 	var pick_id := String(world.get_tool_items()[0]["id"])
@@ -516,18 +530,24 @@ func _check_rejected_stocked_tool_moves_to_b_with_its_id() -> void:
 	_expect(String(_pick_location(world)["type"]) == "stockpile" and int(_pick_location(world)["x"]) == A.position.x,
 		"while A accepts tools the pick must stay in A: %s" % [_pick_location(world)])
 	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var seen: Dictionary = {}
 	var in_b := func() -> bool:
+		_observe_haul(world, seen)
 		var location := _pick_location(world)
 		return String(location["type"]) == "stockpile" and B.has_point(Vector2i(int(location["x"]), int(location["y"])))
 	_expect(_tick_until(world, _day_ticks, in_b) <= _day_ticks, "within a day the pick must be stocked in B: %s" % [_pick_location(world)])
 	_expect(world.get_tool_items().size() == 1 and world.get_tool_item(pick_id).get("kind") == "pick",
 		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
 	_expect(_axes_in(world, A) == {"loose": 0, "stocked": 0} and _units_in(world, "pick", A) == 0, "A's cell must be free")
+	_expect_carried(seen, "to B")
 
 func _check_rejected_stocked_tool_without_b_is_dropped_beside_a() -> void:
 	var world := _stocked_pick_world(64017, false)
 	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
-	var on_ground := func() -> bool: return String(_pick_location(world)["type"]) == "ground"
+	var seen: Dictionary = {}
+	var on_ground := func() -> bool:
+		_observe_haul(world, seen)
+		return String(_pick_location(world)["type"]) == "ground"
 	_expect(_tick_until(world, _day_ticks, on_ground) <= _day_ticks, "within a day the pick must be dropped: %s" % [_pick_location(world)])
 	var dropped := _pick_location(world)
 	var cell := Vector2i(int(dropped["x"]), int(dropped["y"]))
@@ -535,6 +555,7 @@ func _check_rejected_stocked_tool_without_b_is_dropped_beside_a() -> void:
 	_expect(beside and int(dropped["z"]) == TileGrid.SURFACE, "the pick must lie on a tile sharing an edge with A: %s" % [dropped])
 	# The nearest such tile to A's first cell (30, 2): (29, 2), then (30, 1) by y.
 	_expect(cell == Vector2i(30, 1), "nearest tile beside A, ties by y then x: %s" % [cell])
+	_expect_carried(seen, "beside A")
 	for _i in 50:
 		world.tick()
 	var later := _pick_location(world)
@@ -547,17 +568,20 @@ func _check_rejected_stocked_tool_is_deterministic_and_replays() -> void:
 		var second := _stocked_pick_world(64018, with_b)
 		var recorder := CommandRecorderType.new()
 		recorder.start(first, 100, false)
+		var seen: Dictionary = {}
 		for step in _day_ticks / 2:
 			if step == 20:
 				_command_ok(first, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
 				_command_ok(second, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
 			first.tick()
 			recorder.observe_tick(first)
+			_observe_haul(first, seen)
 			second.tick()
 			if first.state_hash() != second.state_hash():
 				_fail("with_b %s: the same seed must give the same state_hash() at tick %d" % [with_b, first.get_tick()])
 				break
 		_expect(String(_pick_location(first)["type"]) == ("stockpile" if with_b else "ground"),
 			"with_b %s: the pick must have moved: %s" % [with_b, _pick_location(first)])
+		_expect_carried(seen, "with_b %s" % with_b)
 		var result := recorder.stop().replay()
 		_expect(bool(result.get("ok", false)), "with_b %s: the session must replay every checkpoint: %s" % [with_b, result])
