@@ -477,8 +477,9 @@ into (v1: `tree`, job `plant_sapling`, `sapling_1` → `sapling_2` → `sapling_
 requires `soil` and sets the first stage. `TreeGrowth` (`core/farming/tree_growth.gd`, composed
 by `FarmSystem`) keeps one growth record per sapling tile; every tick, with no season, a record
 grows by one tick and the tile shows the stage reached at even fractions of `grow_days`. At
-`grow_days` the tile becomes the tree, unless a colonist stands on it: the tree is impassable,
-so a ripe sapling waits until its tile is free. `ForestGiver` (`core/zones/forest_giver.gd`),
+`grow_days` the tile becomes the tree, unless a colonist or creature stands on it: the tree is
+impassable, so a ripe sapling waits until its tile is free (a ground item such as the felled
+tree's wood does not count). `ForestGiver` (`core/zones/forest_giver.gd`),
 run from `FarmSystem.advance()` after `FarmGiver` in the `farming` phase, submits the forest's
 plant job on each forest zone's (`zone_add` with `kind: "forest"`) passable soil not claimed by
 a live farm job. Felling stays the manual `chop` order; the soil it leaves inside a forest zone

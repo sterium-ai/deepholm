@@ -30,17 +30,18 @@ var saplings: Dictionary = {}
 var forest_ids: Array[String] = []
 
 var _tile_grid: TileGridType
-var _is_cell_occupied: Callable
+var _is_actor_at: Callable
 ## forests.json id -> ForestRule.
 var _rules: Dictionary = {}
 ## stage tile id -> [forest id, stage index].
 var _stage_of_tile: Dictionary = {}
 
-## is_cell_occupied is WorldState's (tile, excluding_colonist_id) query; an empty Callable
+## is_actor_at is WorldState's actor-only (tile) query (colonists and creatures, not ground
+## items: a felled tree's wood must not hold back its replanted sapling); an empty Callable
 ## treats every tile as free.
-func _init(content: ContentRegistryType, day_length_ticks: int, tile_grid: TileGridType, is_cell_occupied: Callable) -> void:
+func _init(content: ContentRegistryType, day_length_ticks: int, tile_grid: TileGridType, is_actor_at: Callable) -> void:
 	_tile_grid = tile_grid
-	_is_cell_occupied = is_cell_occupied
+	_is_actor_at = is_actor_at
 	for forest: Dictionary in content.list("forests"):
 		var rule := ForestRule.new()
 		var stages: Array = forest["stages"]
@@ -108,7 +109,7 @@ func grow() -> void:
 		record["growth"] = growth
 		if growth < rule.ripe:
 			_set_tile(cell, _stage_tile(rule, growth))
-		elif not (_is_cell_occupied.is_valid() and _is_cell_occupied.call(cell, "")):
+		elif not (_is_actor_at.is_valid() and _is_actor_at.call(cell)):
 			saplings.erase(key)
 			_set_tile(cell, rule.grown_tile)
 

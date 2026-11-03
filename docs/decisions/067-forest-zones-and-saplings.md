@@ -39,8 +39,9 @@ tiles. A renewable wood source fits that machinery without new mechanisms.
 4. **Growth.** `TreeGrowth` (`core/farming/tree_growth.gd`, composed by `FarmSystem`) keeps
    `{forest, growth}` per sapling tile. Growth rises one per tick with no season up to
    `grow_days × day_length_ticks`; stage *i* shows from `ripe × i / n`. At ripe the tile
-   becomes `grown_tile`, except while a colonist stands on it: the tree is impassable, so the
-   flip waits for the tile to be free. Records are reconciled with the tiles on every dirty
+   becomes `grown_tile`, except while a colonist or creature stands on it: the tree is
+   impassable, so the flip waits for the tile to be free. A ground item (the felled tree's wood)
+   does not hold it back. Records are reconciled with the tiles on every dirty
    cell and on decode, iterated in key order, and draw no RNG.
 5. **Felling.** Unchanged: the player's `chop` order fells the tree and leaves soil, which
    the forest zone replants on the next `farming` tick.

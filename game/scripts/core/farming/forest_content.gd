@@ -8,10 +8,9 @@ extends RefCounted
 ## no tile is a stage of two forests or of a crop (a stage tile names its owner). Pure and
 ## static, like the registry's own checks.
 
-const SOIL_TILE := "soil"
-
 ## "" when every reference resolves (or there is no forests.json); else the first failure.
-static func check(raw_by_kind: Dictionary) -> String:
+## soil_tile is the registry's TILE_SOIL (the tile a plant job must require).
+static func check(raw_by_kind: Dictionary, soil_tile: String) -> String:
 	if not raw_by_kind.has("forests"):
 		return ""
 	var passable_of: Dictionary = {}
@@ -44,6 +43,6 @@ static func check(raw_by_kind: Dictionary) -> String:
 				return "forest '%s' reuses stage tile '%s' of %s" % [forest_id, stage, stage_owner[stage]]
 			stage_owner[stage] = "forest '%s'" % forest_id
 		var plant: Dictionary = effects_of[forest["plant_job"]]
-		if plant.get("requires_tile", "") != SOIL_TILE or plant.get("set_tile", "") != stages[0] or plant.has("consumes"):
-			return "forest '%s' plant_job '%s' must require tile '%s', set_tile '%s' and consume nothing" % [forest_id, forest["plant_job"], SOIL_TILE, stages[0]]
+		if plant.get("requires_tile", "") != soil_tile or plant.get("set_tile", "") != stages[0] or plant.has("consumes"):
+			return "forest '%s' plant_job '%s' must require tile '%s', set_tile '%s' and consume nothing" % [forest_id, forest["plant_job"], soil_tile, stages[0]]
 	return ""

@@ -66,11 +66,11 @@ var _dirty_cursor: int = 0
 
 ## get_farm_zones/get_items/submit/passability feed FarmGiver (see its _init); view_jobs_of_kinds
 ## is JobQueue.view_jobs_of_kinds, bound here to job_kinds. get_forest_zones (ZoneTable's) and
-## is_cell_occupied (WorldState's) feed ForestGiver and TreeGrowth; empty, nothing is planted and
-## a grown sapling never waits for a colonist.
+## is_actor_at (WorldState's actor-only query) feed ForestGiver and TreeGrowth; empty, nothing
+## is planted and a grown sapling never waits for an actor.
 func _init(content: ContentRegistryType, calendar: CalendarServiceType, clock: SeededClock, tile_grid: TileGridType,
 		get_farm_zones: Callable, get_items: Callable, view_jobs_of_kinds: Callable, submit: Callable, passability: Callable,
-		get_forest_zones := Callable(), is_cell_occupied := Callable()) -> void:
+		get_forest_zones := Callable(), is_actor_at := Callable()) -> void:
 	_calendar = calendar
 	_clock = clock
 	_tile_grid = tile_grid
@@ -103,7 +103,7 @@ func _init(content: ContentRegistryType, calendar: CalendarServiceType, clock: S
 		for kind: String in [rule.sow_job, rule.harvest_job]:
 			if kind not in job_kinds:
 				job_kinds.append(kind)
-	trees = TreeGrowthType.new(content, calendar.day_length_ticks(), tile_grid, is_cell_occupied)
+	trees = TreeGrowthType.new(content, calendar.day_length_ticks(), tile_grid, is_actor_at)
 	for kind: String in trees.plant_jobs():
 		if kind not in job_kinds:
 			job_kinds.append(kind)

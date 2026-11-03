@@ -5,7 +5,8 @@ extends SceneTree
 ## grow_days into a tree; felling stays the manual chop, whose soil the zone replants.
 ## Everything is driven through apply()/tick(): zone_add commands and the clock.
 ## Acceptance checks: 3x3 soil + 1 farmer -> 9 saplings within 2 days, trees after ~8 days (a
-## ripe sapling waits while a colonist stands on it), a chopped tree replanted within a day;
+## ripe sapling waits while a colonist stands on it), a chopped tree replanted within a day and
+## regrown into a tree with its wood still on the tile;
 ## save/load mid-growth keeps state_hash() and ticks in step; an A11 replay reproduces the
 ## run; the same seed gives the same hash.
 
@@ -77,6 +78,14 @@ func _count(world: WorldStateType, kinds: Array) -> int:
 				total += 1
 	return total
 
+## A wood item lies on the surface tile at cell.
+func _wood_at(world: WorldStateType, cell: Vector2i) -> bool:
+	for item in world.get_items():
+		var tile := TileGrid.tile_of(item)
+		if String(item.get("kind", "")) == "wood" and tile.x == cell.x and tile.y == cell.y:
+			return true
+	return false
+
 func _tick_until(world: WorldStateType, limit_tick: int, done: Callable, log: ReplayLogType = null) -> bool:
 	while world.get_tick() < limit_tick:
 		world.tick()
@@ -103,7 +112,9 @@ func _check_zone_add_forest_rules() -> void:
 ## 2 days; by day 8 + 2 every tile is a tree except the one the idle farmer stands on (a ripe
 ## sapling waits for its tile to be free: the tree is impassable); a chop order (felling is
 ## manual) sends the farmer for the axe, so that tree grows, and the felled corner's soil is
-## replanted within a day of the chop.
+## replanted within a day of the chop; once a second chop draws the farmer away, that sapling
+## grows back into a tree with the chop's wood still lying on its tile (a ground item does not
+## hold growth back, only an actor does).
 func _check_plant_grow_replant_and_replay() -> void:
 	var world := _world(SEED, 1)
 	world.spawn_ground_tool_item("axe", 1, 1)
@@ -137,6 +148,16 @@ func _check_plant_grow_replant_and_replay() -> void:
 	_expect(world.get_tile(farmer.x, farmer.y) == TREE, "the waiting sapling must grow once the farmer has left, got %s" % world.get_tile(farmer.x, farmer.y))
 	var replanted := _tick_until(world, world.get_tick() + _day_ticks, func() -> bool: return world.get_tile(felled.x, felled.y) in STAGES, log)
 	_expect(replanted, "a chopped forest tile must be replanted within a day, tile is %s" % world.get_tile(felled.x, felled.y))
+	_expect(_wood_at(world, felled), "the felled tree's wood must lie on the replanted tile (no stockpile to haul it to)")
+	# The farmer idles on the corner it just replanted; a second chop across the zone draws it off,
+	# so only the wood is left on the corner while its sapling grows.
+	var far := FOREST.end - Vector2i.ONE
+	var chop_far := Scenarios.command(world, "chop_far", "chop", {"x": far.x, "y": far.y, "z": 0, "priority": 1})
+	_expect(chop_far.get("ok", false), "the second chop order must be accepted: %s" % chop_far)
+	var regrown := _tick_until(world, world.get_tick() + (GROW_DAYS + 1) * _day_ticks, func() -> bool: return world.get_tile(felled.x, felled.y) == TREE, log)
+	print("test_forest_zone: felled corner regrown=%s by tick %d, wood on it=%s, farmer %s" % [regrown, world.get_tick(), _wood_at(world, felled), TileGrid.tile_of(world.get_colonists()[0])])
+	_expect(regrown, "the replanted sapling must grow back into a tree with the wood on its tile, tile is %s" % world.get_tile(felled.x, felled.y))
+	_expect(_wood_at(world, felled), "the wood must still lie on the regrown tile (the cycle ran with it there)")
 	log.finish(world)
 	world.command_observer = Callable()
 	var replayed := log.replay()

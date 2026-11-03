@@ -21,7 +21,9 @@
     - `plant_job` `plant_sapling`.
   - `tiles.json` adds the three passable sapling stage tiles.
   - `jobs.json` adds `plant_sapling` (labour farm, no seed or item input).
-  - `content_registry.gd` loads and validates `forests` through `forest_content.gd`.
+  - `content_registry.gd` loads and validates `forests` through `forest_content.gd`, passing
+    its `TILE_SOIL` constant to `ForestContent.check()`, so no tile id is written outside the
+    registry.
 - **Zone:**
   - `zone_add` takes `kind: "forest"`, and a forest zone that names a crop is rejected.
   - `zone_table.gd` adds `get_forest_zones()`.
@@ -33,7 +35,9 @@
 - **Growth:** `core/farming/tree_growth.gd` (TreeGrowth) is composed by FarmSystem.
   - Each sapling's growth rises by one per tick, up to `grow_days * day_length_ticks`.
   - The tile flips through the stage tiles, and then to `tree`.
-  - A ripe sapling under a colonist waits, because the tree is impassable.
+  - A ripe sapling under an actor (colonist or creature) waits, because the tree is
+    impassable. A ground item, such as the felled tree's wood, does not hold it back: the
+    query is WorldState's actor-only `_colonist_at`.
   - It draws no RNG and iterates in sorted keys.
 - **Felling:** unchanged. A tree is felled only by the manual `chop` order.
 - **Save:**
@@ -71,7 +75,7 @@ touching these:
 - **`core/persistence/*`:** the migration and schema bump the task asks for
   (`save_migrations`, `state_codec`, `save_io`, `save_wire`), plus the `saplings` and
   forest-zone validators.
-- **`core/world_state.gd`:** 1 line, passing the occupancy query to FarmSystem.
+- **`core/world_state.gd`:** 1 line, passing the actor-only query `_colonist_at` to FarmSystem.
 - **`game/data/text/en.json`:** two UI strings.
 - **Viewer files beyond the zone tool:** `map_view.gd` and `tile_atlas_map.gd` draw the
   stage tiles.
@@ -98,29 +102,52 @@ touching these:
 - **`tests/test_toils_dig_chop_regression.gd`:** the exact job-kind check goes 20 → 21 and
   names `plant_sapling`. No assertion removed or loosened.
 
+### Pending owner approval: scope amendment
+
+REVIEW.md's scope gate asks for an owner-approved amendment for every edit above that falls
+outside the owned paths. **No such approval has been given yet.** The edits stay in this
+branch because the feature cannot be wired without them, and each is the minimum one needed.
+The owner is asked to approve the list above as F6a's scope, or to say which edits to take out.
+
 ## Acceptance (test_forest_zone.gd, through zone_add/chop commands and tick())
 
 | Criterion | Check |
 |---|---|
 | 3×3 soil + 1 farmer → 9 saplings within 2 days | `_check_plant_grow_replant_and_replay` |
-| Trees after ~8 days (none before day 8; all but the farmer's tile by day 10; every stage seen) | same |
+| Trees after ~8 days (none before day 8; all but the tile the idle farmer stands on by day 10; every stage seen) | same |
 | Chopped tree → replanted within a day | same (chop order + axe; felled tile back to a stage within one day) |
+| Replanted sapling regrows into a tree with the chop's wood still on its tile | same (a second chop draws the farmer away; the felled tile is `tree` within `grow_days + 1` days, and the wood is still there) |
 | Replay identical | same, A11 `ReplayLog.replay()` ok |
 | Save/load identical | `_check_mid_growth_save_matches_uninterrupted_world` (saved at day 4 through SaveIO; hash compared every 100 ticks to day 11) |
 | `state_hash` deterministic | `_check_same_seed_same_hash` |
 | zone_add rules | `_check_zone_add_forest_rules` (crop rejected, unknown kind rejected, stockpile overlap rejected) |
 
-**Design deviation (consequence, not a choice).** A colonist that stands on a ripe sapling
-blocks it from becoming a tree, because the tree is impassable. This happens when the idle
-farmer parks on its last planted tile. The test asserts the wait, and that the tree grows
-once the farmer leaves (sent to fetch the axe for the chop).
+### Pending owner decision: a ripe sapling under an actor waits
 
-Suggested follow-up (not done here): a "step off" toil for an idle colonist on a ripe
-sapling. ADR 067 lists it under Consequences.
+The task's acceptance says "trees after ~8 days". This branch adds one exception: **a ripe
+sapling with a colonist or creature on it stays a sapling until the tile is free**, because
+turning it into an impassable tree would trap the actor.
+- In the test this happens when the idle farmer parks on its last planted tile. The test asserts
+  the wait, and that the tree grows once the farmer leaves (sent off by a `chop` order).
+- The owner has not decided this yet. They are asked to accept the exception (as the acceptance
+  table above records it) or choose another behaviour.
+- One alternative, not done here: a "step off" toil for an idle colonist on a ripe sapling.
+  ADR 067 lists it under Consequences.
+
+## Review fixes (Codex verdict REQUEST_CHANGES)
+
+| Review item | Fix |
+|---|---|
+| `forest_content.gd` `SOIL_TILE` literal fails `lint_content_literals.ps1` | Constant removed; `check(raw_by_kind, soil_tile)` takes the registry's `TILE_SOIL`. Lint passes. |
+| Growth query counted ground items, so chop wood held back the replanted sapling | TreeGrowth and ForestGiver now take WorldState's actor-only `_colonist_at` (colonists and creatures). New acceptance row: chop → replant → regrow with the wood still on the tile. ADR 067 and `colonist-ai.md` wording updated. |
+| Out-of-scope edits need an owner-approved amendment | Recorded above as a pending owner approval. |
+| Occupied-sapling exception needs an owner decision | Recorded above as a pending owner decision; the acceptance table now states it. |
 
 ## Gate
 
-- Branch head, full suite: `run_tests: all 135 test(s) PASS  [815s]` (rebased on `2750fe3`)
+- Branch head after the review fixes, full suite: `run_tests: all 135 test(s) PASS  [834s]` (rebased on `2750fe3`)
+- `game/scripts/tests/lint_content_literals.ps1`:
+  `lint_content_literals: PASS (no tile-id/work-ticks/move-ticks literal found outside the registry)`
 - `tools/check_core_warnings.ps1`: `check_core_warnings: OK, 2801 warning(s), none above baseline`.
   - The first run after the rebase failed: `unsafe_call_argument` was +7 in `zone_handler.gd`,
     `farm_system.gd`, `tree_growth.gd` and `forest_giver.gd`.
@@ -137,7 +164,7 @@ sapling. ADR 067 lists it under Consequences.
   | `main` `2750fe3` | 22417 lines | 109 |
 
   - `world_state.gd` is 767 lines on both.
-  - New files: `tree_growth.gd` 157, `forest_giver.gd` 60, `forest_content.gd` 49 lines.
+  - New files: `tree_growth.gd` 158, `forest_giver.gd` 60, `forest_content.gd` 48 lines.
   - `farm_system.gd` goes 248 → 279 lines.
 - `manifest.json` lists only a version (no content file list), so it needed no change.
 - Tests: 134 `test_*.gd` on `main`, 135 on the branch (`test_forest_zone.gd` is new). None
@@ -151,6 +178,7 @@ From the repo root (`$GODOT` = `C:\dev\Going Deeper\tools\godot\Godot_v4.7.2-sta
 powershell -NoProfile -File tools/run_tests.ps1
 powershell -NoProfile -File tools/run_tests.ps1 -Filter test_forest_zone -SkipImport
 powershell -NoProfile -File tools/run_tests.ps1 -Filter test_save_migration -SkipImport
+powershell -NoProfile -File game/scripts/tests/lint_content_literals.ps1
 python tools/check_core_budgets.py
 powershell -NoProfile -File tools/measure_core.ps1
 powershell -NoProfile -File tools/check_core_warnings.ps1

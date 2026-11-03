@@ -128,7 +128,7 @@ func _init(content_dir: String = DEFAULT_CONTENT_DIR, schema_dir: String = DEFAU
 		_fail(ERROR_DANGLING_REFERENCE, crop_error, "crops.json")
 		return
 	# F6a: forests.json's tile/job ids and its plant job's effects.
-	var forest_error := ForestContentType.check(raw_by_kind)
+	var forest_error := ForestContentType.check(raw_by_kind, TILE_SOIL)
 	if not forest_error.is_empty():
 		_fail(ERROR_DANGLING_REFERENCE, forest_error, "forests.json")
 		return
