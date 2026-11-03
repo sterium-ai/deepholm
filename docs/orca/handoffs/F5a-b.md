@@ -147,8 +147,7 @@
      - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
        game/scripts/core/world_state.gd` giving `2 2`; `haul_giver.gd` and `tool_fetch_toil.gd`
        are unchanged.
-  12. Round 9, the commit that changes this file to the present text
-     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It answers review round 9
+  12. Round 9, `dbfe7fd`. It answers review round 9
      (`.orca-review.md`, REQUEST_CHANGES):
      - (blocking) a need interrupt suspends the job and releases its tool reservation, while
        the carrier keeps the pick in the hand and the job keeps `item_id` (ToolFetchToil
@@ -167,6 +166,54 @@
      - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
        game/scripts/core/world_state.gd` giving `2 2`; only `tool_drop_toil.gd` changes in
        core.
+  13. Round 10, the commit that changes this file to the present text
+     (`git log -1 -- docs/orca/handoffs/F5a-b.md`). It follows the owner's rule in
+     `docs/orca/BACKLOG.md` on main, commit **`c769a48`**: whenever a `haul_tool` job cannot
+     continue, the carrier sets the tool down on its current tile, the job fails through the
+     shared engine, and the giver re-plans from the ground. The case-by-case fixes of rounds 5
+     to 9 are replaced by one failure branch:
+     - `ToolDropToil.fail_haul_tool(colonist, job_id, job, hooks, reason)` is the only exit for
+       a `haul_tool` job that cannot continue. It sets the held tool down on the carrier's tile
+       (when the carrier holds the job's tool, reserved or not), releases every tool reservation
+       of the job, clears the toil state and calls `hooks.on_toil_fail` (the shared
+       `finish_job("fail_job")`). The callers only pick an existing reason:
+       - destination no longer free for a tool or inside a stockpile that rejects tools, or
+         cargo gone or reserved by another job: `invalid_target` (`toil_executor.gd`, the
+         en-route recheck `ToolDropToil.haul_cannot_continue()`, every tick);
+       - destination unreachable mid-carry: `blocked_target_unreachable` (`toil_bindings.gd`
+         `toil_on_unreachable`, through `ToolExecutor.fail_hauled_tool()`; round 8 used
+         `invalid_target` here);
+       - cargo unreachable while fetching: `blocked_target_unreachable`
+         (`ToolFetchToil.fail_carry`, wired to `fail_haul_tool`);
+       - need or rescue interrupt: `need_interrupt` (`needs_system.gd` and
+         `toil_bindings.gd` `abandon_haul_tool`). A `haul_tool` job is no longer suspended and
+         re-queued with the tool in the hand; it fails, and the tool is on the ground before
+         the carrier walks off to eat;
+     - the round 5 re-reservation of an unreserved cargo on resume and the round 9 "unreserved
+       but own `item_id`" set-down are gone: no job resumes with a tool in the hand any more;
+     - re-plan semantics: a tool set down on a stockpile tile is stocked there (as any tool
+       dropped on a stockpile), and if that stockpile rejects tools `HaulGiver` hauls it out
+       again; a tool set down outside every zone stays where it is unless a stockpile takes it.
+       So the round 5 test now accepts the pick stocked in A for a moment, as long as no idle
+       colonist ever holds it and it ends stocked in B;
+     - `haul_giver.gd`: only its doc comment changes (it cites `c769a48`);
+     - new tick-driven table test `_check_haul_tool_failure_matrix` (seeds 64025 to 64048,
+       24 cases): moment (job under way, pick still in A / pick carried) x interrupt (critical
+       food need on the carrier / none) x fault (B rejects tools / B walled off / the target
+       cell turned to rock) x reservation (kept / released by hand). Every tick it checks that
+       no colonist holds the pick without an open job for it; each case checks one failure
+       with an existing reason, then, once the fault is undone, that the pick ends stocked in
+       B (only while B takes tools) or on the ground outside every stockpile, with the same
+       id, no open `haul_tool` job and no stale reservation;
+     - the round 9 test is rewritten for the new rule:
+       `_check_destination_rejects_tools_after_an_interrupt_leaves_the_tool_outside` (seed
+       64024); the round 8 test accepts either existing reason;
+     - mutation check: with the set-down in `fail_haul_tool()` removed, the matrix fails (an
+       idle colonist holds the pick); restored, `test_stockpile_filters` passes;
+     - `world_state.gd` is still 767 lines, with `git diff --numstat origin/main --
+       game/scripts/core/world_state.gd` giving `2 2`.
+- Owner decision followed (round 10, `c769a48`): one uniform failure rule for `haul_tool`, with
+  a tick-driven table test.
 - Owner decision followed (round 5): rebase onto `origin/main` after L3, keep v13, and rerun the
   full suite since the rebase brings code changes.
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
@@ -180,11 +227,15 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 9)
+## Final suite line (author-reported, round 10)
 
 ```
-run_tests: all 137 test(s) PASS  [898s]
+run_tests: all 137 test(s) PASS  [998s]
 ```
+
+Round 10 tree (owner rule `c769a48`). The run started just before a whitespace-only fix in
+`tool_drop_toil.gd` (one mangled line continuation joined); no behaviour changed. Round 9 gave
+137 PASS [898s].
 
 The line is quoted verbatim. The author ran this on the round 9 tree (this branch on
 `origin/main` `f55e9b0`, with schema v13, the two-line `world_state.gd` wiring, the round 8
@@ -244,25 +295,26 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
   - **`fetch_tool`** (`ToolFetchToil`): for a kind with no `needs_tool` that lists
     `fetch_tool`, the toil carries the tool its giver named (`item_id`) and reserved. It walks
     to the tool and picks it up, with no search. It is done once that tool is in the hand under
-    this job's reservation, or when the job names no tool (`_carry_done()`). If an interrupt
-    (need, rescue) released the reservation, the toil reserves the tool again on resume (round
-    5), so the delivery is not refused.
+    this job's reservation, or when the job names no tool (`_carry_done()`). A route failure
+    while fetching goes to `fail_carry`, wired to `ToolDropToil.fail_haul_tool()` (round 10).
   - `reserve`, `go_to` and `work` (1 tick): the colonist walks to the target.
   - **en-route recheck** (round 2): `ToolExecutor.advance()` calls
-    `ToolDropToil.haul_target_lost()` on every tick for a kind with `fetch_tool` and no
+    `ToolDropToil.haul_cannot_continue()` on every tick for a kind with `fetch_tool` and no
     `needs_tool`. The target is lost when it is no longer free for a tool (see below), or when
     it lies in a stockpile that rejects tools now. All stockpiles come from
     `ZoneTable.get_stockpile_zones()`, wired as one argument appended to an existing
     `world_state.gd` line. The job is also lost when its `item_id` tool is gone or reserved by
-    another job (round 5). A lost target goes to `fail_for_invalid_target()`:
-    - the held tool, if it is this job's, is set down at the colonist's tile
+    another job (round 5). A lost target goes to the single failure branch
+    `fail_haul_tool(..., "invalid_target")` (round 10, owner rule `c769a48`):
+    - the held tool, if it is this job's `item_id` or reserved by this job, is set down at the
+      colonist's tile
       (`_set_down_held()`). It is stocked when that tile is in any stockpile, so `HaulGiver`
       hauls it out again if that stockpile rejects tools, and it goes on the ground otherwise.
       A tool is never left loose inside a stockpile;
     - every tool reservation of the job is released, and route, work and work progress are
       cleared;
-    - `on_toil_fail` fails the job with `invalid_target` (remedy `resubmit_order`), as other
-      toil failures do. The giver offers the tool again with a fresh target on a later tick.
+    - `on_toil_fail` fails the job with the caller's existing reason (remedy from the shared
+      engine), as other toil failures do. The giver re-plans from the ground on a later tick.
   - **work completion** (`ToolDropToil.place_hauled_tool()`): the held tool is set down and
     its reservation is released. The target is checked again at this moment (round 2), since
     zones and filters can change while the tool is carried:
@@ -277,15 +329,14 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
 
     If the held tool is not this job's, nothing happens.
   - `release_all` then completes the job.
-  - **unreachable destination mid-carry** (round 8): when the route to the target fails while
-    the colonist carries the tool, `toil_on_unreachable` sends a `haul_tool` job to
-    `fail_for_invalid_target()` (above) instead of cancelling and resubmitting it, so the tool
-    is set down and the job fails with `invalid_target`.
-  - **interrupt, then destination invalid** (round 9): a need interrupt releases the job's
-    reservation but leaves the tool in the hand and the job's `item_id`. If the target is lost
-    (or unreachable) before the job resumes, `fail_for_invalid_target()` sets down the held tool
-    when it is reserved by this job or, unreserved, is the job's `item_id`. It never sets down a
-    tool another job reserved.
+  - **unreachable destination** (rounds 8 and 10): when the route fails, while fetching or
+    carrying, `toil_on_unreachable` (and `fail_carry` in `ToolFetchToil`) sends a `haul_tool`
+    job to `fail_haul_tool(..., "blocked_target_unreachable")` instead of cancelling and
+    resubmitting it, so the tool is set down and the job fails once.
+  - **need interrupt** (round 10, replaces the round 5/9 suspend and resume): `NeedsSystem`
+    does not suspend a `haul_tool` job. It calls `abandon_haul_tool`, which goes to
+    `fail_haul_tool(..., "need_interrupt")`: the tool is set down where the carrier stands and
+    the job fails, so no tool waits in a hand. It never sets down a tool another job reserved.
 - `toil_bindings.gd` adds a `haul_tool` arm to the work-completion match and (round 8) a
   `haul_tool` arm to `toil_on_unreachable`. `toil_executor.gd` adds the one-line forwarders
   `place_hauled_tool()` and (round 8) `fail_hauled_tool()`, the 2-line en-route recheck and an
@@ -369,9 +420,11 @@ Approved by the owner in round 2 (`docs/orca/BACKLOG.md` on main, commit `afeead
 - `game/content/jobs.json`: the `haul_tool` kind;
 - `game/scripts/core/jobs/toil_executor.gd`: the forwarder, the 2-line en-route recheck and the
   constructor parameter (654/800; round 8 adds a second one-line forwarder,
-  `fail_hauled_tool()`, which the owner has not seen yet);
-- `game/scripts/core/jobs/toil_bindings.gd`: the work-completion arm (504/800; round 8 adds the
-  `toil_on_unreachable` arm, which the owner has not seen yet);
+  `fail_hauled_tool()`, and round 10 points it, the recheck and `ToolFetchToil.fail_carry` at
+  `fail_haul_tool()`; the owner has not seen these yet);
+- `game/scripts/core/jobs/toil_bindings.gd`: the work-completion arm (507/800; round 8 adds the
+  `toil_on_unreachable` arm and round 10 the `abandon_haul_tool` wiring for need interrupts;
+  the owner has not seen these yet);
 - the `"haul_tool"` value of the schema's job kind enum;
 - `game/data/text/en.json`: one status text.
 
@@ -397,6 +450,9 @@ and are still pending:
    lines while three were edited; round 4 brings it to two.
 4. `docs/decisions/064-…md` and `docs/orca/BACKLOG.md` (status `review`, unchanged in this
    round).
+5. `game/scripts/core/actors/needs_system.gd` (round 10, 460/800): a need or rescue interrupt
+   of a `haul_tool` job calls the new optional `abandon_haul_tool` callable (fail and set the
+   tool down, per `c769a48`) instead of suspending the job. Other kinds are unchanged.
 
 ## Contract impact
 
@@ -411,14 +467,19 @@ and are still pending:
 - API:
   - `ToolDropToil.place_hauled_tool()` and `ToolExecutor.place_hauled_tool()` are new. The
     first one revalidates its target at delivery.
-  - `ToolDropToil.haul_target_lost()` and `fail_for_invalid_target()` are new (round 2).
+  - `ToolDropToil.haul_target_lost()` (round 2; `haul_cannot_continue()` since round 10) is new.
     `ToolDropToil._init` and `ToolExecutor._init` each gain an optional trailing
     `get_all_stockpiles` parameter.
   - A failed `haul_tool` job can carry reason `invalid_target`. That reason already exists,
     with its own text.
   - `ToolItemStore.lies_at()` is new.
   - A failed `haul_tool` job can also carry the existing reason `blocked_target_unreachable`
-    (round 6), when its cargo cannot be reached.
+    (round 6), when its cargo or (round 10) its destination cannot be reached, and the existing
+    reason `need_interrupt` (round 10).
+  - `ToolDropToil.fail_haul_tool()` (round 10) is the single failure branch; it replaces
+    `fail_for_invalid_target()`. `NeedsSystem` gains an optional `abandon_haul_tool` callable
+    and `ToolFetchToil` a `fail_carry` callable, both wired in `toil_bindings.gd` /
+    `toil_executor.gd`.
   - `HaulGiver._init` has four optional trailing parameters: `tool_store` and `get_zones`
     (from `18bc3bd`), `get_tool_jobs` (round 4) and `region_reachable` (round 6). Its `get_jobs` view lists `haul` jobs only,
     as on `origin/main`.
@@ -436,6 +497,11 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered run (round 10): `test_stockpile_filters` PASS [27s], with the 24-case matrix. With
+  the set-down call in `ToolDropToil.fail_haul_tool()` removed, the matrix fails (an idle
+  colonist holds the pick); restored, it passes. Also PASS on the round 10 tree:
+  `test_haul_need_interrupt`, `test_haul_stockpile`, `test_need_jobs`, `test_needs`, the five
+  `test_tool_items*` files and `test_tool_handover_scenarios`.
 - Filtered run (round 9): `test_stockpile_filters` PASS [21s]. With the round 9 change to
   `fail_for_invalid_target()` reverted, the seed 64024 check fails ("the failed job must set
   the pick down: held colonist_0").
@@ -460,17 +526,18 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23459 lines in 113 files` (round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
+- `tools/measure_core.ps1`: `core total: 23456 lines in 113 files` (round 10; 23459 in round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
   23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
 
   | File | Lines | Longest function |
   |---|---|---|
   | `world_state.gd` | 767 (593 code, 114 comment) | `state_hash`, 30 |
-  | `toil_executor.gd` | 654 (479 code, 127 comment) | `_start_current_toil`, 50 |
-  | `toil_bindings.gd` | 504 (379 code, 88 comment) | `_init`, 49 |
-  | `tool_drop_toil.gd` | 361 | `_init`, 30 |
-  | `tool_fetch_toil.gd` | 290 | `advance`, 44 |
-  | `haul_giver.gd` | 182 | — |
+  | `toil_executor.gd` | 654 (480 code, 126 comment) | `_start_current_toil`, 50 |
+  | `toil_bindings.gd` | 507 (381 code, 89 comment) | `_init`, 51 |
+  | `needs_system.gd` | 460 (360 code, 69 comment) | `ensure_needs`, 45 |
+  | `tool_drop_toil.gd` | 356 (258 code, 72 comment) | `_init`, 30 |
+  | `tool_fetch_toil.gd` | 279 | — |
+  | `haul_giver.gd` | 183 | — |
   | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
 
 ## Known limitations
@@ -486,14 +553,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 - The ground fallback must share an edge with the tool's own stockpile, on the same layer. The
   tool is not taken further away.
 - The job has no hauling priority of its own (non-goal). It uses `haul`'s priority, 1.
-- When the job fails en route (target lost, or, since round 8, target unreachable mid-carry;
-  since round 9 also while suspended by an interrupt), the tool is set down at the colonist's tile with no check that
-  the cell is free. If a stocked tool already lies there, the two share the cell until the giver
-  hauls one out.
-- After a need interrupt the carrier keeps the tool in the hand while the job is queued again
-  (`JobQueue.suspend()`). The test covers the same carrier resuming it. A different haul colonist
-  claiming the queued job meanwhile is not covered by a test: it cannot pick up a tool held by
-  another colonist, so the job would not deliver it until the tool is set down.
+- Whenever the job cannot continue (round 10, `c769a48`: target lost or unreachable, cargo
+  unreachable or lost, need or rescue interrupt), the tool is set down at the carrier's tile
+  with no check that the cell is free. If a stocked tool already lies there, the two share the
+  cell until the giver hauls one out.
+- A tool set down inside a stockpile that rejects tools (for example A, when the interrupt
+  comes right after the pick-up) is stocked there for a moment and hauled out again by a new
+  job. That costs one more job, not a loop: each new job fails only on a new fault.
+- An interrupted `haul_tool` job is failed, not resumed (round 10), so its progress is lost and
+  a new job is queued from where the tool lies.
 - A stack hauled onto the target while the tool is carried may share the cell with the stocked
   tool, as it could before F5a-b.
 

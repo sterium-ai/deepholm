@@ -94,8 +94,9 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## order gives (one with no tool on it), else the nearest free tile edge-adjacent to its stockpile
 ## and outside every zone; with neither it waits for a later tick. The job names the tool (item_id)
 ## and reserves it, so a haul colonist carries it there through ToolFetchToil and ToolDropToil,
-## keeping its id; an interrupt that releases the reservation leaves item_id, which ToolFetchToil
-## re-reserves on resume. A reserved tool (being fetched or already hauled), one a queued or active
+## keeping its id; a job that cannot continue (interrupt, target lost or unreachable, reservation
+## gone) sets the tool down on the carrier's tile and fails (c769a48), and it is re-planned from
+## there. A reserved tool (being fetched or already hauled), one a queued or active
 ## haul_tool job names, and one outside every stockpile (its zone was removed: not stock, F2) are
 ## skipped. A queued or active haul_tool job's target is not offered twice. A candidate cell in
 ## another passability region than the tool (walled off) is skipped and the search goes on, so a

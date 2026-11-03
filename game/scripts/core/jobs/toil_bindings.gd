@@ -115,6 +115,9 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 		"is_first_leg": _toil_is_first_leg,
 		"on_pick_up_success": _toil_on_pick_up_success,
 	}
+	# F5a-b (c769a48): an interrupted haul_tool is not resumable; it takes the one failure branch.
+	_needs_system.abandon_haul_tool = func(c: Dictionary, jid: String, jb: Dictionary) -> void:
+		_toils.fail_hauled_tool(c, jid, jb, hooks, "need_interrupt")
 
 ## Deposits any carried item on colonist's own tile (colonist-ai.md 3.3) and clears
 ## route/work/reroute state.
@@ -257,8 +260,8 @@ func toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> voi
 		# No cargo; ConstructionGiver/CraftGiver submit a replacement later.
 		_finish_job.call(job_id, "cancel_job")
 	elif String(job["kind"]) == "haul_tool" and not _find_job_colonist.call(job_id).is_empty():
-		# F5a-b: the carried tool is set down and the job fails; HaulGiver offers it again.
-		_toils.fail_hauled_tool(_find_job_colonist.call(job_id), job_id, job, hooks)
+		# F5a-b (c769a48): the one haul_tool failure branch; HaulGiver re-plans from the ground.
+		_toils.fail_hauled_tool(_find_job_colonist.call(job_id), job_id, job, hooks, "blocked_target_unreachable")
 	elif is_first or String(job["kind"]) != "haul":
 		_resubmit_unreachable_job.call(job_id, job)
 	else:

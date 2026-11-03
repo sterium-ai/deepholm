@@ -299,7 +299,7 @@ func _find_drop_cell(from: Vector3i) -> Variant:
 ## stockpile that still accepts tools (_get_zones is the "tool" group's), on the ground there
 ## while it is free and in no stockpile at all, else set down at the colonist's tile
 ## (_set_down_held()). No-op unless that tool is this job's. advance() normally fails the job
-## first (haul_target_lost()); this covers a change on the completing tick.
+## first (haul_cannot_continue()); this covers a change on the completing tick.
 func place_hauled_tool(colonist: Dictionary, job_id: String, target: Vector3i) -> void:
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty() or String(_tool_reservation_of.call(held_id)) != job_id:
@@ -325,37 +325,32 @@ func _set_down_held(held_id: String, cell: Vector3i) -> void:
 	else:
 		_drop_tool_ground.call(held_id, cell)
 
-## F5a-b review round 2: a haul_tool job (fetch_tool with no needs_tool) whose target stopped
-## being a valid destination while the tool was fetched or carried: no longer free for a tool,
-## or now inside a stockpile that rejects tools. Checked every tick by ToilExecutor.advance().
-## Review round 5: also its tool (item_id) being gone or reserved by another job, e.g. after an
-## interrupt released it; an unreserved one is re-reserved by ToolFetchToil instead.
-func haul_target_lost(job: Dictionary) -> bool:
+## F5a-b: a haul_tool job (fetch_tool with no needs_tool) that cannot continue (backlog rule,
+## review round 9, c769a48): its tool (item_id) gone or no longer reserved by it, or its target no
+## longer free for a tool or now inside a stockpile that rejects tools. Checked every tick by
+## ToilExecutor.advance(); fail_haul_tool() is the one failure branch.
+func haul_cannot_continue(job: Dictionary) -> bool:
 	var kind: Dictionary = _job_kinds.get(String(job["kind"]), {})
 	if not String(kind.get("needs_tool", "")).is_empty() or not (TOIL_FETCH_TOOL in (kind.get("toils", []) as Array)):
 		return false
 	var cargo := String(job.get("item_id", ""))
-	if not cargo.is_empty():
-		var owner := String(_tool_reservation_of.call(cargo))
-		if _tool_item_lookup.call(cargo).is_empty() or not (owner in ["", String(job["id"])]):
-			return true
+	if not cargo.is_empty() and (_tool_item_lookup.call(cargo).is_empty() or String(_tool_reservation_of.call(cargo)) != String(job["id"])):
+		return true
 	var target: Vector3i = job["target"]
 	return not _free_for_tool(target) or (_in_any_stockpile(target) and not _in_any_zone(target))
 
-## haul_target_lost() failure, through the shared job engine: the held tool, if this job's, is
-## set down at the colonist's tile (_set_down_held()), every reservation of the job is released,
-## execution state is cleared and on_toil_fail fails the job with invalid_target (remedy
-## resubmit_order). HaulGiver offers the tool again with a fresh target the next tick.
-## Review round 9: the job's own cargo (item_id) held unreserved, as an interrupt leaves it before
-## ToolFetchToil re-reserves it, is set down too, so it never stays in the hand.
-func fail_for_invalid_target(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
+## The single haul_tool failure branch (c769a48), whatever the cause (interrupt, target invalid or
+## unreachable, reservation missing): the carrier sets the job's tool (item_id, or any tool the job
+## reserves) down on its current tile (_set_down_held()), every reservation of the job is released,
+## execution state is cleared and on_toil_fail fails the job through the shared engine (remedy
+## resubmit_order). HaulGiver re-plans the tool from where it now lies.
+func fail_haul_tool(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, reason: String) -> void:
 	var held_id := String(colonist.get("held_tool", ""))
-	var owner := "" if held_id.is_empty() else String(_tool_reservation_of.call(held_id))
-	if not held_id.is_empty() and (owner == job_id or (owner.is_empty() and held_id == String(job.get("item_id", "")))):
+	if not held_id.is_empty() and (held_id == String(job.get("item_id", "")) or String(_tool_reservation_of.call(held_id)) == job_id):
 		_set_down_held(held_id, TileGrid.tile_of(colonist))
 	_release_all_tool_reservations.call(job_id)
 	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")
 	if _work_progress_clear.is_valid() and _work_ticks.has(String(job["kind"])):
 		_work_progress_clear.call(job["target"])
-	(hooks["on_toil_fail"] as Callable).call(job_id, "invalid_target")
-	_record.call(TOIL_GO_TO, "failed:invalid_target")
+	(hooks["on_toil_fail"] as Callable).call(job_id, reason)
+	_record.call(TOIL_GO_TO, "failed:" + reason)

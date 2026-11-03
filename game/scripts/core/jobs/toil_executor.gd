@@ -146,6 +146,7 @@ func _init(move_ticks_per_tile: int, work_ticks: Dictionary, passability: Callab
 		drop_tool_ground, drop_tool_stockpile, work_progress_clear, reroutes, advance_go_to,
 		_record, get_colonists, get_tool_items, set_active_drop_item, get_active_drop_item,
 		find_colonist, get_assignments, get_all_stockpiles)
+	_tool_fetch.fail_carry = _tool_drop.fail_haul_tool
 
 ## The colonist's "mover" route via ActorTable (ADR 012): the live object, so field writes
 ## mutate the colonist; a wholesale replacement must still assign colonist["route"].
@@ -429,8 +430,8 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, assignment_p
 	if TOIL_FETCH_TOOL in toils and _tool_drop.active_tool_missing(job_id):
 		_tool_drop.fail_for_destroyed_tool(colonist, job_id, job, hooks)
 		return
-	if TOIL_FETCH_TOOL in toils and _tool_drop.haul_target_lost(job): # F5a-b: destination changed en route
-		_tool_drop.fail_for_invalid_target(colonist, job_id, job, hooks); return
+	if TOIL_FETCH_TOOL in toils and _tool_drop.haul_cannot_continue(job): # F5a-b: target or reservation lost
+		_tool_drop.fail_haul_tool(colonist, job_id, job, hooks, "invalid_target"); return
 	if _tool_drop.is_dropping(colonist, job_id, job, hooks) \
 			or (_route(colonist) == null and colonist.get("work") == null and _tool_drop.needs_drop(colonist, job_id)):
 		_tool_drop.advance(colonist, job_id, job, hooks)
@@ -626,10 +627,9 @@ func waiting_for_handover(colonist_id: String, job_id: String) -> Dictionary:
 ## F5a-b: haul_tool's completion effect (ToolDropToil.place_hauled_tool()).
 func place_hauled_tool(c: Dictionary, job_id: String, target: Vector3i) -> void: _tool_drop.place_hauled_tool(c, job_id, target)
 
-## F5a-b review round 8: a haul_tool whose target became unreachable mid-carry sets the tool
-## down where the colonist stands and fails through the shared engine (ToolDropToil), never a
-## cancel-and-resubmit that would drop item_id and the reservation with the tool still held.
-func fail_hauled_tool(c: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void: _tool_drop.fail_for_invalid_target(c, job_id, job, hooks)
+## F5a-b (c769a48): the one haul_tool failure branch (ToolDropToil.fail_haul_tool()), for
+## ToilBindings' unreachable and interrupt causes.
+func fail_hauled_tool(c: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, reason: String) -> void: _tool_drop.fail_haul_tool(c, job_id, job, hooks, reason)
 
 ## Persistence passthrough: true while the in-flight route is a drop_tool leg, so a restored
 ## search uses the drop toil's plain passability.
