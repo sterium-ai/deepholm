@@ -21,7 +21,9 @@ extends SceneTree
 ## - F5a-b: a stocked pick in A, switched to materials only, keeps its id and is carried by a
 ##   colonist's haul_tool job to B (every group) within a day; with no B it is carried to a free
 ##   tile beside A, outside every zone; both runs are deterministic and replay; when B stops
-##   accepting tools while the pick is carried there, it is not stocked in B (deterministic too).
+##   accepting tools while the pick is carried there, it is not stocked in B (deterministic too);
+##   a need that interrupts the carrier mid-carry does not end the job with the pick in hand: on
+##   resuming, the job reserves the pick again and stocks it in B.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
@@ -60,6 +62,7 @@ func _init() -> void:
 	_check_rejected_stocked_tool_without_b_is_dropped_beside_a()
 	_check_rejected_stocked_tool_is_deterministic_and_replays()
 	_check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools()
+	_check_need_interrupt_mid_carry_still_stocks_the_tool_in_b()
 	if _failed:
 		quit(1)
 		return
@@ -638,3 +641,62 @@ func _check_hauled_tool_is_not_stocked_where_the_target_now_rejects_tools() -> v
 	_expect(settled, "the pick must end on the ground outside every stockpile: %s" % [_pick_location(first)])
 	var result := recorder.stop().replay()
 	_expect(bool(result.get("ok", false)), "the session must replay every checkpoint: %s" % [result])
+
+## F5a-b review round 5: a critical food need interrupts the carrier while it holds the pick. The
+## suspend releases the job's reservations, the pick's included; on resuming, the haul_tool job
+## reserves the pick again (job.item_id) and stocks it in B. It never completes with the pick still
+## in a hand, and the pick never rests in A (which rejects tools) or anywhere but B at the end.
+func _check_need_interrupt_mid_carry_still_stocks_the_tool_in_b() -> void:
+	var world := _stocked_pick_world(64020, true)
+	Scenarios.isolate_need(world, "food")
+	var pick_id := String(world.get_tool_items()[0]["id"])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var job_id := ""
+	var carrier := ""
+	for _i in _day_ticks:
+		world.tick()
+		var location := _pick_location(world)
+		if String(location["type"]) == "held":
+			carrier = String(location["colonist_id"])
+			for job in world.get_jobs(["haul_tool"]):
+				if String(job["status"]) == "active":
+					job_id = String(job["id"])
+			break
+	_expect(not carrier.is_empty() and not job_id.is_empty(), "a colonist must pick the pick up for a haul_tool job")
+	if carrier.is_empty() or job_id.is_empty():
+		return
+	for colonist in TestAccess.colonists(world):
+		if String(colonist["id"]) == carrier:
+			colonist["needs"]["food"] = 5
+	var job_status := func() -> String:
+		for job in world.get_jobs(["haul_tool"]):
+			if String(job["id"]) == job_id:
+				return String(job["status"])
+		return ""
+	var interrupted := false
+	for _i in 60:
+		world.tick()
+		if job_status.call() == "queued":
+			interrupted = true
+			break
+	_expect(interrupted, "the food need must interrupt the haul_tool job mid-carry: %s" % [world.get_jobs(["haul_tool"])])
+	if not interrupted:
+		return
+	_expect(String(_pick_location(world)["type"]) == "held", "the carrier still holds the pick when interrupted: %s" % [_pick_location(world)])
+	var finished := false
+	for _i in _day_ticks * 2:
+		world.tick()
+		var location := _pick_location(world)
+		var type := String(location["type"])
+		if type != "held":
+			var cell := Vector2i(int(location["x"]), int(location["y"]))
+			_expect(not A.has_point(cell), "the pick must never rest in A, which rejects tools: %s" % [location])
+		if job_status.call() in ["completed", "failed", "cancelled"]:
+			finished = true
+			break
+	_expect(finished and job_status.call() == "completed", "the resumed haul_tool job must complete: %s" % [world.get_jobs(["haul_tool"])])
+	var final := _pick_location(world)
+	_expect(String(final["type"]) == "stockpile" and B.has_point(Vector2i(int(final["x"]), int(final["y"]))),
+		"after the resumed job completes the pick must be stocked in B, not held: %s" % [final])
+	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
+		"the same pick id must be the only tool: %s" % [world.get_tool_items()])

@@ -328,10 +328,17 @@ func _set_down_held(held_id: String, cell: Vector3i) -> void:
 ## F5a-b review round 2: a haul_tool job (fetch_tool with no needs_tool) whose target stopped
 ## being a valid destination while the tool was fetched or carried: no longer free for a tool,
 ## or now inside a stockpile that rejects tools. Checked every tick by ToilExecutor.advance().
+## Review round 5: also its tool (item_id) being gone or reserved by another job, e.g. after an
+## interrupt released it; an unreserved one is re-reserved by ToolFetchToil instead.
 func haul_target_lost(job: Dictionary) -> bool:
 	var kind: Dictionary = _job_kinds.get(String(job["kind"]), {})
 	if not String(kind.get("needs_tool", "")).is_empty() or not (TOIL_FETCH_TOOL in (kind.get("toils", []) as Array)):
 		return false
+	var cargo := String(job.get("item_id", ""))
+	if not cargo.is_empty():
+		var owner := String(_tool_reservation_of.call(cargo))
+		if _tool_item_lookup.call(cargo).is_empty() or not (owner in ["", String(job["id"])]):
+			return true
 	var target: Vector3i = job["target"]
 	return not _free_for_tool(target) or (_in_any_stockpile(target) and not _in_any_zone(target))
 

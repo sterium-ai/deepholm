@@ -87,21 +87,25 @@ func _cell_takes_item(cell: Vector3i) -> bool:
 ## F5a-b (ADR 064): a stocked tool (ToolItemStore, ADR 061) in a stockpile that no longer accepts
 ## its group gets, in id order, one haul_tool job targeting the first free cell find_free_haul_cell()'s
 ## order gives (one with no tool on it), else the nearest free tile edge-adjacent to its stockpile
-## and outside every zone; with neither it waits for a later tick. The job reserves the tool, so a
-## haul colonist carries it there through ToolFetchToil and ToolDropToil, keeping its id. A reserved
-## tool (being fetched or already hauled) is skipped, and so is one outside every stockpile (its
-## zone was removed: not stock, F2). A queued or active haul_tool job's target is not offered twice.
+## and outside every zone; with neither it waits for a later tick. The job names the tool (item_id)
+## and reserves it, so a haul colonist carries it there through ToolFetchToil and ToolDropToil,
+## keeping its id; an interrupt that releases the reservation leaves item_id, which ToolFetchToil
+## re-reserves on resume. A reserved tool (being fetched or already hauled), one a queued or active
+## haul_tool job names, and one outside every stockpile (its zone was removed: not stock, F2) are
+## skipped. A queued or active haul_tool job's target is not offered twice.
 func _haul_rejected_tools(tick: int) -> void:
 	if _tool_store == null or not _get_tool_jobs.is_valid():
 		return
 	var busy: Dictionary = {}
+	var claimed: Dictionary = {}
 	for job in (_get_tool_jobs.call() as Array):
 		if String(job["kind"]) == "haul_tool" and job["status"] in ["queued", "active"]:
 			busy[job["target"]] = true
+			claimed[String(job.get("item_id", ""))] = true
 	for tool: Dictionary in (_tool_store.get_items() as Array):
 		var location: Dictionary = tool["location"]
 		var tool_id: String = tool["id"]
-		if String(location["type"]) != "stockpile" or _tool_store.is_reserved(tool_id):
+		if String(location["type"]) != "stockpile" or _tool_store.is_reserved(tool_id) or claimed.has(tool_id):
 			continue
 		var tile := TileGrid.tile_of(location)
 		if bool(_accepts_item_at.call(tile, String(tool["kind"]))) or _home_stockpile(tile).is_empty():
@@ -113,6 +117,7 @@ func _haul_rejected_tools(tick: int) -> void:
 			continue
 		var result: Dictionary = _submit_job.call(cell, _priority, tick, "haul_tool")
 		if result.get("ok", false):
+			_attach_item.call(String(result["job_id"]), tool_id)
 			_tool_store.reserve(tool_id, String(result["job_id"]))
 			busy[cell] = true
 

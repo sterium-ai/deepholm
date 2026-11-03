@@ -55,7 +55,11 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 		return false
 	var kind := String(def.get("needs_tool", ""))
 	if kind.is_empty():
-		return not _carry_done(colonist, job_id)
+		var cargo := _cargo_id(job, job_id)
+		if cargo.is_empty():
+			return false
+		var cargo_owner := String(_tool_reservation_of.call(cargo))
+		return not (String(colonist.get("held_tool", "")) == cargo and cargo_owner in [job_id, ""])
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return true
@@ -68,7 +72,7 @@ func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	var kind := _tool_kind_for(job)
 	if kind.is_empty():
 		var toils: Array = _job_kinds.get(String(job["kind"]), {}).get("toils", [])
-		return not (TOIL_FETCH_TOOL in toils) or _carry_done(colonist, job_id)
+		return not (TOIL_FETCH_TOOL in toils) or _carry_done(colonist, job, job_id)
 	var held_id := String(colonist.get("held_tool", ""))
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return false
@@ -80,10 +84,27 @@ func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	return bool(_reserve_tool.call(held_id, job_id))
 
 ## F5a-b (ADR 064): a fetch_tool kind with no needs_tool (haul_tool) carries the tool its giver
-## reserved for it; done once that tool is in the hand, or when there is none left to carry.
-func _carry_done(colonist: Dictionary, job_id: String) -> bool:
-	var reserved := _reserved_tool_for(job_id)
-	return reserved.is_empty() or String(colonist.get("held_tool", "")) == String(reserved["id"])
+## named (item_id) and reserved; done once that tool is in the hand under job_id's reservation,
+## or when there is none to carry. An interrupt (NeedsSystem, rescue) releases the reservation of
+## the tool in the hand: it is re-acquired here, or ToolDropToil.place_hauled_tool() would refuse
+## the delivery and the job would complete with the tool still held (review round 5).
+func _carry_done(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
+	var cargo := _cargo_id(job, job_id)
+	if cargo.is_empty():
+		return true
+	if String(colonist.get("held_tool", "")) != cargo:
+		return false
+	var owner := String(_tool_reservation_of.call(cargo))
+	if owner == job_id:
+		return true
+	return owner.is_empty() and bool(_reserve_tool.call(cargo, job_id))
+
+## The tool a carrying job (haul_tool) moves: its item_id, else the tool it reserves, else "".
+func _cargo_id(job: Dictionary, job_id: String) -> String:
+	var item_id := String(job.get("item_id", ""))
+	if not item_id.is_empty():
+		return item_id
+	return String(_reserved_tool_for(job_id).get("id", ""))
 
 func _held_tool_kind(colonist: Dictionary) -> String:
 	var held_id := String(colonist.get("held_tool", ""))
@@ -175,9 +196,12 @@ func _reserved_tool_for(job_id: String) -> Dictionary:
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var kind := _tool_kind_for(job)
 	var reserved := _reserved_tool_for(job_id)
-	if kind.is_empty(): # a carried tool (_carry_done()): its giver reserved it, never search
+	if kind.is_empty(): # a carried tool (_carry_done()): its giver named it, never search
 		if reserved.is_empty():
-			return
+			var cargo := _cargo_id(job, job_id)
+			if cargo.is_empty() or _get_tool_item.call(cargo).is_empty() 					or not String(_tool_reservation_of.call(cargo)).is_empty() 					or not bool(_reserve_tool.call(cargo, job_id)):
+				return
+			reserved = _get_tool_item.call(cargo)
 		kind = String(reserved["kind"])
 	var freshly_reserved := reserved.is_empty()
 	if freshly_reserved:

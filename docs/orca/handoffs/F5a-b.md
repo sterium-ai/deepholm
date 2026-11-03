@@ -43,7 +43,30 @@
        exactly two existing lines change, no line is added, and the file stays at 767 lines;
      - (non-blocking) `docs/orca/BACKLOG.md`'s F5a-b heading said "no schema bump". It now
        says "schema v13";
-     - (non-blocking) the full suite was rerun on the round 4 tree (see below).
+     - (non-blocking) the full suite was rerun on the round 4 tree.
+  7. Round 5, the commit after round 4. It answers review round 5 (`.orca-review.md`,
+     REQUEST_CHANGES):
+     - (blocking) a need or rescue interrupt released the reservation of the tool in the
+       carrier's hand. On resuming, `_carry_done()` saw no reserved tool and reported the carry
+       done; `place_hauled_tool()` then refused the delivery (the tool was no longer this job's),
+       and the job completed with the pick still held. Now:
+       - `HaulGiver` names the tool on the job (`job.item_id`, through its existing
+         `attach_item` callable, as `haul` jobs do), so the cargo identity survives the release;
+       - `ToolFetchToil` (`_carry_done()`, `needs()` and `advance()`) re-reserves that tool for
+         the job when it is unreserved, whether it is in the hand or still to be fetched. The
+         carry is done only when the tool is in the hand under this job's reservation;
+       - `ToolDropToil.haul_target_lost()` also fails the job (`invalid_target`, through the
+         shared engine) when that tool is gone or reserved by another job;
+       - `HaulGiver` skips a tool that a queued or active `haul_tool` job names, so an interrupt
+         does not lead to a second job for the same tool;
+       - new tick-driven test `_check_need_interrupt_mid_carry_still_stocks_the_tool_in_b`
+         (seed 64020, `Scenarios.isolate_need(world, "food")`): with the pick in the hand the
+         carrier gets `needs.food = 5`, the job goes back to `queued` with the pick still held,
+         then completes with the pick stocked in B (same single id), never loose in A. Without
+         the fix it fails with "after the resumed job completes the pick must be stocked in B,
+         not held: {type: held, colonist_id: colonist_0}";
+     - (non-blocking) the full suite is still author-reported; it was rerun on the round 5 tree
+       (see below).
 - Owner decision followed (round 3): rebase onto `origin/main` and renumber the bump to v13,
   keeping F5b's v12 step (v14 only if v13 were taken; it was not).
 - Owner decision followed (round 2): `afeeade` on main approves that scope and asks for the
@@ -55,17 +78,18 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 4)
+## Final suite line (author-reported, round 5)
 
 ```
-run_tests: all 136 test(s) PASS  [999s]
+run_tests: all 136 test(s) PASS  [880s]
 ```
 
-The author ran this on the round 4 tree (this branch on `origin/main` `5399153`, with schema
-v13 and the two-line `world_state.gd` wiring), on Windows with Godot 4.7.2 headless. It is still author-reported: the reviewer has
+The author ran this on the round 5 tree (this branch on `origin/main` `5399153`, with schema
+v13, the two-line `world_state.gd` wiring and the round 5 re-reservation), on Windows with Godot
+4.7.2 headless. It is still author-reported: the reviewer has
 not reproduced it yet (`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1`).
 N is 136 because main now has 136 test files. This branch adds or removes none: its checks are in
-existing test files. The round 3 tree gave 136 PASS [991s]. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
+existing test files. The round 4 tree gave 136 PASS [999s], round 3 136 PASS [991s]. Earlier runs, before the rebase, were 135 PASS [924s] (round 2) and 135 PASS
 [889s] (round 1).
 
 ## What changed (carried design, replaces the teleport)
@@ -88,20 +112,25 @@ existing test files. The round 3 tree gave 136 PASS [991s]. Earlier runs, before
      zone (ties by y, then x);
   3. else no target, and the tool is tried again next tick.
 
-  It then submits a `haul_tool` job at the target through the shared queue (`submit_job`) and
-  reserves the tool for that job (`ToolItemStore.reserve`).
+  It then submits a `haul_tool` job at the target through the shared queue (`submit_job`),
+  names the tool on it (`item_id`, round 5) and reserves the tool for that job
+  (`ToolItemStore.reserve`). A tool that a queued or active `haul_tool` job already names is
+  skipped too (round 5).
 - A colonist with the haul labour takes the job from the scheduler like any other job.
   - **`fetch_tool`** (`ToolFetchToil`): for a kind with no `needs_tool` that lists
-    `fetch_tool`, the toil carries the tool its giver reserved. It walks to the tool and picks
-    it up, with no search. It is done once that tool is in the hand, or once the job has no
-    reserved tool left (`_carry_done()`).
+    `fetch_tool`, the toil carries the tool its giver named (`item_id`) and reserved. It walks
+    to the tool and picks it up, with no search. It is done once that tool is in the hand under
+    this job's reservation, or when the job names no tool (`_carry_done()`). If an interrupt
+    (need, rescue) released the reservation, the toil reserves the tool again on resume (round
+    5), so the delivery is not refused.
   - `reserve`, `go_to` and `work` (1 tick): the colonist walks to the target.
   - **en-route recheck** (round 2): `ToolExecutor.advance()` calls
     `ToolDropToil.haul_target_lost()` on every tick for a kind with `fetch_tool` and no
     `needs_tool`. The target is lost when it is no longer free for a tool (see below), or when
     it lies in a stockpile that rejects tools now. All stockpiles come from
     `ZoneTable.get_stockpile_zones()`, wired as one argument appended to an existing
-    `world_state.gd` line. A lost target goes to `fail_for_invalid_target()`:
+    `world_state.gd` line. The job is also lost when its `item_id` tool is gone or reserved by
+    another job (round 5). A lost target goes to `fail_for_invalid_target()`:
     - the held tool, if it is this job's, is set down at the colonist's tile
       (`_set_down_held()`). It is stocked when that tile is in any stockpile, so `HaulGiver`
       hauls it out again if that stockpile rejects tools, and it goes on the ground otherwise.
@@ -157,6 +186,9 @@ existing test files. The round 3 tree gave 136 PASS [991s]. Earlier runs, before
       `invalid_target`. On no tick after the switch does the pick lie loose inside A or B, or
       sit stocked in B. It ends on the ground outside every stockpile, and a colonist carried
       it.
+    - Round 5, seed 64020: a food need interrupts the carrier with the pick in the hand. The
+      job returns to `queued` with the pick still held, resumes, and completes with the pick
+      stocked in B (same single id), never loose in A.
     - All cases: two worlds built from the same seed have equal `state_hash()` on every tick,
       and the replay returns ok.
   - `test_architecture_rules.gd`: `haul_tool` is added to the expected job kinds, and a
@@ -243,6 +275,11 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered runs (round 5), all PASS: `test_stockpile_filters` [18s], `test_haul_need_interrupt`
+  [2s], `test_architecture_rules` [3s], `test_build_tool_footprint` [1s],
+  `test_toils_dig_chop_regression` [2s], `test_tool_handover_scenarios` [18s], `test_tool_items`
+  [4s], `test_tool_items_fetch` [6s], `test_tool_items_handover` [2s] and
+  `test_tool_items_reservations` [5s].
 - Filtered runs (round 4), both PASS: `test_stockpile_filters` [22s] and
   `test_architecture_rules` [3s].
 - Filtered runs (round 3): `test_save_migration` [7s] PASS after the v13 renumbering.
@@ -252,17 +289,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23108 lines in 112 files` (round 4, on top of F5b;
-  23105 in round 3).
+- `tools/measure_core.ps1`: `core total: 23144 lines in 112 files` (round 5, on top of F5b;
+  23108 in round 4, 23105 in round 3).
 
   | File | Lines | Longest function |
   |---|---|---|
   | `world_state.gd` | 767 (593 code, 114 comment) | `state_hash`, 30 |
   | `toil_executor.gd` | 649 (478 code, 124 comment) | `_start_current_toil`, 50 |
   | `toil_bindings.gd` | 501 | `_init`, 49 |
-  | `tool_drop_toil.gd` | 351 (255 code, 70 comment) | `_init`, 30 |
-  | `tool_fetch_toil.gd` | 254 | — |
-  | `haul_giver.gd` | 164 | — |
+  | `tool_drop_toil.gd` | 358 | `_init`, 30 |
+  | `tool_fetch_toil.gd` | 278 | `advance`, 41 |
+  | `haul_giver.gd` | 169 | — |
   | `state_codec.gd` | 597 (436 code, 106 comment) | `decode`, 70 |
 
 ## Known limitations
@@ -279,6 +316,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 - When the job fails en route, the tool is set down at the colonist's tile with no check that
   the cell is free. If a stocked tool already lies there, the two share the cell until the giver
   hauls one out.
+- After a need interrupt the carrier keeps the tool in the hand while the job is queued again
+  (`JobQueue.suspend()`). The test covers the same carrier resuming it. A different haul colonist
+  claiming the queued job meanwhile is not covered by a test: it cannot pick up a tool held by
+  another colonist, so the job would not deliver it until the tool is set down.
 - A stack hauled onto the target while the tool is carried may share the cell with the stocked
   tool, as it could before F5a-b.
 
