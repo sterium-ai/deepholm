@@ -27,9 +27,9 @@ func _initialize() -> void:
 	TestAccess.tile_grid(world).tiles.fill(WorldStateType.TILE_FLOOR)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({
-		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "route": null, "work": null, "hands": [],
+		"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": [],
 	})
-	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "kind": "wood", "count": 1}
+	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 0, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	world.apply({"actor": "test", "command_id": "zone", "tick": world.get_tick(), "type": "zone_add",
 		"payload": {"x": 5, "y": 5, "width": 1, "height": 1}})
