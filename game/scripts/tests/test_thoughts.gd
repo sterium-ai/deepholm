@@ -1,8 +1,8 @@
 extends SceneTree
 
 ## F5c (ADR 066): happiness from the thought table (content/thoughts.json). Every check goes
-## through the real triggers: needs decaying on world.tick(), need jobs completing, harvest and
-## craft jobs completing, a colonist dying in combat, and the view snapshot the panel reads.
+## through the real triggers: needs decaying on world.tick(), need jobs completing, harvest,
+## craft and cook jobs completing, a colonist dying in combat, and the view snapshot the panel reads.
 ## Acceptance: meal + bed gives > 60 within 2 days; starving + ground gives < 40; thoughts
 ## expire on schedule; same seed, same state_hash(); save/load and replay give identical results.
 
@@ -27,6 +27,7 @@ func _init() -> void:
 	_check_recorded_session_replays()
 	_check_harvest_adds_harvested()
 	_check_craft_adds_crafted()
+	_check_cook_adds_crafted()
 	_check_colonist_death_saddens_the_survivors()
 	_check_stack_limit_replaces_the_earliest()
 	_check_bed_reachability_is_per_region()
@@ -229,6 +230,27 @@ func _check_craft_adds_crafted() -> void:
 			break
 	_expect(crafted, "finishing a craft job must add the crafted thought")
 	_expect(not _thought_ids(world, "colonist_1").has("crafted"), "a colonist that did not craft does not think crafted")
+
+## Cooking counts as crafting (owner, review round 2): a finished cook_work job adds
+## "crafted"; the colonist whose cook labour is off does not get it.
+func _check_cook_adds_crafted() -> void:
+	var world := Scenarios.empty_floor_world(660014)
+	Scenarios.isolate_need(world, "")
+	TestAccess.object_table(world).set_object(Vector3i(BENCH.x, BENCH.y, 0), "kitchen", "colony", "")
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 5, 3))
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 6, 3))
+	_command_ok(world, "set_labour", {"colonist": "colonist_1", "kind": "cook", "level": 0})
+	_command_ok(world, "zone_add", {"x": 0, "y": 0, "z": 0, "width": 4, "height": 2})
+	Scenarios.add_stock(world, "food", 2, 0, 0)
+	_command_ok(world, "craft_set_target", {"x": BENCH.x, "y": BENCH.y, "z": 0, "recipe": "meal", "count": 1})
+	var cooked := false
+	for _i in 2 * DAY_TICKS:
+		world.tick()
+		if _thought_ids(world, "colonist_0").has("crafted"):
+			cooked = true
+			break
+	_expect(cooked, "finishing a cook job must add the crafted thought")
+	_expect(not _thought_ids(world, "colonist_1").has("crafted"), "a colonist that did not cook does not think crafted")
 
 ## Death: a colony colonist killed in combat gives every surviving colony colonist
 ## "colonist_died" (-15) at the next needs tick (CombatSystem records a pending death, the

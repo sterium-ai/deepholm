@@ -8,7 +8,8 @@
 > one-line hooks. The colonist panel shows happiness and the active thoughts. Saves move to
 > schema v13 (an optional `thoughts` field per colonist).
 
-- **Status:** proposed (design closed with the owner in BACKLOG F5c; owner sign-off pending)
+- **Status:** proposed (design closed with the owner in BACKLOG F5c; the deviations from the
+  design text were accepted in review round 2, `main` `f51498d`; merges as proposed)
 - **Date:** 2026-11-03
 - **Scope:** content (`thoughts.json` and its schema), simulation (`ActorThoughts`, hooks in
   `NeedsSystem`, `ToilBindings`, `CombatSystem`), persistence (schema v13), presentation
@@ -40,7 +41,7 @@ and `slept_ground` (rest ≤ 25), `meal_items` (`["meal"]`), and the table:
 | `slept_ground` | −8 | 0.5 | refresh | each tick while rest ≤ 25 and no bed is reachable |
 | `slept_bed` | +8 | 1.5 | refresh | a sleep job completes (sleep jobs always target a bed) |
 | `harvested` | +2 | 1 | stack 3 | a job of kind `harvest` completes (`job_kinds`) |
-| `crafted` | +2 | 1 | stack 3 | a job of kind `craft_work` completes (`job_kinds`) |
+| `crafted` | +2 | 1 | stack 3 | a job of kind `craft_work` or `cook_work` completes (`job_kinds`) |
 | `colonist_died` | −15 | 5 | stack 3 | a colony colonist dies; every other colony colonist |
 
 `refresh` restarts the one instance; `stack` adds an instance up to `stack_limit`, then
@@ -89,7 +90,7 @@ save, so a save in that window restores exactly. Fixture
 
 - Thoughts ship with no mood effects (F5d), so happiness is information only for now.
 - `colonist_died` is broadcast to every colony colonist; relations (later) may weight it.
-- `cook_work` does not count as `crafted`; adding it is a one-word content change.
+- Cooking counts as crafting: `crafted` lists `cook_work` beside `craft_work` (owner, `f51498d`).
 - `content/thoughts.json` is the place to tune the weights and durations.
 
 ## Acceptance criteria

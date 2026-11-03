@@ -12,7 +12,7 @@
     {"id": "slept_ground", "weight": -8, "duration_days": 0.5, "repeat": "refresh", "stack_limit": 1},
     {"id": "slept_bed", "weight": 8, "duration_days": 1.5, "repeat": "refresh", "stack_limit": 1},
     {"id": "harvested", "weight": 2, "duration_days": 1, "repeat": "stack", "stack_limit": 3, "job_kinds": ["harvest"]},
-    {"id": "crafted", "weight": 2, "duration_days": 1, "repeat": "stack", "stack_limit": 3, "job_kinds": ["craft_work"]},
+    {"id": "crafted", "weight": 2, "duration_days": 1, "repeat": "stack", "stack_limit": 3, "job_kinds": ["craft_work", "cook_work"]},
     {"id": "colonist_died", "weight": -15, "duration_days": 5, "repeat": "stack", "stack_limit": 3}
   ]
 }

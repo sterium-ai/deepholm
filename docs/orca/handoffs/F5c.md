@@ -3,11 +3,13 @@
 ## Branch and commit
 
 - Branch: `antonelmejor50-hub/f5c-happiness-from-a-thought`, rebased on `origin/main`
-  `f55e9b0` (the owner's F5c scope approval), which sits on L3 `bb3ff32` (#55, no schema bump)
-  and F5b `5399153` (#54). Four commits (the feature, the review round-1 fixes, the handoff figures after the rebase, the review round-2 fixes), not pushed.
+  `f51498d` (the owner's round-2 decisions), on top of `f55e9b0` (the F5c scope approval), L3
+  `bb3ff32` (#55, no schema bump) and F5b `5399153` (#54). Five commits (the feature, the
+  review round-1 fixes, the handoff figures after the rebase, the review round-2 fixes, the
+  owner round-2 change), not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
   if F5a-b (v13) landed first. F5a-b (tool hauling, its own v13 bump) is a different task from
-  F5b (#54, cooking, merged, v12). F5a-b has not landed: `origin/main` (`f55e9b0`) is still at
+  F5b (#54, cooking, merged, v12). F5a-b has not landed: `origin/main` (`f51498d`) is still at
   `SCHEMA_VERSION` 12 after L3. So there is **no renumbering**. If F5a-b merges first, this step becomes `_v13_to_v14`. The fixture, the
   `SCHEMA_VERSION` constant, the schema `const` and the `13:` arm move up by one.
 - ADR: **066** (owner's allocation), `docs/decisions/066-happiness-from-thoughts.md`, status
@@ -110,17 +112,26 @@ Persistence (schema v13):
   colonist is tired (rest ≤ 25) and no bed is reachable. Once a bed is reachable it stops.
   `test_thoughts` checks this.
 - `meal_items` is a new content key that decides meal (+) versus raw (0).
-- `crafted` counts only `craft_work`. `cook_work` is not counted; adding it is a one-word
-  content change. The thought is given to the worker who completes the job.
+- `crafted` counts `craft_work` and `cook_work` (owner, round 2). The thought is given to the
+  worker who completes the job.
 - `colonist_died` goes to every colony colonist. Relations are a non-goal.
 - `colonist_died` lands one tick after the death, through the pending count (hook 4).
 - The panel shows each thought's name and weight, not its time left.
 
-**Owner decision: awaiting.** No decision on these deviations is recorded in BACKLOG F5c yet
-(`origin/main` is still `f55e9b0` at round 2). The owner is asked to accept or change each one.
-ADR 066 stays *proposed* until then.
+**Owner decision: accepted**, in BACKLOG F5c on `main`, commit `f51498d`:
 
-Why the code does not follow the design text literally instead:
+> **Review round 2 (owner's interface, 2026-11-03): design deviations accepted** as listed in
+> the F5c handoff: (1) `slept_ground` comes from the needs tick (tired with no reachable bed),
+> not from a sleep job; (2) `meal_items` content key decides meal (+) vs raw (0); (3)
+> `colonist_died` goes to every colony colonist and lands one tick after the death through the
+> pending count (now hashed); (4) the panel shows name and weight, not time left. One change
+> required: **`crafted` must also count `cook_work`** (content, one word). ADR 066 merges as
+> `proposed` (README rule).
+
+The one change is made: `thoughts.json` `crafted.job_kinds` is `["craft_work", "cook_work"]`,
+checked by test 14. ADR 066 stays *proposed*, as the owner says.
+
+Why the code does not follow the design text literally (kept for the record):
 - **Ground sleep.** No sleep job ends on the floor: sleep need jobs always target a bed. A
   literal "slept on the ground" event would need a new floor-sleep job, which is outside F5c and
   would mean rewriting `needs_system`'s sleep path (the owner note forbids a rewrite).
@@ -165,7 +176,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
 Results at the branch head:
-- Suite (review round 2, on `f55e9b0`): `run_tests: all 138 test(s) PASS  [995s]`
+- Suite (owner round 2, on `f51498d`): `run_tests: all 138 test(s) PASS  [1.007s]` (1007 s; the runner prints a locale thousands separator)
 - `test_thoughts.gd`: PASS.
 - `check_core_budgets.py`: `OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
@@ -185,8 +196,8 @@ Results at the branch head:
   `validators/giver_validator.gd` 159, `view_snapshot.gd` 264, `entity_codec.gd`,
   `entity_validator.gd` 320, `save_migrations.gd` 286) are far below 800 lines.
 - Tests compared with `main`:
-  - `test_*.gd` files: 137 on main (`f55e9b0`), 138 on the branch (`+test_thoughts.gd`);
-  - `_check_` sites: 2156 on main, 2186 on the branch;
+  - `test_*.gd` files: 137 on main (`f51498d`), 138 on the branch (`+test_thoughts.gd`);
+  - `_check_` sites: 2156 on main, 2188 on the branch;
   - no test was deleted, skipped or loosened.
 
 `test_thoughts.gd` drives everything through real ticks, commands and jobs, never through
@@ -213,6 +224,8 @@ direct calls:
     `slept_ground` and the one beside it does not.
 12. A repeated meal refreshes the one `ate_meal` instance instead of adding a second one.
 13. Raw food adds `ate_raw` only (happiness 50).
+14. A cook job (kitchen, `meal`) gives `crafted` to the cook only (owner round 2). With
+    `cook_work` removed from `job_kinds`, this check fails.
 
 ## Review response (round 1, `.orca-review.md`, REQUEST_CHANGES)
 
@@ -248,7 +261,15 @@ Non-blocking:
 - The schema bullet now says that F5a-b (tool hauling, v13, not landed) is not F5b (#54, v12,
   merged). The branch stays at v13.
 
+## Owner note (round 2, BACKLOG F5c, `f51498d`)
+
+1. **Deviations accepted** (quoted above); the "awaiting" status from review rounds 1 and 2 is
+   closed.
+2. **`crafted` must also count `cook_work`.** Done in `content/thoughts.json` (one word, no code
+   change); test 14 covers it. ADR 066's table and consequences say so.
+3. **ADR 066 stays *proposed*.** Unchanged; it now cites `f51498d` for the accepted deviations.
+
 ## Limitations and next action
 
 - Happiness is information only. Its consequences (depression) are F5d.
-- The owner should review the deviations above, then sign off ADR 066.
+- Ready for review round 3.
