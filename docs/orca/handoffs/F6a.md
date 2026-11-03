@@ -2,8 +2,9 @@
 
 ## Branch and commit
 
-- Branch: `antonelmejor50-hub/f6a-forest-zone-plant-and`, rebased on `origin/main` `2750fe3`
-  (F5a: save schema v10, ADR 064; plus viewer tasks B6 and B7).
+- Branch: `antonelmejor50-hub/f6a-forest-zone-plant-and`, rebased on `origin/main` `2bc29b9`
+  (the owner's F6a amendments in BACKLOG.md, docs only) on top of `2750fe3` (F5a: save schema
+  v10, ADR 064; plus viewer tasks B6 and B7).
 - **Schema number (owner note).** F5a landed first and took v10, so F6a takes **v11**:
   - `_v10_to_v11()` (arm `10:`) sits after F5a's `_v9_to_v10()`, which is kept unchanged.
   - `SCHEMA_VERSION` is 11.
@@ -102,12 +103,14 @@ touching these:
 - **`tests/test_toils_dig_chop_regression.gd`:** the exact job-kind check goes 20 → 21 and
   names `plant_sapling`. No assertion removed or loosened.
 
-### Pending owner approval: scope amendment
+### Scope amendment: approved by the owner (`2bc29b9`)
 
 REVIEW.md's scope gate asks for an owner-approved amendment for every edit above that falls
-outside the owned paths. **No such approval has been given yet.** The edits stay in this
-branch because the feature cannot be wired without them, and each is the minimum one needed.
-The owner is asked to approve the list above as F6a's scope, or to say which edits to take out.
+outside the owned paths. The owner approved this list unchanged as F6a's scope in BACKLOG.md,
+commit `2bc29b9` ("Approved amendments ... (1) **scope**"):
+
+> the edits declared in the F6a handoff ("Edits outside the listed owned paths") are approved as
+> F6a's scope [...] each being the minimum needed to wire the zone
 
 ## Acceptance (test_forest_zone.gd, through zone_add/chop commands and tick())
 
@@ -122,17 +125,24 @@ The owner is asked to approve the list above as F6a's scope, or to say which edi
 | `state_hash` deterministic | `_check_same_seed_same_hash` |
 | zone_add rules | `_check_zone_add_forest_rules` (crop rejected, unknown kind rejected, stockpile overlap rejected) |
 
-### Pending owner decision: a ripe sapling under an actor waits
+### Owner decision: a ripe sapling under an actor waits (`2bc29b9`)
 
-The task's acceptance says "trees after ~8 days". This branch adds one exception: **a ripe
-sapling with a colonist or creature on it stays a sapling until the tile is free**, because
-turning it into an impassable tree would trap the actor.
-- In the test this happens when the idle farmer parks on its last planted tile. The test asserts
-  the wait, and that the tree grows once the farmer leaves (sent off by a `chop` order).
-- The owner has not decided this yet. They are asked to accept the exception (as the acceptance
-  table above records it) or choose another behaviour.
-- One alternative, not done here: a "step off" toil for an idle colonist on a ripe sapling.
-  ADR 067 lists it under Consequences.
+The owner decided the growth rule in BACKLOG.md, commit `2bc29b9` ("Approved amendments ...
+(2) **growth and occupancy**"):
+
+> a sapling only advances to the impassable `tree` stage while **no actor** stands on its tile (a
+> tree must never trap a colonist); **ground items never block growth** (wood left by chopping
+> must not stop the replanted sapling: occupancy query is actor-only). Acceptance keeps "all 9
+> tiles are trees after ~8 days" for tiles no colonist stands on, and adds a chop → replant →
+> regrow cycle with the wood still on the tile.
+
+The branch matches it:
+- TreeGrowth's query is WorldState's actor-only `_colonist_at` (colonists and creatures).
+- The test asserts that the idle farmer's tile waits, and that the tree grows once a `chop`
+  order sends the farmer away.
+- The chop → replant → regrow row above covers the wood case.
+- A "step off" toil for an idle colonist on a ripe sapling remains a possible follow-up (ADR 067,
+  Consequences). It is not done here.
 
 ## Review fixes (Codex verdict REQUEST_CHANGES)
 
@@ -140,12 +150,13 @@ turning it into an impassable tree would trap the actor.
 |---|---|
 | `forest_content.gd` `SOIL_TILE` literal fails `lint_content_literals.ps1` | Constant removed; `check(raw_by_kind, soil_tile)` takes the registry's `TILE_SOIL`. Lint passes. |
 | Growth query counted ground items, so chop wood held back the replanted sapling | TreeGrowth and ForestGiver now take WorldState's actor-only `_colonist_at` (colonists and creatures). New acceptance row: chop → replant → regrow with the wood still on the tile. ADR 067 and `colonist-ai.md` wording updated. |
-| Out-of-scope edits need an owner-approved amendment | Recorded above as a pending owner approval. |
-| Occupied-sapling exception needs an owner decision | Recorded above as a pending owner decision; the acceptance table now states it. |
+| Out-of-scope edits need an owner-approved amendment | Approved by the owner in `2bc29b9`, quoted above. |
+| Occupied-sapling exception needs an owner decision | Decided by the owner in `2bc29b9`, quoted above; the acceptance table states it. |
 
 ## Gate
 
-- Branch head after the review fixes, full suite: `run_tests: all 135 test(s) PASS  [834s]` (rebased on `2750fe3`)
+- Branch head after the review fixes, rebased on `2bc29b9` (`f74e94d`), full suite: `run_tests: all 135 test(s) PASS  [814s]`
+  - The first run after the rebase ended `run_tests: 1 of 135 test(s) failed: test_map_experience_fps_measurement  [870s]`. That test is a wall-clock FPS measurement. Run alone it passed (`run_tests: all 1 test(s) PASS  [68s]`, avg 128.44 FPS, min 127), and the full rerun above passed on the same tree with no change. The rebase itself only brought in the docs-only `2bc29b9`.
 - `game/scripts/tests/lint_content_literals.ps1`:
   `lint_content_literals: PASS (no tile-id/work-ticks/move-ticks literal found outside the registry)`
 - `tools/check_core_warnings.ps1`: `check_core_warnings: OK, 2801 warning(s), none above baseline`.
