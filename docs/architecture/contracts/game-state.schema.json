@@ -282,7 +282,8 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
-        "location": { "$ref": "#/$defs/toolLocation" }
+        "location": { "$ref": "#/$defs/toolLocation" },
+        "setDown": { "const": true, "description": "v14 (F5a-b): a ground tool a failed haul_tool job set down, or one hauled out of a rejecting stockpile onto the ground beside it; HaulGiver re-plans it into a tool-accepting stockpile whatever the filters were. Absent otherwise." }
       }
     },
     "groundBerry": {

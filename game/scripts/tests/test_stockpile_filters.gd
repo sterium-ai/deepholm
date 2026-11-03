@@ -77,6 +77,7 @@ func _init() -> void:
 	_check_destination_walled_off_mid_carry_sets_the_tool_down()
 	_check_destination_rejects_tools_after_an_interrupt_leaves_the_tool_outside()
 	_check_interrupt_outside_a_is_replanned_from_the_ground_into_b()
+	_check_set_down_tool_is_replanned_after_the_filters_change()
 	_check_haul_tool_failure_matrix()
 	if _failed:
 		quit(1)
@@ -926,6 +927,68 @@ func _check_interrupt_outside_a_is_replanned_from_the_ground_into_b() -> void:
 	var replans := world.get_jobs(["haul_tool"]).filter(func(job: Dictionary) -> bool:
 		return String(job["id"]) != job_id and String(job.get("item_id", "")) == pick_id and String(job["status"]) == "completed")
 	_expect(replans.size() == 1, "one new haul_tool job must carry the pick from the ground into B: %s" % [world.get_jobs(["haul_tool"])])
+	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
+		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
+
+## F5a-b review round 13: recovery must not hang on the filters of the moment. A rejects tools, a
+## haul_tool job picks the pick up, A takes tools again while it is carried, and B is walled off
+## mid-route, so the job fails outside every stockpile and the pick is set down there, marked
+## set_down. No stockpile rejects tools any more, yet the mark keeps it a haul candidate: it
+## survives save/load (in memory and through SaveIO) and, with B still walled off, HaulGiver
+## re-plans it into A, which takes tools again. Same id, no haul_tool job open, no stale
+## reservation, and the mark is gone once it is stocked.
+func _check_set_down_tool_is_replanned_after_the_filters_change() -> void:
+	var world := _stocked_pick_world(64061, true)
+	var pick_id := String(world.get_tool_items()[0]["id"])
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})
+	var job_id := ""
+	for _i in _day_ticks:
+		world.tick()
+		var location := _pick_location(world)
+		if String(location["type"]) != "held":
+			continue
+		for colonist in TestAccess.colonists(world):
+			var cell := Vector2i(int(colonist["x"]), int(colonist["y"]))
+			if String(colonist["id"]) == String(location["colonist_id"]) and cell.distance_to(Vector2i(A.position)) >= 6.0 					and not A.has_point(cell) and not B.has_point(cell):
+				job_id = String(world.get_assignments().get(String(colonist["id"]), {}).get("job_id", ""))
+		if not job_id.is_empty():
+			break
+	_expect(not job_id.is_empty(), "a colonist must carry the pick out of A for a haul_tool job")
+	if job_id.is_empty():
+		return
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "food,material,seed,tool,valuable", "priority": 2})
+	_wall_around(world, B, true)
+	var job_of := func() -> Dictionary: return world.get_job(job_id)
+	var ended := func() -> bool: return not (job_of.call().get("status", "") in ["queued", "active"])
+	_expect(_tick_until(world, 200, ended) <= 200 and String(job_of.call().get("status", "")) == "failed"
+			and String(job_of.call().get("reason", "")) in ["invalid_target", "blocked_target_unreachable"],
+		"the haul_tool job must fail through the engine once B is walled off: %s" % [job_of.call()])
+	var dropped := _pick_location(world)
+	var dropped_cell := Vector2i(int(dropped.get("x", -1)), int(dropped.get("y", -1)))
+	_expect(String(dropped["type"]) == "ground" and not A.has_point(dropped_cell) and not B.has_point(dropped_cell)
+			and bool(world.get_tool_item(pick_id).get("set_down", false)),
+		"the pick must be set down, marked, on the ground outside A and B: %s" % [world.get_tool_item(pick_id)])
+	var restored := WorldStateType.from_save_state(world.to_save_state())
+	_expect(bool(restored.get_tool_item(pick_id).get("set_down", false)) and restored.state_hash() == world.state_hash(),
+		"save/load must keep the set_down mark: %s" % [restored.get_tool_item(pick_id)])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	var write := SaveIOType.write_atomic(SAVE_PATH, StateCodecType.encode(world))
+	var read := SaveIOType.read(SAVE_PATH)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	_expect(write["ok"] and read["ok"], "a world with a set-down pick must save and load through SaveIO: %s %s" % [write, read])
+	if read["ok"]:
+		var from_file := StateCodecType.decode(read["state"])
+		_expect(bool(from_file.get_tool_item(pick_id).get("set_down", false)) and from_file.state_hash() == world.state_hash(),
+			"the file round trip must keep the set_down mark: %s" % [from_file.get_tool_item(pick_id)])
+	var in_a := func() -> bool:
+		_expect_holder_busy(world, "re-planned after the filters changed")
+		var location := _pick_location(world)
+		return _haul_tool_closed(world) and String(location["type"]) == "stockpile" 			and A.has_point(Vector2i(int(location["x"]), int(location["y"])))
+	_expect(_tick_until(world, _day_ticks, in_a) <= _day_ticks,
+		"the set-down pick must be re-planned into A, which takes tools again: %s, jobs %s"
+			% [_pick_location(world), world.get_jobs(["haul_tool"])])
+	_expect(not world.get_tool_item(pick_id).has("set_down") and world.get_tool_item_reservation(pick_id).is_empty(),
+		"once stocked the pick must carry no set_down mark and no reservation: %s" % [world.get_tool_item(pick_id)])
 	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
 		"the same pick id must be the only tool: %s" % [world.get_tool_items()])
 

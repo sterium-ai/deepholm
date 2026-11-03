@@ -289,12 +289,47 @@
        given so it can be checked;
      - gates on the round 12 tree: `world_state.gd` is 767 lines and numstat `2 2` against
        `origin/main`; `check_core_budgets` OK; `measure_core` 23803 lines in 114 files.
-- Pending owner approval (round 12, does not block): while some stockpile rejects a tool kind,
-  every ground tool of that kind outside a tool-accepting stockpile becomes a `haul_tool`
-  candidate. That includes tools that were never stocked, not just the one a failed job set
-  down. Once no stockpile rejects the kind, ground tools are left alone again. Tracking only
-  set-down tools would need a new persisted field. Please confirm this scope, or ask for the
-  field.
+  16. Round 13, the commit that changes this file to the present text. It answers review
+     round 13 (`.orca-review.md`):
+     - (blocking) `haul_giver.gd:131`: the round 12 ground re-plan ran only while some
+       stockpile rejected the tool's kind. If A accepted tools again after the pick-up and the
+       job then failed outside every stockpile, the set-down tool was never looked at again.
+       Recovery is now kept on the tool itself, independent of the current filters: a ground
+       tool carries a sparse `set_down` mark (`ToolItemStore`; saved as the optional
+       `setDown: true` on its `toolItems` entry, inside the v14 bump). The round 12
+       `_stockpile_rejects`/`_rejecting` narrowing is removed;
+     - the mark is set by `ToolDropToil._set_down_held()` (every `haul_tool` failure, per
+       `c769a48`) and by the ground branch of `place_hauled_tool()` (a tool hauled out onto the
+       ground beside a rejecting stockpile, so it is stocked once some stockpile takes tools).
+       `set_stockpile()` and `set_held()` clear it. Other ground drops (`drop_tool` and the
+       fetch fallbacks) are unmarked, so ordinary ground tools are still left alone, as before
+       F5a-b (the four tests that failed in round 12's first attempt stay green);
+     - `HaulGiver` considers a ground tool only if it is marked, and plans it only into a free
+       cell of a reachable tool-accepting stockpile, never onto more ground;
+     - `tool_validator.gd`: a `toolItems` entry allows `setDown` (bool, only `true`) besides the
+       required `id`, `kind` and `location`; `_require_fields` was replaced there because it
+       treats the required list as the allowed list. `state_codec.gd` writes the key only when
+       set and reads it back; the schema has `toolItem.setDown` (const true) and
+       `save-system.md` its v14 note. A v13 save has no such key, so `_v13_to_v14` is unchanged
+       and the v13 and v14 fixtures still match;
+     - new tick-driven check `_check_set_down_tool_is_replanned_after_the_filters_change`
+       (seed 64061): A rejects tools, a colonist carries the pick at least 6 tiles out of A, then
+       A accepts tools again; B is walled off and the job fails through the engine
+       (`invalid_target` or `blocked_target_unreachable`); the pick lies on the ground outside A
+       and B, marked. The world goes through a save round trip in memory and then through the
+       SaveIO file, and is ticked on until the same pick id is stocked in A, with no open
+       `haul_tool` job, no mark and no reservation. Under the round 12 rule no stockpile rejects
+       tools at that point, so the pick would be skipped; this was reasoned, not run;
+     - (non-blocking) the suite line is still author-reported (see below), with the log path;
+     - gates on the round 13 tree: `world_state.gd` is 767 lines and numstat `2 2` against
+       `origin/main`; `check_core_budgets` OK; `measure_core` 23822 lines in 114 files;
+       `haul_giver.gd` 195 lines, `tool_drop_toil.gd` 358, `tool_item_store.gd` 129,
+       `state_codec.gd` 608, `tool_validator.gd` 124.
+- Pending owner approval (round 13, does not block): the persisted optional `setDown` field on
+  `toolItems` entries (the schema, `state_codec.gd`, `tool_validator.gd`, `save-system.md`). It
+  is what the reviewer's round 13 fix needs ("preserve recovery eligibility independently of
+  current filters"), and round 12 named it as the alternative. It stays inside the v14 bump: no
+  new version, id or reason. It replaces the round 12 question, which is withdrawn.
 - Owner decision followed (round 12, `a7cbb0e`): `needs_system.gd` is F5a-b scope; a tool
   dropped outside a stockpile is a haul candidate again, with its test; `save-system.md` says
   schema 14; full suite, commit.
@@ -316,7 +351,23 @@
   commands and ticks. In `world_state.gd`, only a wiring hook of 2 lines or fewer is allowed,
   with no growth.
 
-## Final suite line (author-reported, round 12)
+## Final suite line (author-reported, round 13)
+
+```
+run_tests: all 139 test(s) PASS  [1.037s]
+```
+
+Quoted verbatim. As in earlier rounds, the runner prints seconds with `.` as the thousands
+separator in this locale. The tree is round 13 (the code changes in item 16). On Windows, with
+Godot 4.7.2 headless, the author ran
+`powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/run_tests.ps1 -SkipImport > full13.log 2>&1`.
+`-SkipImport` is safe here: round 13 adds no `class_name`, and the class cache was refreshed in
+round 12. The log is at
+`C:\dev\tmp\claude\C--Users-Anto-ito-orca-workspaces-deepholm-f5a-b-haul-rejected-tools-out\a0b97d0f-55b9-400d-95db-2c04893aa622\scratchpad\full13.log`.
+It is local to the author's machine and not committed. Its FAIL and push_error lines come from
+the suite's expected-failure checks. The reviewer has not reproduced the full suite.
+
+### Round 12 (history)
 
 ```
 run_tests: all 139 test(s) PASS  [1.071s]
@@ -398,9 +449,11 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
   - its tile still accepts its group, or
   - its tile lies in no stockpile (its zone was removed, so F2 says it is not stock).
 
-  Since round 12 it also looks at each tool on the ground (location type `ground`) that is not
-  reserved and lies in no stockpile accepting its group, such as a tool a failed `haul_tool`
-  job set down. Such a tool only gets step 1 below (a free cell of a reachable tool-accepting
+  Since round 13 it also looks at each tool on the ground (location type `ground`) that is not
+  reserved and carries the `set_down` mark: a tool a failed `haul_tool` job set down, or one
+  this giver hauled out onto the ground beside its stockpile. The mark is saved (`setDown`)
+  and does not depend on the current filters, so a tool set down after A accepts tools again
+  is still recovered. Unmarked ground tools are left alone. Such a tool only gets step 1 below (a free cell of a reachable tool-accepting
   stockpile); it is never moved from one ground tile to another.
 
   For every other tool, it picks a target:
@@ -452,7 +505,8 @@ and the rerun above, on the same HEAD, passed with no such error. The round 4 tr
       lies there. The cell's reservation is not checked (it is this job's own), and neither is
       a stack (one hauled there since may share it, as before);
     - free and in a stockpile that accepts tools now: stocked there;
-    - free and in no stockpile at all: on the ground there;
+    - free and in no stockpile at all: on the ground there (marked `set_down`, so it is
+      stocked once some stockpile accepts tools);
     - otherwise (taken, or in a stockpile that rejects tools): `_set_down_held()` at the
       colonist's tile, as above. The en-route recheck normally fails the job first; this case
       covers a change on the completing tick.
@@ -591,7 +645,8 @@ and are still pending:
 
 - Save format: schema v14. The job `kind` enum gains `haul_tool`. `_v13_to_v14` changes only
   `schemaVersion`. A saved `haul_tool` job is an ordinary job record, and a tool's reservation
-  is already saved in `ToolItemStore.reservations`.
+  is already saved in `ToolItemStore.reservations`. Since round 13 a `toolItems` entry may also
+  carry `setDown: true` (a ground tool HaulGiver must stock; absent otherwise), inside v14.
 - Ids: none are created. The tool keeps its id (ADR 061). The job takes a normal job id from
   the queue.
 - Jobs and content: one new job kind, `haul_tool`. No new toil, command or labour.
@@ -605,7 +660,8 @@ and are still pending:
     `get_all_stockpiles` parameter.
   - A failed `haul_tool` job can carry reason `invalid_target`. That reason already exists,
     with its own text.
-  - `ToolItemStore.lies_at()` is new.
+  - `ToolItemStore.lies_at()` is new; `set_ground()` takes an optional `set_down` flag
+    (round 13), cleared by `set_stockpile()` and `set_held()`.
   - A failed `haul_tool` job can also carry the existing reason `blocked_target_unreachable`
     (round 6), when its cargo or (round 10) its destination cannot be reached, and the existing
     reason `need_interrupt` (round 10).
@@ -630,6 +686,9 @@ python tools/check_core_budgets.py
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 ```
 
+- Filtered runs (round 13), all PASS: `test_stockpile_filters` [32s], `test_save_migration`
+  [7s], `test_tool_items_save` [5s], `test_tool_items_handover` [7s], `test_haul_need_interrupt`
+  [2s], `test_farming_content` [3s] and `test_movement_scheduling_load` [4s].
 - Filtered run (round 10): `test_stockpile_filters` PASS [27s], with the 24-case matrix. With
   the set-down call in `ToolDropToil.fail_haul_tool()` removed, the matrix fails (an idle
   colonist holds the pick); restored, it passes. Also PASS on the round 10 tree:
@@ -661,7 +720,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
   expected-failure checks, and still passes.
 - Gate: `check_core_budgets: OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file cap(s), 1 file and 3 function exception(s))`.
   No budget or exception was raised.
-- `tools/measure_core.ps1`: `core total: 23783 lines in 114 files` (round 11, after the F5c
+- `tools/measure_core.ps1`: `core total: 23822 lines in 114 files` (round 13; 23803 in round 12;
+  23783 in round 11, after the F5c
   and L4 rebases; the table below is round 10's, except that `needs_system.gd` is now 532,
   `toil_bindings.gd` 508 and `state_codec.gd` 603). Earlier: 23456 lines in 113 files (round 10; 23459 in round 9; 23456 in round 8; 23448 in round 7; 23443 in round 6; 23423 in round 5 after the L3 rebase;
   23144 in 112 files before it, 23108 in round 4, 23105 in round 3; the growth is L3's).
@@ -697,6 +757,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 - A tool set down inside a stockpile that rejects tools (for example A, when the interrupt
   comes right after the pick-up) is stocked there for a moment and hauled out again by a new
   job. That costs one more job, not a loop: each new job fails only on a new fault.
+- Only a marked ground tool (`set_down`) is re-planned. A tool dropped on the ground by other
+  work (`drop_tool`, the fetch fallbacks) stays where it is, as before F5a-b.
 - An interrupted `haul_tool` job is failed, not resumed (round 10), so its progress is lost and
   a new job is queued from where the tool lies.
 - A stack hauled onto the target while the tool is carried may share the cell with the stocked
@@ -706,7 +768,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 
 - The owner approves or rejects the files still listed under "Pending owner approval": the
   schema v14 files beyond the enum, the test pins, the `world_state.gd` line edits, the
-  `needs_system.gd` wiring, and the round 8 and round 10 additions to `toil_executor.gd` and
-  `toil_bindings.gd`.
+  `needs_system.gd` wiring, the round 8 and round 10 additions to `toil_executor.gd` and
+  `toil_bindings.gd`, and the round 13 `setDown` field (schema, codec, validator, save-system).
 - The reviewer reproduces the full suite line.
 - Then review with `tools/orca/review.ps1`, which now resolves `F5a-b` to this file.

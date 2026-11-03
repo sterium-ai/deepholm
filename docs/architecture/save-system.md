@@ -287,8 +287,10 @@ returns a new dictionary and never mutates its input. Steps today:
   `heal` at zero rather than to that file. `save_schema_v11_noskills_fixture.json` is the v11
   fixture with every colonist's `skills` dropped (`docs/orca/handoffs/F5b-write-noskills-save.gd`):
   it migrates with `heal` in the labour table only.
-- **v13 → v14** (F5a-b, ADR 064): the job kind enum gains `haul_tool`; the unpacked shape is
-  unchanged. A v13 world queued no `haul_tool` job, so the step changes only the version, and a
+- **v13 → v14** (F5a-b, ADR 064): the job kind enum gains `haul_tool`, and a `toolItems` entry
+  gains an optional `setDown` (present only as `true`: a ground tool a failed `haul_tool` job set
+  down or hauled out onto the ground beside a rejecting stockpile, which HaulGiver re-plans into a tool-accepting stockpile whatever the filters are); the
+  unpacked shape is otherwise unchanged. A v13 world queued no `haul_tool` job, so the step changes only the version, and a
   v13 state that already lists one is refused. `save_schema_v13_fixture.json` (F5c's) migrates
   exactly to `save_schema_v14_fixture.json` (the same session, written packed by
   `docs/orca/handoffs/F5a-b-write-save.gd`).

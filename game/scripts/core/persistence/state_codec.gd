@@ -23,7 +23,7 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v11 adds forest zones and sapling growth (F6a, ADR 067).
 ## v12 adds the heal labour to every colonist's labour table and skills (F5b, ADR 065).
 ## v13 saves a colonist's active thoughts (F5c, ADR 066).
-## v14 adds the haul_tool job kind (F5a-b, ADR 064).
+## v14 adds the haul_tool job kind and a ground tool's optional setDown (F5a-b, ADR 064).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
 const SCHEMA_VERSION := 14
 
@@ -316,10 +316,13 @@ static func _encode_tool_items(tool_items: Dictionary, next_id: int) -> Dictiona
 	var list: Array = []
 	for key in keys:
 		var item: Dictionary = tool_items[key]
-		list.append({
+		var entry := {
 			"id": item["id"], "kind": item["kind"],
 			"location": _encode_tool_location(item["location"]),
-		})
+		}
+		if bool(item.get("set_down", false)):
+			entry["setDown"] = true
+		list.append(entry)
 	return {"nextId": next_id, "list": list}
 
 static func _decode_tool_items(field: Dictionary) -> Dictionary:
@@ -330,6 +333,8 @@ static func _decode_tool_items(field: Dictionary) -> Dictionary:
 			"id": id, "kind": String(entry["kind"]),
 			"location": _decode_tool_location(entry["location"]),
 		}
+		if bool(entry.get("setDown", false)):
+			items[id]["set_down"] = true
 	return {"items": items, "next_id": int(field["nextId"])}
 
 ## A location is ground/stockpile (a tile) or held (the holder's colonist id).

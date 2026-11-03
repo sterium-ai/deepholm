@@ -297,7 +297,8 @@ func _find_drop_cell(from: Vector3i) -> Variant:
 ## target, revalidated now: stocked there while it is a free cell (passable, no other tool on
 ## it: a stack hauled there since may share it, and its cell reservation is this job's own) in a
 ## stockpile that still accepts tools (_get_zones is the "tool" group's), on the ground there
-## while it is free and in no stockpile at all, else set down at the colonist's tile
+## while it is free and in no stockpile at all (marked set_down, so HaulGiver stocks it once a
+## stockpile accepts tools, whatever the filters were when it left), else set down at the colonist's tile
 ## (_set_down_held()). No-op unless that tool is this job's. advance() normally fails the job
 ## first (haul_cannot_continue()); this covers a change on the completing tick.
 func place_hauled_tool(colonist: Dictionary, job_id: String, target: Vector3i) -> void:
@@ -307,7 +308,7 @@ func place_hauled_tool(colonist: Dictionary, job_id: String, target: Vector3i) -
 	if _free_for_tool(target) and _in_any_zone(target):
 		_drop_tool_stockpile.call(held_id, target)
 	elif _free_for_tool(target) and not _in_any_stockpile(target):
-		_drop_tool_ground.call(held_id, target)
+		_drop_tool_ground.call(held_id, target, true)
 	else:
 		_set_down_held(held_id, TileGrid.tile_of(colonist))
 	_record.call(TOIL_DROP_TOOL, "complete")
@@ -318,12 +319,13 @@ func _free_for_tool(cell: Vector3i) -> bool:
 			return String(item["location"]["type"]) in ["ground", "stockpile"] and TileGrid.tile_of(item["location"]) == cell)
 
 ## Inside any stockpile the tool is stocked, so HaulGiver hauls it out again if that stockpile
-## rejects tools; never left loose there (review round 2). Outside every stockpile: on the ground.
+## rejects tools; never left loose there (review round 2). Outside every stockpile: on the ground,
+## marked set_down (ToolItemStore.set_ground()) so HaulGiver re-plans it whatever the filters say.
 func _set_down_held(held_id: String, cell: Vector3i) -> void:
 	if _in_any_stockpile(cell):
 		_drop_tool_stockpile.call(held_id, cell)
 	else:
-		_drop_tool_ground.call(held_id, cell)
+		_drop_tool_ground.call(held_id, cell, true)
 
 ## F5a-b: a haul_tool job (fetch_tool with no needs_tool) that cannot continue (backlog rule,
 ## review round 9, c769a48): its tool (item_id) gone or no longer reserved by it, or its target no
