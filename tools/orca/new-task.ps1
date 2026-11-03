@@ -45,6 +45,9 @@ $start = [array]::IndexOf($lines, $line)
 $end = $lines.Count
 for ($i = $start + 1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match "^###+ ") { $end = $i; break } }
 $entry = ($lines[$start..($end - 1)] -join "`n").Trim()
+# Windows PowerShell 5.1 passes a native argument with embedded double quotes broken at each
+# quote (the orca CLI then sees "Unknown command"); single quotes read the same to the agent.
+$entry = $entry -replace '"', "'"
 
 $prompt = "Lee AGENTS.md (solo ese; docs/orca/README.md y REVIEW.md solo cuando los necesites). Tu encargo es la tarea $TaskId; su entrada completa de docs/orca/BACKLOG.md va al final de este mensaje: NO leas BACKLOG.md entero (para cambiar la fila de estado de $TaskId usa grep y una edicion puntual). Hazla siguiendo docs/orca/REFACTOR-PLAN.md si es una tarea R. Primero importa el proyecto y pasa la suite completa con tools/run_tests.ps1 para tener la linea base; no vuelques salidas largas al contexto (filtra con Select-String/tail). No toques nada fuera de los owned paths. Trabaja por paquetes pequenos y usa subagentes para explorar codigo (que devuelvan un resumen, no ficheros). Presupuesto orientativo: 300 turnos; si la tarea no cabe, entrega lo cerrado y deja el resto anotado en el informe. Antes de entregar lee docs/orca/REVIEW.md y comprueba que todo lo que pide ya se cumple. Escribe el informe de entrega de AGENTS.md en docs/orca/handoffs/$TaskId.md (el revisor solo ve el repo, no esta terminal), incluyendo la linea final del runner de tests, las cifras de tools/measure_core.ps1 y los comandos de verificacion reproducibles, y actualiza la fila de estado de $TaskId en BACKLOG.md. Haz commit al terminar; no hagas push.`n`n--- ENTRADA $TaskId (docs/orca/BACKLOG.md) ---`n$entry"
 
