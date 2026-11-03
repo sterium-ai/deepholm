@@ -12,6 +12,16 @@
 run_tests: all 135 test(s) PASS  [919s]
 ```
 
+This run covers the code at HEAD: the commit after it only adds this line and the note below
+to this file.
+
+Note for review: `tools/orca/review.ps1` takes the task id as the first `-` token of the
+branch name (line 24), so for `f5a-b-haul-…` it reads `F5A`, i.e. `docs/orca/handoffs/F5a.md`.
+That is the parent task's report, which quotes 134 tests. Its preflight then fails with "quotes
+134 tests but the branch has 135", and the reviewer prompt would point at F5a's handoff. This
+report, `F5a-b.md`, quotes 135. The script is not an owned path, so it is not changed here (see
+Next action).
+
 Baseline before the change, same machine: `run_tests: all 135 test(s) PASS  [879s]`. That run
 started before the edits were saved and finished after, so some later files may have run
 against the edited code. The branch run above is the one that counts. N stays 135: the new
@@ -137,3 +147,8 @@ The owner should approve or reject the two deviations. If the tool must be carri
 colonist through ToolFetchToil and ToolDropToil, open a follow-up that owns `jobs.json`, the
 toil executor and bindings, and `JobQueue`. Its first step is to decide whether that job is
 saved, because a saved job means a schema bump. Otherwise this is ready for review.
+
+To launch the review, `review.ps1` must resolve the id `F5A-B`. That needs a small fix in that
+script, owned by the owner: for example, take the token before the first `-` that is followed
+by a word of three or more letters, or accept a `-TaskId` parameter. Until then, use
+`-SkipPreflight`, and tell the reviewer that the report is `docs/orca/handoffs/F5a-b.md`.
