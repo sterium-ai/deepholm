@@ -550,7 +550,7 @@ func _unpacked_fixture_state(path: String) -> Dictionary:
 	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
 	return state
 
-## _unpacked_fixture_state() with the seed and the three RNG states restored from their raw
+## _unpacked_fixture_state() with the seed and the four RNG states restored from their raw
 ## tokens (SaveJsonInts, as SaveIO.read() does) instead of JSON.parse_string()'s floats.
 func _exact_fixture_state(path: String) -> Dictionary:
 	var text := FileAccess.get_file_as_string(path)
@@ -560,7 +560,8 @@ func _exact_fixture_state(path: String) -> Dictionary:
 	for restored: Dictionary in [SaveJsonInts._restore_exact_rng(state, located),
 			SaveJsonInts._restore_exact_seed(state, located),
 			SaveJsonInts._restore_exact_incident_rng(state, located),
-			SaveJsonInts._restore_exact_dig_find_rng(state, located)]:
+			SaveJsonInts._restore_exact_dig_find_rng(state, located),
+			SaveJsonInts._restore_exact_fauna_rng(state, located)]:
 		_expect(restored["ok"], "%s must restore its exact integers: %s" % [path, restored])
 	var unpacked := SaveWireType.unpack(state, 4096)
 	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])

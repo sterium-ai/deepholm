@@ -190,8 +190,8 @@ func _init(p_seed: int = 1337, tick_rate: int = 10, p_width: int = MAP_WIDTH, p_
 	_build_systems()
 	_build_commands()
 	var tables := WorldSetupType.startup_tables(_content)
-	if not tables.error.is_empty():
-		_fail_startup(tables.error)
+	if not (tables.error + _fauna.startup_error()).is_empty():
+		_fail_startup(tables.error + _fauna.startup_error())
 		return
 	_build_work_engine(tables.tool_requirements)
 	_build_givers(tables.haul)

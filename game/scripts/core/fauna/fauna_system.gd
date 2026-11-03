@@ -20,6 +20,7 @@ const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 
 const SEED_SALT := 0x0FA0A
 const FACTION := "wildlife"
+const ERROR_INVALID_SPECIES_CONTENT := "invalid_species_content"
 const NEIGHBOURS: Array[Vector2i] = [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1, 0),
 	Vector2i(1, 0), Vector2i(-1, 1), Vector2i(0, 1), Vector2i(1, 1)]
 
@@ -30,6 +31,7 @@ var _passable: Callable # (Vector3i, faction_id) -> float
 var _random := RandomNumberGenerator.new()
 var _animals: Array[Dictionary] = []
 var _next_id := 0
+var _startup_error := ""
 
 ## Seeds mapgen["animal_counts"] onto open ground outside `clearing` (the colony's spawn rect).
 func _init(content: ContentRegistry, day_ticks: int, tick: Callable, tile_grid: TileGridType, passable: Callable, world_seed: int,
@@ -37,7 +39,7 @@ func _init(content: ContentRegistry, day_ticks: int, tick: Callable, tile_grid: 
 	var counts: Dictionary = mapgen.get("animal_counts", {})
 	_table = FaunaSpecies.build(content.document("species") as Dictionary, counts, day_ticks, content)
 	if not _table["ok"]:
-		push_error("FaunaSystem: %s" % _table["message"])
+		_startup_error = "fatal fauna content error (%s): %s" % [ERROR_INVALID_SPECIES_CONTENT, _table["message"]]
 		_table = {"ok": false, "species": {}, "order": [], "grass": {}, "crops": {}}
 	_tick = tick
 	_tile_grid = tile_grid
@@ -46,6 +48,8 @@ func _init(content: ContentRegistry, day_ticks: int, tick: Callable, tile_grid: 
 	for species_id: String in _table["order"]:
 		_seed_species(species_id, (counts.get(species_id, 0) as int), clearing)
 
+## Empty, or the typed fatal error WorldState's startup aborts on (bad species.json or mapgen counts).
+func startup_error() -> String: return _startup_error
 func get_animals() -> Array[Dictionary]: return _animals
 func get_species(species_id: String) -> Dictionary: return (_table["species"] as Dictionary).get(species_id, {})
 func count_of(species_id: String) -> int:

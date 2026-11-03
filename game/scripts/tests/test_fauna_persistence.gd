@@ -6,6 +6,8 @@ extends SceneTree
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const CommandRecorderType = preload("res://scripts/viewer/command_recorder.gd")
+const SaveIOType = preload("res://scripts/core/persistence/save_io.gd")
+const SAVE_PATH := "user://test-fauna-persistence-round-trip.json"
 
 const DAY_TICKS := 2200
 const MIX: Array[String] = ["grasshopper", "grasshopper", "grasshopper", "bird", "rabbit", "rabbit", "wolf"]
@@ -15,6 +17,8 @@ var _failed := false
 func _init() -> void:
 	_check_hash_is_deterministic()
 	_check_save_load_continues_identically()
+	_check_real_file_round_trip()
+	_check_unknown_species_rejected()
 	_check_recorded_session_replays()
 	if _failed:
 		quit(1)
@@ -75,3 +79,45 @@ func _check_recorded_session_replays() -> void:
 	_expect(not world._fauna.get_animals().is_empty(), "the recorded session must carry animals")
 	var replay: Dictionary = recorder.stop().replay()
 	_expect(bool(replay.get("ok", false)), "the recorded session must replay identically: %s" % [replay])
+
+## Through the real save file (validation, integrity, exact 64-bit integers): a fauna.rng state
+## above 2^53 must come back bit-exact, or the next fauna draw diverges.
+func _check_real_file_round_trip() -> void:
+	var world := _wild_world(880004)
+	for _i in DAY_TICKS / 2:
+		world.tick()
+	var saved: Dictionary = world.to_save_state()
+	var rng_state: int = saved["fauna"]["rng"]["state"]
+	_expect(absi(rng_state) > (1 << 53), "the fixture run must carry a fauna.rng state beyond 2^53 (got %d)" % rng_state)
+	var written := SaveIOType.write_atomic(SAVE_PATH, saved)
+	_expect(written.get("ok", false), "a save with animals must be writable: %s" % written)
+	var read := SaveIOType.read(SAVE_PATH)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))
+	_expect(read.get("ok", false), "a save with animals must load: %s" % read.get("message", ""))
+	if not read.get("ok", false):
+		return
+	_expect(read["state"]["fauna"]["rng"]["state"] == rng_state, "fauna.rng.state must survive the file bit-exact")
+	var restored := WorldStateType.from_save_state(read["state"])
+	_expect(restored.state_hash() == world.state_hash(), "a file round trip must keep state_hash() with animals")
+	for _i in DAY_TICKS:
+		world.tick()
+		restored.tick()
+	_expect(restored.state_hash() == world.state_hash(), "the file-restored world must continue identically")
+	_expect(restored._fauna.get_animals() == world._fauna.get_animals(), "the file-restored roster must match")
+
+## Review fix: a saved animal's species must be a species.json id of the session, not just an
+## id-shaped string. A save carrying a "dragon" is refused both by validation and by the writer.
+func _check_unknown_species_rejected() -> void:
+	var world := _wild_world(880005)
+	world.tick()
+	var saved: Dictionary = world.to_save_state()
+	_expect(SaveIOType._validate_state(saved)["ok"], "the untouched save with animals must validate")
+	var tampered: Dictionary = saved.duplicate(true)
+	(tampered["fauna"]["animals"] as Array)[0]["species"] = "dragon"
+	var check := SaveIOType._validate_state(tampered)
+	_expect(not check["ok"], "a save with an unknown species must be rejected")
+	_expect(str(check.get("message", "")).contains("fauna"), "the rejection must name the fauna field: %s" % check)
+	var written := SaveIOType.write_atomic(SAVE_PATH, tampered)
+	_expect(not written.get("ok", false), "the writer must refuse a save with an unknown species: %s" % written)
+	if FileAccess.file_exists(SAVE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE_PATH))

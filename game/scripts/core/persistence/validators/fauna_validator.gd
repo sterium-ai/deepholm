@@ -2,14 +2,14 @@ class_name FaunaValidator
 extends SaveCheck
 
 ## Save validation for the optional "fauna" field (F6b-1, ADR 070): the wild-animal roster, the
-## next animal id and the fauna stream. Species ids are checked by pattern only (SaveIO never
-## loads content); FaunaSystem drops nothing on load, so a bad record fails here.
+## next animal id and the fauna stream. A species must be one of the session's species.json ids
+## (SaveIO.content_rules()["species"]); FaunaSystem drops nothing on load, so a bad record fails here.
 
 const FAUNA_FIELDS := ["animals", "nextAnimalId", "rng"]
 const ANIMAL_FIELDS := ["id", "kind", "species", "x", "y", "z", "factionId", "bornTick", "lastMealTick",
 	"nextBirthTick", "health"]
 
-static func _valid_fauna(value: Variant, map_width: int, map_height: int, layer_count: int) -> Dictionary:
+static func _valid_fauna(value: Variant, map_width: int, map_height: int, layer_count: int, species_ids: Array[String]) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid fauna type")
 	var fauna: Dictionary = value
@@ -25,7 +25,7 @@ static func _valid_fauna(value: Variant, map_width: int, map_height: int, layer_
 		return _fail("invalid fauna.rng fields")
 	var seen_ids := {}
 	for animal: Variant in (fauna["animals"] as Array):
-		var animal_check := _valid_animal(animal, map_width, map_height, layer_count)
+		var animal_check := _valid_animal(animal, map_width, map_height, layer_count, species_ids)
 		if not animal_check["ok"]:
 			return animal_check
 		var id: String = (animal as Dictionary)["id"]
@@ -34,14 +34,14 @@ static func _valid_fauna(value: Variant, map_width: int, map_height: int, layer_
 		seen_ids[id] = true
 	return {"ok": true}
 
-static func _valid_animal(value: Variant, map_width: int, map_height: int, layer_count: int) -> Dictionary:
+static func _valid_animal(value: Variant, map_width: int, map_height: int, layer_count: int, species_ids: Array[String]) -> Dictionary:
 	if not (value is Dictionary):
 		return _fail("invalid fauna animal type")
 	var animal: Dictionary = value
 	var check := _require_fields(animal, ANIMAL_FIELDS, "fauna animal")
 	if not check["ok"]:
 		return check
-	if not _keys_allowed(animal, ANIMAL_FIELDS) or animal["kind"] != "animal" or not (animal["species"] is String) or not _matches_id_pattern(animal["species"] as String) \
+	if not _keys_allowed(animal, ANIMAL_FIELDS) or animal["kind"] != "animal" or not (animal["species"] is String) or not species_ids.has(animal["species"] as String) \
 			or not (animal["id"] is String) or not (animal["id"] as String).begins_with("animal_") \
 			or not (animal["factionId"] is String) or not (animal["health"] is int and (animal["health"] as int) >= 0):
 		return _fail("invalid fauna animal fields")

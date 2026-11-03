@@ -136,6 +136,7 @@ static func _read_and_verify(path: String, check: Dictionary) -> Dictionary:
 	var seed_restore := SaveJsonInts._restore_exact_seed(state, located_state)
 	var incident_rng_restore := SaveJsonInts._restore_exact_incident_rng(state, located_state)
 	var dig_find_rng_restore := SaveJsonInts._restore_exact_dig_find_rng(state, located_state)
+	var fauna_rng_restore := SaveJsonInts._restore_exact_fauna_rng(state, located_state)
 	var version_value: Variant = state.get("schemaVersion")
 	if _is_int(version_value) and int(version_value) > SCHEMA_VERSION:
 		return {"ok": false, "code": "save_from_newer_version", "message": "save schema is newer than this build", "file": path}
@@ -151,6 +152,8 @@ static func _read_and_verify(path: String, check: Dictionary) -> Dictionary:
 		return {"ok": false, "code": "schema_error", "message": incident_rng_restore["message"], "file": path}
 	if not dig_find_rng_restore["ok"]:
 		return {"ok": false, "code": "schema_error", "message": dig_find_rng_restore["message"], "file": path}
+	if not fauna_rng_restore["ok"]:
+		return {"ok": false, "code": "schema_error", "message": fauna_rng_restore["message"], "file": path}
 	# Back to the plain state before anything reads a field SaveWire packs (A7).
 	var wire_rules: Dictionary = check["rules"]
 	var max_world_size: int = wire_rules["maxWorldSize"]
@@ -252,6 +255,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 	var crop_ids: Array[String] = rules["crops"]
 	var item_groups: Array[String] = rules["itemGroups"]
 	var forest_ids: Array[String] = rules["forests"]
+	var species_ids: Array[String] = rules["species"]
 	var checks: Array[Callable] = [
 		func() -> Dictionary: return ItemValidator._valid_items(state.get("items"), w, h, layers),
 		func() -> Dictionary: return ObjectValidator._valid_objects(state["objects"], w, h, layers),
@@ -271,7 +275,7 @@ static func _validate_state_rules(state: Dictionary, rules: Dictionary) -> Dicti
 		func() -> Dictionary: return _optional(state, "rescueVictimAssignments", func(v: Variant) -> Dictionary: return GiverValidator._valid_rescue_victim_assignments(v)),
 		func() -> Dictionary: return _optional(state, "combatBlockedTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_combat_blocked_targets(v, w, h, layers)),
 		func() -> Dictionary: return _optional(state, "approachJobTargets", func(v: Variant) -> Dictionary: return GiverValidator._valid_approach_job_targets(v, w, h, layers)),
-		func() -> Dictionary: return _optional(state, "fauna", func(v: Variant) -> Dictionary: return FaunaValidator._valid_fauna(v, w, h, layers)),
+		func() -> Dictionary: return _optional(state, "fauna", func(v: Variant) -> Dictionary: return FaunaValidator._valid_fauna(v, w, h, layers, species_ids)),
 		func() -> Dictionary: return CalendarValidator._valid_calendar_alerts(state.get("calendarAlerts")),
 		func() -> Dictionary: return ToolValidator._valid_tool_fetch_excluded(state.get("toolFetchExcluded"), state.get("toolItems")),
 		func() -> Dictionary: return ToolValidator._valid_tool_items(state.get("toolItems"), w, h, layers),
@@ -301,6 +305,8 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		"needs": _ids(registry, "needs"),
 		"crops": _ids(registry, "crops"),
 		"forests": _ids(registry, "forests"),
+		# F6b-1 (ADR 070): a saved animal's species must be one this session's species.json defines.
+		"species": _species_ids(registry),
 		# F3 (ADR 062): skill levels and the carry bonus in a saved colonist's hands.
 		"skills": registry.document("skills").duplicate(true),
 		# F5a: the groups a stockpile filter may name are the items' kinds (ZoneTable.item_groups).
@@ -308,6 +314,12 @@ static func content_rules(registry: ContentRegistryType) -> Dictionary:
 		# A saved map keeps its exact size on load, so only WorldGenerator's upper bound applies.
 		"maxWorldSize": int(registry.document("mapgen").get("max_world_size", WorldGeneratorType.DEFAULT_MAX_WORLD_SIZE)),
 	}
+
+static func _species_ids(registry: ContentRegistryType) -> Array[String]:
+	var ids: Array[String] = []
+	for entry: Dictionary in (registry.document("species") as Dictionary).get("species", []):
+		ids.append(entry["id"] as String)
+	return ids
 
 static func _ids(registry: ContentRegistryType, kind: String) -> Array[String]:
 	var id_field: String = ContentRegistryType.ID_FIELD_BY_KIND[kind]

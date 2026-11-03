@@ -53,6 +53,10 @@ The owner note adds four constraints:
      refers to species ids.
    - `build()` rejects unknown tiles, duplicate ids, unknown prey and bad mapgen counts, with a
      clear message.
+   - A rejection is fatal at startup: `FaunaSystem.startup_error()` returns
+     `fatal fauna content error (invalid_species_content): <message>`, and `WorldState` passes it
+     to `_fail_startup()` together with the table errors. The world never starts animal-free on
+     bad content (review fix; `test_fauna_startup.gd` runs the real startup in a child process).
    - `health` and `attack` are stored but not yet used; they are for F6b-3.
 2. **Actors.** An animal is a flat record with these fields: `id` (`animal_<n>`),
    `kind: "animal"`, `species`, `x`, `y`, `z`, `factionId: "wildlife"`, `bornTick`,
@@ -61,6 +65,11 @@ The owner note adds four constraints:
    - The records live in `FaunaSystem`'s own roster, not in the colonist and actor lists, so
      no labour, needs, job or combat system ever iterates over them.
    - The kind is `"animal"`, separate from the incident `"wolf"` kind, so raids are unchanged.
+   - **Contract amendment, pending owner approval.** The F6b-1 backlog entry says "actors in the
+     actor table". This decision keeps the record shape and the `ActorTable` factory but not
+     the shared list. Moving the records into the shared list would make every colonist-facing
+     system and its tests filter on `kind`, including systems outside F6b-1's owned paths.
+     If the owner rejects the amendment, the integration becomes its own task.
 3. **Phase.** `FaunaSystem.tick()` is registered as TickPipeline phase `"fauna"`. It walks the
    roster in spawn order (ids ascend), and for each animal:
    - **Starving:** the animal dies once `starve_ticks` pass without a meal.
@@ -81,11 +90,22 @@ The owner note adds four constraints:
    its state is unchanged with animals present.
 6. **Worldgen.** `mapgen.animal_counts` (species → count, default empty) places animals on
    grass outside the spawn clearing, using the fauna stream. The same seed gives the same
-   placement.
+   placement. `test_fauna_startup.gd` checks this through `WorldState.new()` itself.
+   - **Shipped counts are deferred, pending owner approval.** Adding counts to the shipped
+     `mapgen.json` was measured: it changes `state_hash()` for every new world. Two pinned
+     literals in `test_toils_dig_chop_regression.gd`, which is outside F6b-1's owned paths,
+     then fail: `EXPECTED_HASH` goes from 3133873738 to 3745611256, and
+     `COLONY_EXPECTED_HASH` from 2587936448 to 3592413806. The owner either approves
+     re-pinning those literals, or ships counts in a later balance task.
 7. **Persistence.**
    - Schema v14 adds an optional top-level `fauna` field: `{animals, nextAnimalId, rng: {seed,
      state}}`.
-   - `FaunaValidator` checks it.
+   - `FaunaValidator` checks it. An animal's `species` must be a species.json id of the session
+     (`SaveIO.content_rules()["species"]`); a save holding an unknown species is refused on read
+     and on write.
+   - `fauna.rng.state` is a full 64-bit integer, so `SaveJsonInts` restores it exactly, like
+     the world's own stream. A float round trip above 2^53 would lose bits and diverge on the
+     next draw.
    - The 13 → 14 migration adds nothing, because an absent field means no animals.
    - `state_hash()` includes the fauna block only once an animal has ever spawned, so animal-free
      worlds hash exactly as before.
@@ -96,8 +116,11 @@ The owner note adds four constraints:
 
 ## Alternatives considered
 
-- **Animals in the shared actor list.** Rejected: every colonist-facing system would have to
-  filter them out, and the A14 cost would grow with every system.
+- **Animals in the shared actor list.** Rejected, pending the owner's approval of the amendment
+  in §2: every colonist-facing system would have to filter them out, and the A14 cost would grow
+  with every system.
+- **Logging bad species content and starting with no animals.** Rejected in review: a silent,
+  empty ecosystem hides a content error. Bad content is now a fatal, typed startup error (§1).
 - **Hard cap with a deterministic birth.** Rejected: the population overshoots and then
   saw-tooths at the cap. The logistic chance gives a smooth approach.
 - **Drawing from the world RNG.** Rejected: adding one animal would change every later colonist
@@ -126,6 +149,10 @@ The owner note adds four constraints:
 - `test_fauna_species.gd`: content compiles and rejects bad input; worldgen seeding works; the
   RNG stream is separate.
 - `test_fauna_persistence.gd`: the hash is deterministic, save/load continues identically, and
-  a replay is ok.
+  a replay is ok. A real save file keeps a `fauna.rng.state` above 2^53 bit-exact, and a save
+  with an unknown species is refused.
+- `test_fauna_startup.gd`: bad prey or bad counts abort the real startup with the typed error;
+  mapgen counts seed animals through `WorldState.new()`, deterministically and outside the
+  clearing.
 - `test_fauna_viewer.gd`: the wolf sprite, the placeholder dots, and dropping dead animals.
 - `test_save_migration.gd`: the v13 → v14 migration and the v14 fixture.
