@@ -1113,14 +1113,14 @@ func _run_haul_tool_failure_case(seed_value: int, label: String, carried: bool, 
 	_expect(world.get_tool_items().size() == 1 and String(world.get_tool_items()[0]["id"]) == pick_id,
 		"%s: the same pick id must be the only tool: %s" % [label, world.get_tool_items()])
 
-## Rock on one cell (rock = true), or floor again (false): a raw tile write, as in _wall_around.
-## F5a-b review round 14: cancel_job, fail_job and invalidate_job on an active haul_tool job whose
-## carrier holds the pick outside A and B must not leave it in the colonist's hand. Each command,
+## F5a-b review rounds 14-15: cancel_job, fail_job, invalidate_job and complete_job on an active
+## haul_tool job whose carrier holds the pick outside A and B must not leave it in the colonist's
+## hand (complete_job is a debug command for a job that has not delivered). Each command,
 ## through the real command path, ends the job and the carrier sets the pick down where it stands
 ## (marked set_down, no reservation left); ticked on, HaulGiver re-plans it from the ground and the
 ## same pick id ends stocked in B, with no haul_tool job open and never held by an idle colonist.
 func _check_job_commands_set_an_active_haul_tool_down() -> void:
-	var seeds := {"cancel_job": 64062, "fail_job": 64063, "invalidate_job": 64064}
+	var seeds := {"cancel_job": 64062, "fail_job": 64063, "invalidate_job": 64064, "complete_job": 64065}
 	for command_type in seeds:
 		var world := _stocked_pick_world(int(seeds[command_type]), true)
 		var pick_id := String(world.get_tool_items()[0]["id"])
@@ -1166,6 +1166,7 @@ func _check_job_commands_set_an_active_haul_tool_down() -> void:
 				and not world.get_tool_item(pick_id).has("set_down"),
 			"%s: the same pick id must be the only tool, stocked and unmarked: %s" % [command_type, world.get_tool_items()])
 
+## Rock on one cell (rock = true), or floor again (false): a raw tile write, as in _wall_around.
 func _set_rock(world: WorldStateType, cell: Vector3i, rock: bool) -> void:
 	TestAccess.set_tile(world, cell.x, cell.y, WorldStateType.TILE_ROCK if rock else WorldStateType.TILE_FLOOR)
 	TestAccess.tile_grid(world).reset_cells()
