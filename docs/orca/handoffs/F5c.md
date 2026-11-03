@@ -6,7 +6,7 @@
   `f51498d` (the owner's round-2 decisions), on top of `f55e9b0` (the F5c scope approval), L3
   `bb3ff32` (#55, no schema bump) and F5b `5399153` (#54). Five commits (the feature, the
   review round-1 fixes, the handoff figures after the rebase, the review round-2 fixes, the
-  owner round-2 change), not pushed.
+  owner round-2 change, plus a sixth with the review round-3 handoff wording), not pushed.
 - **Schema number.** Save schema **v13** (`_v12_to_v13()`). The owner note said to take v14 only
   if F5a-b (v13) landed first. F5a-b (tool hauling, its own v13 bump) is a different task from
   F5b (#54, cooking, merged, v12). F5a-b has not landed: `origin/main` (`f51498d`) is still at
@@ -58,7 +58,8 @@ Simulation:
     `test_actor_field_lint` clean: no bare `"colonist"` literal and no direct `actor.get("needs")`.
 
 **Hooks** (the owner asked for a minimal list; `needs_system.gd` was not rewritten and
-`world_state.gd` did not change, still 767 lines):
+`world_state.gd` kept its line count, still 767 lines; its one change is the `state_hash()` line that
+also calls `_needs_system.hash_into(snapshot)`, hook 4):
 1. `needs_system.gd:188-208`, `decay_needs()`. Inside the existing colonist loop, one call to
    `ActorThoughts.apply_state_tick()` (:203): prune, then `hungry` and `slept_ground`. The bed
    check is **per colonist**: `_bed_reachable_once()` (:467) returns a `Callable(colonist)` that
@@ -177,6 +178,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/measure_core.ps1
 
 Results at the branch head:
 - Suite (owner round 2, on `f51498d`): `run_tests: all 138 test(s) PASS  [1.007s]` (1007 s; the runner prints a locale thousands separator)
+- Suite (review round 3, on `f51498d`, after the handoff wording fix): `run_tests: all 138 test(s) PASS  [909s]`
 - `test_thoughts.gd`: PASS.
 - `check_core_budgets.py`: `OK (files <= 800 lines, functions <= 80 code lines, 2 stricter file
   cap(s), 1 file and 3 function exception(s))`. No cap was raised.
@@ -269,7 +271,18 @@ Non-blocking:
    change); test 14 covers it. ADR 066's table and consequences say so.
 3. **ADR 066 stays *proposed*.** Unchanged; it now cites `f51498d` for the accepted deviations.
 
+## Review response (round 3, `.orca-review.md`, APPROVE)
+
+Blocking: none.
+
+Non-blocking:
+- **`F5c.md:61`, "`world_state.gd` did not change".** Reworded: its line count is unchanged
+  (767), and its one change is the `state_hash()` line that also calls
+  `_needs_system.hash_into(snapshot)` (hook 4).
+- **Full suite not rerun in the review sandbox.** Rerun here after the wording fix; the result
+  is the round-3 suite line under Validation.
+
 ## Limitations and next action
 
 - Happiness is information only. Its consequences (depression) are F5d.
-- Ready for review round 3.
+- Approved in review round 3; ready to merge (ADR 066 stays *proposed*).
