@@ -1275,6 +1275,10 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   tick-driven table test covers the matrix (interrupt before/after pickup × target rejects/
   unreachable/walled × with/without reservation) and asserts the tool is on the ground or in a
   valid stockpile, never held by an idle colonist.
+- **Review round 10 (owner's interface, 2026-11-03): scope** — core/actors/needs_system.gd
+  (the interrupt hook the uniform rule needs) is approved as F5a-b's scope, as declared in the
+  handoff. The giver skipping ground tools contradicts the rule's "re-plans from the ground":
+  fix as Codex asks (a dropped tool outside a stockpile is a haul candidate again).
 
 ### F5b — Labours: cook and heal; cooking · `review (antonelmejor50-hub/f5b-labours-cook-and-heal)` · after F2 · Design: closed 2026-10-30
 
