@@ -1146,7 +1146,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   the report).
 - **Non-goals:** a second layer, links, viewer layer switch.
 
-### L3 — Vertical links, region graph and link edges in routing · `review (antonelmejor50-hub/l3-vertical-links-region-graph; on 07cd384, no schema bump; L3b split off)` · after L2
+### L3 — Vertical links, region graph and link edges in routing · `review (antonelmejor50-hub/l3-vertical-links-region-graph; on 5399153, no schema bump; L3b split off)` · after L2
 
 - **Goal:** ADR 045 §3–§4: `VerticalLinks` (stairs/ramps/tunnel as content flags, straight
   up/down only), the region graph across layers, link edges in `RouteSearch` (A8's A* keeps
