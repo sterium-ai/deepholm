@@ -26,6 +26,8 @@ var _retry_base_ticks: int
 var _retry_cap_ticks: int
 var _priority: int
 var _bounds_max: Vector3i
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 var _reservation_table
 var _claimed_targets: Callable
 var _source_candidates: Callable
@@ -283,6 +285,7 @@ func _advance_candidate_search(colonist: Dictionary, state: Dictionary, cursor: 
 	if search == null:
 		var start := TileGrid.tile_of(colonist)
 		search = RerouteType.new(start, target, _routable_to.call(target), Vector3i.ZERO, _bounds_max, _region_reachable)
+		search.use_links(links_of)
 		state["search"] = search
 	if not search.is_terminal():
 		search.resume()

@@ -251,6 +251,7 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector3i) -> void:
 			cost_fn = world._routable_to(target, faction_id)
 		var search: RerouteType = RerouteType.new(snapshot["start"], snapshot["start"],
 			cost_fn, Vector3i.ZERO, bounds_max)
+		search.use_links(world._layer_discovery.links)
 		search.restore(snapshot)
 		world._reroutes[colonist["id"]] = search
 		# Back to the live shape: the full snapshot stays on the search.

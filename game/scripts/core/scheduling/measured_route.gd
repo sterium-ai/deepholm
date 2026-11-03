@@ -4,6 +4,12 @@ extends "res://scripts/core/routing/route_search.gd"
 var expansions: int = 0
 var resume_calls: int = 0
 
+## L3b (ADR 068): set_vertical_links() from a provider of the map's current links (null on a
+## one-layer map). An invalid provider keeps the search on its own layer. Call before restore().
+func use_links(links_of: Callable) -> void:
+	if links_of.is_valid():
+		set_vertical_links(links_of.call())
+
 func resume() -> String:
 	resume_calls += 1
 	var status := super.resume()

@@ -16,8 +16,8 @@ const GENERATOR_VERSION := 1
 const UNDERGROUND_SEED_SALT := 557_093
 ## Per-layer stride so each layer draws from its own stream.
 const LAYER_SEED_STRIDE := 7_919
-const TILE_ROCK := "rock"
-const TILE_FLOOR := "floor"
+const TILE_ROCK := ContentRegistry.TILE_ROCK
+const TILE_FLOOR := ContentRegistry.TILE_FLOOR
 ## One cave pocket per this many tiles (at least one).
 const TILES_PER_POCKET := 256
 const POCKET_MIN_STEPS := 8

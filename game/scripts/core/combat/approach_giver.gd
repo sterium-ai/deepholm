@@ -43,6 +43,8 @@ var _reachable: Callable
 var _is_target_reserved: Callable
 var _routable_to: Callable
 var _bounds_max: Vector3i
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 var _content
 var _relations
 var _route_budget: Dictionary
@@ -308,6 +310,7 @@ func _advance_candidate_search(actor: Dictionary, state: Dictionary, cursor: int
 	if search == null:
 		var start := TileGrid.tile_of(actor)
 		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector3i.ZERO, _bounds_max, _reachable)
+		search.use_links(links_of)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(actor_id, false)):

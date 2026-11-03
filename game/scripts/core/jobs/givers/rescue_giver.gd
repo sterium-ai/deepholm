@@ -29,6 +29,8 @@ const MAX_STALE_RETRIES := 3
 
 var _priority: int
 var _bounds_max: Vector3i
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 var _reservation_table
 var _tile_key: Callable
 var _routable_to: Callable
@@ -224,6 +226,7 @@ func _advance_target_search(state: Dictionary, candidate: Dictionary, target_cur
 	var search: RerouteType = state.get("search")
 	if search == null:
 		search = RerouteType.new(candidate["pos"], target, _routable_to.call(target), Vector3i.ZERO, _bounds_max, _region_reachable)
+		search.use_links(links_of)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(candidate_id, false)):

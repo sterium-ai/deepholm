@@ -56,10 +56,24 @@ work goes into new modules.
 
    Layers are only ever appended in order (L1, then L2, then L3), because a tunnel on layer N
    can only be built once layer N exists.
-4. **Stairs.** Every finished tunnel, the first or a later one, carves a 3×3 floor landing below
-   itself on layer `z + 1`, clearing any vein on it. It then puts `stairs_up` at the centre, under
-   the tunnel. The tunnel has `link_down` and the stairs have `link_up`, so L3's link pairing and
-   the region graph connect the layers with no new code.
+4. **Stairs, one tunnel per layer, routing.**
+   - Every finished tunnel carves a 3×3 floor landing below itself on layer `z + 1` and puts
+     `stairs_up` at the centre, under the tunnel. The landing only turns rock and veins into
+     floor: any other object there (a wall, furniture) is kept, and if the centre is not free the
+     stairs are skipped.
+   - The tunnel has `link_down` and the stairs have `link_up`, so L3's link pairing and the region
+     graph connect the layers with no new code.
+   - `LayerDiscovery.may_place` (a new optional `ConstructionSystem.may_place` Callable) vetoes
+     a tunnel with `invalid_target` in two cases. The detail is `tunnel_layer_taken` when the
+     layer already has a tunnel, a tunnel site or another tunnel in the same build line. It is
+     `tunnel_landing_blocked` when the stairs tile below holds anything but a vein or
+     `stairs_up`.
+   - Route searches see the vertical links (L3b, ADR 068). `LayerDiscovery.links()` returns the
+     region graph's `vertical_links()` on a map with more than one layer. `wire_routing()` gives
+     it to the scheduler and the need, rescue and approach givers as `links_of`; their measured
+     routes call `RouteSearch.set_vertical_links()`. Distance scoring on other layers uses
+     `ZoneTable.OTHER_LAYER_DISTANCE` (as `tool_matching` already did); reach tests are false
+     across layers.
 5. **Tunnel and drill.**
    - The `drill` is a `material` item from the workbench recipe `drill` (wood ×2 and stone ×3).
    - The `tunnel` is a buildable 1×1 passable object costing drill ×1 and wood ×2, with 160 build
@@ -93,3 +107,12 @@ work goes into new modules.
   outside F4's owned paths. Tunnels are placed by build orders (tests, commands). This is a
   follow-up.
 - There are no cave-ins, no smelting, and no layers below L3 (`MAX_UNDERGROUND_LAYER`).
+
+## Known limitations
+
+- A route search keeps the vertical links it was given when it was created. A tunnel finished
+  during a search is seen by the next search.
+- If an object is built on the stairs tile while the tunnel is still a site, the finished tunnel
+  gets no stairs. `may_place` only checks the tile when the tunnel is placed.
+- Deconstructing a tunnel would free its layer for another one. There is no deconstruct command
+  yet, so this cannot happen today.

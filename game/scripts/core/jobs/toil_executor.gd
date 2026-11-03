@@ -356,7 +356,7 @@ func pick_up(colonist: Dictionary, item_id: String, count: int = -1) -> Dictiona
 		return {"ok": false, "reason": REASON_ITEM_NOT_FOUND}
 	var colonist_tile := TileGrid.tile_of(colonist)
 	var item_tile := TileGrid.tile_of(item)
-	if TileGrid.chebyshev(colonist_tile, item_tile) > 1:
+	if colonist_tile.z != item_tile.z or TileGrid.chebyshev(colonist_tile, item_tile) > 1:
 		return {"ok": false, "reason": REASON_ITEM_OUT_OF_REACH}
 	var hands_free := InventoryType.free_capacity(colonist, hands_capacity(colonist))
 	if hands_free <= 0:
@@ -596,10 +596,10 @@ func _arrival_hook(toils: Array, is_first: bool) -> Callable:
 func _no_op_arrive(_colonist: Dictionary, _job_id: String) -> void:
 	_record(TOIL_GO_TO, "complete")
 
-## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
+## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3); never across layers.
 func _within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
 	var colonist_tile := TileGrid.tile_of(colonist)
-	return TileGrid.chebyshev(colonist_tile, tile) <= 1
+	return colonist_tile.z == tile.z and TileGrid.chebyshev(colonist_tile, tile) <= 1
 
 ## Read-only counterpart of _tool_fetch.satisfied() for NeedsSystem.resume_paused_job() and StateCodec:
 ## decides whether to route/start work directly or defer to fetch_tool.

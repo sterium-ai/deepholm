@@ -314,6 +314,8 @@
   "rejection.build_seals_colony": "Building here would seal off part of the colony.",
   "rejection.build_tile_blocked": "Choose an empty, passable, in-bounds tile with no colonist or tree.",
   "rejection.build_tile_claimed": "Another order already claims this tile.",
+  "rejection.tunnel_layer_taken": "This layer already has a tunnel or a tunnel order; dig deeper from the layer below.",
+  "rejection.tunnel_landing_blocked": "Something is built where the stairs would land below; clear it first.",
   "rejection.build_line_kind": "build_line requires a non-empty string kind.",
   "rejection.build_line_tiles": "build_line requires a non-empty array of tiles.",
   "rejection.build_line_tile_payload": "Every build_line tile requires integer x and y.",
