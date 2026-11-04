@@ -83,6 +83,8 @@ func _run_and_verify(world, job_type: String, target: Vector2i, expected_tile: S
 		# sleep jobs that an ordinary-priority order can sit queued for
 		# thousands of ticks before ever being picked up.
 		for colonist in TestAccess.colonists(world):
+			if colonist.get("kind") != "colonist":
+				continue # animal rows (shipped mapgen) carry no needs
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100

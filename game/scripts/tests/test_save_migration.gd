@@ -626,6 +626,8 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	# A v1 colonist has no skills and v7 -> v8 gives it zero skills (ADR 062), so the original
 	# world starts at zero skills too for the migrated save to decode to its state_hash.
 	for colonist in TestAccess.colonists(world):
+		if colonist.get("kind") != "colonist":
+			continue # F6b-1: the shared actor table also holds the mapgen animals, which have no skills
 		colonist["skills"] = SkillsType.build_zero((colonist["labourTable"] as Dictionary).keys())
 	var issued := 0
 	for x in range(24):

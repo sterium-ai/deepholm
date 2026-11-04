@@ -8,7 +8,7 @@
 > `FaunaSystem` drives them once per tick in a new `"fauna"` TickPipeline phase. All of its random draws come from its own salted RNG
 > stream. Births are logistic: once a breeding pair qualifies, a birth happens with probability
 > `1 − count / cap`. Shipped `mapgen.animal_counts` seeds starting counts for every new world.
-> Saves move to schema v14: animals are entities of kind `"animal"`, and an optional `fauna`
+> Saves move to schema v15: animals are entities of kind `"animal"`, and an optional `fauna`
 > field carries the id counter and the fauna stream. The viewer draws the wolf with the B3 pack art and
 > the other species as coloured placeholder dots.
 
@@ -19,10 +19,10 @@
     `content` list;
   - simulation: `FaunaSpecies`, `FaunaSystem`, `ActorTable.spawn_animal()`, the TickPipeline
     `"fauna"` phase;
-  - persistence: schema v14, the `"animal"` entity kind (`EntityCodec`, `EntityValidator`) and
+  - persistence: schema v15, the `"animal"` entity kind (`EntityCodec`, `EntityValidator`) and
     `FaunaValidator`;
   - presentation: `actor_sprites.gd`.
-- **Depends on:** ADR 066 (schema v13), the A9 view snapshot, B3 actor art, A14 tick budgets
+- **Depends on:** ADR 064 (schema v14, F5a-b), ADR 066 (schema v13), the A9 view snapshot, B3 actor art, A14 tick budgets
 - **Implements:** BACKLOG F6b-1
 
 ## Context
@@ -112,7 +112,7 @@ The owner note adds four constraints:
      `^animal_[0-9]+$`, `z` is `TileGrid.SURFACE` and the ticks are ints. Any other kind that
      carries one of those four fields is refused (review round 3). A save holding an unknown
      species, a malformed id or an underground animal is refused on read and on write.
-   - Schema v14 also adds an optional top-level `fauna` field, `{nextAnimalId, rng: {seed,
+   - Schema v15 also adds an optional top-level `fauna` field, `{nextAnimalId, rng: {seed,
      state}}`, checked by `FaunaValidator`. It carries no roster. The field is optional only
      while there are no animal entities. A save with animals must carry it, and `nextAnimalId`
      must exceed every saved `animal_<n>`; otherwise the next birth would reuse a live id
@@ -120,7 +120,7 @@ The owner note adds four constraints:
    - `fauna.rng.state` is a full 64-bit integer, so `SaveJsonInts` restores it exactly, like
      the world's own stream. A float round trip above 2^53 would lose bits and diverge on the
      next draw.
-   - The 13 → 14 migration adds nothing: a v13 save has no animal entities, and an absent
+   - The 14 → 15 migration adds nothing: a v14 save has no animal entities, and an absent
      `fauna` field means no animal was ever spawned.
    - The animals are hashed with the actor table. `state_hash()` adds the fauna counter and
      stream only once an animal has ever spawned, so an animal-free world (empty
@@ -183,4 +183,4 @@ The owner note adds four constraints:
   the shipped mapgen counts seed exactly those animals through `WorldState.new()`, as rows of the
   shared actor table, deterministically, outside the clearing, in `state_hash()` and in the view.
 - `test_fauna_viewer.gd`: the wolf sprite, the placeholder dots, and dropping dead animals.
-- `test_save_migration.gd`: the v13 → v14 migration and the v14 fixture.
+- `test_save_migration.gd`: the v14 → v15 migration and the v15 fixture.

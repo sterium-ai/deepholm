@@ -115,7 +115,7 @@ A save file is the envelope `{format: "deepholm-save", integrity, state}`
 (`SaveIO.FORMAT`), where `integrity` is the SHA-256 of the state's JSON text exactly as
 written (A7; `read()` hashes the raw `state` span, and falls back to the pre-A7 rule, the
 SHA-256 of `JSON.stringify` of the parsed state, for files written that way).
-The state carries `schemaVersion: 14` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
+The state carries `schemaVersion: 15` (`StateCodec.SCHEMA_VERSION`) and, once unpacked, is
 described field for field by
 [`contracts/game-state.schema.json`](contracts/game-state.schema.json). The
 schema was reset to v1 before the first public release (see
@@ -144,6 +144,9 @@ v13 adds a colonist's optional `thoughts`
 ([ADR 066](../decisions/066-happiness-from-thoughts.md)).
 v14 adds the `haul_tool` job kind, which carries a stocked tool out of a stockpile that no longer
 accepts tools ([ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
+v15 adds wild animals: entities of kind `animal` and the optional top-level `fauna`
+(the animal id counter and the fauna RNG stream)
+([ADR 070](../decisions/070-wild-species-and-populations.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -294,6 +297,11 @@ returns a new dictionary and never mutates its input. Steps today:
   v13 state that already lists one is refused. `save_schema_v13_fixture.json` (F5c's) migrates
   exactly to `save_schema_v14_fixture.json` (the same session, written packed by
   `docs/orca/handoffs/F5a-b-write-save.gd`).
+- **v14 → v15** (F6b-1, ADR 070): adds the `animal` entity kind (with `species`, `bornTick`,
+  `lastMealTick` and `nextBirthTick`) and the optional top-level `fauna`
+  (`{nextAnimalId, rng}`). A v14 world had no animal, and an absent `fauna` means none was ever
+  spawned, so the step changes only the version. `save_schema_v15_fixture.json` is a session
+  with animals written by `docs/orca/handoffs/F6b-1-write-save.gd`.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version

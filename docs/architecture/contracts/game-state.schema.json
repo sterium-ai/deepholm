@@ -439,7 +439,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 14 },
+    "schemaVersion": { "type": "integer", "const": 15 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -909,7 +909,7 @@
       }
     },
     "fauna": {
-      "description": "F6b-1 (ADR 070, schema v14): the next animal id and the fauna RNG stream (world seed + salt). The animals themselves are entities of kind animal. Absent when the world never had an animal.",
+      "description": "F6b-1 (ADR 070, schema v15): the next animal id and the fauna RNG stream (world seed + salt). The animals themselves are entities of kind animal. Absent when the world never had an animal.",
       "type": "object",
       "additionalProperties": false,
       "required": ["nextAnimalId", "rng"],
