@@ -6,8 +6,8 @@
 > places its ore veins and logs `layer_discovered`. Every finished tunnel carves a floor landing
 > below itself with `stairs_up` on it, and the pair forms an L3 vertical link. Mining a vein gives
 > one raw ore item in the new `ore` group. Up to three underground layers exist. The save records
-> the generator's version as `map.undergroundVersion` (schema v14 locally; **v16 on main**, see
-> the F4 handoff).
+> the generator's version as `map.undergroundVersion` (schema v16, after F5a-b's v14 and F6b-1's
+> v15).
 
 - **Status:** proposed (owner sign-off pending; F4 handoff)
 - **Date:** 2026-11-03
@@ -97,8 +97,9 @@ work goes into new modules.
    - The new state is `map.undergroundVersion` (integer ≥ 1): the generator algorithm a world
      uses for the layers it has not discovered yet. It is required and validated, and the load
      restores it.
-   - The migration v13→v14 adds `undergroundVersion: 1`.
-   - Schema v14 locally; it is renumbered to v16 on main, after F6b-1 (v14) and F5a-b (v15).
+   - The migration v15→v16 adds `undergroundVersion: 1`.
+   - Schema v16: F5a-b's v14 is on main; v15 is F6b-1's, a pass-through step until it merges
+     and replaces it; F4 is v16.
 8. **Viewer.** The new objects and items have placeholder colours in `map_view.gd` and
    placeholder entries, with reasons, in `world_pack.json` until pack art is chosen. There are
    also text keys for the drill recipe and the `ore` stockpile group.

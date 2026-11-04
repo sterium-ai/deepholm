@@ -4,8 +4,8 @@ extends SceneTree
 ## deterministic session, through the running build's own StateCodec.encode() and
 ## SaveIO.write_atomic(). Run from the repo root:
 ##   godot --headless --path game --script ../docs/orca/handoffs/F4-write-save.gd -- <absolute-output-path>
-## On the F4 branch it produced game/scripts/tests/fixtures/save_schema_v14_fixture.json (schema
-## v14: map.undergroundVersion, ADR 071). The session builds a tunnel with a drill and ticks
+## On the F4 branch it produced game/scripts/tests/fixtures/save_schema_v16_fixture.json (schema
+## v16: map.undergroundVersion, ADR 071). The session builds a tunnel with a drill and ticks
 ## until L1 is discovered, so the fixture carries an underground layer, its veins and the stairs.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
