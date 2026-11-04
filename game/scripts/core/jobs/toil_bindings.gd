@@ -115,6 +115,9 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 		"is_first_leg": _toil_is_first_leg,
 		"on_pick_up_success": _toil_on_pick_up_success,
 	}
+	# F5a-b (c769a48): an interrupted haul_tool is not resumable; it takes the one failure branch.
+	_needs_system.abandon_haul_tool = func(c: Dictionary, jid: String, jb: Dictionary) -> void:
+		_toils.fail_hauled_tool(c, jid, jb, hooks, "need_interrupt")
 
 ## Deposits any carried item on colonist's own tile (colonist-ai.md 3.3) and clears
 ## route/work/reroute state.
@@ -142,9 +145,14 @@ func _force_drop_carried_item(colonist: Dictionary) -> void:
 
 ## Drops a haul/build job's cargo at the shared terminal boundary: through the live
 ## assignment, else through the NeedsSystem.paused_jobs entry (cleared: nothing to resume).
+## A haul_tool carrier also sets its tool down (F5a-b, ToolDropToil.set_down_for_ended_job()).
 func drop_carried_haul_item(job_id: String) -> void:
 	var colonist: Dictionary = _find_job_colonist.call(job_id)
 	if not colonist.is_empty():
+		var job := _scheduler.queue.get_job(job_id)
+		var job_kind: String = job.get("kind", "")
+		if job_kind == "haul_tool":
+			_toils.set_down_hauled_tool(colonist, job_id, job)
 		drop_carried_item_from(colonist)
 		return
 	for colonist_id in _needs_system.paused_jobs.keys():
@@ -256,6 +264,9 @@ func toil_on_unreachable(job_id: String, job: Dictionary, is_first: bool) -> voi
 	elif String(job["kind"]) in ["site_work", "craft_work", "cook_work"]:
 		# No cargo; ConstructionGiver/CraftGiver submit a replacement later.
 		_finish_job.call(job_id, "cancel_job")
+	elif job["kind"] == "haul_tool" and not (_find_job_colonist.call(job_id) as Dictionary).is_empty():
+		# F5a-b (c769a48): the one haul_tool failure branch; HaulGiver re-plans from the ground.
+		_toils.fail_hauled_tool(_find_job_colonist.call(job_id) as Dictionary, job_id, job, hooks, "blocked_target_unreachable")
 	elif is_first or String(job["kind"]) != "haul":
 		_resubmit_unreachable_job.call(job_id, job)
 	else:
@@ -422,6 +433,8 @@ func _toil_on_work_complete(job_id: String) -> void:
 			var colonist: Dictionary = _find_job_colonist.call(job_id)
 			if not colonist.is_empty():
 				_needs_system.apply_need_effect(colonist, job)
+		"haul_tool": # F5a-b (ADR 064): the carried tool lands at its destination
+			_toils.place_hauled_tool(_find_job_colonist.call(job_id) as Dictionary, job_id, target)
 		"escape_trench":
 			_trench.complete_escape(job_id, target)
 		"rescue":

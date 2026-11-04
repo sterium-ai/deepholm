@@ -49,6 +49,9 @@ var _get_assignments: Callable
 ## (JobQueue.set_active_item_marker()), never itemId, which is a haul's cargo (ADR 013).
 var _set_active_item: Callable
 var _get_active_item: Callable
+## Every stockpile, tool-accepting or not (ZoneTable.get_stockpile_zones()): haul_tool's target
+## recheck needs the stockpiles that reject tools, which _get_zones leaves out.
+var _get_all_stockpiles: Callable
 
 func _init(job_kinds: Dictionary, work_ticks: Dictionary, passability: Callable, cell_occupied: Callable,
 		is_cell_free: Callable, get_zones: Callable, tool_reservation_of: Callable, tool_item_lookup: Callable,
@@ -56,7 +59,7 @@ func _init(job_kinds: Dictionary, work_ticks: Dictionary, passability: Callable,
 		drop_tool_stockpile: Callable, work_progress_clear: Callable, reroutes: Dictionary,
 		advance_go_to: Callable, record: Callable, get_colonists: Callable,
 		get_tool_items: Callable, set_active_item: Callable, get_active_item: Callable,
-		find_colonist: Callable, get_assignments: Callable) -> void:
+		find_colonist: Callable, get_assignments: Callable, get_all_stockpiles: Callable = Callable()) -> void:
 	_job_kinds = job_kinds
 	_work_ticks = work_ticks
 	_passability = passability
@@ -79,11 +82,12 @@ func _init(job_kinds: Dictionary, work_ticks: Dictionary, passability: Callable,
 	_get_active_item = get_active_item
 	_find_colonist = find_colonist
 	_get_assignments = get_assignments
+	_get_all_stockpiles = get_all_stockpiles
 
 ## True once the held tool is reserved by a job other than job_id: the decision to start a
 ## fresh drop, never a leg-continuation check (see is_dropping()).
 func needs_drop(colonist: Dictionary, job_id: String) -> bool:
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty():
 		return false
 	var owner := String(_tool_reservation_of.call(held_id))
@@ -152,7 +156,7 @@ func fail_for_destroyed_tool(colonist: Dictionary, job_id: String, job: Dictiona
 	_release_all_tool_reservations.call(job_id)
 	_reconcile_stale_holders(destroyed_ids)
 	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")
-	if _work_progress_clear.is_valid() and _work_ticks.has(String(job["kind"])):
+	if _work_progress_clear.is_valid() and _work_ticks.has(job["kind"]):
 		_work_progress_clear.call(job["target"])
 	var kind := String(_job_kinds.get(String(job["kind"]), {}).get("needs_tool", ""))
 	(hooks["on_no_tool_found"] as Callable).call(job_id, String(colonist["id"]), kind)
@@ -212,7 +216,7 @@ func _route_effective_target(route: Dictionary) -> Vector3i:
 ## re-validates the cell (free, still in a zone) and falls back to dropping in place.
 ## The marker is set at entry and cleared on every completion path.
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty():
 		colonist["route"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, ""); return
 	_set_active_item.call(job_id, held_id)
@@ -254,7 +258,16 @@ func _cell_still_free(cell: Vector3i, excluding_colonist_id) -> bool:
 	return true
 
 func _in_any_zone(cell: Vector3i) -> bool:
-	for zone in (_get_zones.call() as Array):
+	return _in_one_of(cell, _get_zones)
+
+## Inside any stockpile at all, tool-accepting or not.
+func _in_any_stockpile(cell: Vector3i) -> bool:
+	return _in_one_of(cell, _get_all_stockpiles)
+
+func _in_one_of(cell: Vector3i, zones: Callable) -> bool:
+	if not zones.is_valid():
+		return false
+	for zone: Dictionary in (zones.call() as Array):
 		if cell.z == int(zone["z"]) and cell.x >= int(zone["x"]) and cell.x < int(zone["x"]) + int(zone["width"]) \
 				and cell.y >= int(zone["y"]) and cell.y < int(zone["y"]) + int(zone["height"]):
 			return true
@@ -279,3 +292,78 @@ func _find_drop_cell(from: Vector3i) -> Variant:
 				if best == null or distance < best_distance or (distance == best_distance and (x < best.x or (x == best.x and y < best.y))):
 					best = cell; best_distance = distance
 	return best
+
+## F5a-b (ADR 064): haul_tool's work completion sets the tool it carried down at the job's
+## target, revalidated now: stocked there while it is a free cell (passable, no other tool on
+## it: a stack hauled there since may share it, and its cell reservation is this job's own) in a
+## stockpile that still accepts tools (_get_zones is the "tool" group's), on the ground there
+## while it is free and in no stockpile at all (marked set_down, so HaulGiver stocks it once a
+## stockpile accepts tools, whatever the filters were when it left), else set down at the colonist's tile
+## (_set_down_held()). No-op unless that tool is this job's. advance() normally fails the job
+## first (haul_cannot_continue()); this covers a change on the completing tick.
+func place_hauled_tool(colonist: Dictionary, job_id: String, target: Vector3i) -> void:
+	var held_id: String = colonist.get("held_tool", "")
+	if held_id.is_empty() or _tool_reservation_of.call(held_id) != job_id:
+		return
+	if _free_for_tool(target) and _in_any_zone(target):
+		_drop_tool_stockpile.call(held_id, target)
+	elif _free_for_tool(target) and not _in_any_stockpile(target):
+		_drop_tool_ground.call(held_id, target, true)
+	else:
+		_set_down_held(held_id, TileGrid.tile_of(colonist))
+	_record.call(TOIL_DROP_TOOL, "complete")
+
+## Passable and no ground or stocked tool lies there.
+func _free_for_tool(cell: Vector3i) -> bool:
+	var passable: bool = (_passability.call(cell) as Dictionary)["passable"]
+	return passable and not (_get_tool_items.call() as Array).any(func(item: Dictionary) -> bool:
+			var location: Dictionary = item["location"]
+			var location_type: String = location["type"]
+			return location_type in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell)
+
+## Inside any stockpile the tool is stocked, so HaulGiver hauls it out again if that stockpile
+## rejects tools; never left loose there (review round 2). Outside every stockpile: on the ground,
+## marked set_down (ToolItemStore.set_ground()) so HaulGiver re-plans it whatever the filters say.
+func _set_down_held(held_id: String, cell: Vector3i) -> void:
+	if _in_any_stockpile(cell):
+		_drop_tool_stockpile.call(held_id, cell)
+	else:
+		_drop_tool_ground.call(held_id, cell, true)
+
+## F5a-b: a haul_tool job (fetch_tool with no needs_tool) that cannot continue (backlog rule,
+## review round 9, c769a48): its tool (item_id) gone or no longer reserved by it, or its target no
+## longer free for a tool or now inside a stockpile that rejects tools. Checked every tick by
+## ToilExecutor.advance(); fail_haul_tool() is the one failure branch.
+func haul_cannot_continue(job: Dictionary) -> bool:
+	var kind: Dictionary = _job_kinds.get(job["kind"], {})
+	var needs_tool: String = kind.get("needs_tool", "")
+	if not needs_tool.is_empty() or not (TOIL_FETCH_TOOL in (kind.get("toils", []) as Array)):
+		return false
+	var cargo: String = job.get("item_id", "")
+	if not cargo.is_empty() and ((_tool_item_lookup.call(cargo) as Dictionary).is_empty() or _tool_reservation_of.call(cargo) != job["id"]):
+		return true
+	var target: Vector3i = job["target"]
+	return not _free_for_tool(target) or (_in_any_stockpile(target) and not _in_any_zone(target))
+
+## The set-down half of fail_haul_tool(), shared with every other path that ends an active
+## haul_tool job (cancel_job/fail_job/invalidate_job commands, a trapped carrier; review round 14):
+## the job's tool leaves the carrier's hands (_set_down_held()), the job's reservations are
+## released and execution state is cleared. The caller ends the job.
+func set_down_for_ended_job(colonist: Dictionary, job_id: String, job: Dictionary) -> void:
+	var held_id: String = colonist.get("held_tool", "")
+	if not held_id.is_empty() and (held_id == job.get("item_id", "") or _tool_reservation_of.call(held_id) == job_id):
+		_set_down_held(held_id, TileGrid.tile_of(colonist))
+	_release_all_tool_reservations.call(job_id)
+	colonist["route"] = null; colonist["work"] = null; _reroutes.erase(colonist["id"]); _set_active_item.call(job_id, "")
+
+## The single haul_tool failure branch (c769a48), whatever the cause (interrupt, target invalid or
+## unreachable, reservation missing): the carrier sets the job's tool (item_id, or any tool the job
+## reserves) down on its current tile (_set_down_held()), every reservation of the job is released,
+## execution state is cleared and on_toil_fail fails the job through the shared engine (remedy
+## resubmit_order). HaulGiver re-plans the tool from where it now lies.
+func fail_haul_tool(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary, reason: String) -> void:
+	set_down_for_ended_job(colonist, job_id, job)
+	if _work_progress_clear.is_valid() and _work_ticks.has(job["kind"]):
+		_work_progress_clear.call(job["target"])
+	(hooks["on_toil_fail"] as Callable).call(job_id, reason)
+	_record.call(TOIL_GO_TO, "failed:" + reason)

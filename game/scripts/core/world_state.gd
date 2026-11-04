@@ -280,7 +280,7 @@ func _build_work_engine(tool_requirements_by_kind: Dictionary) -> void:
 		set_tool_item_held, _tool_store.set_ground, _worker_view, _route_budget,
 		_zone_table.get_stockpile_zones_for_group.bind("tool"), _cell_free, _tool_store.set_stockpile, _tool_store.release_all, get_tool_reservation_table,
 		_scheduler.queue.set_active_item_marker, _scheduler.queue.get_active_item_marker, _find_colonist, get_assignments,
-		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into)
+		_work_target_for, _crafting.deposit_target_exists, _crafting.deposit_into, _zone_table.get_stockpile_zones)
 	_toils.on_actor_moved = _actor_index.moved; _trench.on_actor_moved = _actor_index.moved
 	# Built after _toils; CombatGiver and ToilExecutor above reach it through lambdas.
 	_needs_system = NeedsSystemType.new(_content, _need_definitions, _need_full, PRIORITY_TICK, _clock, _calendar, _scheduler,
@@ -308,7 +308,7 @@ func _build_givers(haul_definition: Dictionary) -> void:
 	_scheduler.queue.set_haul_backoff(int(haul_definition["retry_base_ticks"]), int(haul_definition["retry_cap_ticks"]))
 	# Read-only queue views (A5): get_jobs()'s tool-handover overlay never touches haul/site_fetch/site_work.
 	_haul_giver = HaulGiverType.new(int(haul_definition["priority"]), _scheduler.queue.view_jobs_of_kinds.bind(["haul"]), get_items, _zone_table.accepts_item_at, _scheduler.submit,
-		_scheduler.queue.attach_item, _zone_table.stockpiles_for_item, _item_table.item_lookup, _cell_free, _passability.passability, _is_cell_occupied)
+		_scheduler.queue.attach_item, _zone_table.stockpiles_for_item, _item_table.item_lookup, _cell_free, _passability.passability, _is_cell_occupied, _tool_store, _zone_table.get_zones, _scheduler.queue.view_jobs_of_kinds.bind(["haul_tool"]), _passability.region_reachable)
 	_scheduler.queue.set_haul_destination_finder(_haul_giver.find_free_haul_cell)
 	_construction_giver = ConstructionGiverType.new(_construction.site_table.list, _scheduler.queue.view_jobs_of_kinds.bind(["site_fetch", "site_work"]), _item_table.get_items,
 		_zone_table.is_in_any_zone, _construction.construction_item_reservation_owner, _construction.submit_site_fetch,

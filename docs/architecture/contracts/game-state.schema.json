@@ -282,7 +282,8 @@
       "properties": {
         "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
         "kind": { "type": "string", "minLength": 1, "pattern": "^[a-z0-9_-]+$" },
-        "location": { "$ref": "#/$defs/toolLocation" }
+        "location": { "$ref": "#/$defs/toolLocation" },
+        "setDown": { "const": true, "description": "v14 (F5a-b): a ground tool a failed haul_tool job set down, or one hauled out of a rejecting stockpile onto the ground beside it; HaulGiver re-plans it into a tool-accepting stockpile whatever the filters were. Absent otherwise." }
       }
     },
     "groundBerry": {
@@ -438,7 +439,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 13 },
+    "schemaVersion": { "type": "integer", "const": 14 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -784,7 +785,7 @@
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "craft", "chop", "haul", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
+          "kind": { "type": "string", "enum": ["dig", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "craft", "chop", "haul", "haul_tool", "forage", "till", "sow", "harvest", "plant_sapling", "mine", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"] },
           "status": { "type": "string", "enum": ["queued", "active", "completed", "failed", "cancelled"] },
           "priority": { "type": "integer", "enum": [0, 1, 2] },
           "target": { "$ref": "#/$defs/tile" },

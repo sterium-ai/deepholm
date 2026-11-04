@@ -71,6 +71,9 @@ var _ensure_combat: Callable
 ## (old, new) -> void when ensure_needs() swaps a roster entry for a rebuilt Dictionary:
 ## WorldState's ActorIndex.replaced (A4).
 var on_actor_replaced: Callable = func(_old: Dictionary, _new: Dictionary) -> void: pass
+## F5a-b (c769a48): (colonist, job_id, job) -> void, ToilBindings' route into the one haul_tool
+## failure branch (ToolDropToil.fail_haul_tool()): an interrupted haul_tool is never resumed.
+var abandon_haul_tool: Callable
 
 ## need_definitions is shared by reference; get_colonists is a lambda because StateCodec.decode()
 ## reassigns WorldState._colonists.
@@ -276,13 +279,20 @@ func _resume_paused_rescue(colonist: Dictionary, job_id: String, job: Dictionary
 	return job_id
 
 ## Pauses, releases the paused job's tool reservations (suspend_assignment() only knows JobQueue's
-## table), then suspends the assignment (ADR 009). No-op when nothing was paused.
+## table), then suspends the assignment (ADR 009). No-op when nothing was paused. A haul_tool is
+## not resumable (F5a-b, c769a48): the tool is set down on the carrier's tile and the job fails.
 func interrupt_current_job(colonist: Dictionary) -> void:
 	var colonist_id: String = colonist["id"]
 	pause_work_job(colonist)
 	if not paused_jobs.has(colonist_id):
 		return
 	var job_id: String = String(paused_jobs[colonist_id])
+	var job := _scheduler.queue.get_job(job_id)
+	var abandoned_kind: String = job.get("kind", "")
+	if abandoned_kind == "haul_tool" and abandon_haul_tool.is_valid():
+		paused_jobs.erase(colonist_id)
+		abandon_haul_tool.call(colonist, job_id, job)
+		return
 	_tool_store.release_all(job_id)
 	_scheduler.suspend_assignment(colonist_id, job_id)
 

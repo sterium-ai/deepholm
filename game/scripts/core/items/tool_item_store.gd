@@ -2,7 +2,10 @@ class_name ToolItemStore
 extends RefCounted
 
 ## Identity-bearing tool items (axe/pick): a stable id and a location (ground, held or
-## stockpile), unlike ItemTable's stackable piles, plus their job reservations.
+## stockpile), unlike ItemTable's stackable piles, plus their job reservations. A ground tool a
+## haul_tool job left on the ground (F5a-b: set down by a failed job, or hauled out of a rejecting
+## stockpile onto the ground beside it) also carries "set_down": true until it is stocked or held
+## again, so HaulGiver re-plans it whatever the zone filters say by then.
 ## state_hash() and StateCodec read items, next_id and reservations directly.
 
 const ReservationTableType = preload("res://scripts/core/jobs/reservation_table.gd")
@@ -40,12 +43,14 @@ func spawn_ground(kind: String, tile: Vector3i) -> String:
 	return item_id
 
 ## To the ground, clearing held_tool and releasing its reservation; false when unknown.
-func set_ground(item_id: String, tile: Vector3i) -> bool:
+## set_down marks a tool a haul_tool job left on the ground (see above); any other drop clears it.
+func set_ground(item_id: String, tile: Vector3i, set_down: bool = false) -> bool:
 	if not items.has(item_id):
 		return false
 	_clear_holder(item_id)
 	_release_reservation_for_drop(item_id)
 	items[item_id]["location"] = {"type": "ground", "x": tile.x, "y": tile.y, "z": tile.z}
+	_mark_set_down(item_id, set_down)
 	return true
 
 ## Onto a stockpile cell, like set_ground().
@@ -55,7 +60,17 @@ func set_stockpile(item_id: String, tile: Vector3i) -> bool:
 	_clear_holder(item_id)
 	_release_reservation_for_drop(item_id)
 	items[item_id]["location"] = {"type": "stockpile", "x": tile.x, "y": tile.y, "z": tile.z}
+	_mark_set_down(item_id, false)
 	return true
+
+## Whether a ground or stockpile tool lies on cell (a held tool lies nowhere).
+func lies_at(cell: Vector3i) -> bool:
+	for item: Dictionary in items.values():
+		var location: Dictionary = item["location"]
+		var location_type: String = location["type"]
+		if location_type in ["ground", "stockpile"] and TileGrid.tile_of(location) == cell:
+			return true
+	return false
 
 ## Into colonist_id's hand; false when either is unknown or the hand holds another tool.
 func set_held(item_id: String, colonist_id: String) -> bool:
@@ -69,8 +84,16 @@ func set_held(item_id: String, colonist_id: String) -> bool:
 		return false
 	_clear_holder(item_id)
 	items[item_id]["location"] = {"type": "held", "colonist_id": colonist_id}
+	_mark_set_down(item_id, false)
 	WorkerType.set_held_tool(colonist, item_id)
 	return true
+
+## Stored sparsely: the key is present only while true.
+func _mark_set_down(item_id: String, set_down: bool) -> void:
+	if set_down:
+		items[item_id]["set_down"] = true
+	else:
+		(items[item_id] as Dictionary).erase("set_down")
 
 ## Clears held_tool from item_id's holder, if any.
 func _clear_holder(item_id: String) -> void:

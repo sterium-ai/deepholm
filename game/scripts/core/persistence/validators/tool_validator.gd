@@ -32,13 +32,19 @@ static func _valid_tool_item(value, map_width: int, map_height: int, layer_count
 	if not (value is Dictionary):
 		return _fail("invalid toolItems entry type")
 	var item: Dictionary = value
-	var check := _require_fields(item, ["id", "kind", "location"], "toolItems entry")
-	if not check["ok"]:
-		return check
+	# v14 (F5a-b): "setDown" is allowed but optional, so it is not one of the required fields.
+	if not _keys_allowed(item, ["id", "kind", "location", "setDown"]):
+		return _fail("unexpected toolItems entry field")
+	for key: String in ["id", "kind", "location"]:
+		if not item.has(key):
+			return _fail_missing("missing toolItems entry field '%s'" % key)
 	if not _matches_id_pattern(item["id"]):
 		return _fail("invalid toolItems entry id")
 	if not _matches_id_pattern(item["kind"]):
 		return _fail("invalid toolItems entry kind")
+	# v14 (F5a-b): optional, present only as true (a set-down ground tool).
+	if item.has("setDown") and not (item["setDown"] is bool and item["setDown"]):
+		return _fail("invalid toolItems entry setDown")
 	return _valid_tool_location(item["location"], map_width, map_height, layer_count)
 
 ## A ground/stockpile tile or a holder's colonist id, never both.

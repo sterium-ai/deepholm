@@ -204,7 +204,7 @@ func _run_and_verify(kind: String, seed_value: int, setup: Callable) -> void:
 	_verify_trace_against_toils(kind, toils, result["world"], result["statuses"], result["completed"])
 
 func _check_execution_trace() -> void:
-	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "plant_sapling", "haul", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
+	var expected_kinds: Array[String] = ["dig", "mine", "chop", "forage", "till", "sow", "harvest", "plant_sapling", "haul", "haul_tool", "site_fetch", "site_work", "craft_fetch", "craft_work", "cook_work", "eat_food", "drink_water", "sleep", "incident", "escape_trench", "flee", "rescue", "approach"]
 	for kind in expected_kinds:
 		_expect(_jobs_content.has(kind), "content/jobs.json must declare a \"%s\" job kind" % kind)
 	_expect(_jobs_content.size() == expected_kinds.size(),
@@ -234,6 +234,14 @@ func _check_execution_trace() -> void:
 	_run_and_verify("drink_water", 206001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_WATER))
 	_check_haul_execution_trace(207001)
+	# F5a-b (ADR 064): no command orders a haul_tool; HaulGiver submits one for a pick stocked in
+	# zone_1 once zone_1 stops accepting tools, targeting zone_2, and reserves the pick for it.
+	_run_and_verify("haul_tool", 207301, func(world: WorldStateType) -> void:
+		_expect(_command(world, "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1})["ok"], "zone_add must be accepted")
+		_expect(_command(world, "zone_add", {"x": 10, "y": 0, "z": 0, "width": 2, "height": 2})["ok"], "zone_add must be accepted")
+		world.set_tool_item_stockpile(world.spawn_ground_tool_item("pick", 5, 0), 5, 0)
+		_expect(_command(world, "zone_set_stockpile", {"id": "zone_1", "groups": "material", "priority": 2})["ok"],
+			"zone_set_stockpile must be accepted"))
 	_check_construction_execution_trace(207501)
 	_check_crafting_execution_trace(207601, "workbench", "planks", "craft_work", "wood", 1, "planks", 2)
 	_check_crafting_execution_trace(207701, "kitchen", "meal", "cook_work", "food", 2, "meal", 1)

@@ -26,6 +26,9 @@ var _record: Callable
 ## job_id -> tool ids proven unreachable in the current fetch attempt, so the next-nearest
 ## is tried. Persisted (ADR 013, "Persistence"): forgetting it on load would change the run.
 var _excluded: Dictionary = {}
+## F5a-b: ToolDropToil.fail_haul_tool(), the one haul_tool failure branch (c769a48), set by
+## ToilExecutor: a carried tool's unreachable candidate fails the job through it.
+var fail_carry: Callable
 
 func _init(job_kinds: Dictionary, get_tool_items: Callable, get_tool_item: Callable,
 		tool_reservation_of: Callable, reserve_tool: Callable, release_tool: Callable,
@@ -55,8 +58,11 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 		return false
 	var kind := String(def.get("needs_tool", ""))
 	if kind.is_empty():
-		return false
-	var held_id := String(colonist.get("held_tool", ""))
+		var cargo := _cargo_id(job, job_id)
+		if cargo.is_empty():
+			return false
+		return not (colonist.get("held_tool", "") == cargo and _tool_reservation_of.call(cargo) == job_id)
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return true
 	var owner := String(_tool_reservation_of.call(held_id))
@@ -67,8 +73,9 @@ func needs(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 	var kind := _tool_kind_for(job)
 	if kind.is_empty():
-		return true
-	var held_id := String(colonist.get("held_tool", ""))
+		var toils: Array = (_job_kinds.get(job["kind"], {}) as Dictionary).get("toils", [])
+		return not (TOIL_FETCH_TOOL in toils) or _carry_done(colonist, job, job_id)
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty() or _held_tool_kind(colonist) != kind:
 		return false
 	var owner := String(_tool_reservation_of.call(held_id))
@@ -78,8 +85,26 @@ func satisfied(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
 		return false
 	return bool(_reserve_tool.call(held_id, job_id))
 
+## F5a-b (ADR 064): a fetch_tool kind with no needs_tool (haul_tool) carries the tool its giver
+## named (item_id) and reserved; done once that tool is in the hand under job_id's reservation,
+## or when there is none to carry. Never re-reserves: a lost reservation fails the job
+## (ToolDropToil.haul_cannot_continue(), c769a48).
+func _carry_done(colonist: Dictionary, job: Dictionary, job_id: String) -> bool:
+	var cargo := _cargo_id(job, job_id)
+	if cargo.is_empty():
+		return true
+	return colonist.get("held_tool", "") == cargo and _tool_reservation_of.call(cargo) == job_id
+
+## The tool a carrying job (haul_tool) moves: its item_id, else the tool it reserves, else "".
+func _cargo_id(job: Dictionary, job_id: String) -> String:
+	var item_id: String = job.get("item_id", "")
+	if not item_id.is_empty():
+		return item_id
+	var reserved_id: String = _reserved_tool_for(job_id).get("id", "")
+	return reserved_id
+
 func _held_tool_kind(colonist: Dictionary) -> String:
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if held_id.is_empty():
 		return ""
 	return String(_get_tool_item.call(held_id).get("kind", ""))
@@ -168,6 +193,11 @@ func _reserved_tool_for(job_id: String) -> Dictionary:
 func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dictionary) -> void:
 	var kind := _tool_kind_for(job)
 	var reserved := _reserved_tool_for(job_id)
+	var carrying := kind.is_empty()
+	if carrying: # a carried tool (_carry_done()): its giver named and reserved it, never search
+		if reserved.is_empty():
+			return # ToolDropToil.haul_cannot_continue() fails the job first
+		kind = reserved["kind"]
 	var freshly_reserved := reserved.is_empty()
 	if freshly_reserved:
 		var from := TileGrid.tile_of(colonist)
@@ -191,7 +221,7 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 		return
 	var target: Variant = ToolMatchingType.item_target(reserved, _colonist_position_map())
 	if target == null:
-		_exclude_candidate(job_id, item_id)
+		_exclude_candidate(colonist, job_id, job, item_id, carrying, hooks)
 		return
 	# A freshly (re)acquired reservation makes any earlier route stale (the holder may have
 	# moved the item), so discard it and search fresh. Only then: an already-held
@@ -203,13 +233,20 @@ func advance(colonist: Dictionary, job_id: String, job: Dictionary, hooks: Dicti
 	var passable: Callable = (hooks["go_to_passable"] as Callable).call(job, true, target)
 	var on_arrive := func(c: Dictionary, jid: String) -> void: _arrive(c, jid, kind, item_id, hooks)
 	if _advance_go_to.call(colonist, job_id, target, passable, TOIL_FETCH_TOOL, on_arrive) == "unreachable":
-		_exclude_candidate(job_id, item_id)
+		_exclude_candidate(colonist, job_id, job, item_id, carrying, hooks)
 
 ## Releases item_id and records it as unreachable. Does not try the next candidate this tick:
-## each go_to search spends the colonist's route budget (ADR 004's per-tick bound).
-func _exclude_candidate(job_id: String, item_id: String) -> void:
+## each go_to search spends the colonist's route budget (ADR 004's per-tick bound). A carried
+## tool (haul_tool) has no next candidate: re-reserving it would retry forever and grow the
+## exclusion list (review round 6), so the job fails through the one haul_tool failure branch
+## (fail_carry, blocked_target_unreachable; c769a48) and HaulGiver re-plans from the ground.
+func _exclude_candidate(colonist: Dictionary, job_id: String, job: Dictionary, item_id: String, carrying: bool, hooks: Dictionary) -> void:
 	_release_tool.call(item_id, job_id)
-	_exclude(job_id, item_id)
+	if not carrying:
+		_exclude(job_id, item_id)
+		return
+	_clear_excluded(job_id)
+	fail_carry.call(colonist, job_id, job, hooks, "blocked_target_unreachable")
 
 ## Clears this job's fetch attempt and reports blocked_no_tool.
 func _report_no_tool_found(job_id: String, colonist_id: String, kind: String, hooks: Dictionary) -> void:
@@ -227,7 +264,7 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 		_release_tool.call(item_id, job_id)
 		_report_no_tool_found(job_id, String(colonist["id"]), kind, hooks)
 		return
-	var held_id := String(colonist.get("held_tool", ""))
+	var held_id: String = colonist.get("held_tool", "")
 	if not held_id.is_empty() and held_id != item_id:
 		_drop_tool_ground.call(held_id, TileGrid.tile_of(colonist))
 	if not bool(_pick_up_tool.call(item_id, String(colonist["id"]))):

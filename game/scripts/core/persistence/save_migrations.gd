@@ -15,6 +15,8 @@ extends RefCounted
 ## - v9 -> v10 (F5a, ADR 064): a stockpile zone may carry "groups" and "priority".
 ## - v10 -> v11 (F6a, ADR 067): forest zones and the "saplings" growth records.
 ## - v11 -> v12 (F5b, ADR 065): every colonist gains the "heal" labour and skill.
+## - v12 -> v13 (F5c, ADR 066): a colonist's optional "thoughts".
+## - v13 -> v14 (F5a-b, ADR 064): the "haul_tool" job kind.
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -60,6 +62,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v11_to_v12(state)
 		12:
 			return _v12_to_v13(state)
+		13:
+			return _v13_to_v14(state)
 		_:
 			return {
 				"ok": false,
@@ -249,6 +253,18 @@ static func _v12_to_v13(state: Dictionary) -> Dictionary:
 		return {"ok": false, "code": "schema_error", "message": "v12 save has no entities array"}
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 13
+	return {"ok": true, "state": migrated}
+
+## v13 -> v14 (F5a-b, ADR 064): the job kind enum gains "haul_tool". A v13 world queued no
+## haul_tool job, so every v13 state is already a v14 state; one that lists such a job is refused.
+static func _v13_to_v14(state: Dictionary) -> Dictionary:
+	if not (state.get("jobs") is Array):
+		return {"ok": false, "code": "schema_error", "message": "v13 save has no jobs array"}
+	for job: Variant in state["jobs"]:
+		if job is Dictionary and (job as Dictionary).get("kind", "") == "haul_tool":
+			return {"ok": false, "code": "schema_error", "message": "v13 save already has a haul_tool job"}
+	var migrated := state.duplicate(true)
+	migrated["schemaVersion"] = 14
 	return {"ok": true, "state": migrated}
 
 ## The same dictionary with its keys in sorted order (_v11_to_v12()).
