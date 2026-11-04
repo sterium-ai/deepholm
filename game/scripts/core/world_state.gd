@@ -687,7 +687,7 @@ func _routable_to(target: Vector3i, faction_id: String = "colony") -> Callable:
 ## Chebyshev adjacency, matching pick_up()/place()'s "on or adjacent to".
 func _colonist_within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
 	var colonist_tile := TileGrid.tile_of(colonist)
-	return TileGridType.chebyshev(colonist_tile, tile) <= 1
+	return colonist_tile.z == tile.z and TileGridType.chebyshev(colonist_tile, tile) <= 1
 
 ## The colonist currently assigned to job_id, or {} when none.
 func _find_job_colonist(job_id: String) -> Dictionary:

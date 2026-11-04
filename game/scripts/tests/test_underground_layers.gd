@@ -10,8 +10,12 @@ extends SceneTree
 ## a blocked landing are rejected, a landing keeps non-vein objects; three discovered layers add
 ## little to the tick. Review round 2: a hungry colonist on L1 climbs the stairs to eat surface
 ## berries, and a hostile on another layer is no flee threat while the raider seeks its target
-## across the stairs (cross-layer distances, no TileGrid same-layer assert).
+## across the stairs (cross-layer distances, no TileGrid same-layer assert). Review round 3: an
+## interrupted L1 job resumes through the stairs, the nearest food across the stairs wins, a save
+## on the discovery tick with searches in flight ticks like the original, and a workbench-crafted
+## drill builds a tunnel.
 
+const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const StateCodecType = preload("res://scripts/core/persistence/state_codec.gd")
 const ReplayLogType = preload("res://scripts/core/world/replay_log.gd")
@@ -48,6 +52,10 @@ func _init() -> void:
 	_check_landing_blocked_and_landing_keeps_objects()
 	_check_colonist_on_l1_eats_surface_berries_through_the_stairs()
 	_check_hostile_on_another_layer_is_no_flee_threat()
+	_check_interrupted_l1_job_resumes_through_the_stairs()
+	_check_nearest_food_across_the_stairs_wins()
+	_check_save_load_with_a_search_in_flight_across_discovery()
+	_check_drill_crafted_at_the_workbench_builds_a_tunnel()
 	if _failed:
 		quit(1)
 		return
@@ -425,3 +433,158 @@ func _check_landing_blocked_and_landing_keeps_objects() -> void:
 	_expect(objects.get_object(kept) == BLOCKER, "the landing must keep a non-vein object (got '%s')" % objects.get_object(kept))
 	_expect(objects.get_object(blocked + Vector3i(0, 0, 1)) == BLOCKER, "the rejected tunnel must leave L1 alone")
 	_expect(TestAccess.tile_grid(world).layer_count == 2, "a rebuilt tunnel must not discover another layer")
+
+## A copper vein two tiles off the stairs (fixture), as in the mining check: once the miner is on
+## L1 with the job, hunger and surface berries pull it up; after eating it walks back down and
+## the vein is mined (the resume test is false across layers, so it re-routes through the stairs).
+func _check_interrupted_l1_job_resumes_through_the_stairs() -> void:
+	var world := _l1_world(SEED, 1)
+	Scenarios.isolate_need(world, "food")
+	var vein := TUNNEL + Vector3i(2, 0, 1)
+	var grid := TestAccess.tile_grid(world)
+	grid.tiles[grid.index_of(vein)] = "rock"
+	grid.mark_dirty(vein)
+	TestAccess.object_table(world).set_object(vein, "copper_vein")
+	grid.reset_cells()
+	grid.regions = null
+	TestAccess.tool_store(world).spawn_ground("pick", Vector3i(3, 3, 0))
+	_command_ok(world, "mine", "mine", {"x": vein.x, "y": vein.y, "z": vein.z, "priority": 1})
+	var hungry := false
+	var surfaced := false
+	var ate := false
+	for _i in 2 * MINE_TICKS:
+		world.tick()
+		var colonist: Dictionary = TestAccess.colonists(world)[0]
+		if not hungry and int(colonist.get("z", 0)) == 1 and colonist.get("work") != null:
+			colonist["needs"]["food"] = 5
+			TestAccess.item_table(world).ground_berries["3_3"] = 1
+			hungry = true
+			continue
+		surfaced = surfaced or (hungry and int(colonist.get("z", 1)) == 0)
+		ate = ate or (hungry and not TestAccess.item_table(world).ground_berries.has("3_3"))
+		if TestAccess.object_table(world).get_object(vein) == "":
+			_expect(hungry and surfaced and ate, "the miner must have been interrupted on L1, climbed up and eaten first (hungry %s, surfaced %s, ate %s)" % [hungry, surfaced, ate])
+			_expect(grid.tile_at(vein) == "floor", "the resumed job must mine the vein to floor")
+			return
+	_fail("the interrupted L1 mine job did not resume within %d ticks (hungry %s, surfaced %s, ate %s, colonist %s)"
+		% [2 * MINE_TICKS, hungry, surfaced, ate, Scenarios.colonist_by_id(world, "colonist_0")])
+
+## A hungry diver on the L1 landing with berries 9 tiles down an L1 corridor and berries 3 steps
+## away across the stairs on the surface: the admissible bound (not a flat other-layer penalty)
+## ranks the surface berries first, so those are eaten.
+func _check_nearest_food_across_the_stairs_wins() -> void:
+	var world := _l1_world(SEED, 1)
+	Scenarios.isolate_need(world, "food")
+	var grid := TestAccess.tile_grid(world)
+	var objects := TestAccess.object_table(world)
+	for x in range(12, 21):
+		var tile := Vector3i(x, TUNNEL.y, 1)
+		objects.set_object(tile, "")
+		grid.tiles[grid.index_of(tile)] = "floor"
+		grid.mark_dirty(tile)
+	grid.reset_cells()
+	grid.regions = null
+	var diver := Scenarios.idle_colonist("colonist_1", TUNNEL.x + 1, TUNNEL.y)
+	diver["z"] = 1
+	diver["needs"] = Scenarios.full_needs({"food": 20})
+	TestAccess.colonists(world).append(diver)
+	var berries := TestAccess.item_table(world).ground_berries
+	berries["20_10_1"] = 1
+	berries["11_10"] = 1
+	for _i in MINE_TICKS:
+		world.tick()
+		if not berries.has("11_10") or not berries.has("20_10_1"):
+			_expect(not berries.has("11_10") and berries.has("20_10_1"),
+				"the surface berries across the stairs must be eaten first (left %s)" % [berries])
+			return
+	_fail("the diver ate neither berry within %d ticks (colonist %s)" % [MINE_TICKS, Scenarios.colonist_by_id(world, "colonist_1")])
+
+## Every route search not finished yet: reroutes, the scheduler's pending routes, the givers'.
+func _searches_in_flight(world: WorldStateType) -> Array:
+	var searches: Array = world._reroutes.values()
+	for request: Dictionary in world._scheduler._pending.values():
+		searches.append(request.get("route"))
+	for giver: Variant in [world._need_giver, world._rescue_giver, world._approach_giver]:
+		for state: Dictionary in giver._searching.values():
+			searches.append(state.get("search"))
+	return searches.filter(func(search: Variant) -> bool: return search != null and not search.is_terminal())
+
+## The tunnel world of the save/load check, its tunnel ordered.
+func _search_in_flight_world() -> WorldStateType:
+	var world := _stocked_world(SEED, 1)
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_1", 46, 46))
+	Scenarios.add_stock(world, "wood", 6, 44, 46)
+	_add_stock_zone(world)
+	Scenarios.isolate_need(world, "")
+	_expect(bool(_build_tunnel(world, "tunnel_0", TUNNEL).get("ok", false)), "the tunnel order must be accepted")
+	return world
+
+## A reroute started the tick before discovery is still searching on the discovery tick and has
+## the new bounds and links; every other search in flight too. A save then ticks like the original.
+func _check_save_load_with_a_search_in_flight_across_discovery() -> void:
+	var probe := _search_in_flight_world()
+	_expect(_tick_until_layers(probe, 2, BUILD_TICKS), "the tunnel must discover L1")
+	var discovery_tick := probe.get_tick()
+	var world := _search_in_flight_world()
+	while world.get_tick() < discovery_tick - 1:
+		world.tick()
+	var reroute: Variant = world._route_search_factory(Vector3i(46, 46, 0), Vector3i(1, 1, 0), world._routable_to(Vector3i(1, 1, 0)))
+	world._reroutes["search_probe"] = reroute
+	world.tick()
+	world._reroutes.erase("search_probe")
+	_expect(TestAccess.tile_grid(world).layer_count == 2, "L1 must be discovered on the probed tick %d" % discovery_tick)
+	var bounds := TestAccess.tile_grid(world).bounds_max()
+	var in_flight := _searches_in_flight(world)
+	in_flight.append(reroute)
+	_expect(not reroute.is_terminal(), "the probe reroute must still be searching on the discovery tick")
+	for search: Variant in in_flight:
+		_expect(search._bounds_max == bounds and search._links != null,
+			"a search in flight must get the new bounds and links on discovery (bounds %s, links %s)" % [search._bounds_max, search._links])
+	var loaded := StateCodecType.decode(StateCodecType.encode(world))
+	_expect(loaded != null, "the save on the discovery tick must load")
+	if loaded == null:
+		return
+	_expect(loaded.state_hash() == world.state_hash(), "the loaded state must hash like the saved one")
+	Scenarios.isolate_need(loaded, "")
+	for _i in 300:
+		world.tick()
+		loaded.tick()
+		if loaded.state_hash() != world.state_hash():
+			_fail("the world saved on the discovery tick must hash like the original (first mismatch at tick %d)" % world.get_tick())
+			return
+
+## Every `kind` item in the world: on the ground, in inventories and held by bench bills.
+func _total(world: WorldStateType, kind: String) -> int:
+	var total := 0
+	for item in world.get_items():
+		if String(item["kind"]) == kind:
+			total += int(item["count"])
+	for colonist in TestAccess.colonists(world):
+		total += InventoryType.count_of_kind(colonist, kind)
+	for bench in world.get_crafting_benches():
+		for stack: Dictionary in ((bench["bill"] as Dictionary).get("held", []) as Array):
+			if String(stack["item"]) == kind:
+				total += int(stack["quantity"])
+	return total
+
+## The whole chain through orders: a workbench crafts the drill from wood x2 and stone x3, the
+## tunnel consumes it and wood x2 and discovers L1.
+func _check_drill_crafted_at_the_workbench_builds_a_tunnel() -> void:
+	var world := Scenarios.empty_floor_world(SEED)
+	Scenarios.isolate_need(world, "")
+	TestAccess.colonists(world).append(Scenarios.idle_colonist("colonist_0", 1, 1))
+	_add_stock_zone(world)
+	Scenarios.add_stock(world, "wood", 4, 1, 0)
+	Scenarios.add_stock(world, "stone", 3, 2, 0)
+	TestAccess.object_table(world).set_object(Vector3i(10, 5, 0), "workbench", "colony", "")
+	_command_ok(world, "drill_order", "craft_add_order", {"x": 10, "y": 5, "z": 0, "recipe": "drill", "count": 1})
+	for _i in BUILD_TICKS:
+		if _total(world, "drill") >= 1:
+			break
+		world.tick()
+	_expect(_total(world, "drill") == 1, "the workbench must craft one drill")
+	_expect(_total(world, "wood") == 2 and _total(world, "stone") == 0,
+		"the drill must cost wood x2 and stone x3 (wood %d, stone %d left)" % [_total(world, "wood"), _total(world, "stone")])
+	_expect(bool(_build_tunnel(world, "tunnel_0", TUNNEL).get("ok", false)), "the tunnel order must be accepted")
+	_expect(_tick_until_layers(world, 2, BUILD_TICKS), "the tunnel built with the crafted drill must discover L1")
+	_expect(_total(world, "drill") == 0 and _total(world, "wood") == 0, "the tunnel must consume the drill and wood x2")

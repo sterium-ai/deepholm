@@ -411,7 +411,7 @@ func consume(colonist: Dictionary, job_id: String) -> Dictionary:
 		return {"ok": false, "reason": REASON_SOURCE_GONE}
 	var target: Vector3i = job["target"]
 	var colonist_tile := TileGrid.tile_of(colonist)
-	if TileGrid.chebyshev(colonist_tile, target) > 1:
+	if colonist_tile.z != target.z or TileGrid.chebyshev(colonist_tile, target) > 1:
 		return {"ok": false, "reason": REASON_SOURCE_OUT_OF_REACH}
 	if _source_valid.is_valid() and not bool(_source_valid.call(job_id)):
 		return {"ok": false, "reason": REASON_SOURCE_GONE}

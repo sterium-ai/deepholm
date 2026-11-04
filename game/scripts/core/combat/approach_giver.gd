@@ -264,8 +264,8 @@ static func _target_precedes(a: Dictionary, b: Dictionary) -> bool:
 
 ## One candidate tile per hostile target, sorted by Chebyshev distance: an admissible lower bound
 ## with diagonal moves (Manhattan is not), so _search_can_stop() never prunes a nearer target on the
-## actor's layer. A target on another layer (F4, ADR 071) is OTHER_LAYER_DISTANCE away: it is
-## searched only while no route on the actor's layer was found.
+## actor's layer. TileGrid.route_lower_bound() equals it on one layer and stays admissible across
+## layers (F4, ADR 071), so a nearer target behind the stairs is never pruned either.
 func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary], tick: int) -> void:
 	var start := TileGrid.tile_of(actor)
 	var candidates: Array = []
@@ -273,7 +273,7 @@ func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary
 		var tile: Variant = _best_adjacent_tile(actor_id, start, target["tile"])
 		if tile == null:
 			continue
-		var distance: int = TileGrid.chebyshev(tile, start) if (tile as Vector3i).z == start.z else ZoneTable.OTHER_LAYER_DISTANCE
+		var distance: int = TileGrid.route_lower_bound(tile, start)
 		candidates.append({"tile": tile, "target": target, "distance": distance})
 	if candidates.is_empty():
 		return

@@ -206,6 +206,12 @@ static func chebyshev(a: Vector3i, b: Vector3i) -> int:
 	assert(a.z == b.z, "chebyshev() across layers")
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
 
+## Admissible lower bound on a route's step count, layers included (F4, ADR 071): a vertical link
+## (ADR 068) is one step at the same (x, y), and a planar step moves at most one tile in Chebyshev
+## distance. Search pruning across layers uses this, never a sentinel distance.
+static func route_lower_bound(a: Vector3i, b: Vector3i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y)) + absi(a.z - b.z)
+
 ## Squared Euclidean: flee-candidate comparison.
 static func distance_sq(a: Vector3i, b: Vector3i) -> int:
 	assert(a.z == b.z, "distance_sq() across layers")

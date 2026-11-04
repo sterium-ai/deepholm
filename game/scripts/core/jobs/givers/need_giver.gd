@@ -256,10 +256,10 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	_set_reason.call(colonist_id, "")
 	_advance_search(colonist, tick)
 
-## Manhattan on one layer; a source on another layer (F4, ADR 071) is OTHER_LAYER_DISTANCE away, so
-## it ranks last and is searched only while no route on the colonist's layer was found.
+## Manhattan on one layer; a source on another layer (F4, ADR 071) is TileGrid.route_lower_bound()
+## away, so _search_can_stop() never prunes a nearer source behind the stairs once a route is found.
 static func _distance(tile: Vector3i, start: Vector3i) -> int:
-	return TileGrid.manhattan(tile, start) if tile.z == start.z else ZoneTable.OTHER_LAYER_DISTANCE
+	return TileGrid.manhattan(tile, start) if tile.z == start.z else TileGrid.route_lower_bound(tile, start)
 
 ## One step per tick. Search phase: one bounded resume() per candidate, collecting every found
 ## route; ranking (length, then pre-sort order) happens on its own tick. Commit phase: recheck

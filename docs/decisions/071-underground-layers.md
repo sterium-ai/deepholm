@@ -71,9 +71,14 @@ work goes into new modules.
    - Route searches see the vertical links (L3b, ADR 068). `LayerDiscovery.links()` returns the
      region graph's `vertical_links()` on a map with more than one layer. `wire_routing()` gives
      it to the scheduler and the need, rescue and approach givers as `links_of`; their measured
-     routes call `RouteSearch.set_vertical_links()`. Distance scoring on other layers uses
-     `ZoneTable.OTHER_LAYER_DISTANCE` (as `tool_matching` already did); reach tests are false
-     across layers.
+     routes call `RouteSearch.set_vertical_links()`.
+   - Pruning and scoring across layers use the admissible `TileGrid.route_lower_bound`
+     (max(|dx|, |dy|) + |dz|), never more than the real route, so the need and approach givers
+     never drop a source across the stairs that is nearer than one on the same layer.
+   - Reach and resume tests are false across layers.
+   - A finished tunnel refreshes every route search in flight with `RouteSearch.refresh_topology`
+     (the reroutes, the scheduler's pending routes and the givers' searches), the same links and
+     bounds a load gives them.
    - Need sources and beds are filtered by region-graph component (`RegionMap.component_of`),
      so a colonist underground finds food and beds across the stairs. Flee ignores hostiles on
      another layer.
@@ -113,8 +118,6 @@ work goes into new modules.
 
 ## Known limitations
 
-- A route search keeps the vertical links it was given when it was created. A tunnel finished
-  during a search is seen by the next search.
 - If an object is built on the stairs tile while the tunnel is still a site, the finished tunnel
   gets no stairs. `may_place` only checks the tile when the tunnel is placed.
 - Deconstructing a tunnel would free its layer for another one. There is no deconstruct command

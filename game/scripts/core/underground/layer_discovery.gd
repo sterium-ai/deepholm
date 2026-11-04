@@ -22,6 +22,7 @@ const TileGridType = preload("res://scripts/core/map/tile_grid.gd")
 const ObjectTableType = preload("res://scripts/core/objects/object_table.gd")
 const EventLogType = preload("res://scripts/core/world/event_log.gd")
 const MeasuredRouteType = preload("res://scripts/core/scheduling/measured_route.gd")
+const VerticalLinksType = preload("res://scripts/core/map/vertical_links.gd")
 
 const TUNNEL_KIND := "tunnel"
 const STAIRS_KIND := "stairs_up"
@@ -95,6 +96,7 @@ func on_site_completed(kind: String, origin: Vector3i) -> void:
 	if layer >= world._tile_grid.layer_count:
 		_append_layer(world, layer)
 	_place_stairs(world, Vector3i(origin.x, origin.y, layer))
+	_refresh_searches(world, links() as VerticalLinksType, world._tile_grid.bounds_max())
 
 ## Generates `layer` (the next one) from the seed, places its veins and logs the discovery.
 static func _append_layer(world: WorldState, layer: int) -> void:
@@ -145,6 +147,21 @@ static func _place_stairs(world: WorldState, stairs: Vector3i) -> void:
 		objects.set_object(stairs, STAIRS_KIND)
 	grid.regions = null
 	grid.reset_cells()
+
+## Every in-flight route search gets the new links and bounds: the ones StateCodec gives the
+## reroutes and the scheduler's routes on a load, and the givers' searches likewise (they restart).
+static func _refresh_searches(world: WorldState, current_links: VerticalLinksType, bounds_max: Vector3i) -> void:
+	var searches: Array = world._reroutes.values()
+	for request: Dictionary in world._scheduler._pending.values():
+		searches.append(request.get("route"))
+	for giver: Object in [world._need_giver, world._rescue_giver, world._approach_giver]:
+		if giver != null:
+			var searching: Dictionary = giver.get("_searching")
+			for state: Dictionary in searching.values():
+				searches.append(state.get("search"))
+	for search: Variant in searches:
+		if search != null:
+			(search as MeasuredRouteType).refresh_topology(current_links, bounds_max)
 
 ## The givers copied TileGrid.bounds_max() when built; a new layer raises its z.
 static func _refresh_giver_bounds(world: WorldState, bounds_max: Vector3i) -> void:

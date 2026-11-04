@@ -274,7 +274,7 @@ func _arrive(colonist: Dictionary, job_id: String, kind: String, item_id: String
 	_clear_excluded(job_id)
 	_record.call(TOIL_FETCH_TOOL, "complete")
 
-## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3).
+## Chebyshev "on or adjacent to" reach test (colonist-ai.md 3.3); false across layers (ADR 071).
 func _within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
 	var colonist_tile := TileGrid.tile_of(colonist)
-	return TileGrid.chebyshev(colonist_tile, tile) <= 1
+	return colonist_tile.z == tile.z and TileGrid.chebyshev(colonist_tile, tile) <= 1
