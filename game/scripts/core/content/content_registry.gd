@@ -53,10 +53,8 @@ const ContentJsonType = preload("res://scripts/core/content/content_json.gd")
 const CropContentType = preload("res://scripts/core/farming/crop_content.gd")
 const ForestContentType = preload("res://scripts/core/farming/forest_content.gd")
 const RecipeBookType = preload("res://scripts/core/crafting/recipe_book.gd")
-
 ## For the static is_known_toil() check only; never drives a ToilExecutor.
 const ToilExecutorType = preload("res://scripts/core/jobs/toil_executor.gd")
-
 ## For the static is_known_component() check only; never spawns an actor.
 const ActorTableType = preload("res://scripts/core/actors/actor_table.gd")
 ## For the static is_valid_labour_value() check of a scenario roster only.
@@ -617,9 +615,9 @@ func _check_job_effects(raw_by_kind: Dictionary) -> Array[String]:
 			return [ERROR_SCHEMA_VIOLATION, bad + ".yields.find_table weights must sum to 100, got %d" % total]
 	return []
 
-## F2 (ADR 061): an item's kind must be one of items.json's declared groups, and a recipe's
-## bench must be an object kind and its inputs/outputs item ids ([file, message], reported as
-## dangling_reference); an item listed twice on one side or a quantity over
+## F2 (ADR 061): an item's kind must be one of items.json's declared groups, a vein's ore (F4)
+## an item id, and a recipe's bench an object kind and its inputs/outputs item ids ([file,
+## message], reported as dangling_reference); an item listed twice on one side or a quantity over
 ## RecipeBook.MAX_COUNT is [file, message, schema_violation]. [] when all hold.
 func _check_crafting_content(raw_by_kind: Dictionary) -> Array[String]:
 	var items_document: Dictionary = raw_by_kind["items"]
@@ -635,6 +633,8 @@ func _check_crafting_content(raw_by_kind: Dictionary) -> Array[String]:
 	for entry: Dictionary in (raw_by_kind["objects"]["objects"] as Array):
 		var object_kind: String = entry["kind"]
 		known_objects[object_kind] = true
+		if entry.has("vein") and not known_items.has(entry["vein"]["ore"]):
+			return ["objects.json", "object '%s' vein.ore '%s' names an unknown item id" % [object_kind, entry["vein"]["ore"]]]
 	var recipes_document: Dictionary = raw_by_kind.get("recipes", {})
 	for recipe: Dictionary in (recipes_document.get("recipes", []) as Array):
 		var recipe_id: String = recipe["id"]

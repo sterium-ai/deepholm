@@ -95,6 +95,12 @@ func _init(start: Vector3i, target: Vector3i, cost_fn: Callable,
 func set_vertical_links(links: VerticalLinksType) -> void:
 	_links = links
 
+## The map grew a layer or a vertical link mid-search (F4, ADR 071): takes the links and bounds a
+## restore() after a save would get, so a live search and a loaded one expand the same tiles.
+func refresh_topology(links: VerticalLinksType, bounds_max: Vector3i) -> void:
+	_links = links
+	_bounds_max = bounds_max
+
 ## "searching", "found" or "unreachable"; the last two are terminal.
 func get_status() -> String:
 	return _status

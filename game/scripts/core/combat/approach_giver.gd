@@ -43,6 +43,8 @@ var _reachable: Callable
 var _is_target_reserved: Callable
 var _routable_to: Callable
 var _bounds_max: Vector3i
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 var _content
 var _relations
 var _route_budget: Dictionary
@@ -244,7 +246,7 @@ func _best_adjacent_tile(actor_id: String, start: Vector3i, target_tile: Vector3
 			continue
 		if not bool(_reachable.call(start, candidate)):
 			continue
-		var distance := TileGrid.manhattan(candidate, start)
+		var distance: int = TileGrid.manhattan(candidate, start) if candidate.z == start.z else ZoneTable.OTHER_LAYER_DISTANCE
 		if best == null or distance < best_distance:
 			best = candidate
 			best_distance = distance
@@ -261,7 +263,9 @@ static func _target_precedes(a: Dictionary, b: Dictionary) -> bool:
 	return String(a["tile_key"]) < String(b["tile_key"])
 
 ## One candidate tile per hostile target, sorted by Chebyshev distance: an admissible lower bound
-## with diagonal moves (Manhattan is not), so _search_can_stop() never prunes a nearer target.
+## with diagonal moves (Manhattan is not), so _search_can_stop() never prunes a nearer target on the
+## actor's layer. TileGrid.route_lower_bound() equals it on one layer and stays admissible across
+## layers (F4, ADR 071), so a nearer target behind the stairs is never pruned either.
 func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary], tick: int) -> void:
 	var start := TileGrid.tile_of(actor)
 	var candidates: Array = []
@@ -269,7 +273,7 @@ func _start_search(actor: Dictionary, actor_id: String, actors: Array[Dictionary
 		var tile: Variant = _best_adjacent_tile(actor_id, start, target["tile"])
 		if tile == null:
 			continue
-		var distance: int = TileGrid.chebyshev(tile, start)
+		var distance: int = TileGrid.route_lower_bound(tile, start)
 		candidates.append({"tile": tile, "target": target, "distance": distance})
 	if candidates.is_empty():
 		return
@@ -308,6 +312,7 @@ func _advance_candidate_search(actor: Dictionary, state: Dictionary, cursor: int
 	if search == null:
 		var start := TileGrid.tile_of(actor)
 		search = RerouteType.new(start, tile, _routable_to.call(tile, actor_faction), Vector3i.ZERO, _bounds_max, _reachable)
+		search.use_links(links_of)
 		state["search"] = search
 	if not search.is_terminal():
 		if bool(_route_budget.get(actor_id, false)):

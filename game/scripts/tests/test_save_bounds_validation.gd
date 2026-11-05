@@ -98,6 +98,7 @@ func _base_state() -> Dictionary:
 		"map": {
 			"width": MAP_WIDTH, "height": MAP_HEIGHT, "layerCount": 1,
 			"tiles": _flat_soil_tiles(), "generatorVersion": WorldGeneratorType.GENERATOR_VERSION,
+			"undergroundVersion": UndergroundGenerator.GENERATOR_VERSION,
 		},
 		"entities": [{
 			"id": "colonist_1", "kind": "colonist", "x": 0, "y": 0, "z": 0, "factionId": "colony",

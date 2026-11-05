@@ -329,19 +329,20 @@ func emit_need_unmet_event(colonist_id: String, kind: String) -> void:
 
 ## Kind-aware sources (berries, water, bed) minus those no colonist can reach, so NeedGiver never
 ## floods a whole component for nothing. Every colonist gets the same list (test_combat relies on
-## it). Reachability is by region id once per source; an impassable source (water) belongs to each
-## region among its orthogonal neighbours, matching RegionMap.reachable(). The food preference is
+## it). Reachability is by region-graph component once per source, so a source on another layer
+## joined by stairs counts (F4, ADR 071); an impassable source (water) belongs to each component
+## among its orthogonal neighbours, matching RegionMap.reachable(). The food preference is
 ## per colonist: NeedGiver ranks these by need_source_ranks() (F5b, ADR 065).
 func need_source_candidates(kind: String) -> Array[Vector3i]:
 	var candidates := _raw_need_sources(kind)
 	if not _get_colonists.call().is_empty():
 		var regions := _tile_grid.get_regions()
-		var colonist_regions: Dictionary = {}
+		var colonist_components: Dictionary = {}
 		for colonist: Dictionary in _get_colonists.call():
-			colonist_regions[regions.region_of(TileGrid.tile_of(colonist))] = true
-		colonist_regions.erase(0) # reachable() is false from a tile with no region
+			colonist_components[regions.component_of(TileGrid.tile_of(colonist))] = true
+		colonist_components.erase(0) # reachable() is false from a tile with no region
 		candidates = candidates.filter(func(candidate: Vector3i) -> bool:
-			return _regions_reaching(regions, candidate).any(func(region: int) -> bool: return colonist_regions.has(region)))
+			return _components_reaching(regions, candidate).any(func(component: int) -> bool: return colonist_components.has(component)))
 	return candidates
 
 ## source_ranks callable for NeedGiver (F5b, ADR 065): food tile -> the restore eating there gives
@@ -379,19 +380,20 @@ func _raw_need_sources(kind: String) -> Array[Vector3i]:
 			candidates = _object_table.tiles_of_kind("bed")
 	return candidates
 
-## The distinct nonzero region ids `regions.reachable(from, target)` is true from.
-func _regions_reaching(regions: RegionMapType, target: Vector3i) -> Array[int]:
+## The distinct nonzero region-graph components `regions.reachable(from, target)` is true from
+## (component_of() is the region id on a one-layer map).
+func _components_reaching(regions: RegionMapType, target: Vector3i) -> Array[int]:
 	var reached_by: Array[int] = []
 	if not _tile_grid.contains(target):
 		return reached_by
-	var own := regions.region_of(target)
+	var own := regions.component_of(target)
 	if own != 0:
 		reached_by.append(own)
 		return reached_by
 	for offset: Vector3i in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
-		var region := regions.region_of(target + offset)
-		if region != 0 and not reached_by.has(region):
-			reached_by.append(region)
+		var component := regions.component_of(target + offset)
+		if component != 0 and not reached_by.has(component):
+			reached_by.append(component)
 	return reached_by
 
 ## claimed_targets callable for NeedGiver: targets of queued/active need jobs, so two
@@ -480,20 +482,20 @@ func _need_thought(job_kind: String, eaten_kind: String) -> String:
 			return "ate_meal" if meals.has(eaten_kind) else "ate_raw"
 		_: return ""
 
-## A Callable(colonist) -> bool, true when a bed is reachable from that colonist's own region
-## (region 0 reaches nothing, as in RegionMap.reachable()). The set of regions reaching a bed is
-## built at most once per call site (once per decay tick) and only when some colonist's rest is low.
+## A Callable(colonist) -> bool, true when a bed is reachable from that colonist's region-graph
+## component, stairs included (region 0 reaches nothing, as in RegionMap.reachable()). The set of
+## components reaching a bed is built at most once per call site (once per decay tick) and only when some colonist's rest is low.
 func _bed_reachable_once() -> Callable:
 	var cache := {}
 	return func(colonist: Dictionary) -> bool:
 		var regions := _tile_grid.get_regions()
-		if not cache.has("regions"):
+		if not cache.has("components"):
 			var reaching := {}
 			for bed: Vector3i in _raw_need_sources("rest"):
-				for region: int in _regions_reaching(regions, bed):
-					reaching[region] = true
-			cache["regions"] = reaching
-		return (cache["regions"] as Dictionary).has(regions.region_of(TileGrid.tile_of(colonist)))
+				for component: int in _components_reaching(regions, bed):
+					reaching[component] = true
+			cache["components"] = reaching
+		return (cache["components"] as Dictionary).has(regions.component_of(TileGrid.tile_of(colonist)))
 
 ## F5b (ADR 065): the best restore an eat_food job at tile would give; 0 when nothing edible.
 ## A ground berry restores the food need's "restore"; an item its content "satiety".

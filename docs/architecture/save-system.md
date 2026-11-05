@@ -147,6 +147,8 @@ accepts tools ([ADR 064](../decisions/064-stockpile-filters-and-priorities.md)).
 v15 adds wild animals: entities of kind `animal` and the optional top-level `fauna`
 (the animal id counter and the fauna RNG stream)
 ([ADR 070](../decisions/070-wild-species-and-populations.md)).
+v16 adds `map.undergroundVersion`, the underground generator's version
+([ADR 071](../decisions/071-underground-layers.md)).
 
 **Layers (v9).** Every tile object is `{x, y, z}` and every flat `x`/`y` record (entities,
 items, zones, workbenches, tool locations, area orders) carries `z` beside them: `z` is the
@@ -302,6 +304,10 @@ returns a new dictionary and never mutates its input. Steps today:
   (`{nextAnimalId, rng}`). A v14 world had no animal, and an absent `fauna` means none was ever
   spawned, so the step changes only the version. `save_schema_v15_fixture.json` is a session
   with animals written by `docs/orca/handoffs/F6b-1-write-save.gd`.
+- **v15 → v16** (F4, ADR 071): adds `map.undergroundVersion: 1` (the only underground generator
+  so far); nothing else changes, since a v15 world has discovered no underground layer.
+  `save_schema_v16_fixture.json` is a session with L1 discovered through a tunnel, written packed
+  by `docs/orca/handoffs/F4-write-save.gd`.
 
 A version with no arm (below 1) is rejected with `no_migration_available`;
 nothing is ever silently filled from current defaults. Adding schema version
@@ -386,6 +392,14 @@ value, so re-saving never relabels it. It is diagnostic only and never checked
 on load. Mapgen count/placement budgets scale with the map area relative to
 `reference_width*reference_height` (48x48). See
 [ADR 019](../decisions/019-world-dimensions-and-generation.md).
+
+`map.undergroundVersion` (schema v16, F4, [ADR 071](../decisions/071-underground-layers.md))
+records `UndergroundGenerator.GENERATOR_VERSION`: the algorithm that generates the next
+underground layer from the seed when a tunnel is finished. A discovered layer is ordinary
+tiles and objects (it grows `layerCount` and `tiles`). Like `generatorVersion` the value is
+kept through load and re-save and is not checked on load today; it is there so a future
+algorithm change can tell which algorithm an older world's undiscovered layers expect.
+v13 saves migrate to version 1.
 
 `_validate_state()` rejects a `tiles` array whose length is not
 `width*height*layerCount` and a `map.width`/`map.height` above `max_world_size`, and

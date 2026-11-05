@@ -26,6 +26,8 @@ var _retry_base_ticks: int
 var _retry_cap_ticks: int
 var _priority: int
 var _bounds_max: Vector3i
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 var _reservation_table
 var _claimed_targets: Callable
 var _source_candidates: Callable
@@ -211,8 +213,8 @@ func _is_backed_off(colonist_id: String, kind: String, tick: int) -> bool:
 	return backoff.has("retry_at") and tick < int(backoff["retry_at"])
 
 ## "Nearest" is the shortest real route, not Manhattan distance, within the best source rank this
-## colonist can route to. The pre-sort (rank descending, then Manhattan, ties row-major) only orders
-## the search and lets it stop once no candidate can beat the best route at that rank.
+## colonist can route to. The pre-sort (rank descending, then Manhattan, ties row-major, then layer)
+## only orders the search and lets it stop once no candidate can beat the best route at that rank.
 ## Reserved/claimed candidates are dropped here and rechecked at commit (searches span ticks).
 func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var colonist_id: String = colonist["id"]
@@ -233,26 +235,33 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 		var rb: int = ranks.get(b, 0)
 		if ra != rb:
 			return ra > rb
-		var da := TileGrid.manhattan(a, start)
-		var db := TileGrid.manhattan(b, start)
+		var da := _distance(a, start)
+		var db := _distance(b, start)
 		if da != db:
 			return da < db
 		if a.y != b.y:
 			return a.y < b.y
-		return a.x < b.x)
+		if a.x != b.x:
+			return a.x < b.x
+		return a.z < b.z)
 	if candidates.is_empty():
 		_onset_failed(colonist_id, kind, tick)
 		return
 	var distances: Array[int] = []
 	var candidate_ranks: Array[int] = []
 	for candidate in candidates:
-		distances.append(TileGrid.manhattan(candidate, start))
+		distances.append(_distance(candidate, start))
 		var rank: int = ranks.get(candidate, 0)
 		candidate_ranks.append(rank)
 	_searching[colonist_id] = {"kind": kind, "candidates": candidates, "distances": distances, "ranks": candidate_ranks,
 		"cursor": 0, "search": null, "found": []}
 	_set_reason.call(colonist_id, "")
 	_advance_search(colonist, tick)
+
+## Manhattan on one layer; a source on another layer (F4, ADR 071) is TileGrid.route_lower_bound()
+## away, so _search_can_stop() never prunes a nearer source behind the stairs once a route is found.
+static func _distance(tile: Vector3i, start: Vector3i) -> int:
+	return TileGrid.manhattan(tile, start) if tile.z == start.z else TileGrid.route_lower_bound(tile, start)
 
 ## One step per tick. Search phase: one bounded resume() per candidate, collecting every found
 ## route; ranking (length, then pre-sort order) happens on its own tick. Commit phase: recheck
@@ -283,6 +292,7 @@ func _advance_candidate_search(colonist: Dictionary, state: Dictionary, cursor: 
 	if search == null:
 		var start := TileGrid.tile_of(colonist)
 		search = RerouteType.new(start, target, _routable_to.call(target), Vector3i.ZERO, _bounds_max, _region_reachable)
+		search.use_links(links_of)
 		state["search"] = search
 	if not search.is_terminal():
 		search.resume()

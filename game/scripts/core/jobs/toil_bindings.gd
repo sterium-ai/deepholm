@@ -448,8 +448,8 @@ func _toil_on_work_complete(job_id: String) -> void:
 	resolve_giver_association(job_id, kind)
 
 ## A jobs.json effects block applied at target in its fixed order (ADR 051): the tile check,
-## the consumed input, the tile transform, the cleared object, the yields at their placement,
-## then the staged find. {} once applied; else the refusal {reason, remedy}, nothing changed.
+## the consumed input, the tile transform, a mined vein's ore (F4), the cleared object, the
+## yields at their placement, then the staged find. {} once applied; else the refusal {reason, remedy}, nothing changed.
 static func apply_work_effects(effects: Dictionary, job_id: String, kind: String, target: Vector3i,
 		tile_grid: TileGridType, object_table: ObjectTableType, item_table: ItemTableType) -> Dictionary:
 	var requires_tile: String = effects.get("requires_tile", "")
@@ -462,6 +462,8 @@ static func apply_work_effects(effects: Dictionary, job_id: String, kind: String
 	var set_tile: String = effects.get("set_tile", "")
 	if not set_tile.is_empty():
 		tile_grid.tiles[tile_grid.index_of(target)] = set_tile
+	if effects.get("vein_ore", false):
+		VeinMining.yield_ore(target, object_table, item_table)
 	var clear_object: bool = effects.get("clear_object", false)
 	if clear_object:
 		object_table.set_object(target, "")

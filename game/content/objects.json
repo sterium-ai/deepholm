@@ -10,6 +10,15 @@
     {"kind": "test_multi_source_crate", "passable": true, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 3}, {"item": "stone", "quantity": 2}]},
     {"kind": "test_footprint_crate", "passable": false, "move_cost": 0, "is_door": false, "health": 20, "max_health": 20, "footprint": [2, 1], "rotatable": true, "build_ticks": 40, "max_builders": 1, "build_cost": []},
     {"kind": "workbench", "passable": false, "move_cost": 0, "is_door": false, "footprint": [2, 1], "rotatable": true, "build_ticks": 120, "max_builders": 2, "build_cost": [{"item": "wood", "quantity": 3}, {"item": "stone", "quantity": 4}]},
-    {"kind": "kitchen", "passable": false, "move_cost": 0, "is_door": false, "footprint": [2, 1], "rotatable": true, "build_ticks": 120, "max_builders": 2, "build_cost": [{"item": "wood", "quantity": 2}, {"item": "stone", "quantity": 5}]}
+    {"kind": "kitchen", "passable": false, "move_cost": 0, "is_door": false, "footprint": [2, 1], "rotatable": true, "build_ticks": 120, "max_builders": 2, "build_cost": [{"item": "wood", "quantity": 2}, {"item": "stone", "quantity": 5}]},
+    {"kind": "tunnel", "passable": true, "move_cost": 1, "is_door": false, "link_down": true, "footprint": [1, 1], "rotatable": false, "build_ticks": 160, "max_builders": 1, "build_cost": [{"item": "drill", "quantity": 1}, {"item": "wood", "quantity": 2}]},
+    {"kind": "stairs_up", "passable": true, "move_cost": 1, "is_door": false, "link_up": true, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": []},
+    {"kind": "copper_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "copper_ore", "layer": 1, "per_thousand_tiles": 6}},
+    {"kind": "tin_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "tin_ore", "layer": 1, "per_thousand_tiles": 5}},
+    {"kind": "coal_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "coal_ore", "layer": 1, "per_thousand_tiles": 6}},
+    {"kind": "iron_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "iron_ore", "layer": 2, "per_thousand_tiles": 6}},
+    {"kind": "silver_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "silver_ore", "layer": 2, "per_thousand_tiles": 3}},
+    {"kind": "gold_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "gold_ore", "layer": 3, "per_thousand_tiles": 2}},
+    {"kind": "gem_vein", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 0, "max_builders": 1, "build_cost": [], "vein": {"ore": "rough_gem", "layer": 3, "per_thousand_tiles": 2}}
   ]
 }

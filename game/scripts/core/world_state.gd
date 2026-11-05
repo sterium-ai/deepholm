@@ -108,13 +108,10 @@ var _actor_index := ActorIndexType.new()
 var _item_table: ItemTableType
 ## Read-through accessors kept for viewer/debug_scenario.gd's farm stock.
 var _items: Dictionary:
-	get:
-		return _item_table.items
+	get: return _item_table.items
 var _next_item_id: int:
-	get:
-		return _item_table.next_item_id
-	set(value):
-		_item_table.next_item_id = value
+	get: return _item_table.next_item_id
+	set(value): _item_table.next_item_id = value
 var _tool_store: ToolItemStoreType
 var _item_definitions: Dictionary = {}
 var _object_table: ObjectTableType
@@ -158,6 +155,7 @@ var _combat_giver: CombatGiverType
 var _combat_system: CombatSystemType
 var _approach_giver: ApproachGiverType
 var _construction: ConstructionSystemType
+var _layer_discovery: LayerDiscovery # F4 (ADR 071): tunnels discover underground layers
 var _construction_giver: ConstructionGiverType
 var _crafting: CraftingSystem # F2 (ADR 061): workbench targets, orders and bills
 var _craft_giver: CraftGiver
@@ -243,6 +241,7 @@ func _build_systems() -> void:
 	_construction = ConstructionSystemType.new(_object_definitions, _tile_grid, _passability, _object_table, _zone_table,
 		_item_table, _scheduler, _event_log, func() -> Array[Dictionary]: return _colonists, _colonist_at,
 		_find_job_colonist, _finish_job, _drop_carried_haul_item, _route_cost)
+	_layer_discovery = LayerDiscovery.new(self) # wires itself into _construction
 	_crafting = CraftingSystem.new(_content.list("recipes"), _object_table, _item_table, _tile_grid, _passability, _scheduler, _zone_table.is_in_any_zone, is_tool_kind, func(kind: String, tile: Vector3i) -> String: return _tool_store.spawn_ground(kind, tile) if is_tool_kind(kind) else "",
 		_tool_store.set_stockpile, get_tool_items, func() -> Array[Dictionary]: return _colonists, _finish_job, _drop_carried_haul_item, _construction.construction_site_exists, _construction.construction_site_deposit, _zone_table.accepts_item_at)
 	# Lambdas over the givers: _build_dimension_services() rebuilds NeedGiver/RescueGiver.
@@ -344,6 +343,7 @@ func _build_dimension_services(incidents_enabled: bool) -> void:
 		_get_job, _finish_job.bind("cancel_job"), _set_work_progress,
 		_calendar.day_of_tick, _event_log.insert_event, _event_log.next_sequence, PRIORITY_TICK, incidents_enabled,
 		_setup.enabled_incidents)
+	_layer_discovery.wire_routing()
 	_tick_pipeline = TickPipelineType.new(_clock, _area_orders, _needs_system, _need_giver, _haul_giver, _construction_giver,
 		_combat_system, _combat_giver, _construction, _scheduler, _passability, _tile_grid, _toils, func() -> CalendarServiceType: return _calendar, _rescue_giver,
 		_trench, _incidents, _approach_giver, _item_table, _event_log, _calendar_alert_giver, _progress_table, _reroutes,
@@ -673,7 +673,7 @@ func _resubmit_unreachable_job(job_id: String, job: Dictionary) -> void:
 
 ## A fresh bounded re-route search within this map's bounds (injected into _toils).
 func _route_search_factory(start: Vector3i, target: Vector3i, passable: Callable) -> RerouteType:
-	return RerouteType.new(start, target, passable, Vector3i.ZERO, _tile_grid.bounds_max(), _passability.region_reachable)
+	return _layer_discovery.linked(RerouteType.new(start, target, passable, Vector3i.ZERO, _tile_grid.bounds_max(), _passability.region_reachable))
 
 ## Faction passability with the scheduler's target-tile exception: a route may end on
 ## its own impassable target (a chop job's tree).
@@ -687,7 +687,7 @@ func _routable_to(target: Vector3i, faction_id: String = "colony") -> Callable:
 ## Chebyshev adjacency, matching pick_up()/place()'s "on or adjacent to".
 func _colonist_within_reach(colonist: Dictionary, tile: Vector3i) -> bool:
 	var colonist_tile := TileGrid.tile_of(colonist)
-	return TileGridType.chebyshev(colonist_tile, tile) <= 1
+	return colonist_tile.z == tile.z and TileGridType.chebyshev(colonist_tile, tile) <= 1
 
 ## The colonist currently assigned to job_id, or {} when none.
 func _find_job_colonist(job_id: String) -> Dictionary:

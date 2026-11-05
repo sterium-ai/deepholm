@@ -18,6 +18,7 @@ extends RefCounted
 ## - v12 -> v13 (F5c, ADR 066): a colonist's optional "thoughts".
 ## - v13 -> v14 (F5a-b, ADR 064): the "haul_tool" job kind.
 ## - v14 -> v15 (F6b-1, ADR 070): the optional "fauna" field and animal entities.
+## - v15 -> v16 (F4, ADR 071): "map.undergroundVersion" (the underground generator's version).
 ##
 ## Adding schema version N+1: bump StateCodec.SCHEMA_VERSION, add a `N:` arm to
 ## _migrate_step() that checks the vN shape and returns a new dictionary (never
@@ -67,6 +68,8 @@ static func _migrate_step(state: Dictionary, from_version: int) -> Dictionary:
 			return _v13_to_v14(state)
 		14:
 			return _v14_to_v15(state)
+		15:
+			return _v15_to_v16(state)
 		_:
 			return {
 				"ok": false,
@@ -276,6 +279,16 @@ static func _v13_to_v14(state: Dictionary) -> Dictionary:
 static func _v14_to_v15(state: Dictionary) -> Dictionary:
 	var migrated := state.duplicate(true)
 	migrated["schemaVersion"] = 15
+	return {"ok": true, "state": migrated}
+
+## v15 -> v16 (F4, ADR 071): "map.undergroundVersion". A v15 world has only its surface layers and
+## no tunnel ever finished, so it gets the first (and only) underground algorithm, version 1.
+static func _v15_to_v16(state: Dictionary) -> Dictionary:
+	if not (state.get("map") is Dictionary):
+		return {"ok": false, "code": "schema_error", "message": "v15 save has no map"}
+	var migrated := state.duplicate(true)
+	(migrated["map"] as Dictionary)["undergroundVersion"] = UndergroundGenerator.GENERATOR_VERSION
+	migrated["schemaVersion"] = 16
 	return {"ok": true, "state": migrated}
 
 ## The same dictionary with its keys in sorted order (_v11_to_v12()).

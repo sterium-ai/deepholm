@@ -5,8 +5,10 @@ extends RefCounted
 ## dirty-cell log and the region/room maps (regions.gd/rooms.gd).
 ## Invariants:
 ## - tiles[index_of(c)] is c's kind; tiles.size() == layer_count * layer_size() (ADR 045 §2:
-##   z outermost, so layer 0's indices are y * width + x); width/height/layer_count change
-##   only in StateCodec.decode(), which also writes them. Regions and rooms cover layer 0.
+##   z outermost, so layer 0's indices are y * width + x); width/height change only in
+##   StateCodec.decode(), which also writes them; layer_count also grows (tiles appended at
+##   the end, existing indices unmoved) when LayerDiscovery discovers a layer (F4, ADR 071).
+##   Regions and rooms cover layer 0.
 ## - regions, rooms and the water cache are built on first use, never in _init().
 ## - dirty_cells is append-only and never persisted; past MAX_DIRTY_CELLS it is trimmed to
 ##   RETAINED_DIRTY_CELLS and dirty_base (absolute cursor of dirty_cells[0]) moves on (A6).
@@ -23,8 +25,8 @@ var width: int
 var height: int
 ## Layers 0..layer_count-1; never shrinks (ADR 045 §2).
 var layer_count: int = 1
-## The most layers a save may declare (MapValidator, SaveWire's allocation guard); F4 sets the
-## gameplay limit within it.
+## The most layers a save may declare (MapValidator, SaveWire's allocation guard); gameplay stops at
+## 1 + LayerDiscovery.MAX_UNDERGROUND_LAYER (F4).
 const MAX_LAYER_COUNT := 64
 ## The surface layer: incidents, spawns and the (x, y) shorthands of WorldState's queries
 ## address it until a layer-aware caller exists (L3/L4/F4).
@@ -203,6 +205,12 @@ static func manhattan(a: Vector3i, b: Vector3i) -> int:
 static func chebyshev(a: Vector3i, b: Vector3i) -> int:
 	assert(a.z == b.z, "chebyshev() across layers")
 	return maxi(absi(a.x - b.x), absi(a.y - b.y))
+
+## Admissible lower bound on a route's step count, layers included (F4, ADR 071): a vertical link
+## (ADR 068) is one step at the same (x, y), and a planar step moves at most one tile in Chebyshev
+## distance. Search pruning across layers uses this, never a sentinel distance.
+static func route_lower_bound(a: Vector3i, b: Vector3i) -> int:
+	return maxi(absi(a.x - b.x), absi(a.y - b.y)) + absi(a.z - b.z)
 
 ## Squared Euclidean: flee-candidate comparison.
 static func distance_sq(a: Vector3i, b: Vector3i) -> int:

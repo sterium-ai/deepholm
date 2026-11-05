@@ -439,7 +439,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 15 },
+    "schemaVersion": { "type": "integer", "const": 16 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -460,7 +460,7 @@
     "map": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["width", "height", "layerCount", "tiles", "generatorVersion"],
+      "required": ["width", "height", "layerCount", "tiles", "generatorVersion", "undergroundVersion"],
       "properties": {
         "width": { "type": "integer", "minimum": 1 },
         "height": { "type": "integer", "minimum": 1 },
@@ -470,7 +470,8 @@
           "description": "layerCount*width*height tile kinds in flat-index order: z*width*height + y*width + x.",
           "items": { "type": "string", "enum": ["rock", "soil", "floor", "plowed_soil", "planted", "crop_grown", "crop_ripe", "hazard", "sapling_1", "sapling_2", "sapling_3", "tree", "water", "trench"] }
         },
-        "generatorVersion": { "type": "integer", "minimum": 1 }
+        "generatorVersion": { "type": "integer", "minimum": 1 },
+        "undergroundVersion": { "type": "integer", "minimum": 1, "description": "UndergroundGenerator.GENERATOR_VERSION of the algorithm that generates this world's next underground layer when a tunnel is finished (F4, ADR 071)." }
       }
     },
     "items": {

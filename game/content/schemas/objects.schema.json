@@ -16,6 +16,17 @@
           "is_door": {"type": "boolean"},
           "link_up": {"type": "boolean"},
           "link_down": {"type": "boolean"},
+          "vein": {
+            "type": "object",
+            "description": "F4 (ADR 071): an ore vein, placed in rock when its layer is generated. Mining it with a pick yields one `ore` item; `per_thousand_tiles` is its density (at least one per layer).",
+            "required": ["ore", "layer", "per_thousand_tiles"],
+            "properties": {
+              "ore": {"type": "string", "minLength": 1},
+              "layer": {"type": "integer", "minimum": 1},
+              "per_thousand_tiles": {"type": "integer", "minimum": 1}
+            },
+            "additionalProperties": false
+          },
           "health": {"type": "integer", "minimum": 0},
           "max_health": {"type": "integer", "minimum": 1},
           "footprint": {

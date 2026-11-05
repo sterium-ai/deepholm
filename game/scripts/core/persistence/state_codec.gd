@@ -25,8 +25,9 @@ const WorldSetupType = preload("res://scripts/core/world/world_setup.gd")
 ## v13 saves a colonist's active thoughts (F5c, ADR 066).
 ## v14 adds the haul_tool job kind and a ground tool's optional setDown (F5a-b, ADR 064).
 ## v15 adds the optional "fauna" field: wild animals and their stream (F6b-1, ADR 070).
+## v16 adds map.undergroundVersion, the underground generator's version (F4, ADR 071).
 ## Every later shape change bumps this and adds a SaveMigrations step and a fixture.
-const SCHEMA_VERSION := 15
+const SCHEMA_VERSION := 16
 
 ## The session registry's manifest version (null: the base bundle on disk); "" when the
 ## registry is invalid, which SaveIO._validate_state() rejects.
@@ -58,6 +59,7 @@ static func encode(world: WorldState) -> Dictionary:
 			"layerCount": world._tile_grid.layer_count,
 			"tiles": world._tile_grid.encode()["tiles"],
 			"generatorVersion": world.get_generator_version(),
+			"undergroundVersion": world._layer_discovery.generator_version,
 		},
 		"entities": EntityCodec._encode_entities(world._colonists, world._reroutes),
 		"inventory": {},
@@ -130,6 +132,8 @@ static func decode(state: Dictionary, content: ContentRegistryType = null) -> Wo
 	world._build_dimension_services(false)
 	world._generator_version = int(map.get("generatorVersion", WorldGeneratorType.GENERATOR_VERSION))
 	world._tile_grid.decode(state["map"])
+	var underground_version: int = map["undergroundVersion"]
+	world._layer_discovery.generator_version = underground_version
 	world._colonists = EntityCodec._decode_entities(state["entities"])
 	# Items, ground berries and the dig-find RNG; nothing else in decode() draws from it.
 	world._item_table.decode(state)
@@ -247,6 +251,7 @@ static func _restore_reroutes(world: WorldState, bounds_max: Vector3i) -> void:
 			cost_fn = world._routable_to(target, faction_id)
 		var search: RerouteType = RerouteType.new(snapshot["start"], snapshot["start"],
 			cost_fn, Vector3i.ZERO, bounds_max)
+		search.use_links(world._layer_discovery.links)
 		search.restore(snapshot)
 		world._reroutes[colonist["id"]] = search
 		# Back to the live shape: the full snapshot stays on the search.

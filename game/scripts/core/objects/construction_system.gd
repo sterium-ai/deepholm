@@ -56,6 +56,13 @@ var _finish_job: Callable
 ## (job_id: String) -> void: completes a builder job a finished site ends, awarding its XP
 ## (F3, ADR 062: ToilBindings sets it); unset, the job is finished as complete_job.
 var complete_builder: Callable
+## (kind: String, origin: Vector3i) -> void: after a finished site's object is placed (F4,
+## ADR 071: LayerDiscovery sets it); unset, nothing else happens.
+var on_site_completed: Callable
+## (kind: String, origin: Vector3i, accepted: Array[Vector3i]) -> Dictionary: a placement veto
+## ({"reason","params"}, or {} to allow) over build and build_line; `accepted` holds the tiles
+## the same build_line already kept (F4, ADR 071: LayerDiscovery sets it). Unset, no veto.
+var may_place: Callable
 ## (job_id: String) -> void: drops a site_fetch job's carried item on the colonist's tile.
 var _drop_carried_haul_item: Callable
 ## (from: Vector3i, to: Vector3i, faction_id: String) -> int: route cost, -1 when unreachable.
@@ -155,6 +162,10 @@ func check_construction_command(payload: Dictionary) -> Dictionary:
 	var occupancy_check := _construction_footprint_check(footprint_tiles)
 	if not occupancy_check.is_empty():
 		return occupancy_check
+	var no_tiles: Array[Vector3i] = []
+	var veto: Dictionary = may_place.call(kind, origin, no_tiles) if may_place.is_valid() else {}
+	if not veto.is_empty():
+		return veto
 	if not bool(_object_definitions[kind].get("passable", true)) and _would_enclose_tiles(footprint_tiles):
 		return {"reason": "blocked_target_unreachable", "params": {"detail": "build_seals_colony"}}
 	return {}
@@ -204,6 +215,8 @@ func classify_build_line_command(payload: Dictionary) -> Dictionary:
 	for tile in canonical:
 		var footprint := _object_table.object_footprint_tiles(kind, tile, orientation)
 		var occupancy_check := _construction_footprint_check(footprint)
+		if occupancy_check.is_empty() and may_place.is_valid():
+			occupancy_check = may_place.call(kind, tile, surviving)
 		if not occupancy_check.is_empty():
 			skipped.append({"x": tile.x, "y": tile.y, "z": tile.z, "reason": occupancy_check["reason"]})
 			continue
@@ -508,6 +521,9 @@ func _finalize_construction_site(site_id: String, completing_job_id: String) -> 
 	var origin: Vector3i = site["origin"]
 	_object_table.set_object(origin, String(site["kind"]), "colony", String(site["orientation"]))
 	site_table.remove(site_id)
+	if on_site_completed.is_valid():
+		var completed_kind: String = site["kind"]
+		on_site_completed.call(completed_kind, origin)
 
 ## A site_work job's terminal transition other than completion frees its builder
 ## slot. Called right after the transition, so the job is still in JobQueue's history (A5).

@@ -131,7 +131,7 @@ func _acceptance_world(seed_value: int, still_needs: bool = true) -> WorldStateT
 	var zone_a := _add_zone(world, A)
 	var zone_b := _add_zone(world, B)
 	_command_ok(world, "zone_set_stockpile", {"id": zone_a, "groups": "food", "priority": 3})
-	_command_ok(world, "zone_set_stockpile", {"id": zone_b, "groups": "food,material,seed,tool,valuable", "priority": 1})
+	_command_ok(world, "zone_set_stockpile", {"id": zone_b, "groups": "food,material,ore,seed,tool,valuable", "priority": 1})
 	return world
 
 func _units_in(world: WorldStateType, kind: String, rect: Rect2i) -> int:
@@ -248,7 +248,7 @@ func _check_recorded_session_replays() -> void:
 	_add_zone(world, A)
 	_add_zone(world, B)
 	_command_ok(world, "zone_set_stockpile", {"id": "zone_1", "groups": "food", "priority": 3})
-	_command_ok(world, "zone_set_stockpile", {"id": "zone_2", "groups": "food,material,seed,tool,valuable", "priority": 1})
+	_command_ok(world, "zone_set_stockpile", {"id": "zone_2", "groups": "food,material,ore,seed,tool,valuable", "priority": 1})
 	var switched := false
 	for _i in _day_ticks:
 		world.tick()
@@ -332,7 +332,7 @@ func _check_commands_are_validated_and_preview_agrees() -> void:
 	_expect(world.preview(good)["ok"] and world.apply(good)["ok"], "a valid zone_set_stockpile must preview and apply")
 	_expect(world.get_zone(zone).get("groups") == ["food", "seed"] and int(world.get_zone(zone)["priority"]) == 3,
 		"groups are stored sorted, with the priority: %s" % [world.get_zone(zone)])
-	_command_ok(world, "zone_set_stockpile", {"id": zone, "groups": "valuable,tool,seed,material,food", "priority": 2})
+	_command_ok(world, "zone_set_stockpile", {"id": zone, "groups": "valuable,tool,seed,ore,material,food", "priority": 2})
 	_expect(world.get_zone(zone).keys().size() == 6, "every group at priority 2 is the default record again: %s" % [world.get_zone(zone)])
 
 ## The panel lists stockpiles (not farm zones), shows priority and groups, and its buttons go
@@ -346,7 +346,7 @@ func _check_panel_changes_a_stockpile_through_commands() -> void:
 	var priority := _find_label(panel, "Priority")
 	_expect(priority != null and priority.text == "Priority 2", "the panel must show the default priority: %s" % [priority.text if priority else null])
 	var buttons := _buttons(panel)
-	_expect(buttons.size() == 2 + 5, "one stockpile: -, + and one toggle per group, got %d buttons" % buttons.size())
+	_expect(buttons.size() == 2 + 6, "one stockpile: -, + and one toggle per group, got %d buttons" % buttons.size())
 	var food: Button = null
 	var more: Button = null
 	for button in buttons:
@@ -359,7 +359,7 @@ func _check_panel_changes_a_stockpile_through_commands() -> void:
 		panel.free()
 		return
 	food.pressed.emit()
-	_expect(world.get_zone(zone).get("groups") == ["material", "seed", "tool", "valuable"], "toggling Food must drop it: %s" % [world.get_zone(zone)])
+	_expect(world.get_zone(zone).get("groups") == ["material", "ore", "seed", "tool", "valuable"], "toggling Food must drop it: %s" % [world.get_zone(zone)])
 	_expect(food.text == "[ ] Food", "the button must show Food rejected, got %s" % food.text)
 	more.pressed.emit()
 	more.pressed.emit()
@@ -453,10 +453,10 @@ func _check_panel_rebuilds_for_another_world_with_the_same_zone_ids() -> void:
 	for button in _buttons(panel):
 		if button.text == "[x] Food":
 			food = button
-	_expect(food != null and _buttons(panel).size() == 2 + 5, "one row of buttons for the new world's stockpile")
+	_expect(food != null and _buttons(panel).size() == 2 + 6, "one row of buttons for the new world's stockpile")
 	if food != null:
 		food.pressed.emit()
-	_expect(second.get_zone("zone_1").get("groups") == ["material", "seed", "tool", "valuable"],
+	_expect(second.get_zone("zone_1").get("groups") == ["material", "ore", "seed", "tool", "valuable"],
 		"the toggle must change the new world's zone_1: %s" % [second.get_zone("zone_1")])
 	_expect(not first.get_zone("zone_1").has("groups"), "and leave the old world's: %s" % [first.get_zone("zone_1")])
 	# The plain refresh path (a host that only reassigns world) rebuilds too: the rectangle differs.

@@ -29,6 +29,7 @@
               "consumes": {"type": "string", "minLength": 1},
               "set_tile": {"type": "string", "minLength": 1},
               "clear_object": {"type": "boolean"},
+              "vein_ore": {"type": "boolean"},
               "yields": {
                 "type": "object",
                 "required": ["placement"],

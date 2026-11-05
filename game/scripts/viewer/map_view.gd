@@ -55,6 +55,16 @@ const OBJECT_COLORS := {
 	"table": Color(0.75, 0.60, 0.35),
 	"berry_bush": Color(0.55, 0.15, 0.45),
 	"bed": Color(0.70, 0.55, 0.65),
+	# F4 (ADR 071) placeholders until pack art is chosen.
+	"tunnel": Color(0.20, 0.16, 0.12),
+	"stairs_up": Color(0.85, 0.80, 0.70),
+	"copper_vein": Color("b87333"),
+	"tin_vein": Color("a8b0b8"),
+	"coal_vein": Color("1e1e22"),
+	"iron_vein": Color("8a5a44"),
+	"silver_vein": Color("d8dce4"),
+	"gold_vein": Color("e8c040"),
+	"gem_vein": Color("40c0b0"),
 }
 const UNKNOWN_OBJECT_COLOR := Color.MAGENTA
 
@@ -73,6 +83,15 @@ const GROUND_ITEM_COLORS := {
 	"flint": Color("4a5060"),
 	"planks": Color("b08050"),
 	"stone_blocks": Color("6a7480"),
+	# F4 (ADR 071) placeholders until pack art is chosen.
+	"drill": Color("707880"),
+	"copper_ore": Color("b87333"),
+	"tin_ore": Color("a8b0b8"),
+	"coal_ore": Color("1e1e22"),
+	"iron_ore": Color("8a5a44"),
+	"silver_ore": Color("d8dce4"),
+	"gold_ore": Color("e8c040"),
+	"rough_gem": Color("40c0b0"),
 }
 const STOCKPILE_COUNT_TEXT_COLOR := Color.WHITE
 const STOCKPILE_COUNT_FONT_SIZE := 10

@@ -47,6 +47,8 @@ var _may_reserve_autonomous: Callable = Callable()
 ## Callable(worker_id, tile) -> cost: an autonomous entry's route search runs under its own
 ## faction's door rules; unset falls back to tick()'s `passable`.
 var _passable_autonomous: Callable = Callable()
+## L3b: the map's current vertical links (MeasuredRoute.use_links()); invalid = layer-local.
+var links_of: Callable = Callable()
 
 func _init(random_source: RandomNumberGenerator, content_registry) -> void:
 	queue = QueueType.new(random_source)
@@ -255,7 +257,7 @@ func tick(tick_number: int, colonists: Array[Dictionary], passable: Callable,
 				request["route"] = null
 				continue
 			if request["route"] == null:
-				request["route"] = RouteType.new(request["start"], entry["target"],
+				request["route"] = _new_route(request["start"], entry["target"],
 					_routable(entry["target"], _passable_for(worker, entry, passable)), bounds_min, bounds_max)
 			var route: RouteType = request["route"]
 			var before := route.expansions
@@ -352,6 +354,8 @@ func _score_candidate(worker: String, colonist: Dictionary, entry: Dictionary, j
 		labour_table: Dictionary, tick_number: int, get_job_labour: Callable, get_calendar_boost: Callable) -> Dictionary:
 	var bracket := _priority_bracket(entry, job_kinds, labour_table, tick_number, get_job_labour, get_calendar_boost)
 	var start := TileGrid.tile_of(colonist)
+	var target: Vector3i = entry["target"]
+	var travel: int = TileGrid.manhattan(target, start) if target.z == start.z else ZoneTable.OTHER_LAYER_DISTANCE
 	var ticks_waiting := tick_number - int(entry["submitted_tick"])
 	var skill := 0
 	if get_job_labour.is_valid():
@@ -359,7 +363,7 @@ func _score_candidate(worker: String, colonist: Dictionary, entry: Dictionary, j
 		var labour: String = get_job_labour.call(kind)
 		skill = SkillsType.level_of(colonist, labour)
 	return {"worker": worker, "entry": entry, "start": start, "skill": skill,
-		"score": PRIORITY_WEIGHT * bracket + ticks_waiting - mini(MAX_TRAVEL_PENALTY, TileGrid.manhattan(entry["target"], start))}
+		"score": PRIORITY_WEIGHT * bracket + ticks_waiting - mini(MAX_TRAVEL_PENALTY, travel)}
 
 ## job id -> its proposals, each list in the global _pair_before() order.
 func _group_by_job(proposals: Array[Dictionary]) -> Dictionary:
@@ -509,7 +513,7 @@ func restore_scheduling(state: Dictionary, is_passable: Callable, bounds_min: Ve
 			request["route"] = null
 		else:
 			var entry: Dictionary = request["candidates"][request["cursor"]]
-			var route: RouteType = RouteType.new(route_state["start"], route_state["start"], _routable(entry["target"], _passable_for(worker, entry, is_passable)), bounds_min, bounds_max)
+			var route := _new_route(route_state["start"], route_state["start"], _routable(entry["target"], _passable_for(worker, entry, is_passable)), bounds_min, bounds_max)
 			route.restore(route_state)
 			request["route"] = route
 		# Found paths are not saved; RouteSearch is deterministic, so re-running rebuilds them.
@@ -575,9 +579,16 @@ func _priority_bracket(entry: Dictionary, job_kinds: Dictionary, labour_table: D
 	var calendar_boost := int(get_calendar_boost.call(labour, tick_number)) if get_calendar_boost.is_valid() else 0
 	return mini(order_priority + calendar_boost + LABOUR_LEVEL_MAX - labour_level, MAX_PRIORITY_BRACKET)
 
+## A measured route that sees links_of's vertical links (L3b, ADR 068).
+func _new_route(start: Vector3i, target: Vector3i, cost_fn: Callable, bounds_min: Vector3i,
+		bounds_max: Vector3i, region_check: Callable = Callable()) -> RouteType:
+	var route: RouteType = RouteType.new(start, target, cost_fn, bounds_min, bounds_max, region_check)
+	route.use_links(links_of)
+	return route
+
 ## Unbounded re-run of a found search; region_check (ADR 054) refuses a target cut off since.
 func _resolve_path(start: Vector3i, target: Vector3i, passable: Callable, bounds_min: Vector3i, bounds_max: Vector3i, region_check: Callable) -> Array:
-	var route := RouteType.new(start, target, _routable(target, passable), bounds_min, bounds_max, region_check)
+	var route := _new_route(start, target, _routable(target, passable), bounds_min, bounds_max, region_check)
 	while not route.is_terminal():
 		route.resume()
 	return route.get_path()

@@ -1326,11 +1326,28 @@
    "bed": "every pack bed is about 30 px wide, two tiles (Props/Static/Furniture.png, Interior_Props_01.png); owner rule: footprint <= 1 tile, art may overhang only up",
    "test_multi_source_crate": "test-only content kind, never placed by the game; no art at all",
    "test_footprint_crate": "test-only content kind, never placed by the game; no art at all",
-   "kitchen": "F5b (ADR 065): new 2x1 bench; pack art not chosen yet (the viewer is outside F5b, follow-up)"
+   "kitchen": "F5b (ADR 065): new 2x1 bench; pack art not chosen yet (the viewer is outside F5b, follow-up)",
+   "tunnel": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "stairs_up": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "copper_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "tin_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "coal_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "iron_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "silver_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "gold_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "gem_vein": "F4 (ADR 071): new object; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)"
   },
   "items": {
    "sand": "the pack has no sand pile (Rocks.png and Resources.png hold rocks, pebbles and ore); a tan pebble would read as stone",
-   "meal": "F5b (ADR 065): new item; pack art not chosen yet (the viewer is outside F5b, follow-up)"
+   "meal": "F5b (ADR 065): new item; pack art not chosen yet (the viewer is outside F5b, follow-up)",
+   "drill": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "copper_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "tin_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "coal_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "iron_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "silver_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "gold_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
+   "rough_gem": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)"
   }
  }
 }

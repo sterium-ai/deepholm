@@ -52,7 +52,8 @@ func _minimal_state_at_size(width: int, height: int) -> Dictionary:
 	return {
 		"schemaVersion": StateCodecType.SCHEMA_VERSION, "contentVersion": StateCodecType.content_version(),
 		"contentPacks": [], "seed": 1, "tick": 0, "epoch": 0,
-		"map": {"width": width, "height": height, "layerCount": 1, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION},
+		"map": {"width": width, "height": height, "layerCount": 1, "tiles": tiles, "generatorVersion": WorldGeneratorType.GENERATOR_VERSION,
+			"undergroundVersion": UndergroundGenerator.GENERATOR_VERSION},
 		"entities": [], "inventory": {}, "jobs": [],
 		"scheduling": {
 			"nextJobId": 1, "jobSequence": 0, "jobTick": 0, "queueEventSequence": -1,
