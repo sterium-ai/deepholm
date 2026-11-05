@@ -29,6 +29,7 @@ const WILD_TICKS_VALID_FIXTURE_DIR := "user://test-content-registry-fixture-wild
 const WILD_TICKS_INVALID_FIXTURE_DIR := "user://test-content-registry-fixture-wild-ticks-invalid"
 const BUILD_COST_DANGLING_FIXTURE_DIR := "user://test-content-registry-fixture-build-cost-dangling"
 const MISSING_BUILD_COST_FIXTURE_DIR := "user://test-content-registry-fixture-missing-build-cost"
+const VEIN_ORE_FIXTURE_DIR := "user://test-content-registry-fixture-vein-ore"
 const MANIFEST_CONTENT_FIXTURE_DIR := "user://test-content-registry-fixture-manifest-content"
 
 ## ADR 026/027: tunables.wild.trench_climb_ticks must reject a
@@ -74,6 +75,7 @@ func _init() -> void:
 	_check_fixtures_with_invalid_wild_trench_climb_ticks_fail_construction()
 	_check_fixture_with_build_cost_dangling_reference_fails_construction()
 	_check_fixture_with_missing_build_cost_fails_construction()
+	_check_fixture_with_vein_ore_dangling_reference_fails_construction()
 	_check_fixture_with_crop_dangling_tile_fails_construction()
 	_check_shipped_manifest_lists_every_content_file()
 	_check_fixture_manifest_content_entries_are_checked()
@@ -321,6 +323,50 @@ func _write_build_cost_dangling_fixture_bundle() -> void:
 		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"]},
 	]})
 	_write_required_tiles_and_mapgen(BUILD_COST_DANGLING_FIXTURE_DIR)
+
+## F4: a vein's ore is spawned as an item when the vein is mined, so a vein.ore naming no
+## declared item must fail construction, never load and surface at play time. The same bundle
+## with a declared ore constructs, so the ore is the only thing rejected.
+func _check_fixture_with_vein_ore_dangling_reference_fails_construction() -> void:
+	_write_vein_ore_fixture_bundle("wood")
+	var valid_registry := ContentRegistryType.new(VEIN_ORE_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
+	_cleanup_dir(VEIN_ORE_FIXTURE_DIR)
+	_expect(valid_registry.is_valid(), "a vein.ore naming a declared item must construct, got %s" % valid_registry.get_error())
+
+	_write_vein_ore_fixture_bundle("does_not_exist")
+	var registry := ContentRegistryType.new(VEIN_ORE_FIXTURE_DIR, ContentRegistryType.DEFAULT_SCHEMA_DIR)
+	_cleanup_dir(VEIN_ORE_FIXTURE_DIR)
+
+	_expect(not registry.is_valid(), "a vein.ore naming an unknown item id must fail construction")
+	var error := registry.get_error()
+	_expect(error.get("code") == ContentRegistryType.ERROR_DANGLING_REFERENCE,
+		"the vein.ore error must be typed as dangling_reference, got %s" % error)
+	_expect(String(error.get("file", "")).ends_with("objects.json"),
+		"the vein.ore error must name objects.json as the offending file, got %s" % error)
+	_expect(String(error.get("message", "")).contains("does_not_exist"),
+		"the vein.ore error must name the dangling id, got %s" % error)
+
+## Same otherwise-valid bundle as _write_build_cost_dangling_fixture_bundle(), except its
+## "wall" row costs only wood and is a vein of the given ore.
+func _write_vein_ore_fixture_bundle(ore: String) -> void:
+	var dir := DirAccess.open("user://")
+	if not dir.dir_exists(VEIN_ORE_FIXTURE_DIR):
+		dir.make_dir_recursive(VEIN_ORE_FIXTURE_DIR)
+
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/manifest.json", {"version": "0.0.1-fixture"})
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/items.json", {"items": [{"id": "axe", "kind": "tool"}, {"id": "wood", "kind": "material"}]})
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/objects.json", {"objects": [
+		{"kind": "bed", "passable": true, "move_cost": 3, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": []},
+		{"kind": "wall", "passable": false, "move_cost": 0, "is_door": false, "footprint": [1, 1], "rotatable": false, "build_ticks": 40, "max_builders": 1, "build_cost": [{"item": "wood", "quantity": 1}], "vein": {"ore": ore, "layer": 1, "per_thousand_tiles": 1}},
+	]})
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/needs.json", {"needs": [
+		{"kind": "rest", "rate_per_day": 80, "warn": 50, "urgent": 25, "critical": 10, "restore": 100, "source_kind": "bed", "full": 100, "job_priority": 1, "retry_base_ticks": 10, "retry_cap_ticks": 40},
+	]})
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/calendar.json", {"day_length_ticks": 100, "windows": []})
+	_write_json(VEIN_ORE_FIXTURE_DIR + "/jobs.json", {"jobs": [
+		{"kind": "chop", "labour": "chop", "toils": ["reserve", "go_to", "work", "release_all"]},
+	]})
+	_write_required_tiles_and_mapgen(VEIN_ORE_FIXTURE_DIR)
 
 ## build_cost is a required field on every objects.json row
 ## (not just the buildable kinds), so a row omitting it entirely must fail

@@ -67,7 +67,7 @@ static func _carve_pocket(random: RandomNumberGenerator, tiles: Array[String], w
 	var x := random.randi_range(0, width - 1)
 	var y := random.randi_range(0, height - 1)
 	for step in random.randi_range(POCKET_MIN_STEPS, POCKET_MAX_STEPS):
-		tiles[y * width + x] = TILE_FLOOR
+		tiles[TileGrid.flat_index(x, y, width)] = TILE_FLOOR
 		match random.randi_range(0, 3):
 			0:
 				x = mini(x + 1, width - 1)
