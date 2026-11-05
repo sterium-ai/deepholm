@@ -13,7 +13,8 @@ extends SceneTree
 ## across the stairs (cross-layer distances, no TileGrid same-layer assert). Review round 3: an
 ## interrupted L1 job resumes through the stairs, the nearest food across the stairs wins, a save
 ## on the discovery tick with searches in flight ticks like the original, and a workbench-crafted
-## drill builds a tunnel.
+## drill builds a tunnel. Review round 5: equidistant beds sharing (x, y) on the layers above and
+## below pick the same bed in either placement order and after a save/load.
 
 const InventoryType = preload("res://scripts/core/actors/components/inventory.gd")
 const WorldStateType = preload("res://scripts/core/world_state.gd")
@@ -26,6 +27,11 @@ const SEED := 42
 ## Ticks a tunnel order may take, hauls down the stairs included.
 const BUILD_TICKS := 2000
 const MINE_TICKS := 2000
+## The diver's tile on L1 and the (x, y) of the beds on L0 and L2: both routes take four steps,
+## one through the stairs up at (10, 10), the other through the tunnel at (11, 10).
+const DIVER_XY := Vector2i(11, 11)
+const BED_XY := Vector2i(10, 11)
+const BED_TICKS := 200
 const FLEE_TICKS := 60
 const CHECKPOINT_INTERVAL := 50
 const TIMING_ROUNDS := 5
@@ -54,6 +60,7 @@ func _init() -> void:
 	_check_hostile_on_another_layer_is_no_flee_threat()
 	_check_interrupted_l1_job_resumes_through_the_stairs()
 	_check_nearest_food_across_the_stairs_wins()
+	_check_equidistant_beds_across_layers_survive_save_load()
 	_check_save_load_with_a_search_in_flight_across_discovery()
 	_check_drill_crafted_at_the_workbench_builds_a_tunnel()
 	if _failed:
@@ -498,6 +505,53 @@ func _check_nearest_food_across_the_stairs_wins() -> void:
 				"the surface berries across the stairs must be eaten first (left %s)" % [berries])
 			return
 	_fail("the diver ate neither berry within %d ticks (colonist %s)" % [MINE_TICKS, Scenarios.colonist_by_id(world, "colonist_1")])
+
+## L1 and L2 discovered, a tired diver on L1 between both stairs, and `beds` placed in that order:
+## three steps to either bed, so only the candidate tie-break tells them apart.
+func _bed_tie_world(beds: Array[Vector3i]) -> WorldStateType:
+	var world := _l1_world(SEED, 2)
+	Scenarios.isolate_need(world, "")
+	_expect(bool(_build_tunnel(world, "tunnel_1", TUNNELS[1]).get("ok", false)), "the L1 tunnel order must be accepted")
+	_expect(_tick_until_layers(world, 3, BUILD_TICKS), "a finished L1 tunnel must discover L2")
+	var objects := TestAccess.object_table(world)
+	for bed in beds:
+		objects.set_object(bed, "bed")
+	var diver := Scenarios.idle_colonist("colonist_1", DIVER_XY.x, DIVER_XY.y)
+	diver["z"] = 1
+	TestAccess.colonists(world).append(diver)
+	world.tick() # settles the new colonist's record, so the save hashes like the world it left
+	diver["needs"]["rest"] = 20
+	return world
+
+## Live worlds list beds in placement order and saves in key order: the bed chosen on a tie must
+## depend on neither, so the loaded world keeps hashing like the original through the whole sleep.
+func _check_equidistant_beds_across_layers_survive_save_load() -> void:
+	var upper := Vector3i(BED_XY.x, BED_XY.y, 0)
+	var lower := Vector3i(BED_XY.x, BED_XY.y, 2)
+	var placements: Array = [[lower, upper], [upper, lower]]
+	for placement: Array in placements:
+		var beds: Array[Vector3i] = []
+		beds.assign(placement)
+		var world := _bed_tie_world(beds)
+		var loaded := StateCodecType.decode(StateCodecType.encode(world))
+		_expect(loaded != null, "the save with two beds must load")
+		if loaded == null:
+			return
+		_expect(loaded.state_hash() == world.state_hash(), "the loaded bed world must hash like the original")
+		Scenarios.isolate_need(loaded, "")
+		var chosen: Variant = null
+		for tick in BED_TICKS:
+			world.tick()
+			loaded.tick()
+			if chosen == null:
+				var jobs := Scenarios.jobs_of_kind(world, "sleep")
+				if not jobs.is_empty():
+					chosen = jobs[0]["target"]
+			if loaded.state_hash() != world.state_hash():
+				_fail("placement %s: the loaded world diverged %d ticks after the save (original sleeps at %s, loaded %s)" % [
+					placement, tick + 1, Scenarios.jobs_of_kind(world, "sleep"), Scenarios.jobs_of_kind(loaded, "sleep")])
+				return
+		_expect(chosen == upper, "placement %s: the tie must go to the lowest layer, chose %s" % [placement, chosen])
 
 ## Every route search not finished yet: reroutes, the scheduler's pending routes, the givers'.
 func _searches_in_flight(world: WorldStateType) -> Array:

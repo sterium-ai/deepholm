@@ -213,8 +213,8 @@ func _is_backed_off(colonist_id: String, kind: String, tick: int) -> bool:
 	return backoff.has("retry_at") and tick < int(backoff["retry_at"])
 
 ## "Nearest" is the shortest real route, not Manhattan distance, within the best source rank this
-## colonist can route to. The pre-sort (rank descending, then Manhattan, ties row-major) only orders
-## the search and lets it stop once no candidate can beat the best route at that rank.
+## colonist can route to. The pre-sort (rank descending, then Manhattan, ties row-major, then layer)
+## only orders the search and lets it stop once no candidate can beat the best route at that rank.
 ## Reserved/claimed candidates are dropped here and rechecked at commit (searches span ticks).
 func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 	var colonist_id: String = colonist["id"]
@@ -241,7 +241,9 @@ func _start_search(colonist: Dictionary, kind: String, tick: int) -> void:
 			return da < db
 		if a.y != b.y:
 			return a.y < b.y
-		return a.x < b.x)
+		if a.x != b.x:
+			return a.x < b.x
+		return a.z < b.z)
 	if candidates.is_empty():
 		_onset_failed(colonist_id, kind, tick)
 		return
