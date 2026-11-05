@@ -98,8 +98,7 @@ work goes into new modules.
      uses for the layers it has not discovered yet. It is required and validated, and the load
      restores it.
    - The migration v15→v16 adds `undergroundVersion: 1`.
-   - Schema v16: F5a-b's v14 is on main; v15 is F6b-1's, a pass-through step until it merges
-     and replaces it; F4 is v16.
+   - Schema v16: F5a-b's v14 and F6b-1's v15 (fauna, ADR 070) are on main; F4 is the next step.
 8. **Viewer.** The new objects and items have placeholder colours in `map_view.gd` and
    placeholder entries, with reasons, in `world_pack.json` until pack art is chosen. There are
    also text keys for the drill recipe and the `ore` stockpile group.

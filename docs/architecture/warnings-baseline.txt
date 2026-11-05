@@ -1,11 +1,11 @@
 # GDScript warnings under game/scripts/core, by kind. CI fails when a count rises above this.
 # Regenerate with tools\check_core_warnings.ps1 -Update (only ever to lower it, or with an ADR).
 # 4.7.2.stable.official.ed1daf0bf
-total 2782
+total 2781
 untyped_declaration 505
 unsafe_property_access 0
 unsafe_method_access 226
-unsafe_call_argument 2024
+unsafe_call_argument 2023
 other 27
 # Per file, for reference only (not gated, so moving code between files needs no update):
 file game/scripts/core/actors/actor_table.gd 18
