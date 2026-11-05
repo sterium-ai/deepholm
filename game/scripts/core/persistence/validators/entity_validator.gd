@@ -12,6 +12,7 @@ const ENTITY_COMPONENT_FIELDS := {
 	"colonist": ["needs", "needsAccumulator", "labourTable", "work", "hands"],
 	"wolf": ["needs", "needsAccumulator", "combat", "wild"],
 	"trader": ["inventory", "visitor"],
+	"animal": ["species", "bornTick", "lastMealTick", "nextBirthTick"], # F6b-1 (ADR 070): wild animals
 }
 
 ## "rerouting" is present only while a re-route is in flight.
@@ -194,16 +195,33 @@ static func _valid_entity_hands(value, capacity: int) -> Dictionary:
 		return _fail("entity hands total count exceeds capacity")
 	return {"ok": true}
 
-## need_kinds: needs.json's kinds, skill_rules: skills.json, both from the session registry
-## (SaveIO.content_rules()).
-static func _valid_entities(value, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
-		skill_rules: Dictionary = {}) -> Dictionary:
+## need_kinds: needs.json's kinds, skill_rules: skills.json, species_ids: species.json's ids, all
+## from the session registry (SaveIO.content_rules()).
+static func _valid_entities(value: Variant, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
+		skill_rules: Dictionary = {}, species_ids: Array[String] = []) -> Dictionary:
 	if not (value is Array):
 		return _fail("invalid entities type")
 	for entity in value:
 		var entity_check := _valid_entity(entity, map_width, map_height, layer_count, need_kinds, skill_rules)
+		if entity_check["ok"] and entity is Dictionary and (entity as Dictionary).get("kind") == "animal":
+			entity_check = _valid_animal(entity as Dictionary, species_ids)
 		if not entity_check["ok"]:
 			return entity_check
+	return {"ok": true}
+
+## F6b-1 (ADR 070): an animal's species must be one of the session's species.json ids (FaunaSystem
+## drops nothing on load, so a bad record fails here), its id "animal_N" (schema ^animal_[0-9]+$),
+## its z the surface (animals never go underground, ADR 070 §4) and its ticks ints.
+static func _valid_animal(animal: Dictionary, species_ids: Array[String]) -> Dictionary:
+	if not (animal["species"] is String) or not species_ids.has(animal["species"] as String):
+		return _fail("invalid entity animal species")
+	if FaunaValidator._animal_id_number(animal["id"]) < 0:
+		return _fail("invalid entity animal id")
+	if animal["z"] != TileGrid.SURFACE:
+		return _fail("invalid entity animal z (animals live on the surface)")
+	for field: String in ["bornTick", "lastMealTick", "nextBirthTick"]:
+		if not (animal[field] is int):
+			return _fail("invalid entity animal %s" % field)
 	return {"ok": true}
 
 static func _valid_entity(value, map_width: int, map_height: int, layer_count: int, need_kinds: Array[String],
@@ -211,7 +229,7 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 	if not (value is Dictionary):
 		return _fail("invalid entity type")
 	var entity: Dictionary = value
-	if not _keys_allowed(entity, ["id", "kind", "x", "y", "z", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor", "thoughts"]):
+	if not _keys_allowed(entity, ["id", "kind", "x", "y", "z", "factionId", "health", "trapped", "needs", "needsAccumulator", "labourTable", "skills", "route", "work", "hands", "heldTool", "combat", "inventory", "wild", "visitor", "thoughts", "species", "bornTick", "lastMealTick", "nextBirthTick"]):
 		return _fail("unexpected entity field")
 	if (not entity.has("id") or not entity.has("kind") or not entity.has("x") or not entity.has("y") or not entity.has("z")
 			or not entity.has("factionId") or not entity.has("health") or not entity.has("route") or not entity.has("trapped")):
@@ -222,6 +240,11 @@ static func _valid_entity(value, map_width: int, map_height: int, layer_count: i
 	for field in ENTITY_COMPONENT_FIELDS[entity["kind"]]:
 		if not entity.has(field):
 			return _fail_missing("missing entity field '%s'" % field)
+	# Review round 3: the animal fields belong to kind "animal" only (the schema's else branch).
+	if entity["kind"] != "animal":
+		for field: String in ENTITY_COMPONENT_FIELDS["animal"]:
+			if entity.has(field):
+				return _fail("unexpected entity field '%s' on kind %s" % [field, entity["kind"]])
 	if (not _is_int_min(entity["x"], 0) or not _is_int_min(entity["y"], 0)
 			or int(entity["x"]) >= map_width or int(entity["y"]) >= map_height or not _valid_layer(entity["z"], layer_count)):
 		return _fail("invalid entity position")

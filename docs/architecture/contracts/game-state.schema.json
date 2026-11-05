@@ -439,7 +439,7 @@
     }
   },
   "properties": {
-    "schemaVersion": { "type": "integer", "const": 14 },
+    "schemaVersion": { "type": "integer", "const": 15 },
     "contentVersion": { "type": "string", "minLength": 1 },
     "contentPacks": {
       "description": "ContentRegistry.packs() in load order: one entry per pack root applied on top of the base bundle; ids are unique.",
@@ -633,11 +633,20 @@
           {
             "if": { "properties": { "kind": { "const": "trader" } } },
             "then": { "required": ["inventory", "visitor"] }
+          },
+          {
+            "if": { "properties": { "kind": { "const": "animal" } } },
+            "then": { "required": ["species", "bornTick", "lastMealTick", "nextBirthTick"], "properties": { "id": { "pattern": "^animal_[0-9]+$" }, "z": { "const": 0 } } },
+            "else": { "properties": { "species": false, "bornTick": false, "lastMealTick": false, "nextBirthTick": false } }
           }
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
-          "kind": { "type": "string", "enum": ["colonist", "wolf", "trader"] },
+          "kind": { "type": "string", "enum": ["colonist", "wolf", "trader", "animal"] },
+          "species": { "type": "string", "pattern": "^[a-z0-9_-]+$", "description": "F6b-1 (ADR 070): kind animal only, a species.json id." },
+          "bornTick": { "type": "integer" },
+          "lastMealTick": { "type": "integer" },
+          "nextBirthTick": { "type": "integer" },
           "x": { "type": "integer", "minimum": 0 },
           "y": { "type": "integer", "minimum": 0 },
           "z": { "type": "integer", "minimum": 0, "description": "Layer (ADR 045): below map.layerCount." },
@@ -897,6 +906,21 @@
       "properties": {
         "seed": { "type": "integer" },
         "state": { "type": "integer" }
+      }
+    },
+    "fauna": {
+      "description": "F6b-1 (ADR 070, schema v15): the next animal id and the fauna RNG stream (world seed + salt). The animals themselves are entities of kind animal. Absent when the world never had an animal.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nextAnimalId", "rng"],
+      "properties": {
+        "nextAnimalId": { "type": "integer", "minimum": 0 },
+        "rng": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["seed", "state"],
+          "properties": { "seed": { "type": "integer" }, "state": { "type": "integer" } }
+        }
       }
     },
     "pendingColonyDeaths": {

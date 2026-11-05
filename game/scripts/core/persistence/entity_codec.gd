@@ -2,7 +2,9 @@ class_name EntityCodec
 extends RefCounted
 
 ## StateCodec's "entities" encoding: each actor record and its components (needs, labour
-## table, skills, route, work, hands, trapped, combat, health, inventory), JSON-safe both ways.
+## table, skills, route, work, hands, trapped, combat, health, inventory, animal species), JSON-safe both ways.
+
+const ANIMAL_TICKS: Array[String] = ["bornTick", "lastMealTick", "nextBirthTick"]
 
 ## Invariant: a component field is emitted only when the live dict carries it (the per-kind
 ## shape ActorTable.spawn() produces), never a colonist-shaped default; "work"/"route" ride
@@ -41,6 +43,10 @@ static func _encode_entities(colonists: Array[Dictionary], reroutes: Dictionary)
 			entity["wild"] = true
 		if colonist.has("visitor"):
 			entity["visitor"] = true
+		if colonist.has("species"): # an F6b-1 animal (ADR 070): species and its fauna clocks
+			entity["species"] = colonist["species"] as String
+			for field: String in ANIMAL_TICKS:
+				entity[field] = colonist[field] as int
 		var colonist_thoughts: Array = (colonist as Dictionary).get("thoughts", [])
 		if not colonist_thoughts.is_empty():
 			entity["thoughts"] = _encode_thoughts(colonist_thoughts)
@@ -85,6 +91,10 @@ static func _decode_entities(entities: Array) -> Array[Dictionary]:
 			colonist["wild"] = true
 		if entity.has("visitor"):
 			colonist["visitor"] = true
+		if (entity as Dictionary).has("species"):
+			colonist["species"] = entity["species"] as String
+			for field: String in ANIMAL_TICKS:
+				colonist[field] = entity[field] as int
 		var entity_thoughts: Array = (entity as Dictionary).get("thoughts", [])
 		if not entity_thoughts.is_empty():
 			colonist["thoughts"] = _encode_thoughts(entity_thoughts)

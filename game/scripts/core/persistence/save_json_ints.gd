@@ -46,41 +46,49 @@ static func _restore_exact_rng(state: Dictionary, located_state: Dictionary) -> 
 
 ## Same for "incidentScheduler"."rng" (its RNG state easily exceeds 2^53), one level deeper.
 static func _restore_exact_incident_rng(state: Dictionary, located_state: Dictionary) -> Dictionary:
-	if not (state.get("incidentScheduler") is Dictionary):
+	return _restore_exact_nested_rng(state, located_state, "incidentScheduler")
+
+## Same for "fauna"."rng" (F6b-1, ADR 070): the fauna stream's state is a full 64-bit value too.
+static func _restore_exact_fauna_rng(state: Dictionary, located_state: Dictionary) -> Dictionary:
+	return _restore_exact_nested_rng(state, located_state, "fauna")
+
+## The exact {seed, state} of top-level object `outer`'s "rng" member, re-read from the raw tokens.
+static func _restore_exact_nested_rng(state: Dictionary, located_state: Dictionary, outer: String) -> Dictionary:
+	if not (state.get(outer) is Dictionary):
 		return {"ok": true}
-	var incident_scheduler: Dictionary = state["incidentScheduler"]
-	if not (incident_scheduler.get("rng") is Dictionary):
+	var outer_object: Dictionary = state[outer]
+	if not (outer_object.get("rng") is Dictionary):
 		return {"ok": true}
-	var rng: Dictionary = incident_scheduler["rng"]
+	var rng: Dictionary = outer_object["rng"]
 	if not rng.has("seed") and not rng.has("state"):
 		return {"ok": true}
-	if not located_state.get("ok", false) or not (located_state["members"] as Dictionary).has("incidentScheduler"):
-		return {"ok": false, "message": "incidentScheduler could not be structurally located in the save's raw JSON"}
+	if not located_state.get("ok", false) or not (located_state["members"] as Dictionary).has(outer):
+		return {"ok": false, "message": "%s could not be structurally located in the save's raw JSON" % outer}
 	var text: String = located_state["text"]
-	var incident_span: Dictionary = (located_state["members"] as Dictionary)["incidentScheduler"]
-	var incident_start: int = incident_span["start"]
-	if incident_start >= text.length() or text[incident_start] != "{":
-		return {"ok": false, "message": "incidentScheduler is not an object in the save's raw JSON"}
-	var incident_members := _scan_object_members(text, incident_start + 1)
-	if not incident_members.has("__end__") or not incident_members.has("rng"):
-		return {"ok": false, "message": "incidentScheduler.rng could not be structurally located in the save's raw JSON"}
-	var rng_span: Dictionary = incident_members["rng"]
+	var outer_span: Dictionary = (located_state["members"] as Dictionary)[outer]
+	var outer_start: int = outer_span["start"]
+	if outer_start >= text.length() or text[outer_start] != "{":
+		return {"ok": false, "message": "%s is not an object in the save's raw JSON" % outer}
+	var outer_members := _scan_object_members(text, outer_start + 1)
+	if not outer_members.has("__end__") or not outer_members.has("rng"):
+		return {"ok": false, "message": "%s.rng could not be structurally located in the save's raw JSON" % outer}
+	var rng_span: Dictionary = outer_members["rng"]
 	var rng_start: int = rng_span["start"]
 	if rng_start >= text.length() or text[rng_start] != "{":
-		return {"ok": false, "message": "incidentScheduler.rng is not an object in the save's raw JSON"}
+		return {"ok": false, "message": "%s.rng is not an object in the save's raw JSON" % outer}
 	var rng_members := _scan_object_members(text, rng_start + 1)
 	if not rng_members.has("__end__"):
-		return {"ok": false, "message": "incidentScheduler.rng object could not be structurally parsed from the save's raw JSON"}
+		return {"ok": false, "message": "%s.rng object could not be structurally parsed from the save's raw JSON" % outer}
 	for key in ["seed", "state"]:
 		if not rng.has(key):
 			continue
 		if not rng_members.has(key):
-			return {"ok": false, "message": "incidentScheduler.rng.%s could not be structurally located in the save's raw JSON" % key}
+			return {"ok": false, "message": "%s.rng.%s could not be structurally located in the save's raw JSON" % [outer, key]}
 		var span: Dictionary = rng_members[key]
 		var token := text.substr(span["start"], span["end"] - span["start"])
 		var parsed := _parse_json_integer_token(token)
 		if not parsed["ok"]:
-			return {"ok": false, "message": "incidentScheduler.rng.%s is not a supported 64-bit integer" % key}
+			return {"ok": false, "message": "%s.rng.%s is not a supported 64-bit integer" % [outer, key]}
 		rng[key] = parsed["value"]
 	return {"ok": true}
 

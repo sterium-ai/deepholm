@@ -139,13 +139,18 @@ SPEC = [
 # objects, actors and items in game/content must each be in the pack or here
 # (test_world_pack.gd).
 PLACEHOLDER = {
+    "actors": {
+        "animal": "F6b-1 (ADR 070): wild animals draw per species; the wolf species reuses the wolf pack art, the other species are coloured placeholder dots until pack art is chosen",
+    },
     "objects": {
         "bed": "every pack bed is about 30 px wide, two tiles (Props/Static/Furniture.png, Interior_Props_01.png); owner rule: footprint <= 1 tile, art may overhang only up",
         "test_multi_source_crate": "test-only content kind, never placed by the game; no art at all",
         "test_footprint_crate": "test-only content kind, never placed by the game; no art at all",
+        "kitchen": "F5b (ADR 065): new 2x1 bench; pack art not chosen yet (the viewer is outside F5b, follow-up)",
     },
     "items": {
         "sand": "the pack has no sand pile (Rocks.png and Resources.png hold rocks, pebbles and ore); a tan pebble would read as stone",
+        "meal": "F5b (ADR 065): new item; pack art not chosen yet (the viewer is outside F5b, follow-up)",
     },
 }
 

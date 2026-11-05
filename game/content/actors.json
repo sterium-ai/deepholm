@@ -32,6 +32,13 @@
         "inventory": {"capacity": 10},
         "visitor": {}
       }
+    },
+    {
+      "id": "animal",
+      "components": ["health"],
+      "tunables": {
+        "health": {"hp": 1, "maxHp": 1}
+      }
     }
   ]
 }

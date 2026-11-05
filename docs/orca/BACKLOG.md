@@ -1413,7 +1413,7 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
 - **Non-goals:** domestic animals/pasture (F6c), real disease effects (F8), weapons/armour
   items, ranged combat, squads and raids (F7), animal taming, seasons/migration.
 
-### F6b-1 — Wild species, animal actors and population dynamics · `todo` · after F6a · Design: closed 2026-10-30 (F6b, package 1 of 3)
+### F6b-1 — Wild species, animal actors and population dynamics · `in review (antonelmejor50-hub/f6b-1-wild-species-animal-actors)` · after F6a · Design: closed 2026-10-30 (F6b, package 1 of 3)
 
 - **Goal:** the ecosystem core of F6b without crop damage or combat: a content **species
   registry** (`game/content/species.json` + schema) with, per species: diet (`grass`, `crops`,

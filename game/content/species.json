@@ -1,0 +1,18 @@
+{
+  "grass_tiles": ["soil"],
+  "crop_tiles": ["planted", "crop_grown", "crop_ripe"],
+  "species": [
+    {"id": "grasshopper", "diet": {"kind": "grazer", "eats": ["grass"]}, "steps_per_day": 24, "hungry_after_days": 0.5,
+      "starve_days": 3, "adult_days": 1, "reproduction": {"interval_days": 2, "radius": 6}, "cap": 60, "sight": 0, "health": 1, "attack": 0},
+    {"id": "bird", "diet": {"kind": "predator", "prey": ["grasshopper"]}, "steps_per_day": 96, "hungry_after_days": 1,
+      "starve_days": 4, "adult_days": 2, "reproduction": {"interval_days": 4, "radius": 12}, "cap": 6, "sight": 12, "health": 4, "attack": 1},
+    {"id": "fox", "diet": {"kind": "predator", "prey": ["bird", "rabbit"]}, "steps_per_day": 48, "hungry_after_days": 1.5,
+      "starve_days": 5, "adult_days": 3, "reproduction": {"interval_days": 6, "radius": 12}, "cap": 4, "sight": 10, "health": 12, "attack": 3},
+    {"id": "rabbit", "diet": {"kind": "grazer", "eats": ["grass", "crops"]}, "steps_per_day": 36, "hungry_after_days": 0.5,
+      "starve_days": 3, "adult_days": 1.5, "reproduction": {"interval_days": 3, "radius": 6}, "cap": 40, "sight": 0, "health": 3, "attack": 0},
+    {"id": "deer", "diet": {"kind": "grazer", "eats": ["grass"]}, "steps_per_day": 40, "hungry_after_days": 1,
+      "starve_days": 5, "adult_days": 3, "reproduction": {"interval_days": 8, "radius": 10}, "cap": 12, "sight": 0, "health": 20, "attack": 2},
+    {"id": "wolf", "diet": {"kind": "predator", "prey": ["rabbit", "deer"]}, "steps_per_day": 56, "hungry_after_days": 1.5,
+      "starve_days": 6, "adult_days": 4, "reproduction": {"interval_days": 10, "radius": 14}, "cap": 4, "sight": 14, "health": 30, "attack": 6}
+  ]
+}

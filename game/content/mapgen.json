@@ -1,4 +1,5 @@
 {
+  "animal_counts": {"grasshopper": 12, "bird": 3, "rabbit": 6, "deer": 3, "fox": 1, "wolf": 1},
   "rock_vein_count": 6,
   "rock_vein_min_length": 10,
   "rock_vein_max_length": 22,

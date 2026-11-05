@@ -182,6 +182,8 @@ func _check_far_edge_order_completes() -> void:
 		# long-distance route instead, so it neutralizes need pressure rather
 		# than shortening the distance).
 		for colonist in TestAccess.colonists(world):
+			if colonist.get("kind") != "colonist":
+				continue # animal rows (shipped mapgen) carry no needs
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100
@@ -220,6 +222,8 @@ func _check_far_edge_order_completes() -> void:
 	var completion_ticks := 0
 	while completion_ticks < FAR_EDGE_TICK_BUDGET and world.get_tile(target.x, target.y) != "trench":
 		for colonist in TestAccess.colonists(world):
+			if colonist.get("kind") != "colonist":
+				continue # animal rows (shipped mapgen) carry no needs
 			var needs: Dictionary = colonist["needs"]
 			for kind in needs.keys():
 				needs[kind] = 100

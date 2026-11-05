@@ -1,13 +1,13 @@
 extends SceneTree
 
-## The save format after the R14 reset (ADR 049), now at schema v14 (A5, ADR 053:
+## The save format after the R14 reset (ADR 049), now at schema v15 (A5, ADR 053:
 ## terminal jobs leave the save; A13b, ADR 010 amendment 2: the save records its
 ## content packs; A16b, ADR 057: the scenario calendar and incident list are saved;
 ## A7, ADR 058: compact file encoding and saved route costs; F1, ADR 059: farm zones
 ## and crop growth; F2, ADR 061: workbench targets, orders and bills; F3, ADR 062: colonist
 ## skills; L2, ADR 045 §5: map layers and "z" on every tile; F5a, ADR 064: stockpile filters
 ## and priorities; F6a, ADR 067: forest zones and sapling growth; F5b, ADR 065: the heal labour; F5c, ADR 066: a
-## colonist's thoughts; F5a-b, ADR 064: the haul_tool job kind).
+## colonist's thoughts; F5a-b, ADR 064: the haul_tool job kind; F6b-1, ADR 070: wild animals).
 ## Proves a save written before the reset is rejected with a clear message, the
 ## committed v1 to v6 fixtures migrate to exactly the migrated v7 fixture, a v1 save
 ## holding terminal jobs loads without them and with the original state_hash, the
@@ -21,7 +21,8 @@ extends SceneTree
 ## saplings list and nothing else, the v11 -> v12 step adds the heal
 ## labour and skill and nothing else, a malformed scenarioStart is
 ## rejected, the committed v12 and v13 fixtures load and re-encode unchanged, the v13 fixture
-## migrates to exactly the v14 one (v13 -> v14 changes only the version), a
+## migrates to exactly the v14 one (v13 -> v14 changes only the version), v14 -> v15 changes
+## only the version and the committed v15 fixture (with animals) loads and re-encodes unchanged, a
 ## fresh save -> load keeps the exact state_hash, the migration chain and the
 ## content-rename hook still work, and the current-schema round trips that used to
 ## live beside the old migration chain.
@@ -81,6 +82,10 @@ const V13_RESAVE_PATH := "user://test-save-migration-v13-resave.json"
 ## file, at v14 (the "haul_tool" job kind). The v13 fixture must migrate to it exactly.
 const V14_FIXTURE := "res://scripts/tests/fixtures/save_schema_v14_fixture.json"
 const V14_RESAVE_PATH := "user://test-save-migration-v14-resave.json"
+## Written by docs/orca/handoffs/F6b-1-write-save.gd (F6b-1): the first v15 file; v15 adds the
+## optional top-level "fauna" (ADR 070), and the session spawned grasshoppers and birds.
+const V15_FIXTURE := "res://scripts/tests/fixtures/save_schema_v15_fixture.json"
+const V15_RESAVE_PATH := "user://test-save-migration-v15-resave.json"
 const BAD_SCENARIO_START_DIR := "user://test-save-migration-bad-scenario-start"
 const V1_TERMINAL_JOBS_DIR := "user://test-save-migration-v1-terminal-jobs"
 const PRE_RELEASE_SLOT_DIR := "user://test-save-migration-pre-release-slots"
@@ -127,6 +132,8 @@ func _init() -> void:
 	_check_v13_fixture_loads_and_reencodes_unchanged()
 	_check_v13_to_v14_changes_only_the_version()
 	_check_v14_fixture_loads_and_reencodes_unchanged()
+	_check_v14_to_v15_changes_only_the_version()
+	_check_v15_fixture_loads_and_reencodes_unchanged()
 	_check_fresh_save_load_keeps_state_hash()
 	_check_empty_migration_chain()
 	_check_malformed_current_state_rejected_through_save_io()
@@ -543,7 +550,7 @@ func _unpacked_fixture_state(path: String) -> Dictionary:
 	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
 	return state
 
-## _unpacked_fixture_state() with the seed and the three RNG states restored from their raw
+## _unpacked_fixture_state() with the seed and the four RNG states restored from their raw
 ## tokens (SaveJsonInts, as SaveIO.read() does) instead of JSON.parse_string()'s floats.
 func _exact_fixture_state(path: String) -> Dictionary:
 	var text := FileAccess.get_file_as_string(path)
@@ -553,7 +560,8 @@ func _exact_fixture_state(path: String) -> Dictionary:
 	for restored: Dictionary in [SaveJsonInts._restore_exact_rng(state, located),
 			SaveJsonInts._restore_exact_seed(state, located),
 			SaveJsonInts._restore_exact_incident_rng(state, located),
-			SaveJsonInts._restore_exact_dig_find_rng(state, located)]:
+			SaveJsonInts._restore_exact_dig_find_rng(state, located),
+			SaveJsonInts._restore_exact_fauna_rng(state, located)]:
 		_expect(restored["ok"], "%s must restore its exact integers: %s" % [path, restored])
 	var unpacked := SaveWireType.unpack(state, 4096)
 	_expect(unpacked["ok"], "%s must unpack: %s" % [path, unpacked])
@@ -618,6 +626,8 @@ func _check_v1_terminal_jobs_leave_the_save() -> void:
 	# A v1 colonist has no skills and v7 -> v8 gives it zero skills (ADR 062), so the original
 	# world starts at zero skills too for the migrated save to decode to its state_hash.
 	for colonist in TestAccess.colonists(world):
+		if colonist.get("kind") != "colonist":
+			continue # F6b-1: the shared actor table also holds the mapgen animals, which have no skills
 		colonist["skills"] = SkillsType.build_zero((colonist["labourTable"] as Dictionary).keys())
 	var issued := 0
 	for x in range(24):
@@ -789,6 +799,49 @@ func _check_v14_fixture_loads_and_reencodes_unchanged() -> void:
 		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
 			"a second write/read of the v14 fixture must keep the decoded state_hash")
 	_remove(V14_RESAVE_PATH)
+
+## F6b-1: v14 -> v15 changes only schemaVersion (an absent "fauna" means no animal ever spawned)
+## and does not mutate its argument.
+func _check_v14_to_v15_changes_only_the_version() -> void:
+	var raw := _unpacked_fixture_state(V14_FIXTURE)
+	var before := JSON.stringify(raw)
+	var migrated := SaveMigrationsType.migrate(raw, 14, 15)
+	_expect(migrated["ok"], "v14 -> v15 must migrate the v14 fixture: %s" % migrated)
+	_expect(JSON.stringify(raw) == before, "the migration must not mutate its argument")
+	if not migrated["ok"]:
+		return
+	var rest: Dictionary = (migrated["state"] as Dictionary).duplicate(true)
+	_expect(int(rest["schemaVersion"]) == 15, "v14 -> v15 must stamp schemaVersion 15")
+	_expect(not rest.has("fauna"), "a migrated v14 state must hold no fauna")
+	rest["schemaVersion"] = 14
+	_expect(JSON.stringify(rest) == before, "v14 -> v15 must change nothing but schemaVersion")
+
+## The committed v15 fixture carries animal entities and the "fauna" field, loads through
+## SaveIO.read(), re-encodes to exactly the state it was read from, and keeps its state_hash through a second write/read.
+func _check_v15_fixture_loads_and_reencodes_unchanged() -> void:
+	var result := SaveIOType.read(V15_FIXTURE)
+	_expect(result["ok"], "the v15 fixture must load through SaveIO.read(): %s" % result)
+	if not result["ok"]:
+		return
+	var state: Dictionary = result["state"]
+	var raw: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(V15_FIXTURE))["state"]
+	_expect(int(raw["schemaVersion"]) == 15 and int(state["schemaVersion"]) == StateCodecType.SCHEMA_VERSION,
+		"the v15 fixture must be schemaVersion 15 on disk and load at the current schemaVersion")
+	_expect((state["entities"] as Array).any(func(e: Dictionary) -> bool: return e.get("kind") == "animal"),
+		"the v15 fixture must hold animal entities for this to prove anything")
+	var world := StateCodecType.decode(state)
+	var reencoded := StateCodecType.encode(world)
+	_expect(JSON.stringify(reencoded) == JSON.stringify(state),
+		"decode() -> encode() of the v15 fixture must reproduce its state exactly")
+	_remove(V15_RESAVE_PATH)
+	var write_result := SaveIOType.write_atomic(V15_RESAVE_PATH, reencoded)
+	_expect(write_result["ok"], "the re-encoded v15 fixture must save: %s" % write_result)
+	var reread := SaveIOType.read(V15_RESAVE_PATH)
+	_expect(reread["ok"], "the re-saved v15 fixture must load: %s" % reread)
+	if reread["ok"]:
+		_expect(StateCodecType.decode(reread["state"]).state_hash() == world.state_hash(),
+			"a second write/read of the v15 fixture must keep the decoded state_hash")
+	_remove(V15_RESAVE_PATH)
 
 ## Acceptance (R14): fresh save -> load -> identical state_hash, through real files,
 ## and the loaded world keeps ticking in step with the original.

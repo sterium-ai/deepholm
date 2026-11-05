@@ -14,10 +14,18 @@ extends Node2D
 ## A9: no node per actor. Each actor is a SpriteRecord (sprite_record.gd) and
 ## this node's one _draw() paints them all; refresh() reads the
 ## WorldState.get_view_snapshot() it is given.
+##
+## F6b-1 (ADR 070): the snapshot's "animals" roster draws here too. A species
+## with pack art (the wolf) is a sprite like any actor; the others are a small
+## species-coloured dot until art lands. Without the pack they draw nothing.
 
 const TILE_SIZE := 16.0
 const PackAssetsType = preload("res://scripts/viewer/pack_assets.gd")
 const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
+## Placeholder dot colour per species without pack art; unknown species are grey.
+const ANIMAL_COLORS := {"grasshopper": Color(0.55, 0.8, 0.25), "bird": Color(0.35, 0.55, 0.9),
+	"rabbit": Color(0.85, 0.8, 0.7), "fox": Color(0.9, 0.45, 0.15), "deer": Color(0.6, 0.4, 0.25)}
+const ANIMAL_DOT_RADIUS := 3.0
 
 ## Art key for an actor: its content kind, except a wolf-def actor of the
 ## raiders faction (content/incidents.json raider_incursion), drawn as a raider.
@@ -37,6 +45,8 @@ var _frames: Dictionary = {}
 var _feet: Dictionary = {}
 ## actor id -> {sprite: SpriteRecord, key, tile, moved, flip_h, elapsed}
 var _actors: Dictionary = {}
+## animal id -> {tile, color} for species without pack art.
+var _placeholders: Dictionary = {}
 
 ## `frames` is pack_assets.gd's actor_frames() (map_view.gd passes the one
 ## from world_pack(), so actors and terrain switch to the pack together), or
@@ -68,6 +78,7 @@ func set_active_layer(z: int) -> void:
 func set_world(world_ref) -> void:
 	world = world_ref
 	_actors.clear()
+	_placeholders.clear()
 	refresh()
 
 func _process(delta: float) -> void:
@@ -108,24 +119,39 @@ func refresh(snapshot: Dictionary = {}) -> void:
 		if not _frames.has(key):
 			continue
 		seen[actor_id] = true
-		var tile := Vector2i(xs[row], ys[row])
-		var state: Dictionary = _actors.get(actor_id, {})
-		if state.is_empty():
-			var sprite := SpriteRecordType.new()
-			sprite.sprite_frames = _frames[key]
-			state = {"sprite": sprite, "key": key, "tile": tile, "moved": false, "flip_h": false, "elapsed": 0.0}
-			_actors[actor_id] = state
+		_track(actor_id, key, Vector2i(xs[row], ys[row]))
+	_placeholders.clear()
+	for animal: Dictionary in snapshot.get("animals", []):
+		if int(animal["z"]) != active_layer:
+			continue
+		var animal_id := String(animal["id"])
+		var tile := Vector2i(int(animal["x"]), int(animal["y"]))
+		var species := String(animal["species"])
+		if _frames.has(species):
+			seen[animal_id] = true
+			_track(animal_id, species, tile)
 		else:
-			var step: Vector2i = tile - Vector2i(state["tile"])
-			state["moved"] = step != Vector2i.ZERO
-			if step.x != 0:
-				state["flip_h"] = step.x < 0
-			state["tile"] = tile
-		_apply(state)
+			_placeholders[animal_id] = {"tile": tile, "color": ANIMAL_COLORS.get(species, Color(0.6, 0.6, 0.6))}
 	for actor_id in _actors.keys():
 		if not seen.has(actor_id):
 			_actors.erase(actor_id)
 	queue_redraw()
+
+## Creates or steps the sprite state of `actor_id`, drawn with art `key`, now on `tile`.
+func _track(actor_id: String, key: String, tile: Vector2i) -> void:
+	var state: Dictionary = _actors.get(actor_id, {})
+	if state.is_empty():
+		var sprite := SpriteRecordType.new()
+		sprite.sprite_frames = _frames[key]
+		state = {"sprite": sprite, "key": key, "tile": tile, "moved": false, "flip_h": false, "elapsed": 0.0}
+		_actors[actor_id] = state
+	else:
+		var step: Vector2i = tile - Vector2i(state["tile"])
+		state["moved"] = step != Vector2i.ZERO
+		if step.x != 0:
+			state["flip_h"] = step.x < 0
+		state["tile"] = tile
+	_apply(state)
 
 func _apply(state: Dictionary) -> void:
 	var sprite: SpriteRecordType = state["sprite"]
@@ -142,9 +168,15 @@ func _apply(state: Dictionary) -> void:
 	sprite.position = tile * TILE_SIZE + Vector2(TILE_SIZE / 2.0 - frame_size.x / 2.0, TILE_SIZE - feet)
 
 func _draw() -> void:
+	for dot: Dictionary in _placeholders.values():
+		draw_circle((Vector2(dot["tile"]) + Vector2(0.5, 0.5)) * TILE_SIZE, ANIMAL_DOT_RADIUS, dot["color"])
 	for state: Dictionary in _actors.values():
 		(state["sprite"] as SpriteRecordType).draw(self)
 
 ## The drawn sprite of an actor id (tests), or null.
 func sprite_for(actor_id: String) -> SpriteRecordType:
 	return _actors.get(actor_id, {}).get("sprite", null)
+
+## The placeholder dot colour of an animal id without pack art (tests), or null.
+func placeholder_for(animal_id: String):
+	return _placeholders.get(animal_id, {}).get("color", null)

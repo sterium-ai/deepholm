@@ -454,7 +454,10 @@ func _check_incident_replay_determinism() -> void:
 ##   heal entry in every labour table and skill map; 2778412269 became the value below. Re-drawing
 ##   the skills over the pre-F5b labours and dropping heal gives 2778412269 back
 ##   (docs/orca/handoffs/F5b-baseline_projection.gd).
-const PRE_INCIDENT_BASELINE_HASH := 2396113793
+## - Shipped wild animals (F6b-1, ADR 070 §6): the 26 animals mapgen.animal_counts seeds are rows
+##   of the actor table; 2396113793 became the value below, and with animal_counts emptied the
+##   same run still hashes to 2396113793.
+const PRE_INCIDENT_BASELINE_HASH := 4079286785
 
 func _check_incidents_disabled_matches_pre_incident_baseline() -> void:
 	if _failed:

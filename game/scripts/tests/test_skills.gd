@@ -455,6 +455,8 @@ func _top_up_needs(world: WorldStateType) -> void:
 func _skills_of(world: WorldStateType) -> Dictionary:
 	var skills := {}
 	for actor in TestAccess.colonists(world):
+		if actor.get("kind") != "colonist":
+			continue # animal rows (shipped mapgen) carry no skills
 		skills[String(actor["id"])] = (actor["skills"] as Dictionary).duplicate(true)
 	return skills
 
