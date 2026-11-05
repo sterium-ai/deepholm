@@ -1222,6 +1222,12 @@ into the entry. Do not start an `F*` whose **Design** block says *pending*.
   existing objects (pick a free landing or refuse the site); (4) tests go through construction
   (build the tunnel with a drill), not `_discover()`, and replay = recorded commands replayed,
   not two identical setups. Content literals: use the registry constants.
+- **Review round 4 (owner's interface, 2026-11-05): scope** — the cross-layer changes Codex
+  itself required (needs/combat systems, need/approach/rescue givers, scheduling, routing,
+  tool-fetch toil, content loading) are approved as F4's scope as declared in the handoff;
+  world_state.gd at +8/−8 lines (LayerDiscovery wiring, linked() on reroutes, same-layer
+  check in reach) is approved — it stays under 800 (707). ein.ore must be validated
+  against declared items in ContentRegistry (fatal content error + rejection test).
 
 ### F5a — Stockpile filters and priorities · `review (antonelmejor50-hub/f5a-stockpile-filters-and-priorities; rebased on 7a9ff1e, save schema v10)` · after F2 (item groups) · Design: closed 2026-10-30
 
