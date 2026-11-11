@@ -394,8 +394,12 @@ Orca helper scripts, this backlog.
 - **Owned paths:** `game/scripts/viewer/tick_driver.gd`, `map_view.gd`, `colonist_sprites.gd`,
   `actor_sprites.gd`, `view_snapshot.gd` only if the profile points there (declare it),
   tests (tick-driver timing test updated), `docs/orca/handoffs/B11.md` with the profile tables.
+- **Also (owner, 2026-11-11 12:05): "there is still a pick floating next to colonists with
+  a dig job".** Decision (owner's interface): the **held-tool badge is removed** — the tool is
+  shown only in the hand during work animations (B9 adds the dig one); the carried-cargo
+  badge stays. Remove `_tool_markers` and its tests' expectations in `colonist_sprites.gd`.
 - **Acceptance:** x1 runs 6 ticks/s; 60 fps at x1 on the default scenario, no memory growth
-  over 10 min (numbers quoted); owner confirms the feel.
+  over 10 min (numbers quoted); no tool badge; owner confirms the feel.
 - **Budget:** ≤ 300 turns.
 
 ### B12 — Zoom: selected-tile indicator and real pointer position drift apart · `todo` · *viewer only*
