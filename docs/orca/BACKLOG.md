@@ -369,7 +369,7 @@ Orca helper scripts, this backlog.
 
 - **Owner (2026-11-11):** some wildlife has no art and the wolf reused from B3 "is quite
   ugly". Use the A20 pixel-art skill to produce, in the Pixel Crawler style (16 px grid,
-  hard silhouettes, pack palette), idle/walk strips for: grasshopper, bird, fox, rabbit, deer,
+  hard silhouettes, pack palette), idle/walk strips **in all 4 directions** (owner rule 2026-11-11: no side-strip reuse for vertical movement) for: grasshopper, bird, fox, rabbit, deer,
   wolf (redo). Generated art is ours and is committed under `game/assets/generated/`
   (never the pack's PNGs). Owner approves each sheet from a contact-sheet screenshot before
   it is wired in.
@@ -434,6 +434,14 @@ Orca helper scripts, this backlog.
 - **Acceptance:** the skill produces, as a demo, a 16×16 shovel icon and a 4-direction wolf
   idle strip that pass `validate_sprite.py`; contact sheet in the handoff; owner judges the
   demo; nothing wired into the game yet (B10/B9 do that).
+- **Rule (owner, 2026-11-11 12:28): every character, NPC and animal has art for every
+  movement and action it performs** — the wolf's vertical movement cannot be the side strip
+  hopping; the game must read as fluid and realistic. Minimum per actor, required by the
+  skill and checked by the validator: idle + walk in **4 directions** (down, up, side; side
+  mirrored only when the design is symmetric) plus one strip per action the actor performs
+  (colonists: dig, mine, chop, build, craft, plant, haul; animals: eat/attack/die when they
+  exist), same frame layout and tool-tip calibration. The demo wolf is idle + walk in 4
+  directions. The rule goes into `docs/art/style.md`.
 - **Budget:** ≤ 250 turns.
 
 ### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `review (antonelmejor50-hub/b7-everything-still-drawn-as)` · *parallel-safe (viewer + sprite-frame data only; no core)*
