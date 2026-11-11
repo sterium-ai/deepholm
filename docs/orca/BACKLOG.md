@@ -317,6 +317,121 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
+### B8 — Placing a wall or a workbench lags / drops frames, even for small areas · `todo` · *parallel-safe (viewer only)*
+
+- **Owner (2026-11-11 playtest, main `97902ae`):** selecting wall or workbench to place it
+  makes the game stutter badly (frame drops), even when the dragged area is small.
+- **Pointer (orchestrator):** dig/mine use the incremental per-tile `drag_preview.gd` (B1);
+  build/footprint tools go through `map_view.gd`'s "hover, footprint and whole-rectangle
+  previews, computed in one call" (`_list_tiles/_list_valid`, `preview_validity`), i.e. a
+  full `WorldState.preview()` pass on every mouse move. Profile first (Godot profiler or
+  `Time.get_ticks_usec()` around the hover path) and quote numbers before/after.
+- **Fix:** hover/footprint previews must be O(footprint) per mouse move and only recompute
+  when the hovered tile changes; whole-rectangle build previews use the B1 incremental path
+  (or a coarse preview + exact apply on release, as B1 did). No simulation changes.
+- **Owned paths:** `game/scripts/viewer/map_view.gd`, `drag_preview.gd`, `order_input.gd`,
+  tests (viewer purity + a headless timing test with a budget), `docs/orca/handoffs/B8.md`.
+- **Acceptance:** hovering a wall tool over a 200×200 map and dragging a 40×40 wall rectangle
+  stays under 2 ms per mouse move (measured, quoted); no visible stutter in the owner's
+  playtest; suite green.
+- **Budget:** ≤ 200 turns.
+
+### B9 — Dig: shovel instead of pick, its own animation, tool tip on the target tile, trench look · `todo` · *core (jobs/tools content) + viewer*
+
+- **Owner (2026-11-11 playtest):** (1) dig shows the mine animation; dig must need a
+  **shovel**, not a pick; (2) the animation must be placed so the **tool's tip hits the
+  selected tile** — today the colonist stands on the tile and the pick visibly strikes a
+  neighbouring tile because of frame size/offsets; (3) the dig result does not read as a
+  **trench**; (4) planting trees (F6a) has no animation.
+- **Pointer:** `game/content/jobs.json` `dig` has `needs_tool: "pick"`; add a `shovel` item
+  (tool group, craftable at the workbench like pick/axe, one in the starting kit) and switch
+  dig to it. Work animations: `colonist_sprites.gd` work strips keyed by `work_kinds`; add
+  `dig` and `plant` animations (pack strips if they exist, otherwise the A20 pixel-art skill
+  produces them in the pack's style). Positioning: the worker should stand on an **adjacent**
+  tile facing the target for dig/mine/chop (ADR note: this is how the toil already approaches
+  impassable targets; for passable soil the worker must also stop adjacent), and the frame's
+  tool tip must be calibrated to land on the target tile (document the offset per animation
+  in `colonist_pack.json`). Trench art: a dug tile gets a distinct darker sunken tile from
+  the terrain atlas (B4 style) with an edge; if the pack lacks it, A20.
+- **Owned paths:** `game/content/items.json`, `recipes.json`, `jobs.json`, `scenarios.json`
+  (starting shovel), the toil approach rule for dig (`core/jobs/*` minimal, with a test),
+  `game/scripts/viewer/colonist_sprites.gd`, `tile_atlas_map.gd`, `game/data/sprite_frames/*`,
+  tests, migration + fixture if the save changes (tool kind on existing tool items), ADR
+  amendment, `docs/orca/handoffs/B9.md`.
+- **Acceptance:** headless: dig requires a shovel (no shovel → `blocked_no_tool`), the worker
+  stands adjacent to the target during `work`; screenshots in the handoff: dig and mine on
+  the same tile show the tool tip over the target; a dug tile is visibly a trench; a plant job
+  shows its animation; suite green; owner confirms.
+- **Non-goals:** trench depth gameplay, filling trenches back.
+- **Budget:** ≤ 300 turns. Depends on A20 only for art the pack lacks (deliver the rest first).
+
+### B10 — Wildlife art: wolf redone, missing species drawn · `todo` · after A20 · *viewer + sprite-frame data*
+
+- **Owner (2026-11-11):** some wildlife has no art and the wolf reused from B3 "is quite
+  ugly". Use the A20 pixel-art skill to produce, in the Pixel Crawler style (16 px grid,
+  hard silhouettes, pack palette), idle/walk strips for: grasshopper, bird, fox, rabbit, deer,
+  wolf (redo). Generated art is ours and is committed under `game/assets/generated/`
+  (never the pack's PNGs). Owner approves each sheet from a contact-sheet screenshot before
+  it is wired in.
+- **Owned paths:** `game/assets/generated/**`, `game/data/sprite_frames/world_pack.json`
+  (actor entries), `actor_sprites.gd`, tests, `docs/orca/handoffs/B10.md`.
+- **Acceptance:** contact sheet of the six species at 1× and 4×; in-game screenshot; owner
+  approves; suite green.
+
+### B11 — General slowness, speed scale (x3 → x1), memory/lag audit · `todo` · *viewer + tick driver; core only if the profile says so*
+
+- **Owner (2026-11-11):** the game feels slow in general; what is now **x3 should be x1**;
+  there seems to be lag or excessive memory use.
+- **Decision (owner's interface, from the owner's words):** `tick_driver.gd`
+  `BASE_TICKS_PER_SECOND` 2.0 → **6.0** (x1 = today's x3; x2 = 12, x3 = 18 ticks/s). Day
+  length in ticks does not change (2200), so a day lasts ~6 min at x1. Glide/animation timing
+  must follow (it already divides by `seconds_per_tick()`).
+- **Audit:** profile a 10-minute session on the owner's map size (the A9 1000-colonist scene
+  and the default scenario): frame time breakdown (tick vs redraw vs UI), memory growth over
+  time (leaks: per-frame allocations in `map_view.gd`, snapshot copies, sprite records),
+  GC pressure. Fix the top offenders inside the viewer; anything in the core goes to a
+  separate entry with numbers.
+- **Owned paths:** `game/scripts/viewer/tick_driver.gd`, `map_view.gd`, `colonist_sprites.gd`,
+  `actor_sprites.gd`, `view_snapshot.gd` only if the profile points there (declare it),
+  tests (tick-driver timing test updated), `docs/orca/handoffs/B11.md` with the profile tables.
+- **Acceptance:** x1 runs 6 ticks/s; 60 fps at x1 on the default scenario, no memory growth
+  over 10 min (numbers quoted); owner confirms the feel.
+- **Budget:** ≤ 300 turns.
+
+### B12 — Zoom: selected-tile indicator and real pointer position drift apart · `todo` · *viewer only*
+
+- **Owner (2026-11-11):** after zooming, the tile highlight is far from where the pointer is.
+- **Pointer:** `map_viewport.gd` `screen_to_tile()` / `zoom_at()` and `map_view.gd`
+  `tile_at_local()`: one of them ignores `map_view.scale`/`position` (or uses the viewport's
+  size instead of the control's) after zoom; also check HiDPI/window scale. Fix the mapping in
+  one place and make hover, drag and click use it.
+- **Owned paths:** `map_viewport.gd`, `map_view.gd` (mapping only), a headless test that
+  zooms to 0.5/1/2/3 and asserts `screen_to_tile(tile_to_screen(t)) == t`, `docs/orca/handoffs/B12.md`.
+- **Acceptance:** the test above; owner confirms at several zoom levels.
+- **Budget:** ≤ 120 turns. Can be folded into B11's branch if the same agent takes both.
+
+#### A20 — Pixel-art skill for a creative agent (Pixel Crawler style) · `todo` · *tooling + docs; no game code*
+
+- **Owner (2026-11-11):** "see if we can create a pixel-art skill for a creative Opus 5.5
+  that makes us good designs" — the AI-art ban of 2026-09-17 is lifted **for art produced
+  through this skill and approved by the owner sheet by sheet**.
+- **Goal:** a repo skill `.claude/skills/pixel-art/SKILL.md` (+ `scripts/`) that lets an
+  agent produce sprites consistent with the pack: palette extracted from the pack sheets
+  (script: `extract_palette.py` → `docs/art/palette.json`), 16 px grid, 64×64 actor frames
+  with feet at y=47 (B2 layout), hard 1 px silhouettes, no anti-aliasing, 4-direction
+  idle/walk strips, item icons 16×16; authoring as code (`PIL`, pixel arrays in a small DSL
+  or numpy) so results are reproducible; `render_contact_sheet.py` to review at 1×/4×;
+  `validate_sprite.py` (palette-only colours, size, transparent margins, silhouette check).
+  The skill text covers the style rules from `docs/art/style.md`, reference crops of the pack
+  (local paths, never committed), the review loop (contact sheet → owner approval), and where
+  files go (`game/assets/generated/`, licence-clean, committed).
+- **Owned paths:** `.claude/skills/pixel-art/**`, `tools/art/*.py`, `docs/art/style.md`
+  (section "Generated art"), `docs/art/palette.json`, `docs/orca/handoffs/A20.md`.
+- **Acceptance:** the skill produces, as a demo, a 16×16 shovel icon and a 4-direction wolf
+  idle strip that pass `validate_sprite.py`; contact sheet in the handoff; owner judges the
+  demo; nothing wired into the game yet (B10/B9 do that).
+- **Budget:** ≤ 250 turns.
+
 ### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `review (antonelmejor50-hub/b7-everything-still-drawn-as)` · *parallel-safe (viewer + sprite-frame data only; no core)*
 
 - **Owner (2026-11-02 playtest):** objects and items on the map still show placeholder art.
