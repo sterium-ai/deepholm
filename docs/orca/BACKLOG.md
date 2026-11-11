@@ -363,7 +363,10 @@ Orca helper scripts, this backlog.
   the same tile show the tool tip over the target; a dug tile is visibly a trench; a plant job
   shows its animation; suite green; owner confirms.
 - **Non-goals:** trench depth gameplay, filling trenches back.
-- **Budget:** ≤ 300 turns. Depends on A20 only for art the pack lacks (deliver the rest first).
+- **Budget:** ≤ 300 turns. **Art note (2026-11-11):** no generated art; use the pack's strips and
+  tiles as the best available stand-in (document which) and leave the final sprites to the
+  commissioned art (A21). Mechanics (shovel, adjacent stance, tool-tip calibration, trench tile
+  from the terrain atlas) are the deliverable.
 
 ### B10 — Wildlife art: wolf redone, missing species drawn · `todo` · after A20 · *viewer + sprite-frame data*
 
@@ -443,6 +446,17 @@ Orca helper scripts, this backlog.
   exist), same frame layout and tool-tip calibration. The demo wolf is idle + walk in 4
   directions. The rule goes into `docs/art/style.md`.
 - **Budget:** ≤ 250 turns.
+
+#### A21 — Art commission brief and intake · 	odo (brief written by the orchestrator 2026-11-11; intake task opens when the art arrives)
+
+- **Scope of the commission (owner 2026-11-11):** everything the Pixel Crawler pack lacks, in
+  its style (16 px grid, 64×64 actor frames with feet at y=47, hard silhouettes): wildlife
+  (grasshopper, bird, fox, rabbit, deer, wolf — idle/walk 4-dir + eat/attack/die), colonist
+  action strips the pack lacks (dig with a shovel, plant; 3 facings each), items (shovel, sand,
+  meal, drill, 7 ores, rough gem), objects (bed and kitchen 1-tile footprint art, tunnel,
+  stairs, 7 vein tiles), tiles (trench with edges, sapling stages if the pack's are weak).
+  Intake: files land in game/assets/commissioned/ (licence recorded in docs/art/LICENSES.md),
+  mapped in the *_pack.json tables, screenshots, owner approval.
 
 ### B7 — Everything still drawn as a placeholder gets Pixel Crawler art (items, bed, door, vertical workbench, crops) · `review (antonelmejor50-hub/b7-everything-still-drawn-as)` · *parallel-safe (viewer + sprite-frame data only; no core)*
 
