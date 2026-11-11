@@ -417,6 +417,29 @@ Orca helper scripts, this backlog.
 - **Acceptance:** the test above; owner confirms at several zoom levels.
 - **Budget:** ≤ 120 turns. Can be folded into B11's branch if the same agent takes both.
 
+### B13 — Core: tick cost and static memory grow with game time (A9 1000 colonists) · `todo` · *core; split off from B11's audit*
+
+- **Source:** B11's profile (`docs/orca/handoffs/B11.md`, sections "A9 stress scene",
+  "Headless memory probe" and "Core findings"; scripts `B11-profile.gd`, `B11-memprobe.gd`
+  next to it). Machine: Ryzen 7 9800X3D, Godot 4.7.2, x1 = 6 ticks/s.
+- **Numbers (baseline):**
+  - A9 (1000 colonists, 145 till orders): `world.tick()` costs about 6–7 ms per frame from
+    90 to 270 s, then jumps at t ≈ 300 s (around tick 1800, reproducible in both runs) to
+    19–35 ms per frame; the world then delivers 135–153 ticks per 30 s instead of 180 (it
+    falls behind 6 ticks/s).
+  - A9 static memory: 775 → 842 MiB in 10 minutes (+67 MiB, most of it after t = 300 s) with
+    object (97,917), resource (279) and node (42,111) counts flat.
+  - Default scenario, core only (headless, no viewer): 79.16 → 82.91 MiB over 3600 ticks
+    (+3.75 MiB), objects flat at 1860. The viewer adds +0.3 MiB on top.
+  - Exit: "268 ObjectDB instances were leaked", "61 resources still in use" (no growth during
+    the run; likely reference cycles).
+- **Goal:** name the system behind the tick jump (per-system breakdown from
+  `tick_pipeline.gd` on A9 around ticks 1700–2000) and the container that grows (Arrays or
+  Dictionaries held by core objects: logs, histories, caches), then cap or fix them.
+- **Owned paths:** to be set with the owner once the breakdown names the system.
+- **Acceptance:** A9 tick cost stays within 1.5× of its 90–270 s level for 10 minutes;
+  static memory growth over 3600 default-scenario ticks under 1 MiB; numbers quoted.
+
 #### A20 — Pixel-art skill for a creative agent (Pixel Crawler style) · `todo` · *tooling + docs; no game code*
 
 - **Owner (2026-11-11):** "see if we can create a pixel-art skill for a creative Opus 5.5

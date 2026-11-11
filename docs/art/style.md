@@ -43,7 +43,7 @@ size and cell layout without touching simulation or viewer logic.
 | Wooden wall, stone wall | 16x16 | fill one tile exactly |
 | Tree | 32x48 | drawn as decor over a forest-floor base; footprint is the trunk tile |
 | Crop sprout (`sprout.png`) | 16x16 | decor drawn over the planted base |
-| Tool icons (`tools.png`: pick, axe) | 16x16 cells | drawn as 8-10 px ground icons and held-tool markers |
+| Tool icons (`tools.png`: pick, axe) | 16x16 cells | drawn as 8-10 px ground icons; a held tool has no floating marker (B11) |
 | Resource icons (`resources.png`: hazard cluster, stone, wood) | 32x20 cells | ground clutter and item icons |
 | Colonist frames | 64x64 per frame | feet at local row 47; see below |
 
@@ -90,10 +90,12 @@ keeps drawing its own inset square.
 `colonist_frames.tres` has these looping animations:
 
 - `walk_down`, `walk_up`, `walk_side`, `carry_walk_down`, `carry_walk_up`,
-  `carry_walk_side`: six frames at **3.0 fps**. At x1,
-  `move_ticks_per_tile` is 4 and `TickDriver.BASE_TICKS_PER_SECOND` is 2.0,
-  so crossing a tile takes 4 / 2.0 = 2.0 seconds; six frames / 2.0 seconds
-  = 3.0 fps.
+  `carry_walk_side`: six frames per tile crossing. The renderer sets the
+  frame from the glide clock (`floor(t * frame_count)`), not from the
+  resource's nominal 3.0 fps. At x1, `move_ticks_per_tile` is 4 and
+  `TickDriver.BASE_TICKS_PER_SECOND` is 6.0 (B11; it was 2.0), so crossing a
+  tile takes 4 / 6.0 = 0.67 seconds and the walk plays at an effective
+  9 fps (18 fps at x2, 27 fps at x3).
 - `idle_down`, `idle_up`, `idle_side`, `carry_idle_down`, `carry_idle_up`,
   `carry_idle_side`: four frames at **2.0 fps**, a calm two-second loop;
   idle has no movement tick constraint.
@@ -209,8 +211,8 @@ on the side its name says, props inside the owner's ceilings.
   `map_view.gd` picks one per tree tile by `hash(Vector3i(seed, x, y))`
   (stable across pan, zoom, save and load). The placeholder tree source has
   one cell, so nothing changes without the pack.
-- **Item icons keep their proportions.** Stockpile icons and the cargo/tool
-  badges use the sprite's own pixels (not its padded cell), uniformly scaled
+- **Item icons keep their proportions.** Stockpile icons and the cargo
+  badge use the sprite's own pixels (not its padded cell), uniformly scaled
   into the same 9.6 px box; the placeholder icons are drawn exactly as before.
 - **Non-colonist actors.** `actor_sprites.gd` draws wolves (`Mobs/Wolf`),
   raiders (a wolf-def actor of the `raiders` faction, drawn with
@@ -344,15 +346,16 @@ TileSet atlas. The governing ceilings are:
 | 1x2-footprint prop | **16 px wide x 44 px tall**; grounded on the two-tile footprint |
 | Tree | **<=32x48**, footprint equal to the trunk tile |
 | Ground item | **8-10 px icon**, centred on its tile |
-| Marker | Carried-item, tool and trapped markers keep their current sizes |
+| Marker | Carried-item and trapped markers keep their current sizes; there is no held-tool marker (B11) |
 
 ## Item icons
 
-Held tools resolve the same `ITEM_ATLAS_MAP` cells as ground item icons,
-with no tint. Tool icons are 16x16 cells in `tools.png`; resource icons are
+Tools resolve the same `ITEM_ATLAS_MAP` cells as ground item icons,
+with no tint. A held tool is not drawn as a floating marker next to the
+colonist (owner, B11): it appears only in the hand during work animations,
+and the colonist panel names it. Tool icons are 16x16 cells in `tools.png`; resource icons are
 32x20 cells in `resources.png`. The ground-icon draw rectangle is 9.6x9.6 px (Prop scale rule:
-Ground item, 8-10 px); the held-tool marker is 9.6x9.6 px at offset
-`(-4, -4)` from the colonist sprite origin. Nearest-neighbour filtering and
+Ground item, 8-10 px). Nearest-neighbour filtering and
 disabled mipmaps preserve the original pixels.
 
 The stockpile renderer combines stackable `get_items()` with ground-located

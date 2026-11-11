@@ -12,6 +12,11 @@
 > a Web-only export. None of this needs a rewrite. Each limit has a bounded
 > fix, listed as an `A*` task in `docs/orca/BACKLOG.md`. The owner accepted all of
 > them on 2026-10-25.
+>
+> **Update (B11, 2026-11-11):** `BASE_TICKS_PER_SECOND` is now 6.0, so x1 runs
+> 6 ticks per second (18 at ×3). The figures below are as audited at 2 ticks per
+> second; at the new rate a tick must finish in about 167 ms to keep up at x1,
+> and every per-tick cost here weighs three times as much in real time.
 
 Audit date: 2026-10-25, at `main` `052d8c4` (Phase R through R3; `world_state.gd` is 4,290
 lines). R4 (`95b06b8`) landed afterwards and moved only the work-progress functions, none

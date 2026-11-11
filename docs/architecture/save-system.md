@@ -809,7 +809,7 @@ its fresh stream seeded from the world seed plus `WorldState.DIG_FIND_SEED_SALT`
 ## Autosave triggers
 
 The tick-boundary trigger uses `SaveConfig.AUTOSAVE_INTERVAL_TICKS`, currently
-`600`. At the viewer's base rate of two ticks per second this is five minutes.
+`600`. At the viewer's base rate of six ticks per second (B11) this is 100 seconds.
 It is based only on explicit world ticks: it does not read wall-clock time or
 fire at tick zero. A failed boundary save is retried rather than advancing the
 boundary bookkeeping.

@@ -17,7 +17,9 @@ extends SceneTree
 ## uncapped, so frame times show the headroom under 16.7 ms instead of the vsync wait.
 ##
 ## Every --sample= seconds it prints one row:
-##   fps, frame ms (mean / p95 / max), then the frame split by wall clock, each a mean
+##   fps, frame ms (mean / p95 / max, from the wall-clock interval between consecutive
+##   _process calls, not from `delta`, which the engine may clamp), the largest `delta`
+##   seen (delta_max_ms, for comparison), then the frame split by wall clock, each a mean
 ##   over all frames, ticked or not: tick ms (world.tick()), refresh ms (boot._refresh()),
 ##   other process ms (from this script's _process to RenderingServer.frame_pre_draw,
 ##   minus tick and refresh: node _process such as the sprite glides, deferred _draw
@@ -42,6 +44,8 @@ var _ticks_per_second := 0.0
 var _started_usec := 0
 var _sample_started_usec := 0
 var _frame_ms: Array[float] = []
+var _last_frame_usec := 0
+var _delta_max_ms := 0.0
 var _tick_usec := 0
 var _refresh_usec := 0
 var _process_ms := 0.0
@@ -88,7 +92,7 @@ func _setup() -> void:
 	print("B11-profile: scenario=%s colonists=%d orders=%d speed=x%d (%.0f ticks/s) seconds=%d vsync=%s" % [
 		_args["scenario"], world.get_colonists().size(), orders, _args["speed"], _ticks_per_second,
 		_args["seconds"], _args["vsync"]])
-	print("t_s,fps,frame_mean_ms,frame_p95_ms,frame_max_ms,tick_ms,refresh_ms,other_process_ms,render_ms,rest_ms,render_cpu_ms,render_gpu_ms,ticks,static_mib,objects,resources,nodes")
+	print("t_s,fps,frame_mean_ms,frame_p95_ms,frame_max_ms,delta_max_ms,tick_ms,refresh_ms,other_process_ms,render_ms,rest_ms,render_cpu_ms,render_gpu_ms,ticks,static_mib,objects,resources,nodes")
 	# A few frames so the UI lays out before the clock starts.
 	for i in 5:
 		await process_frame
@@ -99,8 +103,11 @@ func _setup() -> void:
 func _process(delta: float) -> bool:
 	if not _ready_to_run:
 		return false
-	_frame_ms.append(delta * 1000.0)
 	_frame_start_usec = Time.get_ticks_usec()
+	if _last_frame_usec > 0:
+		_frame_ms.append((_frame_start_usec - _last_frame_usec) / 1000.0)
+	_last_frame_usec = _frame_start_usec
+	_delta_max_ms = maxf(_delta_max_ms, delta * 1000.0)
 	# The measured render time is last frame's.
 	_render_cpu_ms += RenderingServer.viewport_get_measured_render_time_cpu(_viewport_rid)
 	_render_gpu_ms += RenderingServer.viewport_get_measured_render_time_gpu(_viewport_rid)
@@ -120,7 +127,7 @@ func _process(delta: float) -> bool:
 		_accumulator -= floorf(_accumulator)
 	_ticks += ran
 	var now := Time.get_ticks_usec()
-	if now - _sample_started_usec >= int(_args["sample"]) * 1_000_000:
+	if now - _sample_started_usec >= int(_args["sample"]) * 1_000_000 and not _frame_ms.is_empty():
 		_print_row(now)
 	if now - _started_usec >= int(_args["seconds"]) * 1_000_000:
 		print("B11-profile: done")
@@ -149,14 +156,15 @@ func _print_row(now: int) -> void:
 	var refresh_ms := _refresh_usec / 1000.0 / frames
 	var process_ms := _process_ms / frames
 	var render_ms := _render_ms / frames
-	print("%d,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f,%d,%d,%d" % [
+	print("%d,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f,%d,%d,%d" % [
 		(now - _started_usec) / 1_000_000, frames / ((now - _sample_started_usec) / 1_000_000.0),
-		mean, sorted[int(frames * 0.95)], sorted[frames - 1], tick_ms, refresh_ms,
+		mean, sorted[int(frames * 0.95)], sorted[frames - 1], _delta_max_ms, tick_ms, refresh_ms,
 		process_ms, render_ms, mean - tick_ms - refresh_ms - process_ms - render_ms, _render_cpu_ms / frames, _render_gpu_ms / frames,
 		_ticks, Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
 		Performance.get_monitor(Performance.OBJECT_COUNT), Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT),
 		Performance.get_monitor(Performance.OBJECT_NODE_COUNT)])
 	_frame_ms.clear()
+	_delta_max_ms = 0.0
 	_tick_usec = 0
 	_refresh_usec = 0
 	_process_ms = 0.0

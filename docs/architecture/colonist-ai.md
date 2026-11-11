@@ -253,10 +253,9 @@ is not persisted or consulted by simulation decisions. See
 interruption, destruction, reservation-release and load semantics.
 
 The viewer reads `held_tool` and `get_tool_item()` to display the held kind.
-A separate left badge reuses the carried-item atlas cell (zero-based column 23,
-row 4, 16 px cell with 1 px separation), tinted brown for axe and blue-gray for
-pick; the right cargo badge remains independently visible. Empty hands draw no
-tool badge or label. Both `blocked_no_tool` and `waiting_for_tool_handover` use
+The colonist panel names it; the map draws no floating tool badge (removed by
+the owner in B11: a tool shows only in the hand during work animations). The
+right cargo badge remains visible. Empty hands draw no tool label. Both `blocked_no_tool` and `waiting_for_tool_handover` use
 the text table's reason/remedy labels, including waits on active jobs.
 `test_colonist_panel_toil.gd` covers those displays and a real two-job handover;
 `test_tool_handover_scenarios.gd` covers the core transitions and save continuation.
@@ -419,9 +418,9 @@ tick count of one in-game day; `from`/`to` are 1-indexed, inclusive day numbers 
 start of the game. A window may instead declare `from_month`/`to_month` (never both pairs):
 month `m` is days `(m - 1) * days_per_month + 1 .. m * days_per_month`, so the window matches
 exactly the ticks of that day range. A month is **3** days and a year **12** months (36 days);
-both default to 1 when absent. Windows do not repeat each year. `day_length_ticks` is **2200** (ADR 024: at x1, 2 ticks per second,
-a day takes about 18.3 real minutes, slow enough for needs decay — see below — to be
-survivable). The seeded window is `{id: "sow", labour: "farm", from: 1, to: 20, boost: 1,
+both default to 1 when absent. Windows do not repeat each year. `day_length_ticks` is **2200** (ADR 024 chose it at x1 = 2 ticks per second,
+about 18.3 real minutes a day, slow enough for needs decay — see below — to be
+survivable; since B11, x1 runs 6 ticks per second, so a day takes about 6.1 minutes). The seeded window is `{id: "sow", labour: "farm", from: 1, to: 20, boost: 1,
 label: "sowing window"}`; `from`/`to` are day numbers, not ticks, so lengthening `day_length_ticks` changes how long a day takes without changing which day numbers
 the sowing season spans.
 
