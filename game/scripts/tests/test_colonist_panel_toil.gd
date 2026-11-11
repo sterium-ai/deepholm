@@ -124,28 +124,18 @@ func _check_tool_display() -> void:
 	var colonist := world.get_colonists()[0]
 	var id := String(colonist["id"])
 	_expect(not panel._line_for(colonist).contains("Held tool:"), "empty hands have no tool label")
-	_expect(not sprites._tool_markers[id].visible, "empty hands have no tool marker")
+	# B11 (owner): the held tool has no badge; it shows only in the hand during a work
+	# animation. The panel still names it, and the cargo badge stays empty.
+	_expect(not "_tool_markers" in sprites, "B11: no held-tool badge layer")
 	for kind in ["axe", "pick"]:
 		var tool_id := world.spawn_ground_tool_item(kind, 0, 0)
 		_expect(world.set_tool_item_held(tool_id, id), "tool display setup must equip " + kind)
 		sprites.refresh()
 		_expect(panel._line_for(world.get_colonists()[0]).contains("Held tool: " + kind), "panel resolves held item kind")
-		_expect(sprites._tool_markers[id].visible, "held tool marker is visible")
-		var marker: SpriteRecordType = sprites._tool_markers[id]
-		var atlas: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP[kind]
-		_expect(marker.region_rect == atlas["rect"], "tool marker resolves registered region: " + kind)
-		_expect(marker.texture.resource_path == atlas["texture_path"], "tool marker resolves registered texture: " + kind)
-		_expect(marker.modulate == Color.WHITE, "tool marker keeps untinted source pixels: " + kind)
-		_expect(marker.scale * marker.region_rect.size == sprites.TOOL_MARKER_SIZE, "tool marker keeps established dimensions")
-		var tile := Vector2(colonist["x"], colonist["y"])
-		_expect(marker.position == tile * sprites.TILE_SIZE + sprites.TOOL_MARKER_OFFSET, "tool badge sits at tile * TILE_SIZE + TOOL_MARKER_OFFSET")
+		_expect(not sprites._carried_markers[id].visible, "a held tool draws no cargo badge: " + kind)
 		_expect(world.set_tool_item_ground(tool_id, 0, 0), "drop tool setup")
 		sprites.refresh()
-		_expect(not sprites._tool_markers[id].visible, "drop clears marker on refresh")
 		_expect(not panel._line_for(world.get_colonists()[0]).contains("Held tool:"), "drop clears panel label")
-	TestAccess.colonists(world).clear()
-	sprites.refresh()
-	_expect(sprites._tool_markers.is_empty(), "removed colonists leave no tool markers")
 	sprites.free()
 	panel.free()
 

@@ -315,7 +315,27 @@ func _check_tick_driver_cap() -> void:
 		"a long frame runs MAX_TICKS_PER_FRAME ticks, got %d" % ticks[0])
 	driver._process(0.0)
 	_expect(ticks[0] == TickDriverType.MAX_TICKS_PER_FRAME, "the dropped backlog does not run on the next frame")
-	driver._process(0.2) # 1.2 ticks due at x3: one runs
+	driver._process(1.2 / 18.0) # 1.2 ticks due at x3 (18 ticks/s): one runs
 	_expect(ticks[0] == TickDriverType.MAX_TICKS_PER_FRAME + 1, "ordinary frames still tick at the chosen speed")
 	_expect(world.get_tick() == ticks[0], "every counted tick advanced the world")
 	driver.free()
+	_check_tick_driver_rates()
+
+## B11: x1 is the old x3. One simulated second of 60 fps frames runs 6, 12 and 18
+## ticks at x1, x2 and x3, and seconds_per_tick() is the matching glide clock.
+func _check_tick_driver_rates() -> void:
+	_expect(is_equal_approx(TickDriverType.BASE_TICKS_PER_SECOND, 6.0), "x1 runs 6 ticks per second")
+	var expected := {TickDriverType.Speed.X1: 6, TickDriverType.Speed.X2: 12, TickDriverType.Speed.X3: 18}
+	for speed: int in expected:
+		var world := WorldStateType.new(5)
+		var driver := TickDriverType.new(world)
+		driver.set_speed(speed)
+		for frame in 60:
+			driver._process(1.0 / 60.0)
+		var want := int(expected[speed])
+		# Float accumulation may leave the last tick a hair short of due.
+		_expect(world.get_tick() >= want - 1 and world.get_tick() <= want,
+			"speed %d runs %d ticks in one second, got %d" % [speed, want, world.get_tick()])
+		_expect(is_equal_approx(driver.seconds_per_tick(), 1.0 / want),
+			"speed %d glides one tile in 1/%d s" % [speed, want])
+		driver.free()

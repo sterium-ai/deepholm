@@ -381,7 +381,7 @@ Orca helper scripts, this backlog.
 - **Acceptance:** contact sheet of the six species at 1× and 4×; in-game screenshot; owner
   approves; suite green.
 
-### B11 — General slowness, speed scale (x3 → x1), memory/lag audit · `todo` · *viewer + tick driver; core only if the profile says so*
+### B11 — General slowness, speed scale (x3 → x1), memory/lag audit · `review` · *viewer + tick driver; core only if the profile says so*
 
 - **Owner (2026-11-11):** the game feels slow in general; what is now **x3 should be x1**;
   there seems to be lag or excessive memory use.
@@ -405,7 +405,7 @@ Orca helper scripts, this backlog.
   over 10 min (numbers quoted); no tool badge; owner confirms the feel.
 - **Budget:** ≤ 300 turns.
 
-### B12 — Zoom: selected-tile indicator and real pointer position drift apart · `todo` · *viewer only*
+### B12 — Zoom: selected-tile indicator and real pointer position drift apart · `review` · *viewer only*
 
 - **Owner (2026-11-11):** after zooming, the tile highlight is far from where the pointer is.
 - **Pointer:** `map_viewport.gd` `screen_to_tile()` / `zoom_at()` and `map_view.gd`

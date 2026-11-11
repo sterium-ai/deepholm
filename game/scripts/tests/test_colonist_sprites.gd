@@ -22,13 +22,15 @@ const TILE_SIZE := 16.0
 const SPRITE_POSITION_OFFSET := ColonistSpritesType.SPRITE_POSITION_OFFSET
 const EVIDENCE_DIR := "user://captures"
 
-## Route-glide measurement constants: FRAME_DELTA mirrors a 60fps
-## _process() call; MAX_ROUTE_TICKS bounds the drive loop against a genuinely
+## Route-glide measurement constants: FRAME_DELTA mirrors a 180fps
+## _process() call, so a tick at x1/x2/x3 (6/12/18 ticks/s since B11) is a whole
+## 30/15/10 frames -- at 60fps x3's 3.33 frames would round and deliver ticks early,
+## a sampler artefact rather than a glide bug; MAX_ROUTE_TICKS bounds the drive loop against a genuinely
 ## stuck colonist (environment issue) instead of looping forever;
 ## DISPLACEMENT_EPSILON distinguishes a real sub-pixel glide step from the
 ## "frozen" pause a per-tile stutter would produce; DISPLACEMENT_TOLERANCE_PX
 ## is the required "+/-1px of the route's constant pace" bound.
-const FRAME_DELTA := 1.0 / 60.0
+const FRAME_DELTA := 1.0 / 180.0
 const MAX_ROUTE_TICKS := 300
 const DISPLACEMENT_EPSILON := 0.0001
 const DISPLACEMENT_TOLERANCE_PX := 1.0
@@ -228,7 +230,7 @@ func _check_trapped_marker_visibility() -> void:
 	sprites.free()
 
 ## B6 (with the 2026-11-03 amendment): from the tile's raw pixel origin, the
-## tool badge sits left of the head, the cargo badge right of it, the health bar
+## cargo badge sits right of the head (B11: there is no held-tool badge), the health bar
 ## just above the head and the trapped badge just above the bar -- and none of
 ## bar, badges and the character's head box intersect -- instead of the old
 ## frame-origin badges (~28 px left / 35 px above) and the bar across the face.
@@ -237,17 +239,17 @@ func _check_badges_flank_the_head() -> void:
 	_expect(head_box == Rect2(ColonistSpritesType.FRAME_HEAD_BOX.position + SPRITE_POSITION_OFFSET, ColonistSpritesType.FRAME_HEAD_BOX.size),
 		"the head box is the frame's measured head on the feet-anchored sprite")
 	var head_top := head_box.position.y
-	var tool_rect := Rect2(ColonistSpritesType.TOOL_MARKER_OFFSET, ColonistSpritesType.TOOL_MARKER_SIZE)
 	var cargo_rect := Rect2(ColonistSpritesType.CARRIED_MARKER_OFFSET, ColonistSpritesType.CARRIED_MARKER_SIZE)
 	var trapped_rect := Rect2(ColonistSpritesType.TRAPPED_MARKER_OFFSET, ColonistSpritesType.TRAPPED_MARKER_SIZE)
 	var bar_rect := Rect2(ColonistSpritesType.HEALTH_BAR_OFFSET, ColonistSpritesType.HEALTH_BAR_SIZE)
-	_expect(tool_rect.end.x == 0.0 and tool_rect.position.y == head_top, "the tool badge sits just left of the tile, level with the head")
+	var sprites_script: Script = ColonistSpritesType
+	_expect(not "TOOL_MARKER_SIZE" in sprites_script.get_script_constant_map(), "B11: no held-tool badge")
 	_expect(cargo_rect.position.x == TILE_SIZE and cargo_rect.position.y == head_top, "the cargo badge sits just right of the tile, level with the head")
 	_expect(fmod(ColonistSpritesType.HEALTH_BAR_OFFSET.y, TILE_SIZE) == 0.0 and bar_rect.end.y <= head_top,
 		"the health bar is a TILE_SIZE multiple above the tile and sits above the head")
 	_expect(trapped_rect.end.y == bar_rect.position.y and is_equal_approx(trapped_rect.get_center().x, TILE_SIZE / 2.0),
 		"the trapped badge sits centred directly above the health bar")
-	var boxes := [[head_box, "head"], [bar_rect, "health bar"], [tool_rect, "tool badge"],
+	var boxes := [[head_box, "head"], [bar_rect, "health bar"],
 		[cargo_rect, "cargo badge"], [trapped_rect, "trapped badge"]]
 	for i in boxes.size():
 		for j in range(i + 1, boxes.size()):
@@ -309,7 +311,6 @@ func _check_bar_and_badges_clear_the_head_mid_glide() -> void:
 			var boxes := [
 				[Rect2(body.position + ColonistSpritesType.FRAME_HEAD_BOX.position, ColonistSpritesType.FRAME_HEAD_BOX.size), "head"],
 				[Rect2(bar["position"], ColonistSpritesType.HEALTH_BAR_SIZE), "health bar"],
-				[Rect2(sprites._tool_markers["colonist_0"].position, ColonistSpritesType.TOOL_MARKER_SIZE), "tool badge"],
 				[Rect2(sprites._carried_markers["colonist_0"].position, ColonistSpritesType.CARRIED_MARKER_SIZE), "cargo badge"],
 				[Rect2(sprites._trapped_markers["colonist_0"].position, ColonistSpritesType.TRAPPED_MARKER_SIZE), "trapped badge"],
 			]

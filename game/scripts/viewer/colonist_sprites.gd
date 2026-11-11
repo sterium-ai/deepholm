@@ -12,8 +12,9 @@ extends Node2D
 ##
 ## A9: the layer keeps no node per colonist. Each colonist's body and badges are
 ## SpriteRecords (sprite_record.gd) and its health bar a small record, and one
-## _draw() paints them layer by layer (bodies, cargo, tools, trapped, health
-## bars). refresh() reads the WorldState.get_view_snapshot() it is given (boot.gd
+## _draw() paints them layer by layer (bodies, cargo, trapped, health bars).
+## B11: there is no held-tool badge; the tool shows only in the hand during a
+## work animation. refresh() reads the WorldState.get_view_snapshot() it is given (boot.gd
 ## takes one per tick) instead of calling deep-copying getters itself.
 
 const TILE_SIZE := 16.0
@@ -66,15 +67,11 @@ const HEAD_TOP_Y := HEAD_BOX.position.y
 ## sprite rather than overlapping its face.
 const CARRIED_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
 const CARRIED_MARKER_OFFSET := Vector2(TILE_SIZE, HEAD_TOP_Y)
-## Separate left badge so a tool remains visible while carrying cargo.
-## Resolve the held kind's registered art, just like carried cargo.
-const TOOL_MARKER_SIZE := Vector2(TILE_SIZE * 0.6, TILE_SIZE * 0.6)
-const TOOL_MARKER_OFFSET := Vector2(-TOOL_MARKER_SIZE.x, HEAD_TOP_Y)
 
 ## Trapped badge reuses the registered wolf actor crop: its hazard silhouette
 ## is a deliberately legible warning without introducing a second actor-art
-## path or any simulation state. The tint distinguishes it from cargo/tool
-## badges while keeping the source pixels nearest-neighbour. It sits centred
+## path or any simulation state. The tint distinguishes it from the cargo
+## badge while keeping the source pixels nearest-neighbour. It sits centred
 ## directly above the health bar, touching but not overlapping it (B6 amendment).
 const TRAPPED_MARKER_SIZE := Vector2(TILE_SIZE * 0.8, TILE_SIZE * 0.5)
 const TRAPPED_MARKER_OFFSET := Vector2((TILE_SIZE - TRAPPED_MARKER_SIZE.x) / 2.0,
@@ -130,7 +127,6 @@ var _loop_work := false
 ## colonist id -> SpriteRecord, one Dictionary per drawn layer, in first-seen order.
 var _sprites: Dictionary = {}
 var _carried_markers: Dictionary = {}
-var _tool_markers: Dictionary = {}
 var _trapped_markers: Dictionary = {}
 ## actor id -> {"position": Vector2, "fill": float}: the bar's top-left and fill fraction.
 var _health_bars: Dictionary = {}
@@ -141,7 +137,7 @@ var _last: Dictionary = {}
 ## masked to "no worker, no health" so its body and bar drop like a dead one's.
 var active_layer := 0
 
-## Item textures are keyed by actual kind for cargo and held-tool badges,
+## Item textures are keyed by actual kind for the cargo badge,
 ## refreshed even when the colonist sprite is reused.
 var _item_atlas_texture: Texture2D
 var _item_region: Rect2
@@ -166,7 +162,7 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 		_item_region = wood_atlas["rect"]
 	_trapped_texture = load(TileAtlasMapType.ACTOR_ATLAS_MAP["wolf"]["texture_path"])
 
-## Cargo and held-tool badges draw these pack icons (pack_assets.gd's
+## The cargo badge draws these pack icons (pack_assets.gd's
 ## item_icons()) instead of the placeholder sheets.
 func use_item_icons(icons: Dictionary) -> void:
 	_pack_icons = icons
@@ -206,7 +202,6 @@ func set_active_layer(z: int) -> void:
 		# Everything drawn is on the old layer: drop it in one go, not per id in _drop_missing().
 		_sprites.clear()
 		_carried_markers.clear()
-		_tool_markers.clear()
 		_trapped_markers.clear()
 		_motion.clear()
 		_health_bars.clear()
@@ -242,20 +237,30 @@ func _process(delta: float) -> void:
 ## destination pixel for the remaining ticks). seconds_per_tick() == 0.0
 ## (paused) leaves elapsed/t untouched so the drawn position and animation
 ## frame freeze exactly where they were.
+## B11: a state whose glide has finished (t == 1) and which loops no work animation
+## draws the same pixels every frame, so once applied it is marked "settled" and
+## skipped until _update_motion() sees a new tile, cargo or work kind. Only a frame
+## that applied some state queues a redraw.
 func advance(delta: float) -> void:
 	var tick_interval: float = (_tick_driver.seconds_per_tick() * _move_ticks_per_tile) if _tick_driver != null else 0.0
+	var applied := false
 	for colonist_id in _motion:
 		var state: Dictionary = _motion[colonist_id]
+		if state.has("settled"):
+			continue
 		if tick_interval > 0.0:
 			state["elapsed"] = float(state["elapsed"]) + delta
 			state["cycles"] = float(state["elapsed"]) / tick_interval
 			state["t"] = clampf(float(state["cycles"]), 0.0, 1.0)
 		_apply_motion_visual(colonist_id, state)
-	if tick_interval > 0.0 and not _motion.is_empty():
+		applied = true
+		if float(state["t"]) >= 1.0 and not (_loop_work and not String(state["work_animation"]).is_empty()):
+			state["settled"] = true
+	if tick_interval > 0.0 and applied:
 		queue_redraw()
 
 ## Reads the snapshot's columns (view_snapshot.gd). When the actor table holds the
-## same ids in the same rows as last refresh, a colonist whose tile, cargo, tool,
+## same ids in the same rows as last refresh, a colonist whose tile, cargo,
 ## trapped flag and work kind are all unchanged is skipped: its records already show
 ## exactly that, and advance() keeps its glide moving.
 func _refresh(snapshot: Dictionary) -> void:
@@ -268,7 +273,6 @@ func _refresh(snapshot: Dictionary) -> void:
 	var xs: Array = snapshot["x"]
 	var ys: Array = snapshot["y"]
 	var carrying: Array = snapshot["carrying"]
-	var tools: Array = snapshot["tool_kinds"]
 	var trapped: Array = snapshot["trapped"]
 	var work_kinds: Array = snapshot["work_kinds"]
 	var zs: Array = snapshot["z"]
@@ -284,7 +288,6 @@ func _refresh(snapshot: Dictionary) -> void:
 	var last_x: Array = _last.get("x", [])
 	var last_y: Array = _last.get("y", [])
 	var last_carrying: Array = _last.get("carrying", [])
-	var last_tools: Array = _last.get("tool_kinds", [])
 	var last_trapped: Array = _last.get("trapped", [])
 	var last_work: Array = _last.get("work_kinds", [])
 	var max_hp: Array = snapshot["max_hp"]
@@ -292,7 +295,7 @@ func _refresh(snapshot: Dictionary) -> void:
 	var last_max: Array = _last.get("max_hp", [])
 	# Whole columns compare natively: per row, only the columns that changed somewhere
 	# are compared, so an unchanged colonist costs its tile check and little else.
-	var badges_same: bool = same_rows and carrying == last_carrying and tools == last_tools 		and trapped == last_trapped and work_kinds == last_work
+	var badges_same: bool = same_rows and carrying == last_carrying and trapped == last_trapped and work_kinds == last_work
 	var health_same: bool = same_rows and hp == last_hp and max_hp == last_max
 	for row in ids.size():
 		var moved: bool = not same_rows or xs[row] != last_x[row] or ys[row] != last_y[row]
@@ -307,18 +310,18 @@ func _refresh(snapshot: Dictionary) -> void:
 			_health_bars.erase(ids[row])
 		if worker[row] == 0:
 			continue
-		if not moved and (badges_same or (carrying[row] == last_carrying[row] and tools[row] == last_tools[row]
+		if not moved and (badges_same or (carrying[row] == last_carrying[row]
 				and trapped[row] == last_trapped[row] and work_kinds[row] == last_work[row])):
 			continue
-		_refresh_colonist(ids[row], Vector2i(xs[row], ys[row]), carrying[row], tools[row], trapped[row] == 1,
+		_refresh_colonist(ids[row], Vector2i(xs[row], ys[row]), carrying[row], trapped[row] == 1,
 			work_kinds[row])
 	if not same_rows:
 		_drop_missing(ids, worker, hp)
-	_last = {"ids": ids, "x": xs, "y": ys, "z": zs, "carrying": carrying, "tool_kinds": tools, "trapped": trapped,
+	_last = {"ids": ids, "x": xs, "y": ys, "z": zs, "carrying": carrying, "trapped": trapped,
 		"work_kinds": work_kinds, "hp": hp, "max_hp": snapshot["max_hp"]}
 	queue_redraw()
 
-func _refresh_colonist(colonist_id: String, tile: Vector2i, carried_kind: String, tool_kind: String, is_trapped: bool,
+func _refresh_colonist(colonist_id: String, tile: Vector2i, carried_kind: String, is_trapped: bool,
 		work_kind: String) -> void:
 	var state: Dictionary = _update_motion(colonist_id, tile, carried_kind != "", work_kind)
 
@@ -341,15 +344,6 @@ func _refresh_colonist(colonist_id: String, tile: Vector2i, carried_kind: String
 	marker.visible = not cargo.is_empty()
 	if marker.visible:
 		_set_badge(marker, carried_kind, cargo["rect"], CARRIED_MARKER_SIZE)
-
-	var tool_marker: SpriteRecordType = _tool_markers.get(colonist_id)
-	if tool_marker == null:
-		tool_marker = SpriteRecordType.new()
-		_tool_markers[colonist_id] = tool_marker
-	var tool_art: Dictionary = TileAtlasMapType.ITEM_ATLAS_MAP.get(tool_kind, {})
-	tool_marker.visible = not tool_art.is_empty()
-	if tool_marker.visible:
-		_set_badge(tool_marker, tool_kind, tool_art["rect"], TOOL_MARKER_SIZE)
 
 	var trapped_marker: SpriteRecordType = _trapped_markers.get(colonist_id)
 	if trapped_marker == null:
@@ -385,13 +379,12 @@ func _drop_missing(ids: Array, worker: Array, hp: Array) -> void:
 			_sprites.erase(colonist_id)
 			_motion.erase(colonist_id)
 			_carried_markers.erase(colonist_id)
-			_tool_markers.erase(colonist_id)
 			_trapped_markers.erase(colonist_id)
 
 ## One pass per layer, in the order the per-colonist nodes used to stack:
-## bodies, then the cargo, tool and trapped badges, then the health bars.
+## bodies, then the cargo and trapped badges, then the health bars.
 func _draw() -> void:
-	for layer: Dictionary in [_sprites, _carried_markers, _tool_markers, _trapped_markers]:
+	for layer: Dictionary in [_sprites, _carried_markers, _trapped_markers]:
 		for record: SpriteRecordType in layer.values():
 			record.draw(self)
 	for bar: Dictionary in _health_bars.values():
@@ -420,6 +413,7 @@ func _update_motion(colonist_id: String, tile: Vector2i, carrying: bool, work_ki
 		_motion[colonist_id] = fresh_state
 		return fresh_state
 	var state: Dictionary = _motion[colonist_id]
+	state.erase("settled")
 	state["carrying"] = carrying
 	state["work_animation"] = work_animation
 	var previous_current: Vector2i = state["current_tile"]
@@ -521,9 +515,6 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	var marker: SpriteRecordType = _carried_markers.get(colonist_id)
 	if marker != null:
 		marker.position = tile_origin + CARRIED_MARKER_OFFSET
-	var tool_marker: SpriteRecordType = _tool_markers.get(colonist_id)
-	if tool_marker != null:
-		tool_marker.position = tile_origin + TOOL_MARKER_OFFSET
 	var trapped_marker: SpriteRecordType = _trapped_markers.get(colonist_id)
 	if trapped_marker != null:
 		trapped_marker.position = tile_origin + TRAPPED_MARKER_OFFSET
