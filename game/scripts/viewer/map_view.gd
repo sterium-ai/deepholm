@@ -149,7 +149,10 @@ var _preview_per_tile := false
 ## alone do not trigger one). Tiles not yet checked draw as pending; apply()
 ## still runs the exact rules on click/release. A build kind or orientation change
 ## (a click, not a mouse move) over the same tiles re-checks at once, since the
-## last result was for the old kind (_preview_inputs_changed).
+## last result was for the old kind (_preview_inputs_changed). A build click
+## reserves its site without advancing either change log, so _commit_build() drops
+## the last result: the tiles draw as pending and re-check once the cursor rests
+## (_preview_stale).
 const PREVIEW_SETTLE_MSEC := 80
 const PREVIEW_RECHECK_MSEC := 1000
 var _preview_deferred := false
@@ -158,6 +161,7 @@ var _preview_due_msec := 0
 var _preview_checked_msec := 0
 var _preview_checked_changes := Vector2i.ZERO
 var _preview_inputs_changed := false
+var _preview_stale := false
 var _drag_preview := DragPreviewType.new()
 ## The tick and log cursors (world.get_dirty_cells_since(),
 ## world.get_designation_changes()) _drag_preview's changed tiles were last
@@ -550,6 +554,8 @@ func _update_preview() -> void:
 	var was_pending := _preview_pending
 	var inputs_changed := _preview_inputs_changed
 	_preview_inputs_changed = false
+	var stale := _preview_stale
+	_preview_stale = false
 	_list_tiles = []
 	_list_valid = []
 	_preview_pending = false
@@ -583,6 +589,9 @@ func _update_preview() -> void:
 	if not _list_tiles.is_empty() and preview_validity.is_valid():
 		if not _preview_deferred:
 			_list_valid = preview_validity.call(_list_tiles)
+		elif _list_tiles == previous_tiles and stale and not inputs_changed:
+			_preview_pending = true
+			_preview_due_msec = Time.get_ticks_msec() + PREVIEW_SETTLE_MSEC
 		elif _list_tiles == previous_tiles:
 			# Same tiles, newer tick: keep showing the last result; re-check only if
 			# tiles or designations changed since it (rate-limited), or if it is
@@ -778,6 +787,7 @@ func _commit_build(tile: Vector2i) -> void:
 	var result: Dictionary = world.apply(command)
 	build_committed.emit(result)
 	_preview_cache_key = []
+	_preview_stale = true
 	refresh()
 
 ## Number of TileMapLayer cells actually touched by the most recent

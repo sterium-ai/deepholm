@@ -25,6 +25,7 @@ func _run() -> void:
 	_check("wall hover", OrderInputType.Tool.WALL, false)
 	_check("workbench hover", OrderInputType.Tool.BUILD_WORKBENCH, false)
 	_check("wall drag 40x40", OrderInputType.Tool.WALL, true)
+	_check_paused_build_click()
 	if _failed:
 		quit(1)
 		return
@@ -89,6 +90,49 @@ func _check(label: String, tool: int, drag: bool) -> void:
 
 	if drag:
 		_mouse(map_view, origin + Vector2i(39, 39), false)
+	root.remove_child(map_view)
+	map_view.free()
+
+## A workbench click while paused reserves the hovered site without advancing the tick
+## or either change log: the green result shown before the click must not survive it.
+## The site draws as pending, then re-checks to the exact (now invalid) result.
+func _check_paused_build_click() -> void:
+	var world := WorldStateType.new(42, 10, 200, 200)
+	var orders := OrderInputType.new()
+	var map_view := MapViewType.new()
+	root.add_child(map_view)
+	map_view.set_world(world)
+	map_view.preview_validity = func(tiles: Array[Vector2i]) -> Array[bool]:
+		return orders.preview_validity(world, world.preview, map_view, tiles)
+	orders.select_tool(world, map_view, OrderInputType.Tool.BUILD_WORKBENCH)
+	var site := Vector2i(-1, -1)
+	for step in range(0, 40):
+		var tile := Vector2i(80 + step, 80)
+		_motion(map_view, tile)
+		map_view.finish_preview_work()
+		var shown: Array[bool] = map_view._preview_valid
+		if not shown.is_empty() and not shown.has(false):
+			site = tile
+			break
+	_expect(site != Vector2i(-1, -1), "paused build click: a valid workbench site must exist near (80,80)")
+	if site == Vector2i(-1, -1):
+		root.remove_child(map_view)
+		map_view.free()
+		return
+	var tick := world.get_tick()
+	var result := [{}]
+	map_view.build_committed.connect(func(r: Dictionary) -> void: result[0] = r)
+	_mouse(map_view, site, true)
+	_expect(bool((result[0] as Dictionary).get("ok", false)), "paused build click: the build must be accepted: %s" % [result[0]])
+	_expect(world.get_tick() == tick, "paused build click: a build command must not advance the tick")
+	var after: Array[bool] = map_view._preview_valid
+	_expect(after.is_empty() or after.has(false), "paused build click: the pre-click green result must not survive the click")
+	_expect(map_view._preview_pending, "paused build click: the reserved site must be re-checked")
+	map_view.finish_preview_work()
+	var tiles: Array[Vector2i] = map_view._preview_tiles.duplicate()
+	var exact: Array[bool] = orders.preview_validity(world, world.preview, map_view, tiles)
+	_expect(map_view._preview_valid == exact, "paused build click: the re-check must hold the exact validity")
+	_expect(exact.has(false), "paused build click: the just-reserved site must preview invalid")
 	root.remove_child(map_view)
 	map_view.free()
 
