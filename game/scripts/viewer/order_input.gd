@@ -310,6 +310,7 @@ func select_tool(world: WorldStateType, map_view: MapViewType, tool: int) -> voi
 		map_view.set_zone_payload(zone_payload(world, tool))
 		var build_kind := build_kind_for_tool(tool)
 		map_view.set_build_tool_enabled(not build_kind.is_empty())
+		map_view.set_preview_deferred(tool == Tool.WALL or not build_kind.is_empty())
 		if tool == Tool.WALL:
 			map_view.set_build_kind(wall_kind)
 		if not build_kind.is_empty():
