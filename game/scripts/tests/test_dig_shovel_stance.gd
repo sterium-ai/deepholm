@@ -5,7 +5,8 @@ extends SceneTree
 ## remedy craft_or_find:shovel, even when a pick lies at hand; a digger, miner and
 ## chopper stand at Chebyshev distance 1 from the target (never on it) for every tick
 ## of their work toil, including a digger ordered to dig the tile it stands on, and a digger
-## stepping off a tile to dig it never steps into the trench it dug a moment before.
+## stepping off a tile to dig it never steps into the trench it dug a moment before. With no
+## safe neighbour to step off to (walled in, or only trenches around) the dig never starts.
 
 const WorldStateType = preload("res://scripts/core/world_state.gd")
 const Scenarios = preload("res://scripts/tests/support/scenarios.gd")
@@ -19,6 +20,8 @@ func _init() -> void:
 	_check_digger_works_from_adjacent_tile(Vector2i(0, 0), "a dig under the digger's feet")
 	_check_miner_works_from_adjacent_tile()
 	_check_consecutive_digs_never_step_into_a_trench()
+	_check_no_safe_stance_never_works_underfoot(false)
+	_check_no_safe_stance_never_works_underfoot(true)
 	if _failed:
 		quit(1)
 		return
@@ -119,3 +122,28 @@ func _check_consecutive_digs_never_step_into_a_trench() -> void:
 		_expect(String(job.get("status", "")) == "completed",
 			"consecutive dig %d must complete, got %s/%s" % [x, job.get("status"), job.get("reason")])
 		_expect(TestAccess.colonists(world)[0].get("trapped") == null, "consecutive dig %d must not trap the digger" % x)
+
+## Review round: a digger ordered to dig the tile it stands on, with no safe neighbour to
+## step off to - walled in by rock (`trench_exits` false) or with trenches as its only
+## exits (true). The leg is unreachable: work never starts under its feet, the tile stays
+## soil, the digger never enters a trench and is never trapped.
+func _check_no_safe_stance_never_works_underfoot(trench_exits: bool) -> void:
+	var label := "no safe stance (%s)" % ("trench exits" if trench_exits else "walled in")
+	var world := _corridor_world(9030 + int(trench_exits))
+	for x in [0, 2, 3, 4, 5]:
+		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_TRENCH if trench_exits and x in [0, 2] else WorldStateType.TILE_ROCK)
+	TestAccess.colonists(world)[0]["x"] = 1
+	world.spawn_ground_tool_item("shovel", 1, 0)
+	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 1, "y": 0, "z": 0, "priority": 1})
+	_expect(submitted.get("ok", false), "%s: the dig must be accepted" % label)
+	var job_id := String(submitted.get("job_id", ""))
+	for _i in 120:
+		world.tick()
+		var colonist: Dictionary = TestAccess.colonists(world)[0]
+		var work = colonist.get("work")
+		_expect(work == null or String(work.get("job_id", "")) != job_id, "%s: work must never start underfoot" % label)
+		_expect(world.get_tile(int(colonist["x"]), int(colonist["y"])) != WorldStateType.TILE_TRENCH,
+			"%s: the digger must never step into a trench" % label)
+		_expect(colonist.get("trapped") == null, "%s: the digger must never be trapped" % label)
+	_expect(world.get_tile(1, 0) == WorldStateType.TILE_SOIL, "%s: the tile must stay soil" % label)
+	_expect(String(Scenarios.find_job(world, job_id).get("status", "")) != "completed", "%s: the dig must not complete" % label)

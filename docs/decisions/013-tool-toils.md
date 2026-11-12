@@ -507,7 +507,10 @@ The design went through several corrections before acceptance:
   it stands on steps off first.
 - **Step-off avoids trenches.** `toil_executor.gd`'s `_step_off_tile()` consults a
   `step_off_allowed` callable, bound to "not a trench tile", so a digger never steps
-  into the trench it dug a moment before (which would trap it). A dug tile is a
+  into the trench it dug a moment before (which would trap it). With no safe
+  neighbour (none passable, or only trenches) the go_to leg returns `unreachable`
+  instead: work never starts under the digger's feet, and the player job is
+  resubmitted like any other unreachable leg (review round). A dug tile is a
   trench, so a dig in a one-wide corridor now cuts the corridor; tests that relied on
   walking through dug tiles moved their targets into side pockets.
 - Pinned by `scripts/tests/test_dig_shovel_stance.gd`; the viewer side (facing the

@@ -130,6 +130,8 @@ var _frames: SpriteFrames = FRAMES
 var _loop_work := false
 ## With the pack: work animation name -> its tool_tip frame pixel (B9).
 var _tool_tips: Dictionary = {}
+## B9: world.get_assignments() taken once per refresh by _face_work_target() (null = not yet).
+var _refresh_assignments: Variant = null
 
 ## colonist id -> SpriteRecord, one Dictionary per drawn layer, in first-seen order.
 var _sprites: Dictionary = {}
@@ -278,6 +280,7 @@ func advance(delta: float) -> void:
 func _refresh(snapshot: Dictionary) -> void:
 	if world == null:
 		return
+	_refresh_assignments = null
 	if snapshot.is_empty():
 		snapshot = world.get_view_snapshot()
 	var ids: Array = snapshot["ids"]
@@ -461,7 +464,9 @@ func _face_work_target(colonist_id: String, state: Dictionary) -> void:
 	var work: String = state["work_animation"]
 	if work.is_empty() or world == null:
 		return
-	var assignments: Dictionary = world.get_assignments()
+	if _refresh_assignments == null:
+		_refresh_assignments = world.get_assignments()
+	var assignments: Dictionary = _refresh_assignments
 	var assignment: Dictionary = assignments.get(colonist_id, {})
 	if String(assignment.get("job_id", "")).is_empty():
 		return

@@ -224,9 +224,14 @@ made the sprite finish its glide after 1/4 of the real crossing time and then
 hold at the destination pixel for the remaining 3/4, which read as a per-tile
 pause.
 
-`dig` targets are passable soil, so the router resolves `path` all the way
-to the target tile and a one-tile (or empty) path means the colonist already
-stands on it. `chop` and `forage` targets are impassable (a tree tile; a
+`dig` targets are passable soil, but since B9 `dig` is an adjacent-work kind
+(`ToilBindings.ADJACENT_WORK_KINDS`, with `site_work`): the go_to toil trims the
+target tile off the route (`force_trim_last`), so `work` runs from a tile at
+Chebyshev distance 1, never on the tile being dug. A digger ordered to dig the
+tile it stands on first steps off to the first orthogonal neighbour (N, W, E, S)
+that is passable and not a trench; with no such neighbour the leg is
+`unreachable` and the job is resubmitted, so work never starts underfoot.
+`chop` and `forage` targets are impassable (a tree tile; a
 `berry_bush` object, per `content/objects.json`): the router is allowed to
 terminate a search on that tile only to detect reachability, but
 `GlobalAssignmentScheduler.tick()` (`game/scripts/core/scheduling/global_assignment.gd`)
@@ -236,8 +241,9 @@ rejects. So for `chop`/`forage`, a one-tile (or empty) `path` means the
 colonist already stands on the tile *adjacent* to the tree/bush, not on it,
 and `work` begins from that adjacent tile. A resolved path of one tile or
 fewer skips `route` entirely and starts `work` immediately in every case;
-only what "the target" means (on it, for `dig`, versus next to it, for
-`chop`/`forage`) differs. `content/jobs.json` gives `forage` the same
+the colonist then always stands next to the target for `dig`/`chop`/`forage`
+(for `dig` via the trim above, for `chop`/`forage` because the target is
+impassable). `content/jobs.json` gives `forage` the same
 `reserve, go_to, work, release_all` toil sequence as `dig`/`chop`.
 
 `work` (`null` when not working) holds:
