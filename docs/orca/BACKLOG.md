@@ -317,7 +317,7 @@ Orca helper scripts, this backlog.
   build.
 - **Non-goals:** new art; changing what chopping yields.
 
-### B8 — Placing a wall or a workbench lags / drops frames, even for small areas · `todo` · *parallel-safe (viewer only)*
+### B8 — Placing a wall or a workbench lags / drops frames, even for small areas · `review` (branch `antonelmejor50-hub/b8-placing-a-wall-or`) · *parallel-safe (viewer only)*
 
 - **Owner (2026-11-11 playtest, main `97902ae`):** selecting wall or workbench to place it
   makes the game stutter badly (frame drops), even when the dragged area is small.

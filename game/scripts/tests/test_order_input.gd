@@ -234,6 +234,10 @@ func _check_wall_gesture(boot) -> void:
 	motion.position = Vector2(start * MapViewType.TILE_SIZE) + Vector2.ONE
 	view._gui_input(motion)
 	_expect(world.get_events().size() == before, "wall press and drag must not submit commands")
+	# B8: a wall drag move only lays out the rectangle; the exact check waits until
+	# the cursor rests (MapView._preview_deferred).
+	_expect(observed_kinds.is_empty(), "a wall drag move must defer the exact preview check")
+	view.finish_preview_work()
 	_expect(view._preview_tiles == tiles and view._preview_valid == [true, true, true, true, true, true],
 		"reverse drag must preview the complete filled rectangle in row-major order")
 	var hash_before: int = world.state_hash()

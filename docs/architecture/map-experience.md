@@ -28,7 +28,25 @@ See [ADR 018](../decisions/018-pc-map-presentation.md).
 - Only active tools show a local hover/rectangle grid. Green cells are valid;
   red cells with a slash are invalid. Validity uses read-only
   `WorldState.preview()` checks; no live events or jobs are created by preview.
-  Tick refresh rechecks changed world conditions.
+  For every other tool, tick refresh rechecks changed world conditions.
+- **Deferred preview for Wall and build tools (B8).** An impassable kind's exact
+  check runs a whole-map enclosure flood fill (~200–340 ms on 200x200), so
+  `OrderInput.select_tool()` turns on `MapView.set_preview_deferred()` for them:
+  - A mouse move or tick only lays out the hovered footprint / dragged rectangle.
+    Tiles not yet checked draw light grey (pending), never a stale green/red.
+  - The exact check runs once the cursor has rested on the same tiles for 80 ms.
+  - With the cursor at rest, the last exact result stays. A recheck is scheduled
+    only when the tile change log (`get_dirty_cells_since`) or designation log
+    (`get_designation_changes`) advanced, at most once per second. Colonist
+    movement alone does not trigger one.
+  - Changing build kind, wall material or orientation rechecks at once.
+  - A build click reserves its site without advancing the tick or either change
+    log (for example while paused). So the click drops the last result: the
+    tiles turn pending and recheck after the settle delay. An already-green
+    preview never outlives the build it shows.
+  - The preview is advisory: `OrderInput.apply()` still validates every command
+    exactly. `MapView.finish_preview_work()` flushes a pending check (tests and
+    benches).
 - Release confirms through the existing command boundary (one command per
   tile, or one rectangle command for Zone and Wall). Actual rejection reasons still
   appear in the panel. The grid disappears on confirmation until another mouse

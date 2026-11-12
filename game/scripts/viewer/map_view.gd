@@ -140,6 +140,28 @@ var _list_valid: Array[bool] = []
 ## tile, so a drag previews incrementally through _drag_preview (see
 ## drag_preview.gd) instead of re-validating the whole rectangle per move.
 var _preview_per_tile := false
+## B8: OrderInput.select_tool() turns this on for wall and build tools, whose one
+## exact preview can flood the whole map (an impassable kind's enclosure check):
+## a mouse move or tick then only lays out _list_tiles, and _process() runs the
+## exact check once the cursor has rested PREVIEW_SETTLE_MSEC. A tick re-checks
+## unmoved tiles only when the world's tile or designation change logs advanced
+## since the last check, at most every PREVIEW_RECHECK_MSEC (colonists walking
+## alone do not trigger one). Tiles not yet checked draw as pending; apply()
+## still runs the exact rules on click/release. A build kind or orientation change
+## (a click, not a mouse move) over the same tiles re-checks at once, since the
+## last result was for the old kind (_preview_inputs_changed). A build click
+## reserves its site without advancing either change log, so _commit_build() drops
+## the last result: the tiles draw as pending and re-check once the cursor rests
+## (_preview_stale).
+const PREVIEW_SETTLE_MSEC := 80
+const PREVIEW_RECHECK_MSEC := 1000
+var _preview_deferred := false
+var _preview_pending := false
+var _preview_due_msec := 0
+var _preview_checked_msec := 0
+var _preview_checked_changes := Vector2i.ZERO
+var _preview_inputs_changed := false
+var _preview_stale := false
 var _drag_preview := DragPreviewType.new()
 ## The tick and log cursors (world.get_dirty_cells_since(),
 ## world.get_designation_changes()) _drag_preview's changed tiles were last
@@ -427,6 +449,7 @@ func set_build_kind(kind: String) -> void:
 	_build_kind = kind
 	_build_orientation = "horizontal"
 	_preview_cache_key = []
+	_preview_inputs_changed = true
 	queue_redraw()
 
 func set_build_rotatable(rotatable: bool) -> void:
@@ -434,6 +457,7 @@ func set_build_rotatable(rotatable: bool) -> void:
 	if not rotatable:
 		_build_orientation = "horizontal"
 	_preview_cache_key = []
+	_preview_inputs_changed = true
 	queue_redraw()
 
 func get_build_orientation() -> String:
@@ -447,6 +471,7 @@ func toggle_build_orientation() -> void:
 		return
 	_build_orientation = "vertical" if _build_orientation == "horizontal" else "horizontal"
 	_preview_cache_key = []
+	_preview_inputs_changed = true
 	_update_preview()
 	queue_redraw()
 
@@ -481,6 +506,11 @@ func set_tool_enabled(enabled: bool) -> void:
 func leave_tool() -> void:
 	set_tool_enabled(false)
 	tool_left.emit()
+
+func set_preview_deferred(enabled: bool) -> void:
+	_preview_deferred = enabled
+	_preview_pending = false
+	_preview_cache_key = []
 
 func clear_hover() -> void:
 	_hover = Vector2i(-1, -1)
@@ -519,8 +549,16 @@ func _update_preview() -> void:
 	if key == _preview_cache_key:
 		return
 	_preview_cache_key = key
-	_list_tiles.clear()
-	_list_valid.clear()
+	var previous_tiles := _list_tiles
+	var previous_valid := _list_valid
+	var was_pending := _preview_pending
+	var inputs_changed := _preview_inputs_changed
+	_preview_inputs_changed = false
+	var stale := _preview_stale
+	_preview_stale = false
+	_list_tiles = []
+	_list_valid = []
+	_preview_pending = false
 	if tool_enabled and _dragging and _preview_per_tile:
 		var changed := _drag_preview_changes()
 		_drag_preview.update(_rectangle(_drag_start, _drag_current), world.get_tick() if world != null else -1, preview_validity, changed)
@@ -548,6 +586,41 @@ func _update_preview() -> void:
 			else:
 				next_preview_tiles.append(_hover)
 		_list_tiles = next_preview_tiles
+	if not _list_tiles.is_empty() and preview_validity.is_valid():
+		if not _preview_deferred:
+			_list_valid = preview_validity.call(_list_tiles)
+		elif _list_tiles == previous_tiles and stale and not inputs_changed:
+			_preview_pending = true
+			_preview_due_msec = Time.get_ticks_msec() + PREVIEW_SETTLE_MSEC
+		elif _list_tiles == previous_tiles:
+			# Same tiles, newer tick: keep showing the last result; re-check only if
+			# tiles or designations changed since it (rate-limited), or if it is
+			# still waiting for its first check.
+			_list_valid = previous_valid
+			if inputs_changed:
+				_check_deferred_preview()
+			elif was_pending:
+				_preview_pending = true
+			elif _world_change_cursors() != _preview_checked_changes:
+				_preview_pending = true
+				_preview_due_msec = _preview_checked_msec + PREVIEW_RECHECK_MSEC
+		else:
+			_preview_pending = true
+			_preview_due_msec = Time.get_ticks_msec() + PREVIEW_SETTLE_MSEC
+	queue_redraw()
+
+## The world's tile and designation change-log cursors (see _preview_checked_changes).
+func _world_change_cursors() -> Vector2i:
+	if world == null:
+		return Vector2i.ZERO
+	# A cursor past the end returns an empty slice, so this copies no cells.
+	return Vector2i(int(world.get_dirty_cells_since(1 << 62)["next"]), int(world.get_designation_changes(-1)["next"]))
+
+## Runs the deferred exact check for _list_tiles (see _preview_deferred).
+func _check_deferred_preview() -> void:
+	_preview_pending = false
+	_preview_checked_msec = Time.get_ticks_msec()
+	_preview_checked_changes = _world_change_cursors()
 	if not _list_tiles.is_empty() and preview_validity.is_valid():
 		_list_valid = preview_validity.call(_list_tiles)
 	queue_redraw()
@@ -583,11 +656,15 @@ func _process(_delta: float) -> void:
 	if _drag_preview.has_work():
 		_drag_preview.step(preview_validity)
 		queue_redraw()
+	if _preview_pending and Time.get_ticks_msec() >= _preview_due_msec:
+		_check_deferred_preview()
 
-## Runs the drag preview's remaining work now (tests and benchmarks).
+## Runs the drag preview's and deferred check's remaining work now (tests and benchmarks).
 func finish_preview_work() -> void:
 	while _drag_preview.has_work():
 		_drag_preview.step(preview_validity)
+	if _preview_pending:
+		_check_deferred_preview()
 	queue_redraw()
 
 ## The tile rectangle with corners start and end, both inclusive.
@@ -710,6 +787,7 @@ func _commit_build(tile: Vector2i) -> void:
 	var result: Dictionary = world.apply(command)
 	build_committed.emit(result)
 	_preview_cache_key = []
+	_preview_stale = true
 	refresh()
 
 ## Number of TileMapLayer cells actually touched by the most recent
@@ -1117,11 +1195,15 @@ func _draw() -> void:
 	_draw_stockpile_counts()
 	_draw_construction_sites()
 	_draw_link_markers()
-	_drag_preview.draw(self, TILE_SIZE, _visible_tile_rect())
+	var visible_tiles := _visible_tile_rect()
+	_drag_preview.draw(self, TILE_SIZE, visible_tiles)
 	for i in _list_tiles.size():
 		var tile := _list_tiles[i]
-		var valid := i < _list_valid.size() and _list_valid[i]
-		var color := Color(0.3, 1.0, 0.55) if valid else Color(1.0, 0.3, 0.3)
+		if not visible_tiles.has_point(tile):
+			continue
+		var unchecked := i >= _list_valid.size() and _preview_pending
+		var valid := unchecked or (i < _list_valid.size() and _list_valid[i])
+		var color := Color(0.85, 0.85, 0.85) if unchecked else (Color(0.3, 1.0, 0.55) if valid else Color(1.0, 0.3, 0.3))
 		var rect := Rect2(Vector2(tile) * TILE_SIZE, Vector2.ONE * TILE_SIZE)
 		draw_rect(rect, Color(color, 0.22), true)
 		draw_rect(rect, color, false, 1.0)
