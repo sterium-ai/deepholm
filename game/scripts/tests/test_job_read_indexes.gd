@@ -18,7 +18,7 @@ func _init() -> void:
 	var world = WorldStateType.new(4242, 10, 64, 64)
 	var c0: Dictionary = world.get_colonists()[0]
 	var home := TileGrid.tile_of(c0)
-	for kind in ["pick", "pick", "axe"]:
+	for kind in ["pick", "shovel", "axe"]:
 		world.spawn_ground_tool_item(kind, home.x, home.y)
 	_rect(world, "dig", home - Vector3i(8, 8, 0), Vector3i(16, 16, 0))
 	_rect(world, "chop", Vector3i(0, 0, 0), Vector3i(64, 12, 0))

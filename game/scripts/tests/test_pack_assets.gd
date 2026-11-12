@@ -16,7 +16,7 @@ const MISSING_ROOT := "user://no_pack_here/"
 const FIXTURE_ROOT := "user://pack_fixture/"
 const FACINGS := ["down", "up", "side"]
 const BASE_PREFIXES := ["idle", "walk", "carry_idle", "carry_walk"]
-const WORK_PREFIXES := ["chop", "mine", "dig", "build"]
+const WORK_PREFIXES := ["chop", "mine", "dig", "build", "plant"]
 const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
 const ViewSnapshotStub = preload("res://scripts/tests/support/view_snapshot_stub.gd")
 
@@ -85,7 +85,7 @@ func _expect(condition: bool, message: String) -> void:
 func _check_mapping(mapping: Dictionary) -> void:
 	var animations: Dictionary = mapping.get("animations", {})
 	_expect(animations.size() == FACINGS.size() * (BASE_PREFIXES.size() + WORK_PREFIXES.size()),
-		"colonist_pack.json must have 24 animations, has %d" % animations.size())
+		"colonist_pack.json must have %d animations, has %d" % [FACINGS.size() * (BASE_PREFIXES.size() + WORK_PREFIXES.size()), animations.size()])
 	var manifest := PackAssetsType.read_mapping("res://data/sprite_frames/pack_manifest.json")
 	var listed: Array = manifest.get("files", [])
 	for prefix: String in BASE_PREFIXES + WORK_PREFIXES:

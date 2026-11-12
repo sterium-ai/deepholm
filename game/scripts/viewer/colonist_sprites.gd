@@ -31,7 +31,12 @@ const SpriteRecordType = preload("res://scripts/viewer/sprite_record.gd")
 ## the ordinary idle/walk choice -- the placeholder has only build_*.
 const WORK_ANIMATION_BY_JOB_KIND := {
 	"site_work": "build", "chop": "chop", "mine": "mine", "dig": "dig",
+	"plant_sapling": "plant",
 }
+## B9: the most a worker's body shifts toward its target so the measured tool tip
+## (colonist_pack.json's per-animation "tool_tip") lands on the target tile's centre;
+## half a tile keeps its feet inside its own tile.
+const MAX_WORK_OFFSET := TILE_SIZE / 2.0
 
 ## Colonists are 64x64 px source frames with empty canvas around the
 ## silhouette: the character's feet sit at local y = 47, not the frame's raw
@@ -123,6 +128,8 @@ var _motion: Dictionary = {}
 ## (the placeholder's build_* keeps its t-driven timing unchanged).
 var _frames: SpriteFrames = FRAMES
 var _loop_work := false
+## With the pack: work animation name -> its tool_tip frame pixel (B9).
+var _tool_tips: Dictionary = {}
 
 ## colonist id -> SpriteRecord, one Dictionary per drawn layer, in first-seen order.
 var _sprites: Dictionary = {}
@@ -154,6 +161,11 @@ func _init(pack_root: String = PackAssetsType.DEFAULT_ROOT) -> void:
 	if pack_frames != null:
 		_frames = pack_frames
 		_loop_work = true
+		var animations: Dictionary = PackAssetsType.read_mapping(PackAssetsType.COLONIST_FRAMES_JSON).get("animations", {})
+		for animation_name: String in animations:
+			var tip: Array = animations[animation_name].get("tool_tip", {}).get("at", [])
+			if tip.size() == 2:
+				_tool_tips[animation_name] = Vector2(float(tip[0]), float(tip[1]))
 	for kind in TileAtlasMapType.ITEM_ATLAS_MAP:
 		_cargo_textures[kind] = load(TileAtlasMapType.ITEM_ATLAS_MAP[kind]["texture_path"])
 	var wood_atlas = TileAtlasMapType.ITEM_ATLAS_MAP.get("wood")
@@ -324,6 +336,7 @@ func _refresh(snapshot: Dictionary) -> void:
 func _refresh_colonist(colonist_id: String, tile: Vector2i, carried_kind: String, is_trapped: bool,
 		work_kind: String) -> void:
 	var state: Dictionary = _update_motion(colonist_id, tile, carried_kind != "", work_kind)
+	_face_work_target(colonist_id, state)
 
 	if not _sprites.has(colonist_id):
 		var body := SpriteRecordType.new()
@@ -438,6 +451,42 @@ func _update_motion(colonist_id: String, tile: Vector2i, carrying: bool, work_ki
 	state["cycles"] = 0.0
 	return state
 
+## B9: a colonist in a work toil faces its job's target (worked from an adjacent
+## tile, ADR 013) and, when its work animation has a measured tool_tip, carries a
+## "work_offset" of at most MAX_WORK_OFFSET per axis that puts that tip on the
+## target tile's centre. The target is not in the snapshot, so it is read from the
+## world's assignment and job, only when this colonist's row changed.
+func _face_work_target(colonist_id: String, state: Dictionary) -> void:
+	state["work_offset"] = Vector2.ZERO
+	var work: String = state["work_animation"]
+	if work.is_empty() or world == null:
+		return
+	var assignments: Dictionary = world.get_assignments()
+	var assignment: Dictionary = assignments.get(colonist_id, {})
+	if String(assignment.get("job_id", "")).is_empty():
+		return
+	var target = world.get_job(String(assignment["job_id"]), assignments).get("target")
+	if not target is Vector3i:
+		return
+	var step: Vector2i = Vector2i(target.x, target.y) - Vector2i(state["current_tile"])
+	if step == Vector2i.ZERO:
+		return
+	if absi(step.y) > absi(step.x):
+		state["facing"] = "up" if step.y < 0 else "down"
+		state["flip_h"] = false
+	else:
+		state["facing"] = "side"
+		state["flip_h"] = step.x < 0
+	var tip: Variant = _tool_tips.get("%s_%s" % [work, state["facing"]])
+	if tip == null:
+		return
+	var frame_tip: Vector2 = tip
+	if state["flip_h"]:
+		frame_tip.x = FRAME_SOURCE_SIZE - 1.0 - frame_tip.x
+	var target_centre := Vector2(step) * TILE_SIZE + Vector2(TILE_SIZE, TILE_SIZE) / 2.0
+	var offset := target_centre - (SPRITE_POSITION_OFFSET + frame_tip * DISPLAY_SCALE)
+	state["work_offset"] = offset.clamp(-Vector2.ONE * MAX_WORK_OFFSET, Vector2.ONE * MAX_WORK_OFFSET)
+
 ## The interpolated tile's own raw pixel origin, lerp(previous_tile,
 ## current_tile, t) * TILE_SIZE, shared by the body (plus the feet anchor,
 ## SPRITE_POSITION_OFFSET, per docs/art/style.md) and the badges (plus their
@@ -501,7 +550,7 @@ func _apply_motion_visual(colonist_id: String, state: Dictionary) -> void:
 	if sprite == null:
 		return
 	var tile_origin := _drawn_tile_origin(state)
-	sprite.position = tile_origin + SPRITE_POSITION_OFFSET
+	sprite.position = tile_origin + SPRITE_POSITION_OFFSET + state.get("work_offset", Vector2.ZERO)
 	sprite.flip_h = bool(state["flip_h"])
 	var animation_name := _animation_name(state)
 	if sprite.animation != animation_name:

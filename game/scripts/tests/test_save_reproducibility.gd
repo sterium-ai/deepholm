@@ -90,7 +90,7 @@ func _check_generator_provenance_preserved_through_resave() -> void:
 
 ## A small hand-built corridor (mirrors test_toils_dig_chop_regression.gd's own
 ## _build_world()): rock everywhere except a soil row a colonist can dig its
-## own way along, with a pick already on the ground so dig's needs_tool
+## own way along, with a shovel already on the ground so dig's needs_tool
 ## precondition never blocks it.
 func _build_dig_test_world(seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, 16, 16)
@@ -101,7 +101,7 @@ func _build_dig_test_world(seed_value: int) -> WorldStateType:
 		TestAccess.set_tile(world, x, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 func _complete_dig(world: WorldStateType, target: Vector3i, command_id: String) -> bool:

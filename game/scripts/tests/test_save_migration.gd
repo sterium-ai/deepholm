@@ -1374,7 +1374,7 @@ func _check_critical_interrupt_survives_save_load_round_trip() -> void:
 	# already committed, walked, ate, and resumed the dig job all within the
 	# same tick the critical interrupt fired.
 	TestAccess.item_table(world).ground_berries["9_20"] = 1
-	world.spawn_ground_tool_item("pick", 9, 0)
+	world.spawn_ground_tool_item("shovel", 9, 0)
 
 	var dig_result := world.apply({
 		"actor": "test", "command_id": "dig_1", "tick": world.get_tick(),

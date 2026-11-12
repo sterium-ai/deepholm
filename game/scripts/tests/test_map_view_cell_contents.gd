@@ -95,7 +95,7 @@ func _init() -> void:
 ## spending the whole tick budget just walking to fetch a tool.
 func _give_starting_tools(world: WorldStateType) -> void:
 	var colonist: Dictionary = world.get_colonists()[0]
-	world.spawn_ground_tool_item("pick", int(colonist["x"]), int(colonist["y"]))
+	world.spawn_ground_tool_item("shovel", int(colonist["x"]), int(colonist["y"]))
 	world.spawn_ground_tool_item("axe", int(colonist["x"]), int(colonist["y"]))
 
 func _run_job_to_completion(world: WorldStateType, job_type: String, target: Vector2i) -> void:

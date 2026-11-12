@@ -38,27 +38,29 @@ func _expect(condition: bool, message: String) -> void:
 		push_error(message)
 
 ## A single row corridor: colonist starts at (0,0); (0,0)-(3,0) are soil,
-## (4,0) is a tree. Everything else is rock, so the router has exactly one
-## path to each target, keeping the position trace below unambiguous.
-## The axe spawns at (3,0), past the dig target (2,0), not at (0,0) --
-## dig always completes first (nearer), turning (2,0) into trench, so a
-## same-side axe would send the colonist's own fetch_tool leg back through
-## it to reach (0,0), tripping the trap-on-entry rule (route search
-## still treats trench as ordinary passable terrain; only arrival traps).
+## (4,0) is a tree, and (2,1) is a dead-end soil pocket holding the dig target.
+## Everything else is rock, so the router has exactly one path to each target,
+## keeping the position trace below unambiguous. B9: the digger works the pocket
+## from (2,0) next to it, so the trench it leaves never cuts the corridor the
+## chop still has to walk.
+## The axe spawns at (3,0), not at (0,0) (kept from before B9, when the dig
+## target sat on the corridor itself and a same-side axe sent the fetch_tool leg
+## back through the fresh trench, tripping the trap-on-entry rule).
 func _build_world(seed_value: int) -> WorldType:
 	var world := WorldType.new(seed_value)
 	TestAccess.tile_grid(world).tiles.fill(WorldType.TILE_ROCK)
 	for x in range(0, 5):
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
 	TestAccess.set_tile(world, 4, 0, WorldType.TILE_TREE)
+	TestAccess.set_tile(world, 2, 1, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	world.spawn_ground_tool_item("axe", 3, 0)
 	return world
 
 func _dig_target() -> Vector3i:
-	return Vector3i(2, 0, 0)
+	return Vector3i(2, 1, 0)
 
 func _chop_target() -> Vector3i:
 	return Vector3i(4, 0, 0)
@@ -191,7 +193,7 @@ func _build_interrupt_world(seed_value: int) -> WorldType:
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
 	TestAccess.item_table(world).ground_berries["5_0"] = 1
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 ## A colonist with a critical
@@ -386,7 +388,7 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 	TestAccess.colonists(live).clear()
 	TestAccess.colonists(live).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "rest": 100, "water": 100}, "route": null, "work": null, "hands": []})
-	live.spawn_ground_tool_item("pick", 0, 0)
+	live.spawn_ground_tool_item("shovel", 0, 0)
 	var dig_result := Scenarios.command(live, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result["job_id"])
@@ -429,7 +431,7 @@ func _check_save_load_after_resume_matches_live_run() -> void:
 		"both the source and its post-interrupt restore must leave a sand item on or adjacent to the trench")
 
 ## Two dig orders queued for the same soil tile, with a single colonist
-## and a single pick forcing them to run sequentially, must not both spawn a sand item or both
+## and a single shovel forcing them to run sequentially, must not both spawn a sand item or both
 ## consume a find roll. _toil_on_work_complete()'s "dig" branch now revalidates TILE_SOIL before
 ## flooring/spawning (mirroring mine's own stale-duplicate-order guard, test_mine_job.gd's
 ## _check_overlapping_mine_orders_produce_one_stone()): the first order digs and trenches the
@@ -443,7 +445,7 @@ func _check_overlapping_dig_orders_produce_one_sand_and_one_find_roll() -> void:
 	TestAccess.set_tile(world, target.x, target.y, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 
 	var dig_1 := Scenarios.command(world, "dig_dup_1", "dig", {"x": target.x, "y": target.y, "z": 0, "priority": 1})
 	_expect(dig_1["ok"], "first dig submission on a soil tile must be accepted")

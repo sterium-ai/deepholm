@@ -870,6 +870,7 @@ func _single_colonist_world(seed_value: int) -> WorldStateType:
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"route": null, "work": null, "labourTable": _default_labour_table()})
 	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	world.spawn_ground_tool_item("axe", 0, 0)
 	return world
 

@@ -490,3 +490,25 @@ The design went through several corrections before acceptance:
 - **Load-test invariant.** Intermediate versions exempted handover waits from
   the 3-tick idle bound. The exemption was removed once candidate preference
   fixed the underlying cause, and the handover bound is tested separately.
+
+## Amendment (B9, 2026-11-12): dig needs a shovel and is worked from beside the tile
+
+- **Shovel.** `content/jobs.json` gives `dig` `needs_tool: "shovel"` (it was `pick`;
+  `mine` keeps the pick). `shovel` is a tool item in `content/items.json`, crafted at
+  the workbench (`content/recipes.json`), and the starting kit carries one. A dig with
+  no reachable shovel blocks with `blocked_no_tool` and remedy `craft_or_find:shovel`
+  through the shared scheduler described above; nothing else in this ADR changes.
+  Saves made before B9 keep their queued digs: they block until a shovel exists (no
+  migration, schema stays 16).
+- **Adjacent stance.** `dig` joins `site_work` in `toil_bindings.gd`'s
+  `ADJACENT_WORK_KINDS`, so its `go_to` trims the last route step and the worker
+  stands at Chebyshev distance 1 from the target for the whole `work` toil, like
+  `mine` (rock is impassable) and `chop` already did. A digger ordered to dig the tile
+  it stands on steps off first.
+- **Step-off avoids trenches.** `toil_executor.gd`'s `_step_off_tile()` consults a
+  `step_off_allowed` callable, bound to "not a trench tile", so a digger never steps
+  into the trench it dug a moment before (which would trap it). A dug tile is a
+  trench, so a dig in a one-wide corridor now cuts the corridor; tests that relied on
+  walking through dug tiles moved their targets into side pockets.
+- Pinned by `scripts/tests/test_dig_shovel_stance.gd`; the viewer side (facing the
+  target, pack tool-tip offset) by `scripts/tests/test_colonist_work_stance_viewer.gd`.

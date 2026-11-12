@@ -15,7 +15,7 @@ extends SceneTree
 ##   streams, ...). A new key changes the hash even when, as here, it stays
 ##   empty.
 ## - Stepping changes that genuinely alter this scenario: dig/chop declaring
-##   needs_tool and a fetch_tool toil (so _build_world() places a pick and an
+##   needs_tool and a fetch_tool toil (so _build_world() places a shovel and an
 ##   axe for each colonist); the scheduler's activation route search and
 ##   fetch_tool travel sharing one per-colonist per-tick routing allowance
 ##   (ADR 004), which defers a colonist's first travel search by one tick;
@@ -75,8 +75,12 @@ const JOBS_CONTENT_PATH := "res://content/jobs.json"
 ## table, so both projections hash them and 3133873738 / 2587936448 became the values below.
 ## With animal_counts emptied the same run still hashes to both old literals, so the colonists'
 ## stepping did not change.
-const EXPECTED_HASH := 1099216867
-const COLONY_EXPECTED_HASH := 2179195481
+## B9 (dig needs a shovel and is worked from an adjacent tile; _build_world() moved every dig
+## target into a dead-end pocket beside its corridor and dig_4 to row 4 so the rows stay
+## walkable and colonist_0 claims chop_1 first): 1099216867 / 2179195481 became the values
+## below. Stepping genuinely changed (new geometry, shovel fetch, adjacent stance).
+const EXPECTED_HASH := 3003746930
+const COLONY_EXPECTED_HASH := 795895848
 const TOTAL_TICKS := 260
 
 var _failed := false
@@ -152,12 +156,15 @@ func _check_jobs_content_file() -> void:
 			and kinds.has("incident") and kinds.has("escape_trench") and kinds.has("flee") and kinds.has("rescue") and kinds.has("approach"),
 		"jobs.json must declare exactly the dig, mine, chop, forage, till, sow, harvest, plant_sapling, haul, haul_tool, site_fetch, site_work, craft_fetch, craft_work, cook_work, eat_food, drink_water, sleep, incident, escape_trench, flee, rescue and approach kinds (got %s)" % [kinds.keys()])
 
-## Two parallel corridors (y=0, y=2; x=0..9) with a tree at the far end of
-## each row and a one-tile rock buffer (y=1) between them; everything else is
-## rock. Two colonists start at the near end of each row so dig/chop targets,
+## Two parallel corridors (y=0, y=4; x=0..9) with a tree at the far end of
+## each row, every dig target in a one-tile dead-end soil pocket beside its
+## corridor (y=1 for row 0, y=3 for row 4) and a rock buffer (y=2) between the
+## two rows' pockets; everything else is rock. B9 works dig from an adjacent
+## tile, so a dig in the corridor itself would leave a trench across it that
+## the digger must walk back through; a pocket trench never blocks the row. Two colonists start at the near end of each row so dig/chop targets,
 ## routing and the fair scheduler (unrestricted "assignee") all have real
 ## work to do -- each colonist does both a dig and a chop order on its own
-## row, so it swaps between pick and axe. The buffer row makes the two
+## row, so it swaps between shovel and axe. The buffer row makes the two
 ## corridors unreachable from one another: with adjacent corridors, a colonist
 ## assigned to a farther target under the fair scheduler's nearest/priority
 ## ordering could path diagonally back across a row-mate's already-dug trench
@@ -175,22 +182,24 @@ func _build_world(seed_value: int) -> WorldType:
 	TestAccess.object_table(world).object_factions.clear()
 	for x in range(0, 10):
 		TestAccess.set_tile(world, x, 0, WorldType.TILE_SOIL)
-		TestAccess.set_tile(world, x, 2, WorldType.TILE_SOIL)
+		TestAccess.set_tile(world, x, 4, WorldType.TILE_SOIL)
+	for pocket in [Vector2i(3, 1), Vector2i(5, 1), Vector2i(3, 3), Vector2i(7, 3)]:
+		TestAccess.set_tile(world, pocket.x, pocket.y, WorldType.TILE_SOIL)
 	TestAccess.set_tile(world, 9, 0, WorldType.TILE_TREE)
-	TestAccess.set_tile(world, 9, 2, WorldType.TILE_TREE)
+	TestAccess.set_tile(world, 9, 4, WorldType.TILE_TREE)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 2, "z": 0, "route": null, "work": null})
+	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 4, "z": 0, "route": null, "work": null})
 	# Axe sits past every dig target (x=8, just short of the tree at x=9),
-	# pick at the start (x=0, before every dig target) -- see _run_scenario()'s
+	# shovel at the start (x=0, before every dig target) -- see _run_scenario()'s
 	# own comment for why this placement, combined with its priorities, keeps
 	# every fetch_tool trip and every dig/chop leg strictly forward, so no
 	# colonist ever re-lands on a trench tile it (or nothing else, these rows
 	# are unreachable from one another) already dug.
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	world.spawn_ground_tool_item("axe", 8, 0)
-	world.spawn_ground_tool_item("pick", 0, 2)
-	world.spawn_ground_tool_item("axe", 8, 2)
+	world.spawn_ground_tool_item("shovel", 0, 4)
+	world.spawn_ground_tool_item("axe", 8, 4)
 	return world
 
 ## Submits a scripted sequence of dig and chop orders, ticking between
@@ -201,22 +210,24 @@ func _build_world(seed_value: int) -> WorldType:
 ## outranks every chop, 2 vs 1), deliberately, so that within a row every
 ## dig is always served before that row's chop regardless of submission
 ## order/aging (global_assignment.gd's PRIORITY_WEIGHT=16 dwarfs this
-## scenario's few-tick submission spread), and dig_1/dig_2/dig_4 (equal
-## priority, so FIFO by submission order/ordinal) are served in strictly
-## ascending x. A colonist therefore always walks its row purely rightward
-## -- pick already in hand from its first dig, straight through 3, 5, 7 --
-## and only afterwards, once, forward again to the axe depot at 8 and the
-## tree at 9: no dig target is ever revisited after the trap-on-entry rule
-## turns it to trench.
+## scenario's few-tick submission spread), and each row's digs (equal
+## priority, so FIFO by submission order/ordinal) are served in ascending x.
+## A colonist therefore walks its row purely rightward -- shovel in hand from
+## its first dig, along the corridor past its pockets (row 0: 3, 5; row 4: 3, 7)
+## -- and only afterwards forward again to the axe depot at 8 and the tree at 9.
+## dig_4 sits on row 4 (B9) so colonist_0 is free for chop_1 before colonist_1,
+## whose row cannot reach row 0's tree, goes idle: an idle region-disconnected
+## colonist marks a queued job blocked_target_unreachable, which no later tick
+## in this scenario revisits.
 func _run_scenario(world: WorldType) -> void:
-	Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 0, "z": 0, "priority": 2})
-	Scenarios.command(world, "dig_2", "dig", {"x": 5, "y": 0, "z": 0, "priority": 2})
+	Scenarios.command(world, "dig_1", "dig", {"x": 3, "y": 1, "z": 0, "priority": 2})
+	Scenarios.command(world, "dig_2", "dig", {"x": 5, "y": 1, "z": 0, "priority": 2})
 	world.tick()
 	world.tick()
 	Scenarios.command(world, "chop_1", "chop", {"x": 9, "y": 0, "z": 0, "priority": 1})
-	Scenarios.command(world, "dig_3", "dig", {"x": 3, "y": 2, "z": 0, "priority": 2})
+	Scenarios.command(world, "dig_3", "dig", {"x": 3, "y": 3, "z": 0, "priority": 2})
 	world.tick()
 	world.tick()
 	world.tick()
-	Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 2, "z": 0, "priority": 1})
-	Scenarios.command(world, "dig_4", "dig", {"x": 7, "y": 0, "z": 0, "priority": 2})
+	Scenarios.command(world, "chop_2", "chop", {"x": 9, "y": 4, "z": 0, "priority": 1})
+	Scenarios.command(world, "dig_4", "dig", {"x": 7, "y": 3, "z": 0, "priority": 2})

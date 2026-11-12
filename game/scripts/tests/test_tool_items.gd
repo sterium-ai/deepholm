@@ -36,7 +36,7 @@ func _check_items_content_declares_axe_and_pick() -> void:
 	_expect(by_id.get("axe", {}).get("kind") == "tool", "items.json must declare 'axe' with kind 'tool'")
 	_expect(by_id.get("pick", {}).get("kind") == "tool", "items.json must declare 'pick' with kind 'tool'")
 
-## game/content/jobs.json's 'dig' entry must declare needs_tool 'pick' and
+## game/content/jobs.json's 'dig' entry must declare needs_tool 'shovel' (B9) and
 ## 'chop' must declare needs_tool 'axe'.
 func _check_jobs_content_declares_needs_tool() -> void:
 	var file := FileAccess.open(JOBS_CONTENT_PATH, FileAccess.READ)
@@ -52,7 +52,7 @@ func _check_jobs_content_declares_needs_tool() -> void:
 	for entry in parsed["jobs"]:
 		if typeof(entry) == TYPE_DICTIONARY and typeof(entry.get("kind")) == TYPE_STRING:
 			by_kind[entry["kind"]] = entry
-	_expect(by_kind.get("dig", {}).get("needs_tool") == "pick", "jobs.json's dig must declare needs_tool 'pick'")
+	_expect(by_kind.get("dig", {}).get("needs_tool") == "shovel", "jobs.json's dig must declare needs_tool 'shovel' (B9)")
 	_expect(by_kind.get("chop", {}).get("needs_tool") == "axe", "jobs.json's chop must declare needs_tool 'axe'")
 
 ## A freshly spawned colonist's held_tool must be "" (empty).

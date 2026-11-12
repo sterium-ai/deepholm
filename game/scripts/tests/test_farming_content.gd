@@ -354,7 +354,7 @@ func _check_farm_disabled_blocks_till_sow_not_others() -> void:
 	# dig/chop's needs_tool fetch_tool toil requires a matching
 	# tool to exist somewhere; both sit right under the colonist so this
 	# test's dig/chop completion checks are unaffected by travel time.
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	world.spawn_ground_tool_item("axe", 0, 0)
 	_expect(Scenarios.command(world, "zone_1", "zone_add", {"x": 10, "y": 0, "z": 0, "width": 2, "height": 2}).get("ok", false),
 		"zone_add must be accepted")

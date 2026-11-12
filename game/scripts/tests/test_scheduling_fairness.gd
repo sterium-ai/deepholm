@@ -65,11 +65,11 @@ func _world(far_worker: bool = false) -> WorldType:
 		TestAccess.colonists(world)[7]["y"] = WorldType.MAP_HEIGHT - 1
 	# Already held: this is ADR 004's own fairness/service-bound proof, wholly
 	# unrelated to tools, and the fixture completes every active job by
-	# explicit command before the next tick() -- with no pick, dig's own
+	# explicit command before the next tick() -- with no shovel, dig's own
 	# fetch_tool toil would instead fail every order the instant it activates,
 	# the same tick, before that command ever runs.
 	for i in 8:
-		world.set_tool_item_held(world.spawn_ground_tool_item("pick", i * 2, 5), "colonist_%d" % i)
+		world.set_tool_item_held(world.spawn_ground_tool_item("shovel", i * 2, 5), "colonist_%d" % i)
 	return world
 
 func _command(world: WorldType, kind: String, payload: Dictionary) -> Dictionary:

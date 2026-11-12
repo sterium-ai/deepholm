@@ -85,8 +85,8 @@ func _check_save_io_round_trip_after_candidate_excluded() -> void:
 	TestAccess.set_tile(world, 6, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2) but walled off
-	world.spawn_ground_tool_item("pick", 5, 0) # farther (distance 5) but reachable
+	world.spawn_ground_tool_item("shovel", 0, 2) # closer (distance 2) but walled off
+	world.spawn_ground_tool_item("shovel", 5, 0) # farther (distance 5) but reachable
 
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 6, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
@@ -374,7 +374,7 @@ func _check_save_io_round_trip_after_requester_cancellation_midflight() -> void:
 		"labourTable": {"mine": 0, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 3, "build": 3, "craft": 3, "cook": 3}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")

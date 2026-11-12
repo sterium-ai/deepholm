@@ -128,7 +128,7 @@ func _check_requester_waits_for_real_handover_then_completes() -> void:
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 
 	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
@@ -257,7 +257,7 @@ func _check_adjacent_busy_holder_does_not_steal_tool_same_tick() -> void:
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 1, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 20, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush placement must be accepted")
@@ -316,7 +316,7 @@ func _check_fetch_tool_retargets_when_holder_drops_tool_elsewhere() -> void:
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
@@ -471,7 +471,7 @@ func _check_requester_cancellation_midflight_still_completes_drop_correctly() ->
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
@@ -554,7 +554,7 @@ func _check_drop_continues_when_holders_own_next_job_needs_a_different_tool() ->
 		"labourTable": labour_table_all_but_mine})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": labour_table_all_but_chop})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
@@ -1114,7 +1114,7 @@ func _check_destroyed_foreign_held_tool_while_waiting_reconciles_holder() -> voi
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 
 	_expect(Scenarios.command(world, "place_bush", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
@@ -1194,7 +1194,7 @@ func _check_destroyed_foreign_held_tool_mid_drop_reconciles_holder_route() -> vo
 		"labourTable": {"forage": 0}})
 	_expect(Scenarios.command(world, "zone_add_1", "zone_add", {"x": 5, "y": 0, "z": 0, "width": 1, "height": 1}).get("ok", false),
 		"zone_add must be accepted")
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var pick_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"}).get("ok", false),
 		"berry_bush A placement must be accepted")

@@ -161,7 +161,7 @@ func _run_mid_dig_then_eat_scenario(seed_value: int, mutate_at_tick: int, total_
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs()))
 	TestAccess.set_tile(world, 10, 0, WorldStateType.TILE_SOIL)
 	TestAccess.item_table(world).ground_berries["15_0"] = 1
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
@@ -202,7 +202,7 @@ func _check_no_reachable_food_exposes_need_unmet_once_and_keeps_working() -> voi
 	Scenarios.isolate_need(world, "food")
 	TestAccess.colonists(world).append(_colonist("colonist_0", 0, 0, Scenarios.full_needs({"food": 20})))
 	TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 5, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")
 	var dig_job_id := String(dig_result.get("job_id", ""))
@@ -389,7 +389,7 @@ func _check_critical_need_interrupts_mid_dig_and_resumes_with_progress_kept() ->
 	# observable before the need job resolves and resumes it, rather than
 	# both collapsing into the same tick.
 	TestAccess.item_table(world).ground_berries["9_20"] = 1
-	world.spawn_ground_tool_item("pick", 9, 0)
+	world.spawn_ground_tool_item("shovel", 9, 0)
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 10, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result["ok"], "the dig order must be accepted")

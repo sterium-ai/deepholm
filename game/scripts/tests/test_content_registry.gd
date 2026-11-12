@@ -106,7 +106,7 @@ func _check_real_bundle_loads_and_resolves() -> void:
 
 	var dig := registry.get_entry("jobs", "dig")
 	_expect(not dig.is_empty(), "jobs collection must contain 'dig'")
-	_expect(String(dig.get("needs_tool", "")) == "pick", "dig's needs_tool must resolve to a declared tool item")
+	_expect(String(dig.get("needs_tool", "")) == "shovel", "dig's needs_tool must resolve to a declared tool item")
 
 	# Dig's effects.yields.always/find_table must resolve and its
 	# find_table weights (5 + 20 + 10 + 10 + 55) must sum to 100 (ADR 051).

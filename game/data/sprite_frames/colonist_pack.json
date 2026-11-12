@@ -1,6 +1,6 @@
 {
  "source": "Pixel Crawler by Anokolisa; local pack, never committed (tools/sync_pack_assets.ps1)",
- "measured_by": "docs/orca/handoffs/B2-measure_pack_frames.py",
+ "measured_by": "docs/orca/handoffs/B9-measure_pack_frames.py (extends B2-measure_pack_frames.py)",
  "frame_size": [64, 64],
  "feet_y": 47,
  "side_faces": "right",
@@ -175,7 +175,11 @@
     [25, 22, 43, 57],
     [21, 21, 41, 50],
     [20, 9, 38, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [34, 62]
+   }
   },
   "chop_up": {
    "sheet": "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Up-Sheet.png",
@@ -191,7 +195,11 @@
     [21, 10, 39, 48],
     [22, 17, 46, 48],
     [23, 20, 46, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [27, 4]
+   }
   },
   "chop_side": {
    "sheet": "Entities/Characters/Body_A/Animations/Slice_Base/Slice_Side-Sheet.png",
@@ -207,7 +215,11 @@
     [24, 22, 60, 48],
     [24, 20, 49, 48],
     [23, 20, 44, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [63, 35]
+   }
   },
   "mine_down": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
@@ -223,7 +235,11 @@
     [22, 23, 38, 60],
     [9, 21, 38, 48],
     [17, 14, 38, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [31, 61]
+   }
   },
   "mine_up": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
@@ -239,7 +255,11 @@
     [26, 14, 41, 48],
     [26, 11, 41, 48],
     [26, 8, 41, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [38, 15]
+   }
   },
   "mine_side": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
@@ -255,7 +275,11 @@
     [27, 26, 56, 51],
     [27, 23, 53, 48],
     [26, 20, 44, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [56, 42]
+   }
   },
   "dig_down": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
@@ -271,7 +295,11 @@
     [22, 23, 38, 60],
     [9, 21, 38, 48],
     [17, 14, 38, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [31, 61]
+   }
   },
   "dig_up": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
@@ -287,7 +315,11 @@
     [26, 14, 41, 48],
     [26, 11, 41, 48],
     [26, 8, 41, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [38, 15]
+   }
   },
   "dig_side": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
@@ -303,7 +335,11 @@
     [27, 26, 56, 51],
     [27, 23, 53, 48],
     [26, 20, 44, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [56, 42]
+   }
   },
   "build_down": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Down-Sheet.png",
@@ -319,7 +355,11 @@
     [22, 23, 38, 60],
     [9, 21, 38, 48],
     [17, 14, 38, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [31, 61]
+   }
   },
   "build_up": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Up-Sheet.png",
@@ -335,7 +375,11 @@
     [26, 14, 41, 48],
     [26, 11, 41, 48],
     [26, 8, 41, 48]
-   ]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [38, 15]
+   }
   },
   "build_side": {
    "sheet": "Entities/Characters/Body_A/Animations/Crush_Base/Crush_Side-Sheet.png",
@@ -351,6 +395,58 @@
     [27, 26, 56, 51],
     [27, 23, 53, 48],
     [26, 20, 44, 48]
+   ],
+   "tool_tip": {
+    "frame": 3,
+    "at": [56, 42]
+   }
+  },
+  "plant_down": {
+   "sheet": "Entities/Characters/Body_A/Animations/Collect_Base/Collect_Down-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [25, 21, 38, 48],
+    [26, 24, 38, 48],
+    [26, 25, 38, 48],
+    [26, 22, 38, 48],
+    [26, 21, 38, 48],
+    [26, 16, 38, 48],
+    [24, 18, 40, 48]
+   ]
+  },
+  "plant_up": {
+   "sheet": "Entities/Characters/Body_A/Animations/Collect_Base/Collect_Up-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [24, 18, 40, 48],
+    [24, 20, 40, 48],
+    [26, 22, 39, 48],
+    [26, 23, 39, 48],
+    [26, 22, 39, 48],
+    [26, 20, 39, 48],
+    [24, 17, 40, 48],
+    [22, 18, 42, 48]
+   ]
+  },
+  "plant_side": {
+   "sheet": "Entities/Characters/Body_A/Animations/Collect_Base/Collect_Side-Sheet.png",
+   "sheet_size": [512, 64],
+   "frames": 8,
+   "fps": 6.0,
+   "alpha_bboxes": [
+    [25, 18, 40, 48],
+    [26, 21, 40, 48],
+    [23, 26, 41, 48],
+    [23, 27, 41, 48],
+    [23, 25, 40, 48],
+    [23, 23, 39, 48],
+    [18, 18, 36, 48],
+    [21, 18, 38, 48]
    ]
   }
  }

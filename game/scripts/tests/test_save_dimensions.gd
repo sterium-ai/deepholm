@@ -52,14 +52,14 @@ func _expect(condition: bool, message: String) -> void:
 		_fail(message)
 
 ## A world with a real, tool-equipped, in-flight dig job at its far corner,
-## advanced a few ticks before saving. The dig is applied with a pick tool
+## advanced a few ticks before saving. The dig is applied with a shovel tool
 ## present and its result is checked, so the in-flight job really exists
 ## rather than being a silently rejected no-op.
 func _prepared_world(width: int, height: int, seed_value: int) -> WorldStateType:
 	var world := WorldStateType.new(seed_value, 10, width, height)
 	var colonists := world.get_colonists()
 	_expect(not colonists.is_empty(), "a %dx%d world must spawn at least one colonist" % [width, height])
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var far_target := _nearest_soil_tile(world, Vector3i(width - 1, height - 1, 0))
 	_expect(far_target != Vector3i(-1, -1, 0), "a soil tile must exist near the far corner of a %dx%d world" % [width, height])
 	var result: Dictionary = world.apply({
@@ -152,7 +152,7 @@ func _check_far_edge_order_completes() -> void:
 		return
 	_expect(target.x >= FAR_EDGE_MIN_COORD and target.y >= FAR_EDGE_MIN_COORD,
 		"the far-edge dig target must sit near the world's actual far boundary (254/255), got %s" % target)
-	world.spawn_ground_tool_item("pick", target.x, target.y)
+	world.spawn_ground_tool_item("shovel", target.x, target.y)
 	var result: Dictionary = world.apply({
 		"actor": "test", "command_id": "far_edge_dig", "tick": world.get_tick(),
 		"type": "dig", "payload": {"x": target.x, "y": target.y, "z": 0, "priority": 1},
@@ -196,7 +196,8 @@ func _check_far_edge_order_completes() -> void:
 					var t: Vector3i = tile
 					_expect(t.x >= 0 and t.x < width and t.y >= 0 and t.y < height,
 						"a far-edge route tile must stay within the map's own bounds, got %s" % t)
-			if int(colonist["x"]) == target.x and int(colonist["y"]) == target.y and colonist.get("work") != null:
+			# B9: a digger works its soil from an adjacent tile (Chebyshev distance 1).
+			if maxi(absi(int(colonist["x"]) - target.x), absi(int(colonist["y"]) - target.y)) == 1 and colonist.get("work") != null:
 				arrived_working = true
 	_expect(arrived_working, "a colonist must actually arrive at the far-edge dig target and begin work within %d ticks" % FAR_EDGE_TICK_BUDGET)
 	if not arrived_working:

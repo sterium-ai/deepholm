@@ -108,7 +108,7 @@ func _build_two_row_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, x, 1, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 ## Walls (2,0) once the colonist has stepped onto (1,0), forcing a re-route
@@ -236,7 +236,7 @@ func _build_racetrack_world(seed_value: int) -> WorldType:
 		TestAccess.set_tile(world, 5, y, WorldType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 ## Advances world by exactly one tick, walling (2,0) the instant the colonist
@@ -577,8 +577,8 @@ func _check_save_io_round_trip_mid_fetch_tool_return_leg_matches_uninterrupted_r
 ## fetch_tool leg's passability exception from the tool's current (post-
 ## restore) location instead of the in-flight search's own already-persisted
 ## rerouting.target -- these differ once a held tool's holder moves after the
-## search begins but before the save. colonist_1 holds an axe (not a pick --
-## _build_racetrack_world() already spawns a pick on colonist_0's own start
+## search begins but before the save. colonist_1 holds an axe (not a shovel --
+## _build_racetrack_world() already spawns a shovel on colonist_0's own start
 ## tile, which a dig job would grab with no travel at all) on an otherwise-
 ## impassable rock tile (5,0), directly reachable at first via the
 ## racetrack's own top row -- so fetch_tool's first search resolves

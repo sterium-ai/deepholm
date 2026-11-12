@@ -287,15 +287,15 @@
       3,
       5
      ],
-     "label": "trench (dug pit floor)",
+     "label": "trench (B9: dark pit floor with its lit south rim, Wall_Tiles dark pit bottom row)",
      "sheet": "Environment/Tilesets/Wall_Tiles.png",
      "sheet_size": [
       400,
       400
      ],
      "rect": [
-      32,
-      352,
+      224,
+      384,
       16,
       16
      ]
@@ -1340,6 +1340,7 @@
   "items": {
    "sand": "the pack has no sand pile (Rocks.png and Resources.png hold rocks, pebbles and ore); a tan pebble would read as stone",
    "meal": "F5b (ADR 065): new item; pack art not chosen yet (the viewer is outside F5b, follow-up)",
+   "shovel": "B9: new item; the pack has no shovel icon and the owner bars new art until the A21 commission; map_view.gd has no colour for it yet (draws the magenta fallback; map_view.gd is outside B9, follow-up)",
    "drill": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
    "copper_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",
    "tin_ore": "F4 (ADR 071): new item; pack art not chosen yet (placeholder colour in map_view.gd, follow-up)",

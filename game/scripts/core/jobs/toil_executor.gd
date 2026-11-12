@@ -46,6 +46,9 @@ const REASON_SITE_GONE := "site_gone"
 var trace: Array[Dictionary] = []
 ## (actor) -> void after a route step writes x/y: WorldState's ActorIndex.moved (A4).
 var on_actor_moved: Callable = func(_actor: Dictionary) -> void: pass
+## B9: _step_off_tile() prefers a neighbour this accepts (ToilBindings rejects a trench, so
+## a digger working the tile under its feet never steps into the trench it just dug).
+var step_off_allowed: Callable = func(_tile: Vector3i) -> bool: return true
 
 func clear_trace() -> void:
 	trace.clear()
@@ -609,11 +612,15 @@ func needs_fetch_tool(colonist: Dictionary, job: Dictionary, job_id: String) -> 
 ## advance_go_to()'s step-off target: the first passable orthogonal neighbour of `tile`
 ## (N, W, E, S), else `tile` itself.
 func _step_off_tile(tile: Vector3i, faction_id: String) -> Vector3i:
+	var fallback := tile
 	for offset in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
 		var next: Vector3i = tile + offset
 		if bool(_passability.call(next, faction_id)["passable"]):
-			return next
-	return tile
+			if bool(step_off_allowed.call(next)):
+				return next
+			if fallback == tile:
+				fallback = next
+	return fallback
 
 ## Read-only counterpart of _arrival_hook() for resumed go_to legs (NeedsSystem,
 ## WorldState._advance_go_to_or_resubmit()): true only when that leg leads into a work toil.

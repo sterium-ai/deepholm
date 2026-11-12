@@ -31,6 +31,10 @@ const ApproachGiverType = preload("res://scripts/core/combat/approach_giver.gd")
 const CraftingSystemType = preload("res://scripts/core/crafting/crafting_system.gd")
 
 const TILE_WATER := ContentRegistryType.TILE_WATER
+const TILE_TRENCH := ContentRegistryType.TILE_TRENCH
+
+## Kinds whose passable target is always worked from an adjacent tile (forced trim, B9).
+const ADJACENT_WORK_KINDS := ["site_work", "dig"]
 
 ## Comparison-only stand-in for "unreachable" (hands-filling rules): _route_cost returns
 ## -1, and _toil_on_pick_up_success() needs a total order against a real cost.
@@ -84,6 +88,7 @@ func _init(scheduler: AssignmentType, toils: ToilExecutorType, item_table: ItemT
 	# F3 (ADR 062): builders a finished site completes earn XP like every toil completion.
 	_construction.complete_builder = _complete_job
 	_trench = trench
+	_toils.step_off_allowed = func(tile: Vector3i) -> bool: return _tile_grid.tile_at(tile) != TILE_TRENCH
 	_needs_system = needs_system
 	_reroutes = reroutes
 	_tool_requirements_by_kind = tool_requirements_by_kind
@@ -237,16 +242,17 @@ func _toil_go_to_passable(job: Dictionary, is_first: bool, target: Vector3i, fac
 	return _routable_to.call(target, faction_id) if is_first or String(job["kind"]) != "haul" else _passability.is_passable
 
 ## A site's origin is still passable at travel time, so the trim is forced: a builder lands
-## adjacent and can never wall itself in when the site completes.
+## adjacent and can never wall itself in when the site completes. A digger also works its
+## (passable) soil from an adjacent tile, like mine/chop on their impassable targets (B9).
 func _toil_go_to_force_trim_last(job: Dictionary, is_first: bool) -> bool:
 	var kind := String(job["kind"])
-	return kind == "site_work" or (kind in JobQueueType.FETCH_KINDS and not is_first)
+	return kind in ADJACENT_WORK_KINDS or (kind in JobQueueType.FETCH_KINDS and not is_first)
 
 ## Forces the fresh bounded search (which applies the trim above) instead of the scheduler's
-## precomputed path: always for site_work, and for a site_fetch already retargeted.
+## precomputed path: always for site_work and dig, and for a site_fetch already retargeted.
 func _toil_go_to_skip_assignment_path(job: Dictionary) -> bool:
 	var kind := String(job.get("kind", ""))
-	if kind == "site_work":
+	if kind in ADJACENT_WORK_KINDS:
 		return true
 	return kind == "site_fetch" and _construction.site_fetch_source_retargeted.has(String(job.get("id", "")))
 
