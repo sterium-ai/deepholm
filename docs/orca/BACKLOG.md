@@ -336,7 +336,7 @@ Orca helper scripts, this backlog.
   playtest; suite green.
 - **Budget:** ≤ 200 turns.
 
-### B9 — Dig: shovel instead of pick, its own animation, tool tip on the target tile, trench look · `todo` · *core (jobs/tools content) + viewer*
+### B9 — Dig: shovel instead of pick, its own animation, tool tip on the target tile, trench look · `review` (branch `antonelmejor50-hub/b9-dig-shovel-instead-of`; mechanics only, pack stand-ins) · *core (jobs/tools content) + viewer*
 
 - **Owner (2026-11-11 playtest):** (1) dig shows the mine animation; dig must need a
   **shovel**, not a pick; (2) the animation must be placed so the **tool's tip hits the

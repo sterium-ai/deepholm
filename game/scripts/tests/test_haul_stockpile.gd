@@ -233,7 +233,7 @@ func _check_backoff_intervals_and_other_work_still_activates() -> void:
 	_place_wood_item(world, "item_1", 0, 0)
 	TestAccess.item_table(world).next_item_id = 2
 	TestAccess.set_tile(world, 7, 5, WorldStateType.TILE_SOIL)
-	world.spawn_ground_tool_item("pick", 5, 5)
+	world.spawn_ground_tool_item("shovel", 5, 5)
 
 	var dig_result := _apply(world, "dig_other", "dig", {"x": 7, "y": 5, "z": 0, "priority": 1})
 	var dig_job_id := String(dig_result.get("job_id", ""))

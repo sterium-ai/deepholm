@@ -3,6 +3,7 @@
   "items": [
     {"id": "axe", "kind": "tool"},
     {"id": "pick", "kind": "tool"},
+    {"id": "shovel", "kind": "tool"},
     {"id": "seed", "kind": "seed"},
     {"id": "stone", "kind": "material"},
     {"id": "sand", "kind": "material"},

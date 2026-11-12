@@ -46,6 +46,9 @@ const REASON_SITE_GONE := "site_gone"
 var trace: Array[Dictionary] = []
 ## (actor) -> void after a route step writes x/y: WorldState's ActorIndex.moved (A4).
 var on_actor_moved: Callable = func(_actor: Dictionary) -> void: pass
+## B9: _step_off_tile() only picks a neighbour this accepts (ToilBindings rejects a trench,
+## so a digger working the tile under its feet never steps into the trench it just dug).
+var step_off_allowed: Callable = func(_tile: Vector3i) -> bool: return true
 
 func clear_trace() -> void:
 	trace.clear()
@@ -262,15 +265,20 @@ func advance_route_step(colonist: Dictionary, on_arrive: Callable = Callable()) 
 func advance_go_to(colonist: Dictionary, job_id: String, target: Vector3i, passable: Callable,
 		record_as: String = TOIL_GO_TO, on_arrive: Callable = Callable(), force_trim_last: bool = false) -> String:
 	# Step-off rule: on a force-trim target the one-tile path would start work under the
-	# coming object, so re-aim at the first passable orthogonal neighbour (N/W/E/S) until the
-	# colonist has left the tile.
+	# coming object, so re-aim at the first safe orthogonal neighbour (N/W/E/S) until the
+	# colonist has left the tile. B9: with no safe neighbour (none passable, or only trenches)
+	# the leg is unreachable, never work underfoot or a step into a trench.
 	if force_trim_last:
 		var standing := TileGrid.tile_of(colonist)
 		if standing == target:
 			var step_off := _step_off_tile(standing, String(colonist.get("factionId", "colony")))
-			if step_off != standing:
-				target = step_off
-				force_trim_last = false
+			if step_off == standing:
+				_reroutes.erase(colonist["id"])
+				colonist["route"] = null
+				colonist["work"] = null
+				return "unreachable"
+			target = step_off
+			force_trim_last = false
 	var route: Variant = _route(colonist)
 	if route == null:
 		_record(record_as, "enter")
@@ -607,11 +615,14 @@ func needs_fetch_tool(colonist: Dictionary, job: Dictionary, job_id: String) -> 
 	return _tool_fetch.needs(colonist, job, job_id)
 
 ## advance_go_to()'s step-off target: the first passable orthogonal neighbour of `tile`
-## (N, W, E, S), else `tile` itself.
+## (N, W, E, S) that step_off_allowed accepts, else `tile` itself (no safe stance).
 func _step_off_tile(tile: Vector3i, faction_id: String) -> Vector3i:
 	for offset in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
 		var next: Vector3i = tile + offset
-		if bool(_passability.call(next, faction_id)["passable"]):
+		if not bool(_passability.call(next, faction_id)["passable"]):
+			continue
+		var allowed: bool = step_off_allowed.call(next)
+		if allowed:
 			return next
 	return tile
 

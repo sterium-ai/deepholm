@@ -343,7 +343,7 @@ func _check_kind_matches_legacy_cost_duration_and_object(kind: String) -> void:
 	_expect(bool(world.passability(builder_tile.x, builder_tile.y)["passable"]),
 		"(%s) the builder must end up on a tile it can still move from" % kind)
 	TestAccess.set_tile(world, 0, 5, WorldStateType.TILE_SOIL)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var dig_result := _command_ok(world, "dig_after_build_%s" % kind, "dig", {"x": 0, "y": 5, "z": 0, "priority": 1})
 	var dig_terminal := ""
 	for _i in 200:

@@ -218,14 +218,14 @@ func _check_new_game_spawns_pack_tool_requirement() -> void:
 	for tool_item in world.get_tool_items():
 		kinds.append(String(tool_item["kind"]))
 	kinds.sort()
-	_expect(", ".join(kinds) == "pack_saw, pick",
-		"New Game on the pack must spawn exactly the tools its jobs need (pack_saw, pick), got %s" % [kinds])
+	_expect(", ".join(kinds) == "pack_saw, pick, shovel",
+		"New Game on the pack must spawn exactly the tools its jobs need (pack_saw, pick, shovel), got %s" % [kinds])
 	var base_world := BootType.build_default_world()
 	var base_kinds: Array[String] = []
 	for tool_item in base_world.get_tool_items():
 		base_kinds.append(String(tool_item["kind"]))
 	base_kinds.sort()
-	_expect(", ".join(base_kinds) == "axe, pick", "New Game on the base must still spawn axe and pick, got %s" % [base_kinds])
+	_expect(", ".join(base_kinds) == "axe, pick, shovel", "New Game on the base must still spawn axe, pick and shovel (B9), got %s" % [base_kinds])
 
 func _expect_error(registry: ContentRegistryType, code: String, file_suffix: String, what: String) -> void:
 	_expect(not registry.is_valid(), "%s must fail construction" % what)

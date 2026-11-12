@@ -213,7 +213,7 @@ func _check_execution_trace() -> void:
 
 	_run_and_verify("dig", 201001, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_SOIL)
-		world.spawn_ground_tool_item("pick", 0, 0)
+		world.spawn_ground_tool_item("shovel", 0, 0)
 		_expect(_command(world, "dig", {"x": 5, "y": 0, "z": 0, "priority": 1})["ok"], "dig order must be accepted"))
 	_run_and_verify("mine", 201501, func(world: WorldStateType) -> void:
 		TestAccess.set_tile(world, 5, 0, WorldStateType.TILE_ROCK)

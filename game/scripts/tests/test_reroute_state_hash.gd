@@ -12,7 +12,7 @@ extends SceneTree
 
 const WorldType = preload("res://scripts/core/world_state.gd")
 
-## The pick pickup and two tile-advances (4 ticks each) reach the walling
+## The shovel pickup and two tile-advances (4 ticks each) reach the walling
 ## tile; the re-route then needs several resume() calls in this open area.
 const MAX_TICKS := 60
 const WALL_BOTTOM_Y := 40
@@ -39,7 +39,7 @@ func _build_world() -> WorldType:
 	TestAccess.object_table(world).object_factions.clear()
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 2, "y": 10, "z": 0, "route": null, "work": null, "carrying": null})
-	world.spawn_ground_tool_item("pick", 2, 10)
+	world.spawn_ground_tool_item("shovel", 2, 10)
 	world.apply({"actor": "test", "command_id": "dig", "tick": world.get_tick(), "type": "dig",
 		"payload": {"x": 20, "y": 10, "z": 0, "priority": 1}})
 	return world

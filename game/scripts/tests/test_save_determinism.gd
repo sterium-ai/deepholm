@@ -72,8 +72,8 @@ func _fresh_world(seed_value: int) -> WorldStateType:
 	# Already held, not merely reachable: this scenario's exact tick-by-tick
 	# activation/completion choreography leaves no room for fetch_tool's own
 	# travel tick, so both colonists start the run already equipped.
-	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
-	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 47, 0), "colonist_1")
+	world.set_tool_item_held(world.spawn_ground_tool_item("shovel", 0, 0), "colonist_0")
+	world.set_tool_item_held(world.spawn_ground_tool_item("shovel", 47, 0), "colonist_1")
 	return world
 
 func _apply(world: WorldStateType, command_id: String, type: String, payload: Dictionary) -> Dictionary:

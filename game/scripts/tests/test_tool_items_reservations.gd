@@ -49,13 +49,13 @@ func _check_reservation_lifecycle_all_terminal_paths() -> void:
 func _check_reservation_released_on_real_job_commands() -> void:
 	for command_type in ["complete_job", "cancel_job", "fail_job", "invalidate_job"]:
 		var world := _build_single_dig_world(20260919)
-		world.spawn_ground_tool_item("pick", 0, 0)
+		world.spawn_ground_tool_item("shovel", 0, 0)
 		var submitted := Scenarios.command(world, "dig_submit", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 		_expect(submitted.get("ok", false), "dig submission must be accepted (%s)" % command_type)
 		var job_id := String(submitted.get("job_id", ""))
 		_expect(job_id != "", "a real dig job_id must come back from submission (%s)" % command_type)
 		world.tick()
-		var item_id := world.spawn_ground_tool_item("pick", 2, 0)
+		var item_id := world.spawn_ground_tool_item("shovel", 2, 0)
 		_expect(world.reserve_tool_item(item_id, job_id),
 			"reserving the tool for the real dig job must succeed (%s)" % command_type)
 		var result := Scenarios.command(world, "terminate", command_type, {"job_id": job_id})
@@ -71,7 +71,7 @@ func _check_reservation_released_on_natural_completion() -> void:
 	var submitted := Scenarios.command(world, "dig_submit", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
-	var item_id := world.spawn_ground_tool_item("pick", 2, 0)
+	var item_id := world.spawn_ground_tool_item("shovel", 2, 0)
 	_expect(world.reserve_tool_item(item_id, job_id), "reserving the tool for the real dig job must succeed")
 
 	var completed := false

@@ -63,7 +63,7 @@ func _build_world(seed_value: int) -> WorldType:
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null,
 		"labourTable": {"mine": 3, "chop": 3, "farm": 3, "haul": 0, "build": 3, "craft": 3, "cook": 3}})
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 ## The find item kind a completed dig at (1, 0) left behind ("" for no

@@ -339,7 +339,9 @@ func _find_passable_soil_tile(world, excluded: Array[Vector2i] = []) -> Vector2i
 				return Vector2i(x, y)
 	return Vector2i(-1, -1)
 
-## A floor tile whose whole 3x3 neighbourhood is passable floor with no
+## A floor tile whose whole 3x3 neighbourhood is passable (the ring may be
+## soil: B9's extra starting shovel shifts the start beds so no full 3x3 of
+## floor stays free) with no
 ## object, colonist or ground item, so a build there can neither be rejected
 ## as occupied nor as enclosing (a tile whose full ring stays passable can
 ## never cut its component). Vector2i(-1, -1) when none exists.
@@ -355,7 +357,7 @@ func _find_open_floor_tile(world, excluded: Array[Vector2i] = []) -> Vector2i:
 			for dy in range(-1, 2):
 				for dx in range(-1, 2):
 					var tile := Vector2i(x + dx, y + dy)
-					if (world.get_tile(tile.x, tile.y) != "floor" or not world.get_object(tile.x, tile.y).is_empty()
+					if ((tile == Vector2i(x, y) and world.get_tile(tile.x, tile.y) != "floor") or not world.get_object(tile.x, tile.y).is_empty()
 							or occupied.has(tile) or not bool(world.passability(tile.x, tile.y)["passable"])):
 						open = false
 			if open:

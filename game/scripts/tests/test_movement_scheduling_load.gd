@@ -262,15 +262,15 @@ func _check_no_idle_while_work_available() -> void:
 ## waiting, route/work both null -- actually starts its own route once the
 ## wait ends, proving the transition out of the wait works too.
 ##
-## Two colonists, one pick, same shape as test_tool_items.gd's own
+## Two colonists, one shovel, same shape as test_tool_items.gd's own
 ## _check_requester_waits_for_real_handover_then_completes(): colonist_0
-## (labour "mine" disabled) starts holding the pick as a leftover and takes
+## (labour "mine" disabled) starts holding the shovel as a leftover and takes
 ## forage_a; colonist_1 (labour "forage" disabled) has nothing to do until
-## dig_b is submitted, needing the same pick -- now reserved by colonist_1 but
+## dig_b is submitted, needing the same shovel -- now reserved by colonist_1 but
 ## still physically held by colonist_0, busy on forage_a -- so colonist_1
 ## must wait. Only once forage_a completes and forage_b (colonist_0's own
 ## next dispatched job, submitted only at that point -- so a third job is
-## never queued while colonist_1 waits) sends colonist_0 to drop the pick does
+## never queued while colonist_1 waits) sends colonist_0 to drop the shovel does
 ## colonist_1's own wait end and its fetch route begin.
 func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 	var world := WorldType.new(9002)
@@ -280,8 +280,8 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 		"labourTable": {"mine": 0}})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 10, "y": 10, "z": 0, "route": null, "work": null,
 		"labourTable": {"forage": 0}})
-	var pick_id := world.spawn_ground_tool_item("pick", 0, 0)
-	_expect(world.set_tool_item_held(pick_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
+	var shovel_id := world.spawn_ground_tool_item("shovel", 0, 0)
+	_expect(world.set_tool_item_held(shovel_id, "colonist_0"), "moving the shovel into colonist_0's hand must succeed")
 	_expect(Scenarios.command(world, "place_bush_a", "place_object", {"x": 1, "y": 0, "z": 0, "kind": "berry_bush"})["ok"],
 		"berry_bush A placement must be accepted")
 	_expect(Scenarios.command(world, "place_bush_b", "place_object", {"x": 3, "y": 0, "z": 0, "kind": "berry_bush"})["ok"],
@@ -338,7 +338,7 @@ func _check_handover_wait_is_bounded_without_other_queued_work() -> void:
 				dig_b_done = true
 	_expect(forage_a_done, "forage_a must complete within budget")
 	_expect(not forage_b_id.is_empty(), "forage_b must have been submitted once forage_a completed")
-	_expect(dig_b_done, "dig_b must complete once colonist_0's own next dispatched job drops the handed-over pick")
+	_expect(dig_b_done, "dig_b must complete once colonist_0's own next dispatched job drops the handed-over shovel")
 	_expect(seen_route_after_wait,
 		"colonist_1 must be observed actually routing (not merely waiting) once the handover wait ends")
 
@@ -362,7 +362,7 @@ func _build_corridor_world(seed_value: int) -> WorldType:
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "carrying": null})
 	# Already held: this scenario's exact one-tick-precision assertions leave
 	# no room for fetch_tool's own travel tick.
-	world.set_tool_item_held(world.spawn_ground_tool_item("pick", 0, 0), "colonist_0")
+	world.set_tool_item_held(world.spawn_ground_tool_item("shovel", 0, 0), "colonist_0")
 	return world
 
 func _check_cancel_mid_walk_reassigns() -> void:

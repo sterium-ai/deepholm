@@ -82,8 +82,8 @@ func _check_migrant_incident_and_recruitment() -> void:
 
 	var target := Vector3i(int(migrant["x"]) + 1, int(migrant["y"]), 0)
 	TestAccess.set_tile(world, target.x, target.y, WorldStateType.TILE_SOIL)
-	var pick_id := world.spawn_ground_tool_item("pick", migrant["x"], migrant["y"])
-	_expect(world.set_tool_item_held(pick_id, migrant_id), "recruited migrant must be able to hold a pick")
+	var shovel_id := world.spawn_ground_tool_item("shovel", migrant["x"], migrant["y"])
+	_expect(world.set_tool_item_held(shovel_id, migrant_id), "recruited migrant must be able to hold a shovel")
 	var dig_result := world.apply({
 		"actor": "player", "command_id": "dig_migrant_target", "tick": world.get_tick(),
 		"type": "dig", "payload": {"x": target.x, "y": target.y, "z": 0},

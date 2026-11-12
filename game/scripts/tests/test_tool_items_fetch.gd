@@ -33,7 +33,7 @@ func _init() -> void:
 ## work/release_all with no blocked_no_tool detour.
 func _check_fetch_tool_success_frees_no_travel() -> void:
 	var world := _build_single_dig_world(271001)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
@@ -48,7 +48,7 @@ func _check_fetch_tool_success_frees_no_travel() -> void:
 	_expect(String(colonist.get("held_tool", "")) != "", "the colonist must still hold the pick after the job completes")
 
 ## blocked_no_tool: a dig job submitted where no pick exists
-## anywhere exposes reason blocked_no_tool/remedy craft_or_find:pick while
+## anywhere exposes reason blocked_no_tool/remedy craft_or_find:shovel while
 ## staying an ordinary queued (non-terminal) job -- exactly like any other
 ## blocked job ADR 004 skips (job_queue.gd's own BLOCKED_TARGET_RESERVED etc.)
 ## -- freeing its colonist for other work the same tick instead of terminally
@@ -71,8 +71,8 @@ func _check_blocked_no_tool_frees_colonist_for_other_work() -> void:
 			blocked = true
 			_expect(String(dig_job.get("status", "")) == "queued",
 				"a dig job with no pick anywhere must stay a queued, non-terminal job, got status '%s'" % dig_job.get("status"))
-			_expect(String(dig_job.get("remedy", "")) == "craft_or_find:pick",
-				"blocked_no_tool must carry remedy craft_or_find:pick, got '%s'" % dig_job.get("remedy"))
+			_expect(String(dig_job.get("remedy", "")) == "craft_or_find:shovel",
+				"blocked_no_tool must carry remedy craft_or_find:shovel, got '%s'" % dig_job.get("remedy"))
 			break
 	_expect(blocked, "a dig job with no pick anywhere must expose reason blocked_no_tool within the tick budget")
 
@@ -107,7 +107,7 @@ func _check_blocked_no_tool_frees_colonist_for_other_work() -> void:
 ## unreserved and a competing job could take the tool mid-work.
 func _check_held_tool_reuse_respects_other_jobs_reservation() -> void:
 	var world := _build_single_dig_world(271003)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var dig1 := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	var dig1_id := String(dig1.get("job_id", ""))
 	var completed1 := false
@@ -167,7 +167,7 @@ func _check_need_interrupt_releases_and_reacquires_held_tool() -> void:
 		if kind != "food":
 			TestAccess.need_definitions(world)[kind]["rate_per_day"] = 0
 	TestAccess.item_table(world).ground_berries["1_1"] = 1
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
@@ -226,8 +226,8 @@ func _check_fetch_tool_skips_unreachable_candidate_for_farther_one() -> void:
 	TestAccess.set_tile(world, 6, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2) but walled off on every side
-	world.spawn_ground_tool_item("pick", 5, 0) # farther (distance 5) but reachable along the corridor
+	world.spawn_ground_tool_item("shovel", 0, 2) # closer (distance 2) but walled off on every side
+	world.spawn_ground_tool_item("shovel", 5, 0) # farther (distance 5) but reachable along the corridor
 
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 6, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
@@ -259,9 +259,9 @@ func _check_fetch_tool_does_not_chain_multiple_candidates_in_one_tick() -> void:
 	TestAccess.set_tile(world, 8, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	world.spawn_ground_tool_item("pick", 0, 2) # closer (distance 2), walled off
-	world.spawn_ground_tool_item("pick", 0, 3) # next-closer (distance 3), also walled off
-	world.spawn_ground_tool_item("pick", 7, 0) # farthest (distance 7), reachable along the corridor
+	world.spawn_ground_tool_item("shovel", 0, 2) # closer (distance 2), walled off
+	world.spawn_ground_tool_item("shovel", 0, 3) # next-closer (distance 3), also walled off
+	world.spawn_ground_tool_item("shovel", 7, 0) # farthest (distance 7), reachable along the corridor
 
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 8, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
@@ -312,7 +312,7 @@ func _check_rejected_complete_job_preserves_tool_block_recovery() -> void:
 	_expect(String(Scenarios.find_job(world, dig_id).get("status", "")) == "queued",
 		"a rejected complete_job must leave the blocked job's status untouched")
 
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var completed := false
 	for _i in 60:
 		world.tick()
@@ -347,7 +347,7 @@ func _check_interrupted_job_refetches_and_works_at_job_target_not_tool_location(
 		if kind != "food":
 			TestAccess.need_definitions(world)[kind]["rate_per_day"] = 0
 	TestAccess.item_table(world).ground_berries["1_1"] = 1
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
@@ -426,7 +426,7 @@ func _check_blocked_no_tool_respects_labour_disabled() -> void:
 
 	_expect(Scenarios.command(world, "disable_mine", "set_labour", {"colonist": "colonist_0", "kind": "mine", "level": 0}).get("ok", false),
 		"set_labour must be accepted")
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 
 	for _i in 60:
 		world.tick()
@@ -468,7 +468,7 @@ func _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_col
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {},
 		"route": null, "work": null, "hands": [], "held_tool": ""})
-	world.spawn_ground_tool_item("pick", 2, 3) # fully enclosed by rock on every side
+	world.spawn_ground_tool_item("shovel", 2, 3) # fully enclosed by rock on every side
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 5, "y": 0, "z": 0, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
@@ -525,7 +525,7 @@ func _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_col
 ## _check_blocked_no_tool_permanently_unreachable_tool_backs_off_and_frees_
 ## colonist() above for the existing-but-unreachable-tool case). This is the
 ## missing-tool case: a dig job with no matching tool anywhere must keep
-## reporting reason blocked_no_tool/remedy craft_or_find:pick across the
+## reporting reason blocked_no_tool/remedy craft_or_find:shovel across the
 ## entire backoff window, not merely the tick it is first observed.
 func _check_blocked_no_tool_reason_survives_backoff_window() -> void:
 	var world := _build_single_dig_world(271012)
@@ -549,8 +549,8 @@ func _check_blocked_no_tool_reason_survives_backoff_window() -> void:
 		var job := Scenarios.find_job(world, dig_id)
 		_expect(String(job.get("reason", "")) == "blocked_no_tool",
 			"a dig job's reason must stay blocked_no_tool throughout its own backoff window, got '%s'" % job.get("reason", ""))
-		_expect(String(job.get("remedy", "")) == "craft_or_find:pick",
-			"a dig job's remedy must stay craft_or_find:pick throughout its own backoff window, got '%s'" % job.get("remedy", ""))
+		_expect(String(job.get("remedy", "")) == "craft_or_find:shovel",
+			"a dig job's remedy must stay craft_or_find:shovel throughout its own backoff window, got '%s'" % job.get("remedy", ""))
 
 ## WorldState._toil_on_no_tool_found() must requeue through
 ## GlobalAssignment.requeue_assignment(), not suspend_assignment(), which pins
@@ -580,7 +580,7 @@ func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 19, "y": 19, "z": 0,
 		"needs": {"food": 100, "water": 100, "rest": 100}, "labourTable": {"mine": 3},
 		"route": null, "work": null, "hands": [], "held_tool": ""})
-	world.spawn_ground_tool_item("pick", 2, 2) # enclosed, unreachable by anyone
+	world.spawn_ground_tool_item("shovel", 2, 2) # enclosed, unreachable by anyone
 
 	var dig_result := Scenarios.command(world, "dig_1", "dig", {"x": 9, "y": 9, "z": 0, "priority": 1})
 	_expect(dig_result.get("ok", false), "dig submission must be accepted")
@@ -596,7 +596,7 @@ func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void
 
 	_expect(Scenarios.command(world, "disable_colonist0_mine", "set_labour", {"colonist": "colonist_0", "kind": "mine", "level": 0}).get("ok", false),
 		"disabling colonist_0's mine labour must be accepted")
-	world.spawn_ground_tool_item("pick", 5, 5) # genuinely reachable, only useful to colonist_1 now
+	world.spawn_ground_tool_item("shovel", 5, 5) # genuinely reachable, only useful to colonist_1 now
 
 	var completed := false
 	for _i in 400:
@@ -614,7 +614,7 @@ func _check_blocked_no_tool_failure_frees_job_for_a_different_colonist() -> void
 ## the execution trace, not merely inferred from "the job completed quickly".
 func _check_held_tool_skips_fetch_tool_travel() -> void:
 	var world := _build_single_dig_world(266001)
-	var held_id := world.spawn_ground_tool_item("pick", 0, 0)
+	var held_id := world.spawn_ground_tool_item("shovel", 0, 0)
 	_expect(world.set_tool_item_held(held_id, "colonist_0"), "moving the pick into colonist_0's hand must succeed")
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
@@ -642,7 +642,7 @@ func _check_held_tool_skips_fetch_tool_travel() -> void:
 ## completion under the same job id.
 func _check_destroyed_tool_fails_job_and_requeues_with_backoff() -> void:
 	var world := _build_single_dig_world(266004)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))
@@ -691,7 +691,7 @@ func _check_destroyed_tool_fails_job_and_requeues_with_backoff() -> void:
 		"the colonist's work toil must stop the instant its active tool is destroyed")
 
 	# Supplying a fresh pick must let the same job id complete afterward.
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var completed := false
 	for _i in 120:
 		world.tick()
@@ -713,8 +713,8 @@ func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 	TestAccess.set_tile(world, 8, 0, WorldStateType.TILE_SOIL)
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null})
-	var near_id := world.spawn_ground_tool_item("pick", 3, 0)
-	var far_id := world.spawn_ground_tool_item("pick", 7, 0)
+	var near_id := world.spawn_ground_tool_item("shovel", 3, 0)
+	var far_id := world.spawn_ground_tool_item("shovel", 7, 0)
 
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 8, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
@@ -764,7 +764,7 @@ func _check_destroyed_tool_during_fetch_travel_fails_and_backs_off() -> void:
 ## when the destroyed reservation is not the job's own primary (held) tool.
 func _check_destroyed_tool_among_multiple_reservations_not_first_and_unrelated_held_tool_preserved() -> void:
 	var world := _build_single_dig_world(266017)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var submitted := Scenarios.command(world, "dig_1", "dig", {"x": 2, "y": 0, "z": 0, "priority": 1})
 	_expect(submitted.get("ok", false), "dig submission must be accepted")
 	var job_id := String(submitted.get("job_id", ""))

@@ -297,10 +297,10 @@ func _build_two_row_colony_world(seed_value: int) -> WorldStateType:
 	TestAccess.colonists(world).clear()
 	TestAccess.colonists(world).append({"id": "colonist_0", "kind": "colonist", "x": 0, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 0, "y": 1, "z": 0, "route": null, "work": null, "hands": []})
-	# dig needs_tool "pick" (content/jobs.json); spawned on colonist_0's own
+	# dig needs_tool "shovel" (content/jobs.json); spawned on colonist_0's own
 	# tile so fetch_tool resolves immediately, matching test_reroute.gd's own
 	# _build_two_row_world() fixture.
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	return world
 
 func _find_queued_job_for_target(world: WorldStateType, target: Vector3i) -> Dictionary:

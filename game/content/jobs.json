@@ -1,6 +1,6 @@
 {
   "jobs": [
-    {"kind": "dig", "labour": "mine", "needs_tool": "pick", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 30, "retry_base_ticks": 20, "retry_cap_ticks": 80,
+    {"kind": "dig", "labour": "mine", "needs_tool": "shovel", "toils": ["fetch_tool", "reserve", "go_to", "work", "release_all"], "work_ticks": 30, "retry_base_ticks": 20, "retry_cap_ticks": 80,
       "effects": {"requires_tile": "soil", "set_tile": "trench", "yields": {"placement": "adjacent", "always": ["sand"], "find_table": [
         {"item": "gold_coin", "weight": 5},
         {"item": "flint", "weight": 20},

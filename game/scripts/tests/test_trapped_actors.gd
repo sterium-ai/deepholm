@@ -887,7 +887,7 @@ func _check_trapping_mid_haul_releases_item_and_cell_reservations() -> void:
 func _check_stale_dig_target_dug_by_other_worker_does_not_falsely_trap() -> void:
 	var world := _fresh_world(330001)
 	TestAccess.set_tile(world, 2, 0, WorldStateType.TILE_SOIL)
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	var colonist: Dictionary = TestAccess.colonists(world)[0]
 	colonist["x"] = 1
 	colonist["y"] = 0

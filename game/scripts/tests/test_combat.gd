@@ -490,7 +490,7 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	_spawn_actor(world, "colony", "victim", 6, 5)
 	world.tick()
 	var victim := TestAccess.find_colonist(world, "victim")
-	victim["inventory"] = {"items": [{"kind": "axe", "count": 2}, {"kind": "wood", "count": 2}], "tool": "pick", "capacity": 4}
+	victim["inventory"] = {"items": [{"kind": "axe", "count": 2}, {"kind": "wood", "count": 2}], "tool": "shovel", "capacity": 4}
 	victim["health"]["hp"] = 1
 	var attacker := TestAccess.find_colonist(world, "attacker")
 	attacker["combat"]["damage"] = 999
@@ -499,23 +499,23 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	_expect(TestAccess.find_colonist(world, "victim").is_empty(), "a dead actor must be removed from the world")
 
 	var axe_ids: Array[String] = []
-	var pick_ids: Array[String] = []
+	var shovel_ids: Array[String] = []
 	for tool_item in world.get_tool_items():
 		var location: Dictionary = tool_item.get("location", {})
 		_expect(String(location.get("type", "")) == "ground" and int(location.get("x", -1)) == 6 and int(location.get("y", -1)) == 5,
 			"every dropped tool must lie on the victim's own death tile")
 		if String(tool_item["kind"]) == "axe":
 			axe_ids.append(String(tool_item["id"]))
-		elif String(tool_item["kind"]) == "pick":
-			pick_ids.append(String(tool_item["id"]))
+		elif String(tool_item["kind"]) == "shovel":
+			shovel_ids.append(String(tool_item["id"]))
 	_expect(axe_ids.size() == 2, "an inventory.items tool entry with count 2 must drop exactly 2 identity-bearing ground tools (got %d)" % axe_ids.size())
-	_expect(pick_ids.size() == 1, "inventory.tool must drop exactly 1 ground tool (got %d)" % pick_ids.size())
+	_expect(shovel_ids.size() == 1, "inventory.tool must drop exactly 1 ground tool (got %d)" % shovel_ids.size())
 	_expect(world.get_tool_items().size() == 3, "no extra or missing tool item may exist after the drop (got %d)" % world.get_tool_items().size())
 	if axe_ids.size() == 2:
 		_expect(axe_ids[0] != axe_ids[1], "each dropped tool unit must carry its own identity")
 	var pile_tools := 0
 	for item in world.get_items():
-		if String(item["kind"]) in ["axe", "pick"]:
+		if String(item["kind"]) in ["axe", "shovel"]:
 			pile_tools += 1
 	_expect(pile_tools == 0, "no tool kind may land in the ordinary item pile")
 
@@ -533,9 +533,9 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 	var chop_id := String(chop.get("job_id", ""))
 	var dig_id := String(dig.get("job_id", ""))
 	var axe_reserved_for_chop := false
-	var pick_reserved_for_dig := false
+	var shovel_reserved_for_dig := false
 	var axe_held := false
-	var pick_held := false
+	var shovel_held := false
 	var both_done := false
 	for _i in 400:
 		world.tick()
@@ -544,18 +544,18 @@ func _check_death_drops_every_inventory_tool_unit_usable_by_workers() -> void:
 				axe_reserved_for_chop = true
 			if WorkerType.get_held_tool(TestAccess.find_colonist(world, "lumberjack")) == axe_id:
 				axe_held = true
-		for pick_id in pick_ids:
-			if world.get_tool_item_reservation(pick_id) == dig_id:
-				pick_reserved_for_dig = true
-			if WorkerType.get_held_tool(TestAccess.find_colonist(world, "miner")) == pick_id:
-				pick_held = true
+		for shovel_id in shovel_ids:
+			if world.get_tool_item_reservation(shovel_id) == dig_id:
+				shovel_reserved_for_dig = true
+			if WorkerType.get_held_tool(TestAccess.find_colonist(world, "miner")) == shovel_id:
+				shovel_held = true
 		if String(TestAccess.get_job(world, chop_id).get("status", "")) == "completed" and String(TestAccess.get_job(world, dig_id).get("status", "")) == "completed":
 			both_done = true
 			break
 	_expect(axe_reserved_for_chop, "the chop job must reserve one of the dropped inventory.items axes through normal discovery")
 	_expect(axe_held, "the lumberjack must pick up and hold a dropped inventory.items axe")
-	_expect(pick_reserved_for_dig, "the dig job must reserve the dropped inventory.tool pick through normal discovery")
-	_expect(pick_held, "the miner must pick up and hold the dropped inventory.tool pick")
+	_expect(shovel_reserved_for_dig, "the dig job must reserve the dropped inventory.tool shovel through normal discovery")
+	_expect(shovel_held, "the miner must pick up and hold the dropped inventory.tool shovel")
 	_expect(both_done, "both tool-requiring jobs must complete using only the dropped tools (chop '%s', dig '%s')" % [TestAccess.get_job(world, chop_id).get("status", ""), TestAccess.get_job(world, dig_id).get("status", "")])
 	_expect(world.get_tile(22, 5) != WorldStateType.TILE_TREE and world.get_tile(6, 22) != WorldStateType.TILE_SOIL,
 		"the chop and dig work effects must have been applied with the dropped tools")

@@ -112,7 +112,7 @@ func _build_combined_world(seed_value: int) -> WorldStateType:
 	TestAccess.colonists(world).append({"id": "colonist_1", "kind": "colonist", "x": 20, "y": 0, "z": 0, "route": null, "work": null, "hands": []})
 	_zero_other_need_rates(world)
 	TestAccess.item_table(world).ground_berries["4_1"] = 1
-	world.spawn_ground_tool_item("pick", 0, 0)
+	world.spawn_ground_tool_item("shovel", 0, 0)
 	TestAccess.item_table(world).items["item_1"] = {"id": "item_1", "x": 21, "y": 0, "z": 0, "kind": "wood", "count": 1}
 	TestAccess.item_table(world).next_item_id = 2
 	_apply(world, "zone_setup", "zone_add", {"x": 30, "y": 0, "z": 0, "width": 1, "height": 1})
