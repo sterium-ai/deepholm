@@ -32,6 +32,9 @@ answers one question: **is this change safe to merge as it is?** It never edits 
 8. **Report honesty.** Every claim in the handoff report is checkable in the diff or the
    test output. "Should work", "not tested here" or numbers that do not match
    `tools/measure_core.ps1` are findings.
+9. **Player saves untouched.** No script, test, benchmark or profiler in the diff may read or
+   write `user://saves`; anything that boots the game outside a real session redirects saving
+   to its own folder before `Boot` enters the tree and asserts it. Blocking (B11 incident).
 
 ## For `R*` (refactor) tasks
 

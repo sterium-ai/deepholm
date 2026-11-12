@@ -129,6 +129,10 @@ orden estricto, de una en una, porque cada una toca `world_state.gd`. Las tareas
 - **Nunca se "arregla" un test desactivándolo.** Si un test falla por el refactor, el refactor
   está mal o el test necesita adaptarse a una API nueva, y eso se explica en el informe.
 - **Una tarea = una rama = un PR.** Nada de mezclar refactor con funcionalidad.
+- **Ning?n script, test, benchmark o perfilador toca `user://saves` (incidente B11, 12-11-2026:
+  se perdieron los autoguardados 2 y 3 del propietario).** Todo lo que arranque el juego fuera de una
+  partida real redirige el guardado a una carpeta propia antes de que `Boot` entre en el ?rbol y lo
+  comprueba con un assert. El revisor lo trata como bloqueante.
 
 ## Reglas de operación (auditoría del 28-10-2026)
 
