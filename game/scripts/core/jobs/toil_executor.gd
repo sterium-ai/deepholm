@@ -619,7 +619,10 @@ func needs_fetch_tool(colonist: Dictionary, job: Dictionary, job_id: String) -> 
 func _step_off_tile(tile: Vector3i, faction_id: String) -> Vector3i:
 	for offset in [Vector3i(0, -1, 0), Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0)]:
 		var next: Vector3i = tile + offset
-		if bool(_passability.call(next, faction_id)["passable"]) and bool(step_off_allowed.call(next)):
+		if not bool(_passability.call(next, faction_id)["passable"]):
+			continue
+		var allowed: bool = step_off_allowed.call(next)
+		if allowed:
 			return next
 	return tile
 
