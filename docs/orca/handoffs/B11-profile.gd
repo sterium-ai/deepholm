@@ -3,7 +3,15 @@ extends SceneTree
 ## B11 evidence: a timed viewer session, windowed (it needs a real renderer), so the
 ## frame time of the debug viewer can be split into its parts and memory watched over
 ## time. The boot scene is built the way bench_viewer_refresh.gd builds it (Boot.new()
-## in the tree, _build_ui(), then _replace_world()), so no user save is involved.
+## in the tree, _build_ui(), then _replace_world()).
+##
+## Saves are isolated from the player's: the boot node is ProfileBoot (below), given
+## PROFILE_SAVE_DIR (emptied at start) before it enters the tree. Boot._ready() calls
+## its _restore_from_save(), which loads nothing and instead swaps the save manager for
+## one on that dir and re-points the autosave trigger at it, all inside _ready(), before
+## any frame or window notification; so neither the 600-tick autosaves nor the
+## focus-out / close lifecycle saves can write the benchmark world over the player's
+## autosave slots, and user://saves is never read.
 ##
 ## Scenarios (--scenario=):
 ## - default: Boot.build_default_world(), the world a fresh boot shows;
@@ -12,17 +20,21 @@ extends SceneTree
 ##
 ## The TickDriver keeps its speed (x1 unless --speed=) so the sprite glides read the
 ## real seconds_per_tick(), but its own _process is disabled: this script runs the same
-## accumulator (BASE_TICKS_PER_SECOND x speed, MAX_TICKS_PER_FRAME) and times
-## world.tick() and boot._refresh() separately. Vsync is off and the frame rate
+## accumulator (BASE_TICKS_PER_SECOND x speed, MAX_TICKS_PER_FRAME) and, like TickDriver,
+## calls world.tick() then emits tick_driver.ticked, timing the two separately. The
+## ticked handlers are the whole boot callback (_on_ticked(): recorder checkpoint,
+## autosave check with its synchronous save every 600 ticks = 100 s at x1, _refresh()). Vsync is off and the frame rate
 ## uncapped, so frame times show the headroom under 16.7 ms instead of the vsync wait.
 ##
 ## Every --sample= seconds it prints one row:
 ##   fps, frame ms (mean / p95 / max, from the wall-clock interval between consecutive
 ##   _process calls, not from `delta`, which the engine may clamp), the largest `delta`
 ##   seen (delta_max_ms, for comparison), then the frame split by wall clock, each a mean
-##   over all frames, ticked or not: tick ms (world.tick()), refresh ms (boot._refresh()),
-##   other process ms (from this script's _process to RenderingServer.frame_pre_draw,
-##   minus tick and refresh: node _process such as the sprite glides, deferred _draw
+##   over all frames, ticked or not: tick ms (world.tick()), callback ms (the ticked
+##   handlers), then callback max ms (the slowest single callback, where an autosave
+##   shows) and autosaves (saves finished in the row, lifecycle ones included), other
+##   process ms (from this script's _process to RenderingServer.frame_pre_draw,
+##   minus tick and callback: node _process such as the sprite glides, deferred _draw
 ##   calls, UI layout), render ms (frame_pre_draw to frame_post_draw) and rest ms (the
 ##   remainder: present, input, engine idle); then render cpu/gpu ms as the
 ##   RenderingServer measures them, static memory MiB, object / resource / node counts.
@@ -36,6 +48,16 @@ extends SceneTree
 const BenchCommon = preload("res://scripts/tests/bench_common.gd")
 const Boot = preload("res://scripts/boot.gd")
 const TickDriverType = preload("res://scripts/viewer/tick_driver.gd")
+const SaveManagerType = preload("res://scripts/core/persistence/save_manager.gd")
+const PROFILE_SAVE_DIR := "user://b11-profile-saves"
+
+## Boot whose startup resume is replaced by the save isolation (header).
+class ProfileBoot extends Boot:
+	var save_dir := ""
+
+	func _restore_from_save() -> void:
+		save_manager = SaveManagerType.new(save_dir, session_content())
+		autosave_trigger.attach(world, save_manager, _current_epoch)
 
 var _boot: Node
 var _args := {}
@@ -47,7 +69,9 @@ var _frame_ms: Array[float] = []
 var _last_frame_usec := 0
 var _delta_max_ms := 0.0
 var _tick_usec := 0
-var _refresh_usec := 0
+var _callback_usec := 0
+var _callback_max_usec := 0
+var _autosaves := 0
 var _process_ms := 0.0
 var _render_ms := 0.0
 var _frame_start_usec := 0
@@ -76,11 +100,16 @@ func _setup() -> void:
 		orders = BenchCommon.submit_till_orders(world, 1000)
 	else:
 		world = Boot.build_default_world()
-	_boot = Boot.new()
+	_empty_profile_saves()
+	_boot = ProfileBoot.new()
+	_boot.save_dir = PROFILE_SAVE_DIR
 	root.add_child(_boot)
+	assert(_boot.autosave_trigger.save_manager == _boot.save_manager)
 	if _boot._map_view == null: # headless _ready() skips the UI
 		_boot._build_ui()
-	_boot._replace_world(world)
+	_boot._replace_world(world) # re-attaches the trigger, still to the profile manager
+	assert(_boot.autosave_trigger.save_manager == _boot.save_manager)
+	_boot.autosave_trigger.autosaved.connect(func(_result: Dictionary) -> void: _autosaves += 1)
 	_boot.tick_driver.process_mode = Node.PROCESS_MODE_DISABLED
 	_boot.tick_driver.set_speed(TickDriverType.Speed.X1 + int(_args["speed"]) - 1)
 	_ticks_per_second = TickDriverType.BASE_TICKS_PER_SECOND * float(_args["speed"])
@@ -89,10 +118,10 @@ func _setup() -> void:
 	RenderingServer.frame_pre_draw.connect(_on_pre_draw)
 	RenderingServer.frame_post_draw.connect(_on_post_draw)
 	print(BenchCommon.header("B11-profile"))
-	print("B11-profile: scenario=%s colonists=%d orders=%d speed=x%d (%.0f ticks/s) seconds=%d vsync=%s" % [
+	print("B11-profile: scenario=%s colonists=%d orders=%d speed=x%d (%.0f ticks/s) seconds=%d vsync=%s saves=%s" % [
 		_args["scenario"], world.get_colonists().size(), orders, _args["speed"], _ticks_per_second,
-		_args["seconds"], _args["vsync"]])
-	print("t_s,fps,frame_mean_ms,frame_p95_ms,frame_max_ms,delta_max_ms,tick_ms,refresh_ms,other_process_ms,render_ms,rest_ms,render_cpu_ms,render_gpu_ms,ticks,static_mib,objects,resources,nodes")
+		_args["seconds"], _args["vsync"], PROFILE_SAVE_DIR])
+	print("t_s,fps,frame_mean_ms,frame_p95_ms,frame_max_ms,delta_max_ms,tick_ms,callback_ms,callback_max_ms,autosaves,other_process_ms,render_ms,rest_ms,render_cpu_ms,render_gpu_ms,ticks,static_mib,objects,resources,nodes")
 	# A few frames so the UI lays out before the clock starts.
 	for i in 5:
 		await process_frame
@@ -119,9 +148,11 @@ func _process(delta: float) -> bool:
 		var start := Time.get_ticks_usec()
 		_boot.world.tick()
 		var mid := Time.get_ticks_usec()
-		_boot._refresh()
+		_boot.tick_driver.ticked.emit()
+		var callback := Time.get_ticks_usec() - mid
 		_tick_usec += mid - start
-		_refresh_usec += Time.get_ticks_usec() - mid
+		_callback_usec += callback
+		_callback_max_usec = maxi(_callback_max_usec, callback)
 	_frame_tick_usec = Time.get_ticks_usec() - _frame_start_usec
 	if ran == TickDriverType.MAX_TICKS_PER_FRAME:
 		_accumulator -= floorf(_accumulator)
@@ -153,26 +184,33 @@ func _print_row(now: int) -> void:
 		mean += ms
 	mean /= frames
 	var tick_ms := _tick_usec / 1000.0 / frames
-	var refresh_ms := _refresh_usec / 1000.0 / frames
+	var callback_ms := _callback_usec / 1000.0 / frames
 	var process_ms := _process_ms / frames
 	var render_ms := _render_ms / frames
-	print("%d,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f,%d,%d,%d" % [
+	print("%d,%.1f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f,%d,%d,%d" % [
 		(now - _started_usec) / 1_000_000, frames / ((now - _sample_started_usec) / 1_000_000.0),
-		mean, sorted[int(frames * 0.95)], sorted[frames - 1], _delta_max_ms, tick_ms, refresh_ms,
-		process_ms, render_ms, mean - tick_ms - refresh_ms - process_ms - render_ms, _render_cpu_ms / frames, _render_gpu_ms / frames,
+		mean, sorted[int(frames * 0.95)], sorted[frames - 1], _delta_max_ms, tick_ms, callback_ms,
+		_callback_max_usec / 1000.0, _autosaves, process_ms, render_ms, mean - tick_ms - callback_ms - process_ms - render_ms, _render_cpu_ms / frames, _render_gpu_ms / frames,
 		_ticks, Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0,
 		Performance.get_monitor(Performance.OBJECT_COUNT), Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT),
 		Performance.get_monitor(Performance.OBJECT_NODE_COUNT)])
 	_frame_ms.clear()
 	_delta_max_ms = 0.0
 	_tick_usec = 0
-	_refresh_usec = 0
+	_callback_usec = 0
+	_callback_max_usec = 0
+	_autosaves = 0
 	_process_ms = 0.0
 	_render_ms = 0.0
 	_render_cpu_ms = 0.0
 	_render_gpu_ms = 0.0
 	_ticks = 0
 	_sample_started_usec = now
+
+func _empty_profile_saves() -> void:
+	DirAccess.make_dir_recursive_absolute(PROFILE_SAVE_DIR)
+	for file in DirAccess.get_files_at(PROFILE_SAVE_DIR):
+		DirAccess.remove_absolute(PROFILE_SAVE_DIR.path_join(file))
 
 func _parse_args() -> Dictionary:
 	var parsed := {"scenario": "default", "seconds": 600, "speed": 1, "sample": 30, "vsync": false}

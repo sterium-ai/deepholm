@@ -433,6 +433,9 @@ Orca helper scripts, this backlog.
     (+3.75 MiB), objects flat at 1860. The viewer adds +0.3 MiB on top.
   - Exit: "268 ObjectDB instances were leaked", "61 resources still in use" (no growth during
     the run; likely reference cycles).
+  - Autosave hitch (B11 review round 2): `SaveManager.save_autosave()` runs synchronously in
+    the tick callback every 600 ticks (100 s at x1). It takes 86–91 ms on the default scene
+    and 0.54–0.67 s on A9, in a single frame each time.
 - **Goal:** name the system behind the tick jump (per-system breakdown from
   `tick_pipeline.gd` on A9 around ticks 1700–2000) and the container that grows (Arrays or
   Dictionaries held by core objects: logs, histories, caches), then cap or fix them.
