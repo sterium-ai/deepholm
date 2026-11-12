@@ -31,8 +31,18 @@ func screen_to_world(screen_position: Vector2) -> Vector2:
 func screen_to_tile(screen_position: Vector2) -> Vector2i:
 	return map_view.tile_at_local(screen_to_world(screen_position))
 
+## The screen point at the centre of `tile`: the inverse of screen_to_tile() through the
+## same child transform, so screen_to_tile(tile_to_screen(t)) == t at every zoom (B12).
+func tile_to_screen(tile: Vector2i) -> Vector2:
+	return map_view.get_global_transform_with_canvas() * ((Vector2(tile) + Vector2(0.5, 0.5)) * map_view.TILE_SIZE)
+
+## A position local to this viewport, in map_view's local space. B12: zoom_at() and
+## every forwarded mouse event (hover, drag, click) convert through this one call.
+func local_to_map(local_position: Vector2) -> Vector2:
+	return screen_to_world(get_global_transform_with_canvas() * local_position)
+
 func zoom_at(local_position: Vector2, requested_zoom: float) -> void:
-	var anchor := screen_to_world(get_global_transform_with_canvas() * local_position)
+	var anchor := local_to_map(local_position)
 	zoom_level = clampf(requested_zoom, 0.5, 3.0)
 	map_view.scale = Vector2.ONE * zoom_level
 	map_view.position = local_position - anchor * zoom_level
@@ -98,6 +108,7 @@ func _gui_input(event: InputEvent) -> void:
 			if event.pressed:
 				cancel_gesture()
 				zoom_at(event.position, zoom_level * (1.2 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.2))
+				_hover_at(event.position)
 			accept_event()
 			return
 		if event.pressed and (event.button_index == MOUSE_BUTTON_MIDDLE or (event.button_index == MOUSE_BUTTON_LEFT and _space_down)):
@@ -135,6 +146,17 @@ func _gui_input(event: InputEvent) -> void:
 			map_view.clear_hover()
 			return
 		var converted := event.duplicate() as InputEventMouse
-		converted.position = screen_to_world(get_global_transform_with_canvas() * event.position)
+		converted.position = local_to_map(event.position)
 		map_view._gui_input(converted)
 		accept_event()
+
+## B12: re-reads the hover under a pointer that did not move while the map moved under
+## it (a wheel zoom, whose clamp and _constrain() can shift the anchor tile away). Without
+## it the highlight stayed on the tile hovered before the zoom, drawn away from the
+## pointer, until the next mouse motion.
+func _hover_at(local_position: Vector2) -> void:
+	if not Rect2(Vector2.ZERO, size).has_point(local_position):
+		return
+	var motion := InputEventMouseMotion.new()
+	motion.position = local_to_map(local_position)
+	map_view._gui_input(motion)

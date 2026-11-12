@@ -11,7 +11,9 @@ signal ticked
 
 enum Speed { PAUSED, X1, X2, X3 }
 
-const BASE_TICKS_PER_SECOND := 2.0
+## B11 (owner, 2026-11-11): x1 is the old x3, so x1/x2/x3 = 6/12/18 ticks/s. A day
+## stays 2200 ticks, about six real minutes at x1.
+const BASE_TICKS_PER_SECOND := 6.0
 ## A9: at most this many ticks per rendered frame. After a long frame (a hitch, a
 ## window drag, a slow refresh at 1,000 actors) the backlog beyond it is dropped
 ## rather than run, so one slow frame cannot snowball into ever longer catch-up

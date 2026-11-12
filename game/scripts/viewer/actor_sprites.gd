@@ -86,14 +86,28 @@ func _process(delta: float) -> void:
 
 ## Advances every sprite's animation clock by `delta` real seconds, unless the
 ## driver is paused (or absent), so the frame freezes like the colonists'.
+## B11: only the frame depends on the clock (position, flip and animation change in
+## _track()), so this sets the frame alone and queues a redraw only if one changed.
 func advance(delta: float) -> void:
-	var running: bool = _tick_driver != null and _tick_driver.seconds_per_tick() > 0.0
+	if _tick_driver == null or _tick_driver.seconds_per_tick() <= 0.0:
+		return
+	var changed := false
 	for state: Dictionary in _actors.values():
-		if running:
-			state["elapsed"] = float(state["elapsed"]) + delta
-		_apply(state)
-	if running and not _actors.is_empty():
+		state["elapsed"] = float(state["elapsed"]) + delta
+		var sprite: SpriteRecordType = state["sprite"]
+		var frame := _frame_of(state)
+		if sprite.frame != frame:
+			sprite.frame = frame
+			changed = true
+	if changed:
 		queue_redraw()
+
+## The frame `state`'s clock shows in its current animation.
+func _frame_of(state: Dictionary) -> int:
+	var sprite: SpriteRecordType = state["sprite"]
+	var frames: SpriteFrames = sprite.sprite_frames
+	return posmod(int(floor(float(state["elapsed"]) * frames.get_animation_speed(sprite.animation))),
+		frames.get_frame_count(sprite.animation))
 
 ## `snapshot` is this tick's WorldState.get_view_snapshot(); {} takes a fresh one.
 func refresh(snapshot: Dictionary = {}) -> void:
@@ -159,8 +173,7 @@ func _apply(state: Dictionary) -> void:
 	if sprite.animation != animation:
 		sprite.animation = animation
 	var frames: SpriteFrames = sprite.sprite_frames
-	var count := frames.get_frame_count(animation)
-	sprite.frame = posmod(int(floor(float(state["elapsed"]) * frames.get_animation_speed(animation))), count)
+	sprite.frame = _frame_of(state)
 	sprite.flip_h = bool(state["flip_h"])
 	var frame_size := frames.get_frame_texture(animation, 0).get_size()
 	var feet := float(_feet[state["key"]][animation])
